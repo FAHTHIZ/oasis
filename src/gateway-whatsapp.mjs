@@ -94,7 +94,7 @@ export function createWhatsAppGateway(options = {}) {
     }
   }
 
-  const core = createChatCore({ ...options, env, log, send, textApprovals: true });
+  const core = createChatCore({ ...options, platform: 'whatsapp', env, log, send, textApprovals: true });
 
   function download(mediaId) {
     return async () => {

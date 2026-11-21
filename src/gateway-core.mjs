@@ -214,7 +214,12 @@ export function createChatCore(options = {}) {
   async function command(chatKey, text) {
     const [name, ...args] = text.trim().split(/\s+/);
     const cmd = name.replace(/@.*$/, '').replace(/^!/, '/').toLowerCase();
-    if (cmd === '/start' || cmd === '/help') { await send(chatKey, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new (or !new) starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals.'); return true; }
+    if (cmd === '/start' || cmd === '/help') { await send(chatKey, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new (or !new) starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /sethome makes this chat the home channel for routine results.'); return true; }
+    if ((cmd === '/sethome' || cmd === '/home') && options.platform) {
+      const { homeCommand } = await import('./gateway-home.mjs');
+      await send(chatKey, homeCommand(cmd, { platform: options.platform, chatKey, env }));
+      return true;
+    }
     if (cmd === '/new') {
       const state = chats.get(chatKey);
       if (state && state.controller) state.controller.abort();

@@ -26,6 +26,7 @@ import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { appendFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory, loadConfig } from './config.mjs';
+import { readHome } from './gateway-home.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { redactSecrets } from './auto-memory.mjs';
 import { chunkText } from './gateway-core.mjs';
@@ -174,8 +175,9 @@ export const GATEWAY_DELIVERY = {
 export function parseDeliver(value) {
   const text = String(value || 'local').trim();
   if (text === 'local') return 'local';
+  if (text === 'home') return 'home';
   const match = new RegExp('^(telegram|slack|discord|webhook|' + Object.keys(GATEWAY_DELIVERY).join('|') + '):(.+)$').exec(text);
-  if (!match) throw new Error('Unknown delivery target ' + text + '. Use local, telegram:CHAT_ID, slack:CHANNEL, discord:CHANNEL_ID, ' + Object.values(GATEWAY_DELIVERY).map((item) => item.example).join(', ') + ' or webhook:https://...');
+  if (!match) throw new Error('Unknown delivery target ' + text + '. Use local, home (the chat where you sent /sethome), telegram:CHAT_ID, slack:CHANNEL, discord:CHANNEL_ID, ' + Object.values(GATEWAY_DELIVERY).map((item) => item.example).join(', ') + ' or webhook:https://...');
   if (match[1] === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(match[2])) throw new Error('email: needs an address, e.g. email:me@example.com');
   if (match[1] === 'webhook') {
     let url;
@@ -482,7 +484,12 @@ async function preflight(job, env) {
   if (job.workdir) {
     try { if (!(await stat(job.workdir)).isDirectory()) return 'workdir ' + job.workdir + ' is not a folder'; } catch { return 'workdir ' + job.workdir + ' does not exist'; }
   }
-  const target = job.deliver || 'local';
+  let target = job.deliver || 'local';
+  if (target === 'home') {
+    const home = readHome(env);
+    if (!home) return 'delivery to home needs a home channel: send /sethome in a gateway chat';
+    target = home.target;
+  }
   const need = { telegram: 'OASIS_TELEGRAM_BOT_TOKEN', slack: 'OASIS_SLACK_BOT_TOKEN', discord: 'OASIS_DISCORD_BOT_TOKEN' }[target.split(':')[0]];
   if (need && !env[need]) return 'delivery to ' + target + ' needs ' + need;
   const gateway = GATEWAY_DELIVERY[target.split(':')[0]];
@@ -492,8 +499,13 @@ async function preflight(job, env) {
 }
 
 export async function deliverOutput(job, text, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
-  const target = job.deliver || 'local';
+  let target = job.deliver || 'local';
   if (target === 'local') return { delivered: 'local' };
+  if (target === 'home') {
+    const home = readHome(env);
+    if (!home) throw new Error('No home channel is set. Send /sethome in the gateway chat that should receive routine results.');
+    target = home.target;
+  }
   const [kind, ...restParts] = target.split(':');
   const dest = restParts.join(':');
   const body = redactSecrets((job.name ? job.name + ' (' + job.id + ')' : job.id) + '\n\n' + text).text;

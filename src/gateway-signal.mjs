@@ -88,7 +88,7 @@ export function createSignalGateway(options = {}) {
     await api('PUT', '/v1/typing-indicator/' + encodeURIComponent(number), { recipient: chatKey });
   }
 
-  const core = createChatCore({ ...options, env, log, send, typing, textApprovals: true });
+  const core = createChatCore({ ...options, platform: 'signal', env, log, send, typing, textApprovals: true });
 
   async function handleEnvelope(item) {
     const message = parseSignalEnvelope(item, number, botUuid);

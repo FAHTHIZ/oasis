@@ -39,7 +39,7 @@ export const SESSION_TOOL_DEFINITIONS = [
       name: { type: 'string' }, kind: { type: 'string', enum: ['agent', 'script'] },
       workdir: { type: 'string', description: 'Absolute project folder. Defaults to this workspace on create.' },
       skills: { type: 'array', items: { type: 'string' } },
-      deliver: { type: 'string', description: 'local (default), telegram:CHAT_ID, slack:CHANNEL, discord:CHANNEL_ID or webhook:https://...' },
+      deliver: { type: 'string', description: 'local (default), home (the gateway chat the user picked with /sethome), telegram:CHAT_ID, slack:CHANNEL, discord:CHANNEL_ID, matrix:ROOM, signal:NUMBER, email:ADDRESS, whatsapp:NUMBER, mattermost:CHANNEL_ID or webhook:https://...' },
       events: { type: 'array', items: { type: 'string' }, description: 'Webhook routines only: run just for these events, e.g. pull_request.opened, issues.' },
       continue_this_conversation: { type: 'boolean', description: 'Each run starts from a copy of this conversation, so it keeps the context so far (the original is never changed). Set chain too to carry context from run to run.' },
       chain: { type: 'boolean' },

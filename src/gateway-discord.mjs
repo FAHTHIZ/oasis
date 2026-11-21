@@ -59,7 +59,7 @@ export function createDiscordGateway(options = {}) {
     }
   }
 
-  const core = createChatCore({ ...options, env, log, send, typing: (channelId) => api('POST', '/channels/' + channelId + '/typing') });
+  const core = createChatCore({ ...options, platform: 'discord', env, log, send, typing: (channelId) => api('POST', '/channels/' + channelId + '/typing') });
 
   async function handleMessage(message) {
     if (!message || !message.author || message.author.bot) return;
