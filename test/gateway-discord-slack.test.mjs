@@ -139,3 +139,50 @@ test('slack socket mode acks envelopes, replies in threads, and approves via but
   gateway.stop();
   await closed;
 });
+
+test('discord registers slash commands on READY and runs them like typed messages', async () => {
+  const { discordSlashCommands, slashCommandText } = await import('../src/gateway-discord.mjs');
+  const commands = discordSlashCommands();
+  for (const command of commands) {
+    assert.match(command.name, /^[a-z0-9_-]{1,32}$/);
+    assert.ok(command.description.length >= 1 && command.description.length <= 100);
+  }
+  assert.ok(!commands.some((command) => command.name === 'voice'));
+  assert.equal(commands[0].name, 'ask');
+  assert.equal(commands[0].options[0].required, true);
+  assert.equal(slashCommandText({ name: 'model', options: [{ name: 'args', value: 'gpt-5 high' }] }), '/model gpt-5 high');
+  assert.equal(slashCommandText({ name: 'ask', options: [{ name: 'task', value: 'run the tests' }] }), 'run the tests');
+  assert.equal(slashCommandText({ name: 'status' }), '/status');
+
+  const http = fakeHttp();
+  const prompts = [];
+  const gateway = createDiscordGateway({ token: DISCORD_TOKEN, allowedUsers: new Set(['1']), fetchImpl: http.fetchImpl, WebSocketImpl: FakeSocket, deps: deps(fakeAgent(async (_s, text) => { prompts.push(text); return { text: 'ok' }; })), root: PAIR_ROOT, log: () => {} });
+  await gateway.dispatch('READY', { user: { id: '99', username: 'oasis' }, application: { id: '555' } });
+  await gateway.dispatch('READY', { user: { id: '99', username: 'oasis' }, application: { id: '555' } });
+  const puts = http.calls.filter((call) => call.method === 'PUT');
+  assert.equal(puts.length, 1);
+  assert.ok(puts[0].url.endsWith('/applications/555/commands'));
+  assert.deepEqual(puts[0].body.map((command) => command.name), commands.map((command) => command.name));
+  const callbacks = () => http.calls.filter((call) => /\/interactions\/.*\/callback$/.test(call.url));
+  // A stranger gets an ephemeral reply and never reaches the agent.
+  await gateway.handleInteraction({ id: 'i1', token: 't1', type: 2, channel_id: 'c', member: { user: { id: '2', username: 'eve' } }, data: { name: 'ask', options: [{ name: 'task', value: 'rm -rf /' }] } });
+  await flush();
+  assert.equal(callbacks()[0].body.data.flags, 64);
+  assert.match(callbacks()[0].body.data.content, /user ID is @eve \(2\)/);
+  assert.equal(prompts.length, 0);
+  // /ask from an allowed user is acknowledged and runs as a task.
+  await gateway.handleInteraction({ id: 'i2', token: 't2', type: 2, channel_id: 'c', user: { id: '1' }, data: { name: 'ask', options: [{ name: 'task', value: 'run the tests' }] } });
+  await flush();
+  assert.equal(callbacks()[1].body.type, 4);
+  assert.equal(callbacks()[1].body.data.content, '> run the tests');
+  assert.deepEqual(prompts, ['run the tests']);
+  // /status is answered by the gateway itself.
+  await gateway.handleInteraction({ id: 'i3', token: 't3', type: 2, channel_id: 'c', user: { id: '1' }, data: { name: 'status' } });
+  await flush();
+  assert.equal(prompts.length, 1);
+  assert.ok(http.calls.filter((call) => call.url.endsWith('/channels/c/messages')).some((call) => /model|mode|session/i.test(call.body.content)));
+  const off = fakeHttp();
+  const quiet = createDiscordGateway({ token: DISCORD_TOKEN, allowedUsers: new Set(['1']), env: { OASIS_DISCORD_SLASH_COMMANDS: '0' }, fetchImpl: off.fetchImpl, WebSocketImpl: FakeSocket, deps: deps(fakeAgent(() => ({ text: 'x' }))), root: PAIR_ROOT, log: () => {} });
+  await quiet.dispatch('READY', { user: { id: '99' }, application: { id: '555' } });
+  assert.ok(!off.calls.some((call) => call.method === 'PUT'));
+});

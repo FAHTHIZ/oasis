@@ -73,6 +73,8 @@ On start the bot registers its command menu with Telegram (`setMyCommands`), so 
 2. Set `OASIS_DISCORD_BOT_TOKEN` and `OASIS_DISCORD_ALLOWED_USERS` (Discord user IDs). Optional: `OASIS_DISCORD_CHANNELS` lists channels where every message is a task; elsewhere the bot answers DMs and mentions.
 3. Run `oasis gateway discord`.
 
+On connect the bot registers Discord slash commands: `/ask task:` gives the agent a task without mentioning the bot, and `/new`, `/stop`, `/retry`, `/model`, `/usage`, `/resume` and the other chat commands run as if typed. Only allowlisted users can use them; anyone else gets a private reply with their user ID or a pairing code. New global commands can take a few minutes to appear in Discord. Set `OASIS_DISCORD_SLASH_COMMANDS=0` to skip registration.
+
 ## Slack
 
 1. Create a Slack app with Socket Mode on. Give the bot token `chat:write`, `app_mentions:read`, `im:history` (and `files:read` for attachments).
