@@ -839,6 +839,13 @@ export async function createSession({ root, config, restore = null, permissionMo
     else session.styleWarning = 'Output style "' + styleName + '" was not found; using default.';
   }
   session.outputStyle = styleName && !session.styleWarning ? styleName : 'default';
+  const personalityName = env.OASIS_SAFE_MODE === '1' ? null : String(env.OASIS_PERSONALITY || loadedSettings.personality || '').trim().toLowerCase();
+  session.personality = 'none';
+  if (personalityName && personalityName !== 'none') {
+    const { loadPersonalities, systemPromptWithPersonality } = await import('./personalities.mjs');
+    const found = (await loadPersonalities(root, { env, settings: loadedSettings }).catch(() => ({})))[personalityName];
+    if (found) { systemText = systemPromptWithPersonality(systemText, found); session.personality = found.name; }
+  }
   // Reply language: OASIS_LANGUAGE or the "language" setting pins the reply language so
   // replies do not drift into the language of a file, log or web page.
   const replyLanguage = normalizeLanguage(env.OASIS_LANGUAGE) || loadedSettings.language || null;

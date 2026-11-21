@@ -649,6 +649,20 @@ and git remotes to suggest the apps a project uses. Nothing is executed.
 | `OASIS_NO_APP_HINTS=1` | Leave the "apps this project uses that are not connected" line out of the system prompt. |
 | `OASIS_TIP=off` | No start-up tip in the terminal, including the project-apps tip. |
 
+## Personalities
+
+A personality sets the agent's voice and tone without changing what it does, what it may do, or how careful it is: code, commands and quoted output stay exact. It is separate from output styles (`/output-style`), which shape how replies are structured, so the two combine.
+
+`/personality` lists them and `/personality NAME` switches the current session, in the terminal, the web app and every chat gateway (each chat keeps its own). `/personality none` turns it off. Built-ins: `helpful`, `concise`, `technical`, `teacher`, `creative`, `mentor`, `philosopher`, `hype`, `noir`, `pirate`, `shakespeare`, `surfer` and `kawaii`.
+
+Pick a default with `"personality": "teacher"` in settings or `OASIS_PERSONALITY=teacher`. Add your own as a Markdown file in `.oasis/personalities/NAME.md` (this project) or `personalities/NAME.md` in the OASIS config folder (everywhere), with an optional `description:` in front matter, or inline in settings:
+
+```json
+{ "personalities": { "butler": "Speak like a formal English butler.", "coach": { "description": "Sports coach", "prompt": "Talk like an upbeat sports coach." } } }
+```
+
+A personality with the same name as a built-in replaces it. A project's `.oasis/personalities` files and inline definitions count only in folders you trust; an untrusted project may still pick one by name.
+
 ## Home Assistant
 
 Set `OASIS_HASS_URL` (for example `http://homeassistant.local:8123`) and `OASIS_HASS_TOKEN` to a long-lived access token (your Home Assistant profile → Security → Long-lived access tokens) and the agent gets two tools through the [REST API](https://developers.home-assistant.io/docs/api/rest/). `HASS_URL` and `HASS_TOKEN` work too.

@@ -214,7 +214,7 @@ export function createChatCore(options = {}) {
   async function command(chatKey, text) {
     const [name, ...args] = text.trim().split(/\s+/);
     const cmd = name.replace(/@.*$/, '').replace(/^!/, '/').toLowerCase();
-    if (cmd === '/start' || cmd === '/help') { await send(chatKey, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new (or !new) starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /resume continues a saved session (from the terminal or another chat), /sethome makes this chat the home channel for routine results.'); return true; }
+    if (cmd === '/start' || cmd === '/help') { await send(chatKey, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new (or !new) starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /resume continues a saved session (from the terminal or another chat), /sethome makes this chat the home channel for routine results, /personality NAME changes the agent\'s voice.'); return true; }
     if (cmd === '/resume') {
       const current = chats.get(chatKey);
       if (current && current.controller) { await send(chatKey, 'Still working on the previous request. Send /stop first.'); return true; }
@@ -251,6 +251,13 @@ export function createChatCore(options = {}) {
     if (cmd === '/status') {
       const state = chats.get(chatKey);
       await send(chatKey, state ? 'Workspace: ' + root + '\nModel: ' + (state.session.config && state.session.config.model) + '\nMode: ' + (state.session.permissions && state.session.permissions.mode) + '\nMessages: ' + state.session.messages.length + '\nRunning: ' + (state.controller ? 'yes' : 'no') : 'No session yet. Send a task to start one.');
+      return true;
+    }
+    if (cmd === '/personality') {
+      const { personalityCommand } = await import('./personalities.mjs');
+      const settings = await import('./settings.mjs').then((m) => m.loadSettings(root, { env })).catch(() => ({}));
+      const state = args.length ? await chatState(chatKey) : chats.get(chatKey);
+      await send(chatKey, await personalityCommand(args.join(' '), { session: state && state.session, root, env, settings }));
       return true;
     }
     if (cmd === '/mode') {

@@ -410,6 +410,9 @@ export async function loadSettings(root, options = {}) {
     }
     // Reply language (Claude Code's "language" setting). Only plain language names are accepted.
     if (typeof settings.language === 'string' && normalizeLanguage(settings.language)) result.language = normalizeLanguage(settings.language);
+    // Personality (Hermes' /personality): a name, plus optional custom ones as { name: prompt }.
+    if (typeof settings.personality === 'string' && /^[a-z0-9][a-z0-9_-]{0,40}$/i.test(settings.personality.trim())) result.personality = settings.personality.trim().toLowerCase();
+    if (settings.personalities && typeof settings.personalities === 'object' && !Array.isArray(settings.personalities)) result.personalities = { ...(result.personalities || {}), ...settings.personalities };
     if (settings.worktree && typeof settings.worktree === 'object' && typeof settings.worktree.branchPrefix === 'string') result.worktree = { ...(result.worktree || {}), branchPrefix: settings.worktree.branchPrefix.trim().slice(0, 40) };
     // Claude Code's worktree.symlinkDirectories, sparsePaths (repository-relative folders) and baseRef.
     if (settings.worktree && typeof settings.worktree === 'object') {
@@ -471,7 +474,7 @@ export async function loadSettings(root, options = {}) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.subagentStatusLine || settings.fileSuggestion || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
       // Any other key is also skipped until trust; say so instead of dropping it silently.
-      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'compactionReflection', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions', 'alwaysThinkingEnabled', 'skillOverrides', 'disableBundledSkills', 'disableSkillShellExecution', 'spinnerVerbs']);
+      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'personality', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'compactionReflection', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions', 'alwaysThinkingEnabled', 'skillOverrides', 'disableBundledSkills', 'disableSkillShellExecution', 'spinnerVerbs']);
       const skipped = Object.keys(settings).filter((key) => !untrustedSafe.has(key));
       if (loosening || skipped.length) result.ignoredUntrusted.push(file);
       return;
