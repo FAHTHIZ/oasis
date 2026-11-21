@@ -774,6 +774,12 @@ export async function createSession({ root, config, restore = null, permissionMo
       session.imageGeneration = imageConfig;
       session.toolDefinitions = session.toolDefinitions.concat([GENERATE_IMAGE_TOOL_DEFINITION]);
     }
+    const { hassConfig, HOME_ASSISTANT_TOOL_DEFINITIONS } = await import('./home-assistant.mjs');
+    const homeAssistant = hassConfig(env);
+    if (homeAssistant) {
+      session.homeAssistant = homeAssistant;
+      session.toolDefinitions = session.toolDefinitions.concat(HOME_ASSISTANT_TOOL_DEFINITIONS);
+    }
     const { textToSpeechConfig, TEXT_TO_SPEECH_TOOL_DEFINITION } = await import('./tts.mjs');
     const speechConfig = textToSpeechConfig(env, loadedSettings);
     if (speechConfig) {
@@ -1573,7 +1579,7 @@ export function friendlyToolError(error, args = {}, root = '') {
   return message;
 }
 
-export const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'worktree_inspect', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read', 'session_search', 'ide_get_diagnostics', 'ide_open_file', ...SESSION_READ_ONLY_TOOLS]);
+export const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'worktree_inspect', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read', 'session_search', 'ide_get_diagnostics', 'ide_open_file', 'home_assistant', ...SESSION_READ_ONLY_TOOLS]);
 
 const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
   name: 'exit_plan_mode',
