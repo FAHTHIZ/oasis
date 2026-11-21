@@ -151,6 +151,7 @@ export const BUILTIN_COMMANDS = {
   insights: 'Write an HTML report analyzing your recent sessions on this machine (/insights [DAYS])',
   import: 'Import MCP servers, instructions, commands, rules, skills and memories from Codex, Gemini CLI, Cursor, Claude Code, Hermes, OpenCode, Antigravity, Windsurf or Cline (/import [SOURCE] [--dry-run] [--yes])',
   advisor: 'Let the agent consult a second, stronger model mid-task (/advisor MODEL, /advisor off)',
+  mixture: 'Let the agent ask several models at once and merge their answers (/mixture MODEL1,MODEL2,..., /mixture off)',
   subtask: 'Run a task in a forked background subagent that inherits this conversation and reports back (/subtask TASK)',
   recipe: 'Run a Goose recipe (YAML/JSON) from the workspace or GOOSE_RECIPE_PATH (/recipe [FILE|NAME] [key=value ...])',
   btw: 'Ask a side question about this session without adding it to the conversation (/btw QUESTION)',
@@ -1319,6 +1320,21 @@ export async function runBuiltinCommand(name, argument, state) {
       let chosen;
       try { chosen = setAdvisor(session, argument); } catch (error) { return { output: error.message }; }
       return { output: chosen ? 'Advisor set to ' + chosen + '. The agent can now consult it with the advisor tool.' : 'Advisor turned off.' };
+    }
+    case 'mixture': {
+      if (!session) return { output: 'Start a conversation first, or set "mixtureModels" in your settings.' };
+      const { setMixture } = await import('./agent.mjs');
+      const { usableMixture } = await import('./mixture.mjs');
+      if (!argument) {
+        const u = session.mixtureUsage;
+        if (!session.mixtureModels) return { output: 'No mixture. /mixture MODEL1,MODEL2[,...] lets the agent ask several models (provider:model works, e.g. openrouter:deepseek/deepseek-r1) and merge their answers. Add "aggregator MODEL" to pick the merging model.' };
+        const { skipped } = usableMixture(session.mixtureModels, session.config, env || process.env);
+        return { output: 'Mixture: ' + session.mixtureModels.map((entry) => entry.id).join(', ') + '; merged by ' + (session.mixtureAggregator || session.config.model) + (skipped.length ? '. No API key for ' + skipped.join(', ') + ', so they are skipped' : '') + (u ? '. ' + u.rounds + ' round' + (u.rounds === 1 ? '' : 's') + ', ' + u.calls + ' requests, ' + u.input + ' in / ' + u.output + ' out tokens' : '') + '. /mixture off turns it off.' };
+      }
+      const [models, keyword, aggregator] = argument.trim().split(/\s+/);
+      let chosen;
+      try { chosen = setMixture(session, models, keyword === 'aggregator' ? aggregator : ''); } catch (error) { return { output: error.message }; }
+      return { output: chosen ? 'Mixture set to ' + chosen.join(', ') + '. The agent can now use the mixture_of_agents tool on hard questions.' : 'Mixture turned off.' };
     }
     case 'subtask': {
       if (!argument) return { output: 'Usage: /subtask TASK. A background copy of this conversation works on TASK and reports back here.' };

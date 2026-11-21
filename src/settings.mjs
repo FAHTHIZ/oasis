@@ -624,6 +624,11 @@ export async function loadSettings(root, options = {}) {
     }
     if (settings.defaultShell === 'powershell' || settings.defaultShell === 'bash') result.defaultShell = settings.defaultShell;
     if (typeof settings.advisorModel === 'string' && settings.advisorModel.trim()) result.advisorModel = settings.advisorModel.trim().slice(0, 200);
+    // Mixture of agents sends the conversation to other providers, so a repository cannot turn it on.
+    if (['user', 'flag', 'managed'].includes(scope)) {
+      if ((typeof settings.mixtureModels === 'string' && settings.mixtureModels.trim()) || (Array.isArray(settings.mixtureModels) && settings.mixtureModels.length)) result.mixtureModels = (Array.isArray(settings.mixtureModels) ? settings.mixtureModels.map(String).join(',') : settings.mixtureModels.trim()).slice(0, 1000);
+      if (typeof settings.mixtureAggregator === 'string' && settings.mixtureAggregator.trim()) result.mixtureAggregator = settings.mixtureAggregator.trim().slice(0, 200);
+    }
     if (settings.autoMemory === true) result.autoMemory = true;
     for (const key of ['executeCode', 'sessionSearch']) if (settings[key] === true) result[key] = true;
     // "autoCommit": true commits each turn's changed files (documented; previously dropped here).

@@ -274,7 +274,7 @@ export async function runSubagent(parent, args, context, options) {
   const definitions = [...(parent.toolDefinitions || TOOL_DEFINITIONS), ...parentDeferred.values()].filter((definition) => {
     const name = definition && definition.function && definition.function.name;
     if (name === 'task') return depth + 1 < maxDepth && !disallowed.has(name) && (!allowed || allowed.has(name));
-    if (!name || name === 'workflow' || name === 'enter_worktree' || name === 'exit_worktree' || name === 'schedule_wakeup' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'connect_service' || name === 'enter_plan_mode' || name === 'advisor' || name.startsWith('cron_') || name === 'memory_save' || name === 'memory_verify' || name === 'memory_delete' || name === 'skill_propose' || (AGENT_TOOL_NAMES.has(name) && name !== 'team_send_message')) return false;
+    if (!name || name === 'workflow' || name === 'enter_worktree' || name === 'exit_worktree' || name === 'schedule_wakeup' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'connect_service' || name === 'enter_plan_mode' || name === 'advisor' || name === 'mixture_of_agents' || name.startsWith('cron_') || name === 'memory_save' || name === 'memory_verify' || name === 'memory_delete' || name === 'skill_propose' || (AGENT_TOOL_NAMES.has(name) && name !== 'team_send_message')) return false;
     if (disallowed.has(name)) return false;
     return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name) || name === 'team_send_message';
   });
