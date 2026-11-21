@@ -1,7 +1,7 @@
 // Trajectory export and batch runs, for evaluation and fine-tuning datasets.
 //
-//   oasis sessions export [ID...|--all] [--verified] [--format sharegpt|openai] [--out FILE] [--compress [TOKENS]]
-//   oasis batch PROMPTS.jsonl [--out FILE] [--format sharegpt|openai] [--concurrency N] [--compress [TOKENS]]
+//   oasis sessions export [ID...|--all] [--verified] [--format openai|sharegpt|hermes] [--out FILE] [--compress [TOKENS]]
+//   oasis batch PROMPTS.jsonl [--out FILE] [--format openai|sharegpt|hermes] [--concurrency N] [--compress [TOKENS]]
 //
 // --compress cuts each trajectory to TOKENS (default 15250) the way Hermes'
 // trajectory compressor does (see trajectory-compress.mjs); --summary-tokens N,
@@ -39,7 +39,8 @@ export function toOpenAIRecord(data, tools = []) {
     if (message.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length) {
       item.tool_calls = message.tool_calls.map((call) => ({ id: String(call.id || ''), type: 'function', function: { name: String(call.function && call.function.name || ''), arguments: clean(call.function && call.function.arguments || '{}') } }));
     }
-    if (message.role === 'tool') item.tool_call_id = String(message.tool_call_id || '');
+    if (message.role === 'assistant') { const reasoning = typeof message.reasoning_content === 'string' ? message.reasoning_content : typeof message.reasoning === 'string' ? message.reasoning : ''; if (reasoning.trim()) item.reasoning_content = clean(reasoning); }
+    if (message.role === 'tool') { item.tool_call_id = String(message.tool_call_id || ''); if (message.name) item.name = String(message.name); }
     messages.push(item);
   }
   return { id: data.id || null, model: data.model || (data.provider && data.provider.model) || (data.config && data.config.model) || null, messages, tools: tools.map((tool) => tool && tool.function ? { type: 'function', function: { name: tool.function.name, description: tool.function.description, parameters: tool.function.parameters } } : tool).filter(Boolean), metadata: { source: 'oasis', updatedAt: data.updatedAt || null, workspace: data.workspaceRoot ? path.basename(data.workspaceRoot) : null } };
@@ -66,10 +67,96 @@ export function shareGPTFromRecord(record) {
   return { id: record.id, conversations, tools: JSON.stringify(record.tools.map((tool) => tool.function || tool)), metadata: record.metadata, ...(record.compression_metrics ? { compression_metrics: record.compression_metrics } : {}) };
 }
 
+// Hermes function-calling layout (the format Nous Research trains Hermes models
+// on, as written by Hermes Agent): a generated system turn listing the tools in
+// <tools>, gpt turns with a <think> block and <tool_call> JSON, and the results of
+// one assistant turn grouped into a single tool turn of <tool_response> blocks.
+export const HERMES_SYSTEM_PREFIX = 'You are a function calling AI model. You are provided with function signatures within <tools> </tools> XML tags. You may call one or more functions to assist with the user query. If available tools are not relevant in assisting with user query, just respond in natural conversational language.\n\nDon\'t make assumptions about what values to plug into functions. After calling & executing the functions, you will be provided with function results within <tool_response> </tool_response> XML tags.\n\n';
+const HERMES_SYSTEM_SUFFIX = '\nFor each function call return a JSON object, with the following pydantic model json schema for each:\n{\'title\': \'FunctionCall\', \'type\': \'object\', \'properties\': {\'name\': {\'title\': \'Name\', \'type\': \'string\'}, \'arguments\': {\'title\': \'Arguments\', \'type\': \'object\'}}, \'required\': [\'name\', \'arguments\']}\nEach function call should be enclosed within <tool_call> </tool_call> XML tags.\nExample:\n<tool_call>\n{\'name\': <function-name>,\'arguments\': <args-dict>}\n</tool_call>';
+
+export function hermesSystemPrompt(tools = []) {
+  const listed = tools.map((tool) => tool && tool.function ? tool.function : tool).filter((tool) => tool && tool.name).map((tool) => ({ name: tool.name, description: tool.description || '', parameters: tool.parameters || { type: 'object', properties: {} }, required: null }));
+  return HERMES_SYSTEM_PREFIX + 'Here are the available tools:\n<tools>\n' + pyJson(listed) + '\n</tools>' + HERMES_SYSTEM_SUFFIX;
+}
+
+// Python json.dumps spacing (", " and ": "), as in Hermes Agent's own files.
+export function pyJson(value) {
+  if (value === null || value === undefined) return 'null';
+  if (Array.isArray(value)) return '[' + value.map(pyJson).join(', ') + ']';
+  if (typeof value === 'object') return '{' + Object.entries(value).filter(([, item]) => item !== undefined).map(([key, item]) => JSON.stringify(key) + ': ' + pyJson(item)).join(', ') + '}';
+  if (typeof value === 'number' && !Number.isFinite(value)) return 'null';
+  return JSON.stringify(value);
+}
+
+const jsonish = (text) => { if (typeof text !== 'string' || !/^\s*[[{]/.test(text)) return text; try { return JSON.parse(text); } catch { return text; } };
+
+function toolFailed(content) {
+  const value = jsonish(content);
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value) && (value.ok === false || (typeof value.error === 'string' && value.error && value.ok !== true)));
+}
+
+/** Per-tool call counts with successes and failures, for every tool in the list (zero when unused). */
+export function hermesToolStats(record) {
+  const stats = {};
+  for (const tool of record.tools || []) { const name = tool.function ? tool.function.name : tool.name; if (name) stats[name] = { count: 0, success: 0, failure: 0 }; }
+  const names = new Map();
+  for (const message of record.messages) for (const call of message.tool_calls || []) names.set(call.id, call.function.name);
+  for (const message of record.messages) {
+    if (message.role !== 'tool') continue;
+    const name = message.name || names.get(message.tool_call_id) || 'unknown';
+    const entry = stats[name] || (stats[name] = { count: 0, success: 0, failure: 0 });
+    entry.count++;
+    if (toolFailed(message.content)) entry.failure++; else entry.success++;
+  }
+  return stats;
+}
+
+export function hermesFromRecord(record, { completed = true } = {}) {
+  const conversations = [{ from: 'system', value: hermesSystemPrompt(record.tools) + (record.compression_metrics ? '\n\nSome of your previous tool responses may be summarized to preserve context.' : '') }];
+  const names = new Map();
+  for (let index = 0; index < record.messages.length; index++) {
+    const message = record.messages[index];
+    if (message.role === 'system') continue;
+    if (message.role === 'user') { conversations.push({ from: 'human', value: message.content }); continue; }
+    if (message.role === 'assistant') {
+      let value = '<think>\n' + String(message.reasoning_content || '').trim() + (message.reasoning_content ? '\n' : '') + '</think>\n' + (message.content || '');
+      for (const call of message.tool_calls || []) {
+        names.set(call.id, call.function.name);
+        let args = {};
+        try { args = JSON.parse(call.function.arguments || '{}'); } catch { args = {}; }
+        value += (value.endsWith('\n') ? '' : '\n') + '<tool_call>\n' + pyJson({ name: call.function.name, arguments: args }) + '\n</tool_call>';
+      }
+      conversations.push({ from: 'gpt', value });
+      continue;
+    }
+    if (message.role === 'tool') {
+      const responses = [];
+      while (index < record.messages.length && record.messages[index].role === 'tool') {
+        const result = record.messages[index];
+        responses.push('<tool_response>\n' + pyJson({ tool_call_id: result.tool_call_id, name: result.name || names.get(result.tool_call_id) || '', content: jsonish(result.content) }) + '\n</tool_response>');
+        index++;
+      }
+      index--;
+      conversations.push({ from: 'tool', value: responses.join('\n') });
+    }
+  }
+  const stats = hermesToolStats(record);
+  const errors = Object.fromEntries(Object.entries(stats).map(([name, entry]) => [name, entry.failure]));
+  return {
+    id: record.id, conversations, timestamp: record.metadata && record.metadata.updatedAt || new Date().toISOString(), model: record.model, completed,
+    api_calls: record.messages.filter((message) => message.role === 'assistant').length,
+    tool_stats: stats, tool_error_counts: errors, metadata: record.metadata,
+    ...(record.compression_metrics ? { compression_metrics: record.compression_metrics } : {})
+  };
+}
+
+export const EXPORT_FORMATS = ['openai', 'sharegpt', 'hermes'];
+
 function formatRecord(data, format = 'openai', tools = []) {
+  if (format === 'hermes') return hermesFromRecord(toOpenAIRecord(data, tools));
   if (format === 'sharegpt') return toShareGPTRecord(data, tools);
   if (format === 'openai') return toOpenAIRecord(data, tools);
-  throw new Error('Unknown export format ' + format + '. Use sharegpt or openai.');
+  throw new Error('Unknown export format ' + format + '. Use openai, sharegpt or hermes.');
 }
 
 function option(args, name, fallback = null) {
@@ -133,9 +220,20 @@ export function compressionLine(report) {
   return 'Compressed ' + summary.trajectories_compressed + ' of ' + summary.total_trajectories + ' trajectories (' + tokens.total_before + ' -> ' + tokens.total_after + ' tokens, ratio ' + tokens.overall_compression_ratio + ')' + (summary.trajectories_still_over_limit ? '; ' + summary.trajectories_still_over_limit + ' still over the limit' : '') + (report.summarization.total_errors ? '; ' + report.summarization.total_errors + ' summaries failed and used the fixed notice' : '') + '.';
 }
 
-async function formatWith(data, format, tools, squeeze) {
-  let record = toOpenAIRecord(data, tools);
+// Saved sessions do not store tool schemas; use the built-in definitions for the tools a run called.
+async function usedToolDefinitions(messages) {
+  const used = new Set();
+  for (const message of messages || []) for (const call of (message && message.tool_calls) || []) if (call && call.function && call.function.name) used.add(call.function.name);
+  if (!used.size) return [];
+  const { TOOL_DEFINITIONS } = await import('./tools.mjs');
+  const known = new Map(TOOL_DEFINITIONS.map((tool) => [tool.function.name, tool]));
+  return [...used].map((name) => known.get(name) || { type: 'function', function: { name, description: '', parameters: { type: 'object', properties: {} } } });
+}
+
+async function formatWith(data, format, tools, squeeze, { completed = true } = {}) {
+  let record = toOpenAIRecord(data, format === 'hermes' && !tools.length ? await usedToolDefinitions(data.messages) : tools);
   if (squeeze) record = await squeeze.apply(record);
+  if (format === 'hermes') return hermesFromRecord(record, { completed });
   return format === 'sharegpt' ? shareGPTFromRecord(record) : record;
 }
 
@@ -166,7 +264,7 @@ export async function exportSessions(root, args = [], options = {}) {
   const squeeze = await compressor(compressionOptions(args), options, env);
   let ids = args.filter((arg) => !arg.startsWith('--') && !values.has(arg));
   if (args.includes('--all') || !ids.length) {
-    if (!args.includes('--all')) throw new Error('Usage: oasis sessions export SESSION_ID... | --all [--verified] [--format sharegpt|openai] [--out FILE] [--compress [TOKENS]]');
+    if (!args.includes('--all')) throw new Error('Usage: oasis sessions export SESSION_ID... | --all [--verified] [--format openai|sharegpt|hermes] [--out FILE] [--compress [TOKENS]]');
     ids = (await listSessions(root, { env })).map((item) => item.id);
   }
   const out = openOut(option(args, '--out'), stdout);
@@ -210,7 +308,7 @@ export async function runBatch(root, args = [], options = {}) {
   const stderr = options.stderr || process.stderr;
   const values = flagValues(args);
   const file = args.find((arg) => !arg.startsWith('--') && !values.has(arg));
-  if (!file) throw new Error('Usage: oasis batch PROMPTS.jsonl [--out FILE] [--format sharegpt|openai] [--concurrency N] [--compress [TOKENS]]');
+  if (!file) throw new Error('Usage: oasis batch PROMPTS.jsonl [--out FILE] [--format openai|sharegpt|hermes] [--concurrency N] [--compress [TOKENS]]');
   const format = option(args, '--format', 'openai');
   formatRecord({ messages: [] }, format);
   const concurrency = Math.min(8, Math.max(1, Number.parseInt(option(args, '--concurrency', '1'), 10) || 1));

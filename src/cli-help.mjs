@@ -105,7 +105,7 @@ export function helpText() {
     '  oasis sessions archive|unarchive ID  Hide a session from lists (or show it again); it can still be resumed by ID',
     '  oasis sessions search QUERY [--all] [--json]  Search earlier saved conversations',
     '  oasis sessions events ID [--type TYPE] [--json]  Show the audit trail: tool calls, results, approvals, checks, fallbacks',
-    '  oasis sessions export ID...|--all [--verified] [--format sharegpt|openai] [--out FILE] [--compress [TOKENS]]  Export trajectories as JSONL (--verified: only sessions whose last check passed; --compress: summarize the middle of long runs)',
+    '  oasis sessions export ID...|--all [--verified] [--format openai|sharegpt|hermes] [--out FILE] [--compress [TOKENS]]  Export trajectories as JSONL (--verified: only sessions whose last check passed; --compress: summarize the middle of long runs)',
     '  oasis batch PROMPTS.jsonl [--out FILE] [--concurrency N] [--compress [TOKENS]]  Run many prompts, one fresh session each, and save trajectories',
     '  oasis sessions clear ID       Delete one saved session',
     '  oasis sessions prune [--older-than DAYS]  Delete saved sessions unused for DAYS (default 30)',
