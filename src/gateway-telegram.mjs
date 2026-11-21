@@ -14,6 +14,7 @@ import path from 'node:path';
 import { receiveAttachments, gatewayTranscriber, chunkText } from './gateway-core.mjs';
 import { speakableText, synthesizeSpeech, textToSpeechConfig, voiceReplyMode } from './tts.mjs';
 import { createPairing, strangerMessage, withPairing } from './gateway-pairing.mjs';
+import { CHAT_COMMAND_HELP, chatUsageRecorder } from './gateway-commands.mjs';
 
 const API = 'https://api.telegram.org';
 const MAX_MESSAGE = 4000;
@@ -112,6 +113,7 @@ export function createTelegramGateway(options = {}) {
     const tools = [];
     try {
       const turn = await runAgentTurn(state.session, text, {
+        onUsage: await chatUsageRecorder(state.session),
         env,
         signal: controller.signal,
         ...(extra.images && extra.images.length ? { images: extra.images } : {}),
@@ -141,7 +143,7 @@ export function createTelegramGateway(options = {}) {
   async function command(chatId, text) {
     const [name, ...args] = text.trim().split(/\s+/);
     const cmd = name.replace(/@.*$/, '').toLowerCase();
-    if (cmd === '/start' || cmd === '/help') return say(chatId, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /voice on|off|auto sets spoken replies, /resume continues a saved session, /sethome makes this chat the home channel for routine results, /personality NAME changes the agent\'s voice.'), true;
+    if (cmd === '/start' || cmd === '/help') return say(chatId, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /voice on|off|auto sets spoken replies, /resume continues a saved session, /sethome makes this chat the home channel for routine results, /personality NAME changes the agent\'s voice.\n' + CHAT_COMMAND_HELP), true;
     if (cmd === '/resume') {
       const current = chats.get(chatId);
       if (current && current.controller) return say(chatId, 'Still working on the previous request. Send /stop first.'), true;
@@ -161,7 +163,7 @@ export function createTelegramGateway(options = {}) {
       const { homeCommand } = await import('./gateway-home.mjs');
       return say(chatId, homeCommand(cmd, { platform: 'telegram', chatKey: chatId, env })), true;
     }
-    if (cmd === '/new') {
+    if (cmd === '/new' || cmd === '/reset') {
       const state = chats.get(chatId);
       if (state && state.controller) state.controller.abort();
       chats.delete(chatId);
@@ -199,6 +201,13 @@ export function createTelegramGateway(options = {}) {
       const state = await chatState(chatId);
       if (typeof state.session.permissions.setMode === 'function') state.session.permissions.setMode(mode); else state.session.permissions.mode = mode;
       await say(chatId, 'Mode set to ' + mode + '.');
+      return true;
+    }
+    const { sharedChatCommand } = await import('./gateway-commands.mjs');
+    const shared = await sharedChatCommand(cmd.slice(1), args.join(' '), { state: chats.get(chatId) || null, ensureState: () => chatState(chatId), root, env, runBuiltin: deps.slash && deps.slash.runBuiltinCommand, resolveSkill: deps.commands && deps.commands.resolveSkillCommand });
+    if (shared) {
+      if (shared.text) await say(chatId, shared.text);
+      if (shared.prompt) runPrompt(chatId, shared.prompt).catch((error) => log(error.message));
       return true;
     }
     return false;

@@ -8,6 +8,7 @@
 // "yes", "allow 3" or "reject 3" answers the pending approval.
 import path from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { CHAT_COMMAND_HELP, chatUsageRecorder } from './gateway-commands.mjs';
 
 const APPROVAL_TIMEOUT_MS = 10 * 60000;
 const MODES = ['default', 'acceptEdits', 'plan', 'auto'];
@@ -188,6 +189,7 @@ export function createChatCore(options = {}) {
     const tools = [];
     try {
       const turn = await runAgentTurn(state.session, text, {
+        onUsage: await chatUsageRecorder(state.session),
         env,
         signal: controller.signal,
         ...(extra.images && extra.images.length ? { images: extra.images } : {}),
@@ -214,7 +216,7 @@ export function createChatCore(options = {}) {
   async function command(chatKey, text) {
     const [name, ...args] = text.trim().split(/\s+/);
     const cmd = name.replace(/@.*$/, '').replace(/^!/, '/').toLowerCase();
-    if (cmd === '/start' || cmd === '/help') { await send(chatKey, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new (or !new) starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /resume continues a saved session (from the terminal or another chat), /sethome makes this chat the home channel for routine results, /personality NAME changes the agent\'s voice.'); return true; }
+    if (cmd === '/start' || cmd === '/help') { await send(chatKey, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new (or !new) starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /resume continues a saved session (from the terminal or another chat), /sethome makes this chat the home channel for routine results, /personality NAME changes the agent\'s voice.\n' + CHAT_COMMAND_HELP); return true; }
     if (cmd === '/resume') {
       const current = chats.get(chatKey);
       if (current && current.controller) { await send(chatKey, 'Still working on the previous request. Send /stop first.'); return true; }
@@ -236,7 +238,7 @@ export function createChatCore(options = {}) {
       await send(chatKey, homeCommand(cmd, { platform: options.platform, chatKey, env }));
       return true;
     }
-    if (cmd === '/new') {
+    if (cmd === '/new' || cmd === '/reset') {
       const state = chats.get(chatKey);
       if (state && state.controller) state.controller.abort();
       chats.delete(chatKey);
@@ -266,6 +268,13 @@ export function createChatCore(options = {}) {
       const state = await chatState(chatKey);
       if (typeof state.session.permissions.setMode === 'function') state.session.permissions.setMode(mode); else state.session.permissions.mode = mode;
       await send(chatKey, 'Mode set to ' + mode + '.');
+      return true;
+    }
+    const { sharedChatCommand } = await import('./gateway-commands.mjs');
+    const shared = await sharedChatCommand(cmd.slice(1), args.join(' '), { state: chats.get(chatKey) || null, ensureState: () => chatState(chatKey), root, env, runBuiltin: deps.slash && deps.slash.runBuiltinCommand, resolveSkill: deps.commands && deps.commands.resolveSkillCommand });
+    if (shared) {
+      if (shared.text) await send(chatKey, shared.text);
+      if (shared.prompt) runPrompt(chatKey, shared.prompt).catch((error) => log(error.message));
       return true;
     }
     return false;
