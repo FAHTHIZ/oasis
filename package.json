@@ -13,6 +13,7 @@
     "node": ">=22.19"
   },
   "optionalDependencies": {
+    "modal": "0.11.2",
     "node-pty": "1.1.0",
     "sharp": "0.35.5"
   },

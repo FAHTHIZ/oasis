@@ -1691,7 +1691,7 @@ export async function runBuiltinCommand(name, argument, state) {
         const credentialLine = (credentials.credentialFiles || []).length || (credentials.credentialEnv || []).length
           ? '\nCredentials hidden from sandboxed commands: ' + [...(credentials.credentialFiles || []), ...(credentials.credentialEnv || []).map((name) => '$' + name)].join(', ') + '.' + (credentials.credentialNotes || []).map((note) => '\n  ' + note).join('')
           : '';
-        return { output: 'Sandbox: ' + describe(current) + '. This machine: ' + (probe.available ? probe.kind + ' available' : 'no sandbox - ' + probe.reason) + '.' + credentialLine + '\nUsage: /sandbox on | off | network on | network off | os | docker [IMAGE] | podman [IMAGE] | ssh USER@HOST [REMOTE_DIR] | daytona. Make it permanent with "sandbox": {"enabled": true} in settings (add "backend": "docker" for container isolation on any OS, including Windows).' };
+        return { output: 'Sandbox: ' + describe(current) + '. This machine: ' + (probe.available ? probe.kind + ' available' : 'no sandbox - ' + probe.reason) + '.' + credentialLine + '\nUsage: /sandbox on | off | network on | network off | os | docker [IMAGE] | podman [IMAGE] | ssh USER@HOST [REMOTE_DIR] | daytona | modal. Make it permanent with "sandbox": {"enabled": true} in settings (add "backend": "docker" for container isolation on any OS, including Windows).' };
       }
       if (!session) return { output: 'Start a task first; /sandbox changes the running session.' };
       const words = argument.toLowerCase().split(/\s+/);
@@ -1711,7 +1711,8 @@ export async function runBuiltinCommand(name, argument, state) {
         if (rawWords[1]) ssh = { ...(ssh || {}), host: rawWords[1], ...(rawWords[2] ? { remoteRoot: rawWords[2] } : {}) };
         if (!ssh || !ssh.host) return { output: 'Usage: /sandbox ssh USER@HOST [REMOTE_DIR]' };
       } else if (words[0] === 'daytona') { enabled = true; backend = 'daytona'; }
-      else if (!['on', 'off', 'network'].includes(words[0])) return { output: 'Usage: /sandbox on | off | network on | network off | os | docker [IMAGE] | podman [IMAGE] | ssh USER@HOST [REMOTE_DIR] | daytona' };
+      else if (words[0] === 'modal') { enabled = true; backend = 'modal'; }
+      else if (!['on', 'off', 'network'].includes(words[0])) return { output: 'Usage: /sandbox on | off | network on | network off | os | docker [IMAGE] | podman [IMAGE] | ssh USER@HOST [REMOTE_DIR] | daytona | modal' };
       const writable = current && current.writable || [root];
       session.sandbox = resolveSandbox({ permissions: session.settings && session.settings.permissions, sandbox: { ...((session.settings && session.settings.sandbox) || {}), enabled, network, backend, image, ssh, memory: current && current.memory, cpus: current && current.cpus, autoAllowCommands: current ? current.autoAllowCommands !== false : true } }, root);
       if (session.sandbox.enabled && session.sandbox.backend === (current && current.backend || 'os')) session.sandbox.writable = writable;

@@ -19,6 +19,7 @@
 // approvals. Enable with settings { "sandbox": { "enabled": true } } or OASIS_SANDBOX=1.
 import { normalizeSshSettings, detectSshRuntime, sshWrap, DEFAULT_SSH_EXCLUDES } from './ssh-backend.mjs';
 import { normalizeDaytonaSettings, ensureDaytonaSync, daytonaSshSettings } from './daytona-backend.mjs';
+import { normalizeModalSettings, ensureModalSync, modalSshSettings } from './modal-backend.mjs';
 import { spawnSync } from 'node:child_process';
 import { realpathSync, statSync, lstatSync, rmdirSync, unlinkSync, readFileSync } from 'node:fs';
 import os from 'node:os';
@@ -377,8 +378,9 @@ function socketPolicy(settings) {
   };
 }
 
-// Backends that run commands on another machine over SSH (Daytona through its SSH gateway).
-const REMOTE_BACKENDS = ['ssh', 'daytona'];
+// Backends that run commands on another machine over SSH (Daytona through its SSH gateway,
+// Modal through a TCP tunnel to sshd inside the sandbox).
+const REMOTE_BACKENDS = ['ssh', 'daytona', 'modal'];
 
 function remoteSandboxSsh(raw, root, force) {
   const daytona = normalizeDaytonaSettings(raw, process.env, root);
@@ -389,12 +391,22 @@ function remoteSandboxSsh(raw, root, force) {
   return { ...ssh, exclude: [...(ssh.exclude || DEFAULT_SSH_EXCLUDES), '.oasis/daytona/'] };
 }
 
+function modalSandboxSsh(raw, root, force) {
+  const modal = normalizeModalSettings(raw, process.env, root);
+  if (modal.error) return { error: modal.error };
+  const ready = ensureModalSync(modal, force ? { now: Date.now() + 3600000 } : {});
+  if (!ready.ok) return { error: 'The Modal sandbox is not ready: ' + ready.reason };
+  const ssh = modalSshSettings(modal);
+  return { ...ssh, exclude: [...(ssh.exclude || DEFAULT_SSH_EXCLUDES), '.oasis/modal/'] };
+}
+
 export function resolveSandbox(settings = {}, root, force = false) {
   const wanted = settings.sandbox && settings.sandbox.enabled;
   if (!wanted) return { enabled: false, available: false, kind: 'none' };
   const backend = CONTAINER_BACKENDS.includes(settings.sandbox.backend) || REMOTE_BACKENDS.includes(settings.sandbox.backend) ? settings.sandbox.backend : 'os';
   let ssh = backend === 'ssh' ? normalizeSshSettings(settings.sandbox.ssh || {}, process.env, root) : null;
   if (backend === 'daytona') ssh = remoteSandboxSsh(settings.sandbox.daytona || {}, root, force);
+  if (backend === 'modal') ssh = modalSandboxSsh(settings.sandbox.modal || {}, root, force);
   const allowedDomains = domainList(settings.sandbox.allowManagedDomainsOnly ? settings.sandbox.managedAllowedDomains || [] : settings.sandbox.allowedDomains);
   const deniedDomains = domainList(settings.sandbox.deniedDomains);
   const sockets = socketPolicy(settings);
