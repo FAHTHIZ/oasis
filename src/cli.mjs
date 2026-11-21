@@ -3694,8 +3694,8 @@ async function main() {
     return;
   }
   if (command === 'batch') {
-    const { runBatch } = await import('./trajectories.mjs');
-    const result = await runBatch(workspace, rest, { env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null });
+    const { runBatch, compressionLine } = await import('./trajectories.mjs');
+    const result = await runBatch(workspace, rest, { env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null, onCompression: (report) => process.stderr.write('[batch] ' + compressionLine(report) + '\n') });
     if (result.failed) process.exitCode = 1;
     return;
   }
