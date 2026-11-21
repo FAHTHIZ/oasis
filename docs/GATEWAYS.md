@@ -10,6 +10,7 @@ While a gateway is running it also hosts your [routines](USER-GUIDE.md#routines-
 | Discord | `oasis gateway discord` | Buttons | `discord:CHANNEL_ID` |
 | Slack | `oasis gateway slack` | Buttons | `slack:CHANNEL` |
 | Matrix (Element and any homeserver) | `oasis gateway matrix` | Typed replies | `matrix:!ROOM_ID:server` |
+| Signal (through signal-cli REST API) | `oasis gateway signal` | Typed replies | `signal:+NUMBER` or `signal:group.ID` |
 
 ## Chat commands
 
@@ -50,3 +51,26 @@ Works with Element and any Matrix homeserver over the standard Client-Server API
 3. Run `oasis gateway matrix`, then invite the bot to a room. It joins rooms an allowlisted user invites it to and declines every other invite.
 
 The gateway never replays room history after a restart. End-to-end encrypted rooms are not supported: the bot says so once and ignores encrypted messages, so use an unencrypted room for it.
+
+## Signal
+
+Signal has no bot API, so OASIS talks to [signal-cli-rest-api](https://github.com/bbernhard/signal-cli-rest-api), the open-source bridge most self-hosted Signal bots use. Give the bot its own number if you can: messages you send from the bot's number to yourself are ignored.
+
+1. Start the bridge (json-rpc mode keeps one WebSocket open):
+
+   ```sh
+   docker run -d --name signal-api -p 127.0.0.1:8080:8080 \
+     -v "$HOME/.local/share/signal-api:/home/.local/share/signal-cli" \
+     -e MODE=json-rpc bbernhard/signal-cli-rest-api
+   ```
+
+2. Register a number or link the bridge to an existing Signal account as a secondary device (open `http://127.0.0.1:8080/v1/qrcodelink?device_name=oasis` and scan it from Signal → **Linked devices**).
+3. Set:
+   - `OASIS_SIGNAL_API_URL=http://127.0.0.1:8080`
+   - `OASIS_SIGNAL_NUMBER`, the bot's number, for example `+15551234567`
+   - `OASIS_SIGNAL_ALLOWED_USERS`: phone numbers or Signal UUIDs
+   - optional `OASIS_SIGNAL_GROUPS`: group IDs where every message is a task. In other groups the bot answers only when mentioned.
+   - optional `OASIS_SIGNAL_MODE=normal` if the bridge runs in `normal` or `native` mode (OASIS then polls `/v1/receive`).
+4. Run `oasis gateway signal`.
+
+Keep the bridge on `127.0.0.1` or a private network: it has no authentication of its own.
