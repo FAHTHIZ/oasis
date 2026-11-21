@@ -318,6 +318,12 @@ the first time the run shows objective evidence of being stuck:
   times that the turn would otherwise stop;
 - the same tool call returns the same result three times, or a no-progress
   cycle repeats within eight steps.
+- the same tool is refused four times for the same reason, even with
+  different arguments (a second refusal first adds a reminder of the request).
+
+A streamed reply that keeps repeating the same text (2,000+ characters of one
+unit repeated at least ten times) is cut off and sent back once with a note;
+three such replies in a row end the turn with an error.
 
 Without cascade, these signals end the turn with "I'm stuck". With cascade,
 the strong model gets a note saying what failed and continues from the same

@@ -13,7 +13,7 @@ import { renderSound, soundDesign } from './sound-palette.mjs';
 export const SOUND_KINDS = ['done', 'fail', 'input', 'send'];
 const SAMPLE_RATE = 22050;
 
-export function createSoundPlayer({ enabled = () => false, win = globalThis, volume = () => 0.5 } = {}) {
+export function createSoundPlayer({ enabled = () => false, win = globalThis, volume = () => 0.5, clock = () => Date.now() } = {}) {
   let context = null;
   let output = null;
   let last = 0;
@@ -31,7 +31,7 @@ export function createSoundPlayer({ enabled = () => false, win = globalThis, vol
     if (!soundDesign(kind) || !SOUND_KINDS.includes(kind) || !enabled(kind)) return false;
     const Ctx = win.AudioContext || win.webkitAudioContext;
     if (!Ctx) return false;
-    const now = Date.now();
+    const now = clock();
     if (now - last < 120) return false; // never stack sounds
     last = now;
     try {

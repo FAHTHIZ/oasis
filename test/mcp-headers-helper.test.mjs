@@ -67,7 +67,9 @@ async function createHelperFixture(t, buildScript, options = {}) {
 async function waitForFile(file, timeoutMs = 2500) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    try { await readFile(file, 'utf8'); return; } catch {}
+    // The helper may have created the file but not written its pid yet; an
+    // empty read became pid 0, and kill(0, 0) checks our own process group.
+    try { if (/^\d+$/.test((await readFile(file, 'utf8')).trim())) return; } catch {}
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   assert.fail('headersHelper did not create its start marker');
@@ -83,6 +85,7 @@ function isProcessAlive(pid) {
 }
 
 async function waitForProcessExit(pid, timeoutMs = 2500) {
+  assert.ok(Number.isInteger(pid) && pid > 0, 'a real helper pid, not ' + pid);
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (!isProcessAlive(pid)) return;

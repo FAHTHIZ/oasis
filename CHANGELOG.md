@@ -4,6 +4,13 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Harness reliability (found running qwen2.5-coder:3b on Ollama, CPU only)
+
+- A reply stuck repeating the same text is cut off as it streams, instead of running to max_tokens (one such reply held a step for 16 minutes). The model gets one copy back with a note saying why, and the turn stops with a clear error after three looping replies in a row.
+- read_file and write_file to the same file in one reply no longer counts as reading first: the write is refused until the read result has reached the model, so it cannot overwrite code it never saw. Exact-string edits still go through.
+- The same refusal for a tool (git_commit when no commit was asked for) is counted even when the arguments change. The second refusal reminds the model what the user asked; the fourth stops the turn. If files were changed, the turn ends by naming them instead of saying "I'm stuck".
+- The unknown-tool reminder lists only the tools the model was offered, not deferred ones. "Did you mean" no longer suggests unrelated tools for three-letter names, and a call named after something in the task (the function it was asked to write) says it is code to write, not a tool.
+
 ## [1.7.1] - 2026-11-17
 
 ### Highlights
