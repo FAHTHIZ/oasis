@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createMattermostGateway, deliverMattermost, parsePostedEvent, splitChatKey } from '../src/gateway-mattermost.mjs';
 import { parseDeliver } from '../src/routines.mjs';
+import { mkdtempSync as pairMkdtemp } from 'node:fs';
+import { tmpdir as pairTmpdir } from 'node:os';
+import { join as pairJoin } from 'node:path';
+const PAIR_ROOT = pairMkdtemp(pairJoin(pairTmpdir(), 'oasis-pair-'));
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 30));
 const BOT = { id: 'b'.repeat(26), username: 'oasis' };
@@ -34,7 +38,7 @@ function fakeApi() {
 const posted = (post, data = {}) => ({ event: 'posted', data: { post: JSON.stringify({ type: '', file_ids: [], ...post }), channel_type: 'D', ...data } });
 
 function gatewayFor(agent, api, extra = {}) {
-  const gateway = createMattermostGateway({ url: 'https://chat.example.com', token: 'x'.repeat(26), allowedUsers: new Set(['alice']), channels: new Set(), fetchImpl: api.fetchImpl, deps: deps(agent), transcribe: null, log: () => {}, me: BOT, ...extra });
+  const gateway = createMattermostGateway({ url: 'https://chat.example.com', token: 'x'.repeat(26), allowedUsers: new Set(['alice']), channels: new Set(), fetchImpl: api.fetchImpl, deps: deps(agent), transcribe: null, root: PAIR_ROOT, log: () => {}, me: BOT, ...extra });
   return gateway;
 }
 
@@ -45,7 +49,7 @@ test('event parsing and chat keys', () => {
   assert.deepEqual([post.channelId, post.rootId, post.text, post.mentions], [CHAN, 'r', 'hi', [BOT.id]]);
   assert.deepEqual(splitChatKey(CHAN + ':root'), { channelId: CHAN, rootId: 'root' });
   assert.throws(() => createMattermostGateway({ env: {} }), /OASIS_MATTERMOST_URL/);
-  assert.throws(() => createMattermostGateway({ env: { OASIS_MATTERMOST_URL: 'https://chat.example.com', OASIS_MATTERMOST_TOKEN: 'x'.repeat(26) } }), /ALLOWED_USERS/);
+  assert.throws(() => createMattermostGateway({ env: { OASIS_GATEWAY_PAIRING: '0', OASIS_MATTERMOST_URL: 'https://chat.example.com', OASIS_MATTERMOST_TOKEN: 'x'.repeat(26) } }), /ALLOWED_USERS/);
 });
 
 test('direct messages run tasks with typed approvals; usernames are allowlisted', async () => {

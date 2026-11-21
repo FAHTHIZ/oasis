@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSignalGateway, deliverSignal, parseSignalEnvelope, signalGroupRecipient } from '../src/gateway-signal.mjs';
 import { parseDeliver, deliverOutput } from '../src/routines.mjs';
+import { mkdtempSync as pairMkdtemp } from 'node:fs';
+import { tmpdir as pairTmpdir } from 'node:os';
+import { join as pairJoin } from 'node:path';
+const PAIR_ROOT = pairMkdtemp(pairJoin(pairTmpdir(), 'oasis-pair-'));
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 20));
 const BOT = '+15550000000';
@@ -46,7 +50,7 @@ test('envelope parsing: groups, mentions, own messages', () => {
 test('signal requires API URL, number and allowlist', () => {
   assert.throws(() => createSignalGateway({ env: {} }), /OASIS_SIGNAL_API_URL/);
   assert.throws(() => createSignalGateway({ env: { OASIS_SIGNAL_API_URL: 'http://127.0.0.1:8080', OASIS_SIGNAL_NUMBER: '5551' } }), /OASIS_SIGNAL_NUMBER/);
-  assert.throws(() => createSignalGateway({ env: { OASIS_SIGNAL_API_URL: 'http://127.0.0.1:8080', OASIS_SIGNAL_NUMBER: BOT } }), /ALLOWED_USERS/);
+  assert.throws(() => createSignalGateway({ env: { OASIS_GATEWAY_PAIRING: '0', OASIS_SIGNAL_API_URL: 'http://127.0.0.1:8080', OASIS_SIGNAL_NUMBER: BOT } }), /ALLOWED_USERS/);
 });
 
 test('signal polling: strangers told once, allowed DM runs, typed approval, group needs mention', async () => {
@@ -55,7 +59,7 @@ test('signal polling: strangers told once, allowed DM runs, typed approval, grou
   let approved;
   const turns = [];
   const agent = fakeAgent(async (_s, text, options) => { turns.push(text); approved = await options.approval('Run npm test?', false, {}); return { text: 'fixed' }; });
-  const gateway = createSignalGateway({ apiUrl: 'http://127.0.0.1:8080', number: BOT, allowedUsers: new Set([ME]), mode: 'normal', fetchImpl: api.fetchImpl, deps: deps(agent), transcribe: null, log: () => {} });
+  const gateway = createSignalGateway({ apiUrl: 'http://127.0.0.1:8080', number: BOT, allowedUsers: new Set([ME]), mode: 'normal', fetchImpl: api.fetchImpl, deps: deps(agent), transcribe: null, root: PAIR_ROOT, log: () => {} });
   assert.equal(await gateway.pollOnce(1), 4);
   await flush();
   assert.equal(api.calls[0].path, '/v1/receive/' + encodeURIComponent(BOT));
@@ -92,7 +96,7 @@ test('signal json-rpc WebSocket mode', async () => {
   const api = fakeApi();
   const turns = [];
   const agent = fakeAgent(async (_s, text) => { turns.push(text); return { text: 'ok' }; });
-  const gateway = createSignalGateway({ apiUrl: 'http://127.0.0.1:8080', number: BOT, allowedUsers: new Set([ME]), WebSocketImpl: FakeSocket, fetchImpl: api.fetchImpl, deps: deps(agent), log: () => {} });
+  const gateway = createSignalGateway({ apiUrl: 'http://127.0.0.1:8080', number: BOT, allowedUsers: new Set([ME]), WebSocketImpl: FakeSocket, fetchImpl: api.fetchImpl, deps: deps(agent), root: PAIR_ROOT, log: () => {} });
   const done = gateway.connect();
   assert.equal(FakeSocket.last.url, 'ws://127.0.0.1:8080/v1/receive/' + encodeURIComponent(BOT));
   FakeSocket.last.emit(dm('status of CI?'));

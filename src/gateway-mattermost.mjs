@@ -12,6 +12,7 @@
 // session and the agent answers inside the thread. Approvals are typed replies:
 // "allow 3", "always 3" or "reject 3" (or yes / no).
 import { chunkText, createChatCore, parseList } from './gateway-core.mjs';
+import { createPairing, strangerMessage, withPairing } from './gateway-pairing.mjs';
 
 const MAX_MESSAGE = 15000; // Mattermost's default limit is 16383 characters
 const ID_RE = /^[a-z0-9]{26}$/;
@@ -50,8 +51,9 @@ export function createMattermostGateway(options = {}) {
   if (!/^https?:\/\/[^\s/]+/.test(baseUrl)) throw new Error('Set OASIS_MATTERMOST_URL to your Mattermost server, e.g. https://chat.example.com.');
   const token = options.token || env.OASIS_MATTERMOST_TOKEN;
   if (!token || String(token).length < 20) throw new Error('Set OASIS_MATTERMOST_TOKEN to a bot account access token (Integrations, Bot Accounts).');
-  const allowedUsers = options.allowedUsers || parseList(env.OASIS_MATTERMOST_ALLOWED_USERS);
-  if (![...allowedUsers].length) throw new Error('Set OASIS_MATTERMOST_ALLOWED_USERS to the user IDs or usernames allowed to use this agent.');
+  const pairing = createPairing({ platform: 'mattermost', root: options.root, env, log: options.log || ((text) => process.stderr.write('[oasis gateway] ' + text + '\n')) });
+  const allowedUsers = withPairing(options.allowedUsers || parseList(env.OASIS_MATTERMOST_ALLOWED_USERS), pairing);
+  if (!allowedUsers.size && !pairing.enabled) throw new Error('Set OASIS_MATTERMOST_ALLOWED_USERS to the user IDs or usernames allowed to use this agent.');
   const listenChannels = options.channels || parseList(env.OASIS_MATTERMOST_CHANNELS);
   const fetchImpl = options.fetchImpl || fetch;
   const WebSocketImpl = options.WebSocketImpl || globalThis.WebSocket;
@@ -113,7 +115,7 @@ export function createMattermostGateway(options = {}) {
     if (!allowedUsers.has(post.userId) && !(username && (allowedUsers.has(username) || allowedUsers.has('@' + username)))) {
       if (!toldUnknown.has(post.userId)) {
         toldUnknown.add(post.userId);
-        await send(chatKey, 'You are not allowed to use this agent. Your Mattermost user ID is ' + post.userId + (username ? ' (@' + username + ')' : '') + '. Ask the owner to add it to OASIS_MATTERMOST_ALLOWED_USERS.').catch(() => {});
+        await send(chatKey, strangerMessage({ pairing, id: post.userId, label: username ? '@' + username : '', idName: 'Mattermost user ID', envName: 'OASIS_MATTERMOST_ALLOWED_USERS' })).catch(() => {});
         log('ignored message from ' + post.userId);
       }
       return;

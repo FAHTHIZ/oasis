@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { createDiscordGateway, stripMention, DISCORD_INTENTS } from '../src/gateway-discord.mjs';
 import { createSlackGateway, slackChatKey, stripSlackMention } from '../src/gateway-slack.mjs';
 import { parseIdList, chunkText } from '../src/gateway-core.mjs';
+import { mkdtempSync as pairMkdtemp } from 'node:fs';
+import { tmpdir as pairTmpdir } from 'node:os';
+import { join as pairJoin } from 'node:path';
+const PAIR_ROOT = pairMkdtemp(pairJoin(pairTmpdir(), 'oasis-pair-'));
 
 const DISCORD_TOKEN = 'M'.repeat(24) + '.' + 'G'.repeat(6) + '.' + 'x'.repeat(38);
 const flush = () => new Promise((resolve) => setTimeout(resolve, 20));
@@ -45,14 +49,14 @@ test('shared helpers', () => {
 
 test('discord requires a token and allowlist', () => {
   assert.throws(() => createDiscordGateway({ env: {} }), /BOT_TOKEN/);
-  assert.throws(() => createDiscordGateway({ env: { OASIS_DISCORD_BOT_TOKEN: DISCORD_TOKEN } }), /ALLOWED_USERS/);
+  assert.throws(() => createDiscordGateway({ env: { OASIS_GATEWAY_PAIRING: '0', OASIS_DISCORD_BOT_TOKEN: DISCORD_TOKEN } }), /ALLOWED_USERS/);
 });
 
 test('discord identifies, ignores strangers, runs allowed users and handles approval buttons', async () => {
   const http = fakeHttp();
   let approved;
   const agent = fakeAgent(async (_s, text, options) => { approved = await options.approval('Run npm test?', false, { suggestion: 'Bash(npm test)' }); return { text: 'done: ' + text }; });
-  const gateway = createDiscordGateway({ token: DISCORD_TOKEN, allowedUsers: new Set(['1']), fetchImpl: http.fetchImpl, WebSocketImpl: FakeSocket, deps: deps(agent), log: () => {} });
+  const gateway = createDiscordGateway({ token: DISCORD_TOKEN, allowedUsers: new Set(['1']), fetchImpl: http.fetchImpl, WebSocketImpl: FakeSocket, deps: deps(agent), root: PAIR_ROOT, log: () => {} });
   const closed = gateway.connect();
   const ws = FakeSocket.last;
   ws.emit({ op: 10, d: { heartbeat_interval: 60000 } });
@@ -92,7 +96,7 @@ test('discord identifies, ignores strangers, runs allowed users and handles appr
 test('slack requires tokens and allowlist', () => {
   assert.throws(() => createSlackGateway({ env: {} }), /APP_TOKEN/);
   assert.throws(() => createSlackGateway({ env: { OASIS_SLACK_APP_TOKEN: 'xapp-1' } }), /BOT_TOKEN/);
-  assert.throws(() => createSlackGateway({ env: { OASIS_SLACK_APP_TOKEN: 'xapp-1', OASIS_SLACK_BOT_TOKEN: 'xoxb-1' } }), /ALLOWED_USERS/);
+  assert.throws(() => createSlackGateway({ env: { OASIS_GATEWAY_PAIRING: '0', OASIS_SLACK_APP_TOKEN: 'xapp-1', OASIS_SLACK_BOT_TOKEN: 'xoxb-1' } }), /ALLOWED_USERS/);
 });
 
 test('slack socket mode acks envelopes, replies in threads, and approves via buttons', async () => {
@@ -100,7 +104,7 @@ test('slack socket mode acks envelopes, replies in threads, and approves via but
   let approved;
   const seen = [];
   const agent = fakeAgent(async (_s, text, options) => { seen.push(text); approved = await options.approval('Delete build/?', false, {}); return { text: 'ok' }; });
-  const gateway = createSlackGateway({ appToken: 'xapp-1', botToken: 'xoxb-1', allowedUsers: new Set(['U1']), botUserId: 'UBOT', fetchImpl: http.fetchImpl, WebSocketImpl: FakeSocket, deps: deps(agent), log: () => {} });
+  const gateway = createSlackGateway({ appToken: 'xapp-1', botToken: 'xoxb-1', allowedUsers: new Set(['U1']), botUserId: 'UBOT', fetchImpl: http.fetchImpl, WebSocketImpl: FakeSocket, deps: deps(agent), root: PAIR_ROOT, log: () => {} });
   const closed = gateway.connect();
   await flush();
   const ws = FakeSocket.last;

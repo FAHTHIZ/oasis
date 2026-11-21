@@ -8,6 +8,7 @@
 // Each channel gets its own saved session. Approvals arrive as Allow / Always /
 // Reject buttons that only allowlisted users can press.
 import { chunkText, createChatCore, parseIdList, reconnectLoop } from './gateway-core.mjs';
+import { createPairing, strangerMessage, withPairing } from './gateway-pairing.mjs';
 
 const API = 'https://discord.com/api/v10';
 const GATEWAY = 'wss://gateway.discord.gg/?v=10&encoding=json';
@@ -23,8 +24,9 @@ export function createDiscordGateway(options = {}) {
   const env = options.env || process.env;
   const token = options.token || env.OASIS_DISCORD_BOT_TOKEN;
   if (!token || String(token).length < 50) throw new Error('Set OASIS_DISCORD_BOT_TOKEN to the bot token from the Discord Developer Portal.');
-  const allowedUsers = options.allowedUsers || parseIdList(env.OASIS_DISCORD_ALLOWED_USERS);
-  if (!allowedUsers.size) throw new Error('Set OASIS_DISCORD_ALLOWED_USERS to the Discord user IDs allowed to use this agent (DM the bot once to see yours).');
+  const pairing = createPairing({ platform: 'discord', root: options.root, env, log: (line) => (options.log || ((text) => process.stderr.write('[oasis gateway] ' + text + '\n')))(line) });
+  const allowedUsers = withPairing(options.allowedUsers || parseIdList(env.OASIS_DISCORD_ALLOWED_USERS), pairing);
+  if (!allowedUsers.size && !pairing.enabled) throw new Error('Set OASIS_DISCORD_ALLOWED_USERS to the Discord user IDs allowed to use this agent (DM the bot once to see yours).');
   const listenChannels = options.channels || parseIdList(env.OASIS_DISCORD_CHANNELS);
   const apiBase = String(options.apiBase || env.OASIS_DISCORD_API_BASE || API).replace(/\/+$/, '');
   const gatewayUrl = options.gatewayUrl || env.OASIS_DISCORD_GATEWAY_URL || GATEWAY;
@@ -68,7 +70,7 @@ export function createDiscordGateway(options = {}) {
     if (!allowedUsers.has(userId)) {
       if (!toldUnknown.has(userId)) {
         toldUnknown.add(userId);
-        await send(message.channel_id, 'You are not allowed to use this agent. Your Discord user ID is ' + userId + '. Ask the owner to add it to OASIS_DISCORD_ALLOWED_USERS.').catch(() => {});
+        await send(message.channel_id, strangerMessage({ pairing, id: userId, label: message.author && message.author.username ? '@' + message.author.username : '', idName: 'Discord user ID', envName: 'OASIS_DISCORD_ALLOWED_USERS' })).catch(() => {});
         log('ignored message from user ' + userId);
       }
       return;
