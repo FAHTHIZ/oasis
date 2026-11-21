@@ -94,6 +94,7 @@ export function createTelegramGateway(options = {}) {
     if (!config.configured) throw new Error('No model provider is configured. Run `oasis setup` first.');
     const session = await createSession({ root, config, env, permissionMode: options.permissionMode || null });
     session.headless = true;
+    if (session.honcho) (await import('./honcho.mjs')).scopeHonchoToChat(session, 'telegram', chatId);
     const state = { session, controller: null, queue: [], voiceReply: defaultVoiceReply };
     chats.set(chatId, state);
     return state;

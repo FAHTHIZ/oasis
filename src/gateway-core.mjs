@@ -174,6 +174,7 @@ export function createChatCore(options = {}) {
     if (config.configured === false) throw new Error('No model provider is configured. Run `oasis setup` first.');
     const session = await createSession({ root, config, env, permissionMode: options.permissionMode || null });
     session.headless = true;
+    if (session.honcho) (await import('./honcho.mjs')).scopeHonchoToChat(session, options.platform, chatKey);
     const state = { session, controller: null };
     chats.set(chatKey, state);
     return state;

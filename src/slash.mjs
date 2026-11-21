@@ -101,6 +101,7 @@ export const BUILTIN_COMMANDS = {
   avoid: 'Ban a word or phrase from replies, comments and commits (/avoid PHRASE, /avoid remove PHRASE)',
   comments: 'Set how many code comments the agent adds (/comments none|minimal|default)',
   'output-style': 'Legacy alias: list or switch response styles (/output-style NAME)',
+  honcho: 'Honcho user model: show its settings and sync state (/honcho test checks the connection)',
   personality: 'List or switch the agent\'s voice: helpful, concise, technical, teacher, noir, pirate and more (/personality NAME | none)',
   todos: 'Show the current todo list',
   scope: 'Lock file edits to paths for this session: /scope src/** test/** | /scope off',
@@ -312,7 +313,7 @@ export async function runBuiltinCommand(name, argument, state) {
         { title: 'Getting started', commands: ['help', 'setup', 'status', 'doctor', 'context', 'cost', 'undo'] },
         { title: 'Working', commands: ['clear', 'compact', 'test', 'diagnostics', 'audit', 'tasks', 'workflows', 'learning', 'commit', 'pr', 'goal', 'recipe', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export', 'presets'] },
         { title: 'Safety', commands: ['permissions', 'mode', 'sandbox', 'security-review', 'undo', 'rewind', 'purge', 'logout', 'doctor'] },
-        { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'avoid', 'comments', 'output-style', 'personality', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
+        { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'avoid', 'comments', 'output-style', 'personality', 'honcho', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
       ];
       const used = new Set();
       const lines = [];
@@ -1763,6 +1764,12 @@ export async function runBuiltinCommand(name, argument, state) {
       await updateUserSettings((settings) => { if (mode) settings.codeComments = mode; else delete settings.codeComments; return settings; }, env || process.env);
       if (session) applyWritingRules(session, session.avoidPhrases || [], mode);
       return { output: mode === 'none' ? 'The agent will not add code comments (saved).' : mode === 'minimal' ? 'The agent will only add comments that explain non-obvious reasons (saved).' : 'Code comments back to the default (saved).' };
+    }
+    case 'honcho': {
+      const { honchoCommand } = await import('./honcho.mjs');
+      const settings = await import('./settings.mjs').then((m) => m.loadSettings(root, { env })).catch(() => ({}));
+      const result = await honchoCommand(String(argument || '').trim().split(/\s+/).filter(Boolean), { env: env || process.env, settings, root, state: session && session.honcho });
+      return { output: result.text };
     }
     case 'personality': {
       const { personalityCommand } = await import('./personalities.mjs');

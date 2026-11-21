@@ -171,6 +171,7 @@ export function helpText() {
     '  oasis permissions [list]      Show permission rules, hooks, trust, and sandbox status',
     '  oasis daytona up|status|stop|delete   Manage the Daytona cloud sandbox that runs this workspace\'s commands ("backend": "daytona")',
     '  oasis modal up|status|stop              Manage the Modal cloud sandbox that runs this workspace\'s commands ("backend": "modal")',
+    '  oasis honcho [status|test]              Show or test the Honcho user model (HONCHO_API_KEY or HONCHO_URL)',
     '  oasis permissions add allow "run_command(npm test:*)" [--scope user|project|local]',
     '  oasis trust [--revoke]        Trust this workspace so its allow rules and hooks apply',
     '  oasis backups                 List snapshots made before file changes',
