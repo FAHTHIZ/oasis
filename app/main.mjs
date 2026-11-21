@@ -2432,6 +2432,9 @@ function handleRunEvent(event) {
       break;
     }
     case 'thinking':
+      // A new model request: the reply before it is finished, so it loses
+      // its typing cursor instead of blinking above "Thinking".
+      clearCursor();
       startStep();
       showThinking();
       scrollDown();
@@ -2656,6 +2659,17 @@ function handleRunEvent(event) {
       showThinking();
       runClock.tick();
       break;
+    case 'continuing': {
+      // The reply above read as final, but a check sent the model back to
+      // work (the terminal prints the same "Not finished yet" line).
+      const last = $('transcript').lastElementChild;
+      const note = String(event.note || '').slice(0, 300);
+      if (!note || (last && last.classList.contains('continuing') && last.textContent === note)) break;
+      clearCursor();
+      addMessage('note continuing', note);
+      scrollDown();
+      break;
+    }
     case 'hook_result': {
       // Claude Code 2.1.326: a hook that blocks shows in yellow with its reason,
       // one that fails in red, instead of the turn silently changing course.

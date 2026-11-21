@@ -37,6 +37,7 @@ import { createPreviewHandler } from './web-preview.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { connectFromPaste } from './provider-connect.mjs';
 import { basicAuthToken, createCursorAgentsApi, cursorError } from './cursor-agents-api.mjs';
+import { actionNudgeNote } from './turn-guards.mjs';
 
 // The web app shows pages from the project in its own Preview tab. Told nothing,
 // models end a "build me a page" task with `xdg-open index.html`.
@@ -1157,6 +1158,7 @@ export function createOasisWebServer(options = {}) {
         const result = await runAgentTurn(session, prompt, {
           autoApprove: false,
           onVerificationGate: (gate) => emit(job, 'verification_gate', { steps: (Array.isArray(gate && gate.steps) ? gate.steps : []).slice(0, 6).map((step) => String(step).slice(0, 120)) }),
+          onActionNudge: (nudge) => { const note = actionNudgeNote(nudge && nudge.kind); if (note) emit(job, 'action_nudge', { kind: String(nudge.kind), note }); },
           onSteer: (info) => emit(job, 'steered', { delivered: Math.max(0, Math.min(20, Number(info && info.delivered) || 0)) }),
           ...(planOnly ? { planOnly: true } : {}),
           env,

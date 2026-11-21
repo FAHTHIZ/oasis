@@ -692,3 +692,20 @@ export function appendLspUnavailableNotice(text, state) {
   const lines = [...groups.entries()].map(([reason, files]) => (files.length > 3 ? files.slice(0, 3).join(', ') + ' and ' + (files.length - 3) + ' more' : files.join(', ')) + ': ' + reason);
   return String(text || '').trimEnd() + '\n\nLSP verification unavailable for ' + lines.join('; ') + '. Project checks are reported separately; this change was not verified by a language server.';
 }
+
+// What the user sees when OASIS asks the model to keep going after a reply
+// that read as final (the open-todos, new-test and similar gates). Empty for
+// kinds that need no note.
+const ACTION_NUDGE_NOTES = Object.freeze({
+  'open-todos': 'plan steps are still open',
+  'new-test': 'the request asked for a test',
+  'wrong-file': 'the change went to a different file than the request named',
+  described: 'the reply described work instead of doing it',
+  'false-claim': 'the reply claimed a change that was not made',
+  'gave-up': 'the reply stopped before the task was done',
+  refused: 'the reply declined a task it can do',
+  continue: 'the reply announced a next step without taking it'
+});
+export function actionNudgeNote(kind) {
+  return ACTION_NUDGE_NOTES[kind] || '';
+}
