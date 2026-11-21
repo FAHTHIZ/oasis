@@ -172,7 +172,9 @@ function renderSummary(trace) {
     ['Files', String(last.files.length)],
     ['Time', dur(last.durationMs) || '–']
   ];
-  if (last.stats.tokensIn || last.stats.tokensOut) parts.push(['Tokens', compact(last.stats.tokensIn) + ' / ' + compact(last.stats.tokensOut)]);
+  // "7.2k / 41" did not fit a narrow panel and was cut off. Sent tokens are
+  // the headline; received ones go on a second, smaller line.
+  if (last.stats.tokensIn || last.stats.tokensOut) parts.push(['Tokens', compact(last.stats.tokensIn), compact(last.stats.tokensOut) + ' out', (last.stats.tokensIn || 0).toLocaleString() + ' sent, ' + (last.stats.tokensOut || 0).toLocaleString() + ' received']);
   const head = el('div', 'activity-summary-head');
   const dot = el('span', 'status-dot');
   dot.setAttribute('aria-hidden', 'true');
@@ -180,9 +182,12 @@ function renderSummary(trace) {
   box.dataset.status = waiting ? 'waiting' : last.status;
   head.append(dot, el('strong', '', waiting ? 'Needs you' : turnStatusLabel(last.status)), el('span', 'activity-summary-sub', 'Latest message · ' + trace.totals.turns + ' in this chat'));
   const stats = el('dl', 'activity-stats');
-  for (const [label, value] of parts) {
+  for (const [label, value, sub, title] of parts) {
     const cell = el('div', 'activity-stat' + (label === 'Failed' && last.stats.failed ? ' bad' : ''));
-    cell.append(el('dt', '', label), el('dd', '', value));
+    const dd = el('dd', '', value);
+    if (sub) dd.appendChild(el('span', 'activity-stat-sub', sub));
+    if (title) cell.title = title;
+    cell.append(el('dt', '', label), dd);
     stats.appendChild(cell);
   }
   box.replaceChildren(head, stats);

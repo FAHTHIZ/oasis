@@ -189,6 +189,8 @@ svg.icon.i-stop{fill:currentColor}
 @keyframes spin{to{transform:rotate(360deg)}}
 .steps-title{flex:0 1 auto;min-width:0;font-weight:500;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .15s var(--ease)}
 .steps.waiting .steps-title{color:var(--warn)}
+.steps-arg{flex:0 1 auto;min-width:0;max-width:45%;font:12px/1.4 var(--mono);color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.steps-arg[hidden]{display:none}
 .steps-meta{flex:0 1 auto;max-width:48%;overflow:hidden;text-overflow:ellipsis;margin-left:auto;font-size:12px;line-height:1.4;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
 .steps-head .chevron,.tool .chevron{flex:none;color:var(--faint);font-size:16px;line-height:1;opacity:0;transition:transform .18s var(--ease),opacity .15s var(--ease)}
 .steps-head:hover .chevron,.steps-head:focus-visible .chevron,.steps.open>.steps-head .chevron,.tool>details>summary:hover .chevron,.tool>details[open]>summary .chevron,.tool>details>summary:focus-visible .chevron{opacity:1}
@@ -975,6 +977,7 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .activity-stat dt{font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
 .activity-stat dd{margin:0;font:600 14px/1.3 var(--mono);font-variant-numeric:tabular-nums;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .activity-stat.bad dd{color:var(--danger)}
+.activity-stat-sub{display:block;font:500 10.5px/1.2 var(--mono);color:var(--faint)}
 .activity-tools{display:grid;gap:6px;padding:0 10px 8px}
 .activity-tools input{font-size:13px;padding:6px 10px;min-height:32px}
 .seg{display:flex;gap:2px;padding:2px;border-radius:8px;background:var(--sunken);border:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
