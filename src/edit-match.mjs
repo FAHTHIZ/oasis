@@ -25,7 +25,7 @@ function lineNormalizers() {
   ];
 }
 
-function findLineBlockMatches(fileLines, needleLines, normalize) {
+function findLineBlockMatches(fileLines, needleLines, normalize, limit = 2) {
   const target = needleLines.map(normalize);
   const normalized = fileLines.map(normalize);
   const matches = [];
@@ -34,7 +34,7 @@ function findLineBlockMatches(fileLines, needleLines, normalize) {
       if (normalized[start + offset] !== target[offset]) continue outer;
     }
     matches.push(start);
-    if (matches.length > 1) break;
+    if (matches.length >= limit) break;
   }
   return matches;
 }
@@ -288,6 +288,56 @@ function similarity(a, b) {
   for (const [gram, count] of gx) overlap += Math.min(count, gy.get(gram) || 0);
   const total = Math.max(1, x.length - 1 + y.length - 1);
   return (2 * overlap) / total;
+}
+
+// Line numbers (1-based) of up to `limit` exact occurrences of `needle`.
+function exactOccurrenceLines(current, needle, limit) {
+  const lines = [];
+  let line = 1;
+  let scanned = 0;
+  for (let at = current.indexOf(needle); at >= 0 && lines.length < limit; at = current.indexOf(needle, at + needle.length)) {
+    for (let i = scanned; i < at; i++) if (current.charCodeAt(i) === 10) line++;
+    scanned = at;
+    lines.push(line);
+  }
+  return lines;
+}
+
+function describeOccurrences(fileLines, starts, total) {
+  const width = String(starts[starts.length - 1] || 1).length;
+  const shown = starts.map((start) => '  line ' + String(start).padStart(width, ' ') + ': ' + String(fileLines[start - 1] || '').replace(/\r$/, '').trim().slice(0, 100));
+  return shown.join('\n') + (total > starts.length ? '\n  ... and ' + (total - starts.length) + ' more' : '');
+}
+
+/**
+ * Explain an ambiguous old_string: where each occurrence starts, so the model
+ * can add the surrounding context that tells them apart in one retry instead of
+ * re-reading the file. `count` is the number of exact matches already counted
+ * by the caller; with count 0 the relaxed matchers are checked for ambiguity
+ * (old_string matched several places only after normalizing whitespace or
+ * quotes). Returns '' when there is nothing to report.
+ */
+export function ambiguousMatchHint(current, oldString, count = 0, { limit = 6 } = {}) {
+  if (typeof current !== 'string' || typeof oldString !== 'string' || !oldString.length) return '';
+  const fileLines = current.split('\n');
+  if (count > 1) {
+    const starts = exactOccurrenceLines(current, oldString, limit);
+    return 'Matches start at:\n' + describeOccurrences(fileLines, starts, count) +
+      '\nInclude a nearby line that differs between these places in old_string (and new_string), or set replace_all=true to change all of them.';
+  }
+  if (!oldString.trim() || fileLines.length > 20000) return '';
+  const needleLines = oldString.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n');
+  for (const strategy of lineNormalizers()) {
+    const first = findLineBlockMatches(fileLines, needleLines, strategy.line, 2);
+    if (first.length === 1) return '';
+    if (first.length < 2) continue;
+    const all = findLineBlockMatches(fileLines, needleLines, strategy.line, 1000);
+    const starts = all.slice(0, limit).map((start) => start + 1);
+    return 'old_string does not match exactly, and after ignoring ' + strategy.name + ' it matches ' + (all.length >= 1000 ? '1000+' : all.length) +
+      ' places, so no edit was guessed. Candidates start at:\n' + describeOccurrences(fileLines, starts, all.length) +
+      '\nCopy old_string exactly from the intended place and include enough surrounding lines to make it unique.';
+  }
+  return '';
 }
 
 /** Describe the closest region of the file to old_string, for error messages. */

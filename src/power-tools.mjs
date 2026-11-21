@@ -21,7 +21,7 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { snapshotFile } from './backups.mjs';
-import { relaxedReplace, closestMatchHint, matchLineEndings } from './edit-match.mjs';
+import { relaxedReplace, closestMatchHint, ambiguousMatchHint, matchLineEndings } from './edit-match.mjs';
 import { analyzeShellLine, shellAnalyzerReady } from './shell-risk.mjs';
 import { maskedPipelineWarning } from './pipe-status.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
@@ -416,10 +416,12 @@ export async function multiEditFile(root, args = {}, context = {}) {
         relaxedNotes.push('Edit ' + (index + 1) + ' matched after normalizing ' + relaxed.strategy + ' at line ' + relaxed.line);
         return;
       }
+      const ambiguous = edit.replace_all === true ? '' : ambiguousMatchHint(next, edit.old_string, 0);
+      if (ambiguous) throw new Error(label + ambiguous + (index ? ' Line numbers count earlier edits in this call.' : '') + ' No edits were applied.');
       const hint = closestMatchHint(next, edit.old_string);
       throw new Error(label + 'old_string was not found (after applying earlier edits). No edits were applied.' + (hint ? '\n' + hint : ''));
     }
-    if (count > 1 && edit.replace_all !== true) throw new Error(label + 'old_string appears ' + count + ' times; add context or set replace_all. No edits were applied.');
+    if (count > 1 && edit.replace_all !== true) throw new Error(label + 'old_string appears ' + count + ' times; add context or set replace_all. No edits were applied.\n' + ambiguousMatchHint(next, edit.old_string, count) + (index ? '\nLine numbers count earlier edits in this call.' : ''));
     const insert = matchLineEndings(next, edit.new_string);
     next = edit.replace_all === true ? next.split(edit.old_string).join(insert) : next.replace(edit.old_string, () => insert);
     replacements += edit.replace_all === true ? count : 1;
