@@ -12,6 +12,7 @@ While a gateway is running it also hosts your [routines](USER-GUIDE.md#routines-
 | Matrix (Element and any homeserver) | `oasis gateway matrix` | Typed replies | `matrix:!ROOM_ID:server` |
 | Signal (through signal-cli REST API) | `oasis gateway signal` | Typed replies | `signal:+NUMBER` or `signal:group.ID` |
 | Email (IMAP and SMTP) | `oasis gateway email` | Typed replies | `email:ADDRESS` |
+| WhatsApp (official Cloud API) | `oasis gateway whatsapp` | Buttons | `whatsapp:+NUMBER` |
 
 ## Chat commands
 
@@ -94,3 +95,21 @@ Safety:
 
 - From addresses are easy to forge. A message only counts when your mail provider's `Authentication-Results` header shows `dmarc=pass`, or `dkim=pass` for the sender's own domain. Gmail, Outlook, Fastmail and most hosted providers add this header. For a private server that adds none, set `OASIS_EMAIL_REQUIRE_AUTH=0` and make sure only trusted senders can reach the mailbox.
 - Auto-replies, mailing lists, bulk mail and bounces are ignored, and the agent's own mail carries `Auto-Submitted: auto-replied`, so it never loops with another robot.
+
+## WhatsApp
+
+OASIS talks to WhatsApp through Meta's official [WhatsApp Business Cloud API](https://developers.facebook.com/docs/whatsapp/cloud-api), so no phone has to stay online and no unofficial client can get the number banned. Meta delivers messages to a webhook that the gateway serves.
+
+1. In the [Meta developer dashboard](https://developers.facebook.com/apps), create an app, add the WhatsApp product and note the phone number ID. Create a permanent access token for a system user with the `whatsapp_business_messaging` permission.
+2. Set:
+   - `OASIS_WHATSAPP_TOKEN` and `OASIS_WHATSAPP_PHONE_NUMBER_ID`
+   - `OASIS_WHATSAPP_APP_SECRET`: the app secret (App settings, Basic), used to check that each webhook call really comes from Meta
+   - `OASIS_WHATSAPP_VERIFY_TOKEN`: any random string of 8 or more characters
+   - `OASIS_WHATSAPP_ALLOWED_USERS`: phone numbers in international format, for example `+15551112222`
+   - optional: `OASIS_WHATSAPP_HOST` (`127.0.0.1`) and `OASIS_WHATSAPP_PORT` (`8787`)
+3. Run `oasis gateway whatsapp`, then expose it over HTTPS, for example with `cloudflared tunnel --url http://127.0.0.1:8787` or a reverse proxy.
+4. In the WhatsApp configuration page, set the callback URL to `https://YOUR-HOST/webhook`, enter the same verify token and subscribe to the `messages` field.
+
+Approvals arrive as Allow, Always and Reject buttons. Photos, voice notes and documents are downloaded to `.oasis/inbox/`; voice notes are transcribed when a transcription model is configured. Webhook calls without a valid `X-Hub-Signature-256` signature are rejected, and Meta's retries are processed only once.
+
+WhatsApp only lets a business send free-form messages within 24 hours of the person's last message. A routine delivered with `whatsapp:+NUMBER` therefore reaches you only if you wrote to the agent in the last day; otherwise the delivery fails with a clear error.
