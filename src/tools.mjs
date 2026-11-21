@@ -13,7 +13,7 @@ import { condenseOutputEnabled, createOutputCondenser } from './output-condense.
 import { isScratchPath } from './scratch.mjs';
 import { protectedShellWrite, protectedEditsAllowed, protectedConfigPath } from './protected-paths.mjs';
 import { assertFileFresh, recordFileState, forgetFileState } from './file-state.mjs';
-import { relaxedReplace, closestMatchHint, typographyWarning, preserveFileConventions, matchLineEndings } from './edit-match.mjs';
+import { relaxedReplace, closestMatchHint, ambiguousMatchHint, typographyWarning, preserveFileConventions, matchLineEndings } from './edit-match.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
 import { commentWarning } from './style-rules.mjs';
 import { loadMemory } from './memory.mjs';
@@ -2001,10 +2001,12 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       let relaxed = null;
       if (!matches && args.replace_all !== true) relaxed = relaxedReplace(current, args.old_string, args.new_string);
       if (!matches && !relaxed) {
+        const ambiguous = args.replace_all === true ? '' : ambiguousMatchHint(current, args.old_string, 0);
+        if (ambiguous) throw new Error(ambiguous);
         const hint = closestMatchHint(current, args.old_string);
         throw new Error('old_string was not found. It must match the file exactly, including whitespace and indentation.' + (hint ? '\n' + hint : ' Re-read the file and try again.'));
       }
-      if (matches > 1 && args.replace_all !== true) throw new Error('old_string appears ' + matches + ' times. Add more surrounding context to make it unique, or set replace_all=true.');
+      if (matches > 1 && args.replace_all !== true) throw new Error('old_string appears ' + matches + ' times. Add more surrounding context to make it unique, or set replace_all=true.\n' + ambiguousMatchHint(current, args.old_string, matches));
       const insert = matchLineEndings(current, args.new_string);
       const next = relaxed ? relaxed.next : args.replace_all === true ? current.split(args.old_string).join(insert) : current.replace(args.old_string, () => insert);
       if (Buffer.byteLength(next, 'utf8') > MAX_EDIT_FILE) throw new Error('The edited file would exceed the 64 MiB edit limit.');
