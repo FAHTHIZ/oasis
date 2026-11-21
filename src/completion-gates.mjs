@@ -152,7 +152,10 @@ export async function runCompletionGates(turn, host) {
   }
   if (assistant.unknownToolNames && g.unknownToolNudges < 2) {
     g.unknownToolNudges++;
-    const names = [...availableToolNames(session)].filter((name) => !name.includes('__')).slice(0, 30);
+    // Name only the tools the model was given. Listing deferred tools here put
+    // names like git_commit in front of small models that then called them.
+    const offered = (session.toolDefinitions || []).map((tool) => tool && tool.function && tool.function.name).filter(Boolean);
+    const names = (offered.length ? offered : [...availableToolNames(session)]).filter((name) => !name.includes('__')).slice(0, 30);
     session.messages.push({ role: 'user', content: '<system-reminder>' + assistant.unknownToolNames.join(', ') + (assistant.unknownToolNames.length === 1 ? ' is not a tool' : ' are not tools') + ', so nothing ran. Available tools: ' + names.join(', ') + '. Do only what the user asked (do not commit or push unless asked). Call a real tool now, or give your final answer.</system-reminder>' });
     return CONTINUE;
   }
