@@ -237,3 +237,52 @@ export async function externalChangesReminder(context, { root = '', limit = CHAN
   if (body.length > maxChars) body = body.slice(0, maxChars) + '\n... (more changes not shown; re-read files before editing them)';
   return '<system-reminder>Files you read earlier were changed by something other than your file-edit tools (the user, a formatter, a hook, another agent, or a command you ran). Treat this as the current state; do not revert these changes unless asked.\n' + body + '</system-reminder>';
 }
+
+/**
+ * After compaction the text of earlier reads is gone from the conversation, but
+ * the read-state records still said "read", so write_file could overwrite a
+ * file the model now knows only from a summary. Like Claude Code, re-attach
+ * the few most recently read files that are small and unchanged on disk, and
+ * mark every other record (not in `keep`) as partly seen, so a whole-file
+ * overwrite needs a fresh read. Exact-string edits still work: they prove the
+ * model knows the text it replaces.
+ *
+ * Returns { text, files }: text is '' when nothing is re-attached.
+ */
+export async function restoreFilesAfterCompaction(context, { root = '', keep = new Set(), attach = true, maxFiles = 5, maxFileChars = 20000, maxTotalChars = 50000 } = {}) {
+  if (!fileStateEnabled(context)) return { text: '', files: [] };
+  const records = store(context);
+  if (!records.size) return { text: '', files: [] };
+  const display = (absolute) => {
+    const base = root ? (root.endsWith('/') ? root : root + '/') : '';
+    return (base && absolute.startsWith(base) ? absolute.slice(base.length) : absolute).split('\\').join('/');
+  };
+  const attached = [];
+  const blocks = [];
+  let total = 0;
+  if (attach && maxFiles > 0) {
+    for (const [absolute, record] of [...records.entries()].reverse()) {
+      if (attached.length >= maxFiles) break;
+      if (keep.has(absolute) || record.partial || typeof record.snapshot !== 'string') continue;
+      if (record.snapshot.length > maxFileChars || total + record.snapshot.length > maxTotalChars) continue;
+      let info;
+      try { info = await stat(absolute); } catch { continue; }
+      if (!info.isFile() || info.mtimeMs !== record.mtimeMs || info.size !== record.size) continue;
+      const lines = record.snapshot.replace(/\n$/, '').split('\n');
+      const width = String(lines.length).length;
+      blocks.push('<file path="' + display(absolute) + '">\n' + lines.map((line, index) => String(index + 1).padStart(width, ' ') + '\t' + line.replace(/\r$/, '')).join('\n') + '\n</file>');
+      total += record.snapshot.length;
+      attached.push(absolute);
+    }
+  }
+  const restored = new Set(attached);
+  for (const [absolute, record] of records) {
+    if (keep.has(absolute) || restored.has(absolute) || record.partial) continue;
+    record.partial = 'its earlier read was summarized away by compaction';
+  }
+  if (!blocks.length) return { text: '', files: [] };
+  return {
+    text: 'Files you read before this point, re-attached after compaction as they are now on disk (line numbers are not part of the file):\n' + blocks.join('\n'),
+    files: attached.map(display)
+  };
+}
