@@ -2916,7 +2916,7 @@ async function startWebWorkspace(root, args) {
 
 
 // Top-level commands, for the typo hint (`oasis doctr` -> doctor).
-const TYPO_COMMANDS = ['acp', 'agents', 'app', 'auth', 'backups', 'batch', 'config', 'connect', 'diagnostics', 'doctor', 'eval', 'extensions', 'gateway', 'help', 'ide', 'import', 'init', 'insights', 'install', 'mcp', 'memory', 'models', 'permissions', 'plugins', 'purge', 'quota', 'restore', 'sessions', 'setup', 'skills', 'trust', 'ultrareview', 'uninstall', 'update', 'watch', 'web', 'completion', 'cloud', 'daytona', 'schedule', 'routines', 'exec', 'diff', 'deploy', 'profile', 'attempts'];
+const TYPO_COMMANDS = ['acp', 'agents', 'app', 'auth', 'backups', 'batch', 'config', 'connect', 'diagnostics', 'doctor', 'eval', 'extensions', 'gateway', 'help', 'ide', 'import', 'init', 'insights', 'install', 'mcp', 'memory', 'models', 'permissions', 'plugins', 'purge', 'quota', 'restore', 'sessions', 'setup', 'skills', 'trust', 'ultrareview', 'uninstall', 'update', 'watch', 'web', 'completion', 'cloud', 'daytona', 'modal', 'schedule', 'routines', 'exec', 'diff', 'deploy', 'profile', 'attempts'];
 // One-word tasks that sit close to a command name but are real requests.
 const ONE_WORD_TASKS = new Set(['lint', 'test', 'tests', 'build', 'run', 'fix', 'format', 'review', 'explain', 'commit', 'refactor', 'deploy', 'debug', 'docs', 'start', 'stop', 'clean', 'check', 'plan', 'status', 'resume']);
 // Chat controls that only make sense inside a session (`oasis undo` used to
@@ -3705,6 +3705,14 @@ async function main() {
     const daytona = normalizeDaytonaSettings((settings.sandbox && settings.sandbox.daytona) || {}, process.env, workspace);
     if (daytona.error) throw new Error(daytona.error);
     stdout.write(await daytonaCommand(String(rest[0] || 'status').toLowerCase(), daytona) + '\n');
+    return;
+  }
+  if (command === 'modal') {
+    const { normalizeModalSettings, modalCommand } = await import('./modal-backend.mjs');
+    const settings = await loadSettings(workspace).catch(() => ({}));
+    const modal = normalizeModalSettings((settings.sandbox && settings.sandbox.modal) || {}, process.env, workspace);
+    if (modal.error) throw new Error(modal.error);
+    stdout.write(await modalCommand(String(rest[0] || 'status').toLowerCase(), modal) + '\n');
     return;
   }
   if (command === 'gateway') {

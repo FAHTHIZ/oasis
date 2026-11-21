@@ -25,7 +25,7 @@ export function sandboxDoctor(settings, root, { env = process.env, indent = '  '
   if (status.httpProxyPort || status.socksProxyPort) lines.push(indent + 'Network proxy: your own (' + [status.httpProxyPort && 'HTTP :' + status.httpProxyPort, status.socksProxyPort && 'SOCKS :' + status.socksProxyPort].filter(Boolean).join(', ') + '); it does the filtering');
   lines.push(indent + 'Sandbox: ' + (enabled ? 'enabled' : 'off') + ' (' + (status.available ? status.kind + ' available' : 'unavailable: ' + status.reason) + ')');
   lines.push(indent + 'Command isolation: ' + (enabled && status.available
-    ? (backend === 'os' ? 'OS sandbox active' : backend === 'daytona' ? 'remote execution in a Daytona cloud sandbox' : backend === 'ssh' ? 'remote execution over SSH (' + String(settings.sandbox.ssh && settings.sandbox.ssh.host || env.OASIS_SSH_HOST || '') + ')' : 'container sandbox active (' + backend + ', image ' + (settings.sandbox.image || 'node:22-bookworm') + ')')
+    ? (backend === 'os' ? 'OS sandbox active' : backend === 'daytona' ? 'remote execution in a Daytona cloud sandbox' : backend === 'modal' ? 'remote execution in a Modal cloud sandbox' : backend === 'ssh' ? 'remote execution over SSH (' + String(settings.sandbox.ssh && settings.sandbox.ssh.host || env.OASIS_SSH_HOST || '') + ')' : 'container sandbox active (' + backend + ', image ' + (settings.sandbox.image || 'node:22-bookworm') + ')')
     : 'not active; approval controls are not OS isolation'));
   if (backend === 'os' && status.available) {
     const open = status.allowAllUnixSockets === true;
