@@ -86,7 +86,7 @@ function hero() {
   svg = svg.replace('<text x="644" y="518"', '<text x="676" y="518"').replace('<tspan fill="#7CFF5E" font-weight="700">❯ </tspan><tspan fill="#5E7064">ask for anything', '<tspan fill="#5E7064">ask for anything');
   svg = svg.replace('ask for anything · / commands · @ files</tspan></text>', 'ask for anything · / commands · @ files</tspan></text><text x="644" y="518" font-family="' + MONO + '" font-size="14.5" fill="#7CFF5E" font-weight="700">❯</text>');
   svg = svg.replace('</defs>', '</defs>\n  <style>\n' + motion(css.join('\n')) + '\n  </style>');
-  svg = svg.replace('<title id="title">OASIS: the open-source coding agent for any model</title>', '<title id="title">OASIS: the open-source coding agent for any model (animated)</title>');
+  svg = svg.replace('<title id="title">OASIS: the open-source agent for any model</title>', '<title id="title">OASIS: the open-source agent for any model (animated)</title>');
   return svg;
 }
 
