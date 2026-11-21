@@ -300,7 +300,7 @@ Harness features from public documentation, not results.
 | Claude Code plugins | Yes, plus Codex plugins and Gemini extensions | Yes | Imports settings and skills | No (own format) | No (own extensions) | No (own plugins) | No |
 | Subagents | Parallel, background, resumable, teams, worktrees | Yes | Yes | Agent command center | Yes | `general` subagent | No |
 
-OASIS trails in model-specific tuning, a hosted zero-setup cloud, community size and real-world hours, and Hermes still has an execution backend OASIS lacks (Singularity). The full comparison, with sources and dates, is in [Comparison](docs/COMPARISON.md).
+OASIS trails in model-specific tuning, a hosted zero-setup cloud, community size and real-world hours. The full comparison, with sources and dates, is in [Comparison](docs/COMPARISON.md).
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
@@ -309,7 +309,7 @@ OASIS trails in model-specific tuning, a hosted zero-setup cloud, community size
 OASIS can read and change files, run commands and send context to your model provider, with your account's permissions.
 
 - Permission modes go from `plan` (read-only) to `dont-ask` (never waits, denies anything not allowed). The default runs read-only commands freely and asks before other commands, installs, deletions and new websites.
-- The OS sandbox (bubblewrap, macOS Seatbelt, Docker or Podman) is optional. `oasis doctor` tells you whether it's on.
+- The sandbox is optional: bubblewrap or macOS Seatbelt on this machine, a Docker, Podman or Apptainer container, or a remote SSH, Daytona or Modal machine ([Execution backends](docs/EXECUTION-BACKENDS.md)). `oasis doctor` tells you which is on.
 - Plugins, hooks and MCP servers can run third-party code. Review them before turning them on.
 - Approval prompts are not a replacement for operating-system isolation. Use the sandbox, a container or a throwaway machine for untrusted code.
 

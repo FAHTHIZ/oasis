@@ -6,17 +6,28 @@ Where the agent's shell commands (`run_command`, `run_shell`, background jobs an
 | --- | --- | --- | --- |
 | `os` (default) | This machine | bubblewrap on Linux, Seatbelt on macOS: read-only host, writable workspace, network off unless enabled | Nothing on macOS; `bubblewrap` on Linux |
 | `docker` / `podman` | A container on this machine | The container; workspace mounted, network off unless enabled | Docker or Podman |
+| `apptainer` / `singularity` | An [Apptainer](https://apptainer.org) (Singularity) container on this machine, run as you with no daemon: the usual choice on HPC clusters and shared servers | The container; workspace bound, host home and environment hidden, network off unless enabled | Apptainer or SingularityCE (Linux) |
 | `ssh` | Any machine you can reach over SSH (a bigger box, a GPU server, a VM) | Whatever that machine provides | Key-based SSH login, `rsync` on both sides |
 | `daytona` | A [Daytona](https://www.daytona.io) cloud sandbox created for this workspace | A separate cloud VM | `DAYTONA_API_KEY` |
 | `modal` | A [Modal](https://modal.com/docs/guide/sandboxes) sandbox created for this workspace, optionally with a GPU | A gVisor container in Modal's cloud | `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET`, or `modal token new` |
 
-Turn one on for a session with `/sandbox os`, `/sandbox docker [IMAGE]`, `/sandbox ssh USER@HOST [REMOTE_DIR]` `/sandbox daytona` or `/sandbox modal`, or make it permanent in settings:
+Turn one on for a session with `/sandbox os`, `/sandbox docker [IMAGE]`, `/sandbox apptainer [IMAGE]`, `/sandbox ssh USER@HOST [REMOTE_DIR]`, `/sandbox daytona` or `/sandbox modal`, or make it permanent in settings:
 
 ```json
 { "sandbox": { "enabled": true, "backend": "docker", "image": "node:22-bookworm" } }
 ```
 
 `OASIS_SANDBOX=1` and `OASIS_SANDBOX_BACKEND=NAME` do the same from the environment. `oasis doctor` states which backend is in force.
+
+## Apptainer and Singularity
+
+```json
+{ "sandbox": { "enabled": true, "backend": "apptainer", "image": "python:3.12" } }
+```
+
+Each command runs through `apptainer exec --containall`: a fresh PID and IPC namespace, none of your environment variables, an empty temporary home instead of your real one, and only the workspace (plus any `additionalDirectories`) bound writable. `--writable-tmpfs` lets the command write elsewhere in the image; those writes vanish when it exits. With network off OASIS adds `--net --network none`, which unprivileged users may run on Apptainer 1.1 and later.
+
+`image` is a registry name (pulled as `docker://NAME` and cached as a SIF by Apptainer), an explicit `docker://`, `oras://`, `library://` or `shub://` URI, or a path to a local `.sif` file, which is how most clusters provide images. `"backend": "singularity"` works the same and uses the `singularity` binary when that is the one installed; either name falls back to the other. `memory` and `cpus` are applied when your system allows cgroup limits for unprivileged users. Paths containing a comma or colon cannot be bound, a limit of Apptainer's `--bind` syntax.
 
 ## SSH
 

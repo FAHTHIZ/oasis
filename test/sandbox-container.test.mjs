@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { containerArgs, containerPath, detectContainerRuntime, wrapCommand, resolveSandbox, DEFAULT_CONTAINER_IMAGE } from '../src/sandbox.mjs';
+import { containerArgs, apptainerImage, containerPath, detectContainerRuntime, wrapCommand, resolveSandbox, DEFAULT_CONTAINER_IMAGE } from '../src/sandbox.mjs';
 import { loadSettings } from '../src/settings.mjs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
@@ -91,4 +91,38 @@ test('settings accept backend, image and the documented writableCaches/autoAllow
     assert.equal(resolved.image, DEFAULT_CONTAINER_IMAGE);
     assert.deepEqual(resolved.writableCaches, []);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('apptainer backend contains the command and mounts only the workspace', () => {
+  const launch = wrapCommand('npm', ['test'], box({ kind: 'apptainer' }), '/work/app');
+  assert.equal(launch.command, 'apptainer');
+  const a = launch.args;
+  assert.deepEqual(a.slice(0, 4), ['--quiet', 'exec', '--containall', '--writable-tmpfs']);
+  assert.ok(a.includes('--net') && a[a.indexOf('--network') + 1] === 'none');
+  assert.deepEqual(a.filter((x, i) => a[i - 1] === '--bind'), ['/work/app:/work/app:rw']);
+  assert.equal(a[a.indexOf('--pwd') + 1], '/work/app');
+  assert.deepEqual(a.slice(-3), ['docker://node:22-bookworm', 'npm', 'test']);
+  const open = containerArgs('ls', [], box({ kind: 'singularity', network: true, memory: '2g', maskedPaths: [{ path: '/work/app/.env', type: 'file' }, { path: '/elsewhere/.ssh', type: 'directory' }] }), '/work/app');
+  assert.ok(!open.includes('--network'));
+  assert.equal(open[open.indexOf('--memory') + 1], '2g');
+  assert.deepEqual(open.filter((x, i) => open[i - 1] === '--bind'), ['/work/app:/work/app:rw', '/dev/null:/work/app/.env:ro']);
+  assert.throws(() => containerArgs('ls', [], box({ kind: 'apptainer', writable: ['/work/a,b'] }), '/work/a,b'), /comma or colon/);
+});
+
+test('apptainer images: registry names, URIs and local SIF files', () => {
+  assert.equal(apptainerImage('python:3.12'), 'docker://python:3.12');
+  assert.equal(apptainerImage('oras://ghcr.io/me/img:1'), 'oras://ghcr.io/me/img:1');
+  assert.equal(apptainerImage('/shared/images/tools.sif'), '/shared/images/tools.sif');
+  assert.equal(apptainerImage('~/img.sif'), path.join(os.homedir(), 'img.sif'));
+  assert.throws(() => apptainerImage('bad image; rm'), /not valid/);
+  assert.throws(() => apptainerImage('../../x.sif'), /not valid/);
+});
+
+test('apptainer detection falls back to the singularity binary', () => {
+  const seen = [];
+  const probe = detectContainerRuntime('apptainer', true, (bin) => { seen.push(bin); if (bin === 'apptainer') throw new Error('ENOENT'); return { status: 0, stdout: 'singularity-ce version 4.1.5\n' }; });
+  assert.deepEqual(seen, ['apptainer', 'singularity']);
+  assert.equal(probe.kind, 'singularity');
+  assert.match(detectContainerRuntime('apptainer', true, () => { throw new Error('ENOENT'); }).reason, /Apptainer is not installed/);
+  detectContainerRuntime('apptainer', true, () => ({ status: 1 }));
 });
