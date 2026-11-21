@@ -159,12 +159,19 @@ export function catchUpWindowMs(job) {
   return Math.min(2 * UNITS.h, Math.max(2 * 60_000, period / 2));
 }
 
-// Delivery targets: local (default), telegram:CHAT_ID, slack:CHANNEL, discord:CHANNEL_ID, webhook:URL.
+// Delivery targets: local (default), telegram:CHAT_ID, slack:CHANNEL, discord:CHANNEL_ID,
+// webhook:URL, and the platforms in GATEWAY_DELIVERY (matrix:!ROOM:server, ...).
+// Each GATEWAY_DELIVERY entry names the environment variables it needs and the
+// gateway module whose deliver function posts the message.
+export const GATEWAY_DELIVERY = {
+  matrix: { need: ['OASIS_MATRIX_HOMESERVER', 'OASIS_MATRIX_ACCESS_TOKEN'], example: 'matrix:!ROOM_ID:server', load: async () => (await import('./gateway-matrix.mjs')).deliverMatrix }
+};
+
 export function parseDeliver(value) {
   const text = String(value || 'local').trim();
   if (text === 'local') return 'local';
-  const match = /^(telegram|slack|discord|webhook):(.+)$/.exec(text);
-  if (!match) throw new Error('Unknown delivery target ' + text + '. Use local, telegram:CHAT_ID, slack:CHANNEL, discord:CHANNEL_ID or webhook:https://...');
+  const match = new RegExp('^(telegram|slack|discord|webhook|' + Object.keys(GATEWAY_DELIVERY).join('|') + '):(.+)$').exec(text);
+  if (!match) throw new Error('Unknown delivery target ' + text + '. Use local, telegram:CHAT_ID, slack:CHANNEL, discord:CHANNEL_ID, ' + Object.values(GATEWAY_DELIVERY).map((item) => item.example).join(', ') + ' or webhook:https://...');
   if (match[1] === 'webhook') {
     let url;
     try { url = new URL(match[2]); } catch { throw new Error('webhook: needs a full URL.'); }
@@ -473,6 +480,9 @@ async function preflight(job, env) {
   const target = job.deliver || 'local';
   const need = { telegram: 'OASIS_TELEGRAM_BOT_TOKEN', slack: 'OASIS_SLACK_BOT_TOKEN', discord: 'OASIS_DISCORD_BOT_TOKEN' }[target.split(':')[0]];
   if (need && !env[need]) return 'delivery to ' + target + ' needs ' + need;
+  const gateway = GATEWAY_DELIVERY[target.split(':')[0]];
+  const missing = gateway ? gateway.need.filter((name) => !env[name]) : [];
+  if (missing.length) return 'delivery to ' + target + ' needs ' + missing.join(' and ');
   return null;
 }
 
@@ -498,6 +508,9 @@ export async function deliverOutput(job, text, { env = process.env, fetchImpl = 
     for (const part of chunkText(body, 1900)) await post(base + '/channels/' + dest + '/messages', { content: part, allowed_mentions: { parse: [] } }, { authorization: 'Bot ' + env.OASIS_DISCORD_BOT_TOKEN });
   } else if (kind === 'webhook') {
     await post(dest, { routine: job.id, name: job.name || null, text: body });
+  } else if (GATEWAY_DELIVERY[kind]) {
+    const deliver = await GATEWAY_DELIVERY[kind].load();
+    await deliver(dest, body, { env, fetchImpl });
   }
   return { delivered: target };
 }

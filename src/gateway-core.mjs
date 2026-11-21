@@ -1,8 +1,11 @@
-// Shared chat core for the messaging gateways (Discord, Slack). A platform
+// Shared chat core for the messaging gateways (Discord, Slack, Matrix, Signal,
+// Mattermost, email, WhatsApp). A platform
 // adapter supplies send(chatKey, text, { approval }) and optionally typing(chatKey);
 // the core keeps one saved session per chat, runs turns, routes approval
 // answers, and handles the chat commands /new, /stop, /status, /mode and /help
 // (also accepted with a "!" prefix, since Slack reserves "/" for its own commands).
+// Platforms without buttons pass textApprovals: true, and a reply such as
+// "yes", "allow 3" or "reject 3" answers the pending approval.
 import path from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
 
@@ -111,6 +114,26 @@ export async function receiveAttachments(root, text, files = [], { log = () => {
   return { text: prompt, images, saved, skipped, transcripts };
 }
 
+/** Allowlist entries with any printable characters (Matrix @user:server, phone numbers, email addresses). */
+export function parseList(value) {
+  return new Set(String(value || '').split(/[\s,;]+/).map((item) => item.trim()).filter((item) => item && item.length <= 320 && !/[\u0000-\u001f]/.test(item)));
+}
+
+const APPROVAL_WORDS = new Map([['allow', 'allow'], ['yes', 'allow'], ['y', 'allow'], ['ok', 'allow'], ['approve', 'allow'], ['always', 'always'], ['reject', 'reject'], ['no', 'reject'], ['n', 'reject'], ['deny', 'reject']]);
+
+/** "yes", "allow 3", "/reject 2", "always #4" -> { kind, id|null }; anything else -> null. */
+export function parseApprovalReply(text) {
+  const match = /^[/!]?\s*([a-z]+)\s*(?:#?(\d{1,6}))?\s*[.!]?$/i.exec(String(text || '').trim());
+  if (!match) return null;
+  const kind = APPROVAL_WORDS.get(match[1].toLowerCase());
+  return kind ? { kind, id: match[2] || null } : null;
+}
+
+/** The hint text platforms without buttons append to an approval request. */
+export function approvalReplyHint(id, canAlways) {
+  return 'Reply "allow ' + id + '"' + (canAlways ? ', "always ' + id + '"' : '') + ' or "reject ' + id + '" (or just yes / no).';
+}
+
 export function parseIdList(value) {
   return new Set(String(value || '').split(/[\s,]+/).map((item) => item.trim()).filter((item) => /^[A-Za-z0-9_-]{1,40}$/.test(item)));
 }
@@ -174,7 +197,7 @@ export function createChatCore(options = {}) {
           const canAlways = Boolean(meta && meta.suggestion);
           const timer = setTimeout(() => { approvals.delete(id); resolve(false); send(chatKey, 'Approval ' + id + ' timed out and was rejected.').catch(() => {}); }, timeoutMs);
           approvals.set(id, { chatKey, canAlways, resolve: (value) => { clearTimeout(timer); approvals.delete(id); resolve(value); } });
-          send(chatKey, 'Approval needed:\n' + String(message).slice(0, 1800), { approval: { id, canAlways } }).catch((error) => { log(error.message); const waiter = approvals.get(id); if (waiter) waiter.resolve(false); });
+          send(chatKey, 'Approval needed:\n' + String(message).slice(0, 1800) + (options.textApprovals ? '\n\n' + approvalReplyHint(id, canAlways) : ''), { approval: { id, canAlways } }).catch((error) => { log(error.message); const waiter = approvals.get(id); if (waiter) waiter.resolve(false); });
         })
       });
       try { const { saveSession } = deps.sessions || await import('./sessions.mjs'); await saveSession(state.session, { env }); } catch {}
@@ -220,9 +243,23 @@ export function createChatCore(options = {}) {
     return false;
   }
 
+  /** Answers a pending approval from a typed reply; true when the text was an approval answer. */
+  function answerFromText(chatKey, body) {
+    const reply = parseApprovalReply(body);
+    if (!reply) return false;
+    const pending = [...approvals.entries()].filter(([, waiter]) => waiter.chatKey === chatKey);
+    if (!pending.length) return false;
+    const id = reply.id || (pending.length === 1 ? pending[0][0] : null);
+    if (!id) { send(chatKey, 'Several approvals are waiting: ' + pending.map(([key]) => key).join(', ') + '. Reply with the number, e.g. "allow ' + pending[0][0] + '".').catch(() => {}); return true; }
+    if (!answer(chatKey, id, reply.kind)) { send(chatKey, 'Approval ' + id + ' is not pending.').catch(() => {}); return true; }
+    send(chatKey, (reply.kind === 'reject' ? 'Rejected' : reply.kind === 'always' ? 'Always allowed' : 'Allowed') + ' (approval ' + id + ').').catch(() => {});
+    return true;
+  }
+
   async function handleText(chatKey, text, files = []) {
     let body = String(text || '').trim();
     if (!body && !files.length) return;
+    if (options.textApprovals && !files.length && answerFromText(chatKey, body)) return;
     if (!files.length && /^[/!]/.test(body) && await command(chatKey, body)) return;
     let images = [];
     if (files.length) {
@@ -245,7 +282,7 @@ export function createChatCore(options = {}) {
     for (const waiter of [...approvals.values()]) waiter.resolve(false);
   }
 
-  return { handleText, answer, stop, chats, approvals, root };
+  return { handleText, answer, answerFromText, stop, chats, approvals, root };
 }
 
 /** Reconnect loop for WebSocket gateways: connect() resolves when the socket closes. */

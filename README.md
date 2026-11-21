@@ -111,7 +111,7 @@ The web app runs on a computer or server you control, not a hosted service, and 
 | CI | `action.yml` | A GitHub Action that runs OASIS in a workflow |
 | Cloud agents | `oasis cloud run "TASK"` | The task runs on GitHub Actions with your own key; `--pr` opens a pull request, `oasis cloud pull` brings it back |
 | Your own code | `src/sdk.mjs` | The Node.js SDK: session, headless, tool and hook APIs |
-| Chat | `oasis gateway` | Telegram, Slack or Discord gateways |
+| Chat | `oasis gateway` | Telegram, Slack, Discord or Matrix gateways ([Gateways](docs/GATEWAYS.md)) |
 
 Full method lists, transports and auth for each protocol are in [Interfaces](docs/INTERFACES.md).
 
@@ -222,7 +222,7 @@ The same loop that checks a code change checks any other deliverable. The harnes
 | Writing and documents | Reads PDFs and images you upload; saves reports, posts and slides as files in the workspace, not just chat text. |
 | Data | Numbers come from code it ran, not mental arithmetic: CSV and spreadsheet analysis, charts, notebooks. |
 | Media | `generate_image` and `text_to_speech` through any OpenAI-compatible images or speech API, local servers included. |
-| Automation | `oasis schedule add "every 1d" "..."` runs routines without a terminal open, cron or webhook triggered, and `oasis gateway` answers in Telegram, Slack or Discord. |
+| Automation | `oasis schedule add "every 1d" "..."` runs routines without a terminal open, cron or webhook triggered, and `oasis gateway` answers in Telegram, Slack, Discord or Matrix. |
 | Memory that grows | Memory across sessions, full-text recall of past conversations (`session_search`), and repeatable work proposed as reviewable skills (`/learning`). `/insights` reports how you work. |
 | Bring your history | `oasis import` brings settings, memories, skills and commands from Claude Code, Codex, Gemini CLI, Cursor, Hermes, OpenCode, Windsurf, Antigravity and Cline. |
 

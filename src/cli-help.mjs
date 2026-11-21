@@ -33,7 +33,7 @@ export function printQuickHelp() {
       ['oasis mcp list|add|remove', 'Model Context Protocol servers'],
       ['oasis skills | oasis plugins', 'Agent Skills and native plugins'],
       ['oasis ide | oasis acp', 'VS Code, Cursor, Zed, JetBrains and other editors'],
-      ['oasis gateway', 'Chat with OASIS from Telegram, Slack or Discord']
+      ['oasis gateway', 'Chat with OASIS from Telegram, Slack, Discord or Matrix']
     ]),
     '',
     'Safety',
@@ -137,6 +137,7 @@ export function helpText() {
     '  oasis mcp serve [--allow-edits] [--allow-commands]  Serve Oasis tools to other MCP clients over stdio',
     '  oasis gateway telegram        Chat with this workspace agent from Telegram (allowlisted chats only)',
     '  oasis gateway discord|slack   The same from a Discord bot or a Slack app (Socket Mode); allowlisted users only',
+    '  oasis gateway matrix          The same from Matrix / Element (any homeserver); allowlisted users only',
     '  oasis acp [--permission-mode MODE] [--editor-terminal]  Run as an Agent Client Protocol agent for Zed, JetBrains, Neovim and other ACP editors',
     '  oasis app-server [--listen stdio://|unix://[PATH]|ws://IP:PORT] [--ws-auth capability-token --ws-token-file PATH | --ws-auth signed-bearer-token --ws-shared-secret-file PATH] [--permission-mode MODE]  Speak the Codex App Server protocol (JSONL on stdio, or one message per WebSocket text frame) so Codex app-server clients can drive OASIS',
     '  oasis mcp login|logout NAME   Sign in to (or out of) a remote MCP server with OAuth',
