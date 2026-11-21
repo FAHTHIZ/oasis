@@ -3704,7 +3704,7 @@ async function main() {
     let scheduler = null;
     // Host routines only for a real gateway; a usage error must still exit.
     const { GATEWAY_PLATFORMS } = await import('./gateway-telegram.mjs');
-    if (GATEWAY_PLATFORMS.includes(String(rest[0] || '').toLowerCase())) {
+    if ([...GATEWAY_PLATFORMS, 'all'].includes(String(rest[0] || '').toLowerCase())) {
       try {
         const { hostScheduler } = await import('./routines.mjs');
         scheduler = await hostScheduler({ env: process.env, log: (line) => stderr.write('[routines] ' + line + '\n') });
