@@ -263,7 +263,7 @@ export function createTelegramGateway(options = {}) {
   return { run, stop, pollOnce, handleUpdate, chats, approvals };
 }
 
-export const GATEWAY_PLATFORMS = ['telegram', 'discord', 'slack', 'matrix', 'signal', 'email'];
+export const GATEWAY_PLATFORMS = ['telegram', 'discord', 'slack', 'matrix', 'signal', 'email', 'whatsapp'];
 
 export const GATEWAY_USAGE = 'Usage: oasis gateway ' + GATEWAY_PLATFORMS.join('|') + '\n'
   + '  telegram:   OASIS_TELEGRAM_BOT_TOKEN, OASIS_TELEGRAM_ALLOWED_CHATS\n'
@@ -271,7 +271,8 @@ export const GATEWAY_USAGE = 'Usage: oasis gateway ' + GATEWAY_PLATFORMS.join('|
   + '  slack:      OASIS_SLACK_APP_TOKEN, OASIS_SLACK_BOT_TOKEN, OASIS_SLACK_ALLOWED_USERS\n'
   + '  matrix:     OASIS_MATRIX_HOMESERVER, OASIS_MATRIX_ACCESS_TOKEN, OASIS_MATRIX_ALLOWED_USERS [, OASIS_MATRIX_ROOMS]\n'
   + '  signal:     OASIS_SIGNAL_API_URL, OASIS_SIGNAL_NUMBER, OASIS_SIGNAL_ALLOWED_USERS [, OASIS_SIGNAL_GROUPS]\n'
-  + '  email:      OASIS_EMAIL_IMAP_HOST, OASIS_EMAIL_SMTP_HOST, OASIS_EMAIL_USER, OASIS_EMAIL_PASSWORD, OASIS_EMAIL_ALLOWED_SENDERS';
+  + '  email:      OASIS_EMAIL_IMAP_HOST, OASIS_EMAIL_SMTP_HOST, OASIS_EMAIL_USER, OASIS_EMAIL_PASSWORD, OASIS_EMAIL_ALLOWED_SENDERS\n'
+  + '  whatsapp:   OASIS_WHATSAPP_TOKEN, OASIS_WHATSAPP_PHONE_NUMBER_ID, OASIS_WHATSAPP_APP_SECRET, OASIS_WHATSAPP_VERIFY_TOKEN, OASIS_WHATSAPP_ALLOWED_USERS';
 
 export async function runGateway(args = [], options = {}) {
   const kind = String(args[0] || '').toLowerCase();
@@ -282,6 +283,7 @@ export async function runGateway(args = [], options = {}) {
   else if (kind === 'matrix') gateway = (await import('./gateway-matrix.mjs')).createMatrixGateway(options);
   else if (kind === 'signal') gateway = (await import('./gateway-signal.mjs')).createSignalGateway(options);
   else if (kind === 'email') gateway = (await import('./gateway-email.mjs')).createEmailGateway(options);
+  else if (kind === 'whatsapp') gateway = (await import('./gateway-whatsapp.mjs')).createWhatsAppGateway(options);
   else throw new Error(GATEWAY_USAGE);
   const onSignal = () => { gateway.stop(); process.exit(0); };
   process.once('SIGINT', onSignal);

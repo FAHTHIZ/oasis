@@ -166,7 +166,8 @@ export function catchUpWindowMs(job) {
 export const GATEWAY_DELIVERY = {
   matrix: { need: ['OASIS_MATRIX_HOMESERVER', 'OASIS_MATRIX_ACCESS_TOKEN'], example: 'matrix:!ROOM_ID:server', load: async () => (await import('./gateway-matrix.mjs')).deliverMatrix },
   signal: { need: ['OASIS_SIGNAL_API_URL', 'OASIS_SIGNAL_NUMBER'], example: 'signal:+NUMBER', load: async () => (await import('./gateway-signal.mjs')).deliverSignal },
-  email: { need: ['OASIS_EMAIL_SMTP_HOST', 'OASIS_EMAIL_USER', 'OASIS_EMAIL_PASSWORD'], example: 'email:ADDRESS', load: async () => (await import('./gateway-email.mjs')).deliverEmail }
+  email: { need: ['OASIS_EMAIL_SMTP_HOST', 'OASIS_EMAIL_USER', 'OASIS_EMAIL_PASSWORD'], example: 'email:ADDRESS', load: async () => (await import('./gateway-email.mjs')).deliverEmail },
+  whatsapp: { need: ['OASIS_WHATSAPP_TOKEN', 'OASIS_WHATSAPP_PHONE_NUMBER_ID'], example: 'whatsapp:+NUMBER', load: async () => (await import('./gateway-whatsapp.mjs')).deliverWhatsApp }
 };
 
 export function parseDeliver(value) {
