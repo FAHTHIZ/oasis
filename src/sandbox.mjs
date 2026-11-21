@@ -21,7 +21,7 @@ import { normalizeSshSettings, detectSshRuntime, sshWrap, DEFAULT_SSH_EXCLUDES }
 import { normalizeDaytonaSettings, ensureDaytonaSync, daytonaSshSettings } from './daytona-backend.mjs';
 import { normalizeModalSettings, ensureModalSync, modalSshSettings } from './modal-backend.mjs';
 import { spawnSync } from 'node:child_process';
-import { realpathSync, statSync, lstatSync, rmdirSync, unlinkSync, readFileSync } from 'node:fs';
+import { realpathSync, statSync, lstatSync, rmdirSync, unlinkSync, readFileSync, existsSync, mkdtempSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -209,13 +209,28 @@ export function collectCacheDirectories(env = process.env) {
 let cachedProbe = null;
 const containerProbes = new Map();
 
-const CONTAINER_BACKENDS = ['docker', 'podman'];
+const CONTAINER_BACKENDS = ['docker', 'podman', 'apptainer', 'singularity'];
+// Apptainer (formerly Singularity) is daemonless and runs as the calling user, so it works on
+// HPC clusters and shared machines where Docker is not allowed. Both binaries share one CLI.
+const APPTAINER_KINDS = ['apptainer', 'singularity'];
 export const DEFAULT_CONTAINER_IMAGE = 'node:22-bookworm';
 
 export function detectContainerRuntime(backend, force = false, run = spawnSync) {
-  if (!CONTAINER_BACKENDS.includes(backend)) return { available: false, kind: 'none', reason: 'Unknown sandbox backend ' + backend + '. Use os, docker or podman.' };
+  if (!CONTAINER_BACKENDS.includes(backend)) return { available: false, kind: 'none', reason: 'Unknown sandbox backend ' + backend + '. Use os, docker, podman or apptainer.' };
   if (containerProbes.has(backend) && !force) return containerProbes.get(backend);
   let probe;
+  if (APPTAINER_KINDS.includes(backend)) {
+    // Either name finds whichever of the two is installed, preferring the one asked for.
+    probe = { available: false, kind: 'none', reason: 'Apptainer is not installed. Install it (https://apptainer.org/docs/admin/main/installation.html) or SingularityCE, or set "backend": "os". It runs on Linux only.' };
+    for (const binary of backend === 'singularity' ? ['singularity', 'apptainer'] : ['apptainer', 'singularity']) {
+      try {
+        const result = run(binary, ['--version'], { timeout: 10000, encoding: 'utf8', windowsHide: true });
+        if (result && result.status === 0) { probe = { available: true, kind: binary, version: String(result.stdout || '').trim().split('\n')[0].slice(0, 80) }; break; }
+      } catch { /* try the other name */ }
+    }
+    containerProbes.set(backend, probe);
+    return probe;
+  }
   try {
     const result = run(backend, ['version', '--format', '{{.Server.Version}}'], { timeout: 10000, encoding: 'utf8', windowsHide: true });
     probe = result && result.status === 0
@@ -242,7 +257,64 @@ function safeContainerValue(value, label) {
   return text;
 }
 
+/** apptainer IMAGE argument: a local .sif file, an explicit URI, or a registry image pulled with docker://. */
+export function apptainerImage(image) {
+  const text = safeContainerValue(image || DEFAULT_CONTAINER_IMAGE, 'image');
+  if (/^(docker|docker-archive|oras|library|shub|http|https):\/\/[A-Za-z0-9._\/:@-]{1,250}$/.test(text)) return text;
+  if (/^[\w.\/~-]{1,250}\.(sif|simg|img)$/.test(text) && !text.split('/').includes('..')) return text.startsWith('~/') ? path.join(os.homedir(), text.slice(2)) : text;
+  if (/^[A-Za-z0-9][A-Za-z0-9._\/:@-]{0,254}$/.test(text)) return 'docker://' + text;
+  throw new Error('Sandbox image name is not valid: ' + text);
+}
+
+/** `apptainer exec` arguments mirroring the docker sandbox: no host env or home, only the workspace writable. */
+export function apptainerArgs(command, args, sandbox, cwd) {
+  const image = apptainerImage(sandbox.image);
+  // --containall: fresh PID/IPC namespaces, no host environment, and an empty temporary home
+  // instead of the real one. --writable-tmpfs lets commands write to the image (discarded after).
+  const wrapped = ['--quiet', 'exec', '--containall', '--writable-tmpfs',
+    '--env', 'CI=1', '--env', 'OASIS_SANDBOXED=1'];
+  if (!sandbox.network) wrapped.push('--net', '--network', 'none');
+  if (sandbox.memory) wrapped.push('--memory', safeContainerValue(sandbox.memory, 'memory'));
+  if (sandbox.cpus) wrapped.push('--cpus', safeContainerValue(sandbox.cpus, 'cpus'));
+  if (sandbox.memory || sandbox.cpus || sandbox.pidsLimit) wrapped.push('--pids-limit', String(sandbox.pidsLimit || 512));
+  const bind = (from, to, mode) => {
+    const source = safeContainerValue(from, 'path');
+    if (/[,:]/.test(source) || /[,:]/.test(to)) throw new Error('Apptainer cannot bind a path containing a comma or colon: ' + source);
+    wrapped.push('--bind', source + ':' + to + ':' + mode);
+  };
+  const seen = new Set();
+  for (const dir of sandbox.writable || []) {
+    const inside = path.posix.resolve(dir);
+    if (seen.has(inside)) continue;
+    seen.add(inside);
+    bind(dir, inside, 'rw');
+  }
+  for (const item of [...protectedWritePaths(sandbox.protectedRoots || []).existing, ...(sandbox.readOnlyPaths || []).filter((entry) => (sandbox.writable || []).some((dir) => pathContains(dir, entry.path)))]) {
+    bind(item.path, path.posix.resolve(item.path), 'ro');
+  }
+  const writableRoots = [...seen];
+  const masked = new Set();
+  for (const item of sandbox.maskedPaths || []) {
+    if (!item || !['file', 'directory'].includes(item.type) || !item.path) continue;
+    const inside = path.posix.resolve(item.path);
+    const below = writableRoots.some((root) => { const relative = path.posix.relative(root, inside); return relative !== '' && !relative.startsWith('..') && !path.posix.isAbsolute(relative); });
+    if (!below || masked.has(inside)) continue;
+    masked.add(inside);
+    bind(item.type === 'directory' ? emptyMaskDirectory() : '/dev/null', inside, 'ro');
+  }
+  wrapped.push('--pwd', path.posix.resolve(cwd), image, command, ...args);
+  return wrapped;
+}
+
+let maskDir = null;
+function emptyMaskDirectory() {
+  if (maskDir && existsSync(maskDir)) return maskDir;
+  maskDir = mkdtempSync(path.join(os.tmpdir(), 'oasis-mask-'));
+  return maskDir;
+}
+
 export function containerArgs(command, args, sandbox, cwd, platform = process.platform) {
+  if (APPTAINER_KINDS.includes(sandbox.kind)) return apptainerArgs(command, args, sandbox, cwd);
   const image = safeContainerValue(sandbox.image || DEFAULT_CONTAINER_IMAGE, 'image');
   if (!/^[A-Za-z0-9][A-Za-z0-9._\/:@-]{0,254}$/.test(image)) throw new Error('Sandbox image name is not valid: ' + image);
   const wrapped = ['run', '--rm', '-i', '--init',
