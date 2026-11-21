@@ -141,6 +141,7 @@ export function helpText() {
     '  oasis gateway signal          The same from Signal through a signal-cli REST API bridge',
     '  oasis gateway email           Email the agent: IMAP IDLE in, SMTP replies in the same thread; DMARC/DKIM-checked senders only',
     '  oasis gateway whatsapp        The same from WhatsApp (official Cloud API, signed webhook, approval buttons)',
+    '  oasis gateway all             Every configured platform at once, in one process with one routine scheduler',
     '  oasis acp [--permission-mode MODE] [--editor-terminal]  Run as an Agent Client Protocol agent for Zed, JetBrains, Neovim and other ACP editors',
     '  oasis app-server [--listen stdio://|unix://[PATH]|ws://IP:PORT] [--ws-auth capability-token --ws-token-file PATH | --ws-auth signed-bearer-token --ws-shared-secret-file PATH] [--permission-mode MODE]  Speak the Codex App Server protocol (JSONL on stdio, or one message per WebSocket text frame) so Codex app-server clients can drive OASIS',
     '  oasis mcp login|logout NAME   Sign in to (or out of) a remote MCP server with OAuth',

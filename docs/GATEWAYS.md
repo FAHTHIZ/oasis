@@ -14,6 +14,10 @@ While a gateway is running it also hosts your [routines](USER-GUIDE.md#routines-
 | Email (IMAP and SMTP) | `oasis gateway email` | Typed replies | `email:ADDRESS` |
 | WhatsApp (official Cloud API) | `oasis gateway whatsapp` | Buttons | `whatsapp:+NUMBER` |
 
+## Every platform at once
+
+`oasis gateway all` starts every platform whose token is set (`OASIS_TELEGRAM_BOT_TOKEN`, `OASIS_DISCORD_BOT_TOKEN`, `OASIS_SLACK_BOT_TOKEN`, `OASIS_MATRIX_ACCESS_TOKEN`, `OASIS_SIGNAL_NUMBER`, `OASIS_EMAIL_USER` or `OASIS_WHATSAPP_TOKEN`) in one process, with one routine scheduler. Log lines are prefixed with the platform. If a platform is only half configured, startup stops with that platform's error, and if one platform loses its connection later, the others keep answering.
+
 ## Chat commands
 
 `/new` starts a fresh session, `/stop` cancels the running task, `/status` shows the session, `/mode default|acceptEdits|plan|auto` changes how approvals work and `/help` lists these. Every command also works with `!` instead of `/` (Slack reserves `/`).
