@@ -20,7 +20,7 @@ Find the right guide without knowing the repository. The root
 - [First run](FIRST-RUN.md): provider setup, workspace trust, permissions and verification.
 - [Terminal guide](TERMINAL.md): input prefixes, keys, permission modes, commands, scripts and CI.
 - [Interfaces](INTERFACES.md): web app, ACP editors, VS Code family, Codex App Server, Cursor Cloud Agents API, SDK, CI, chat gateways.
-- [Messaging gateways](GATEWAYS.md): Telegram, Discord, Slack, Matrix, Signal and email setup, chat commands, typed approvals and routine delivery.
+- [Messaging gateways](GATEWAYS.md): Telegram, WhatsApp, Discord, Slack, Matrix, Signal and email setup, chat commands, typed approvals and routine delivery.
 - [Desktop app](DESKTOP.md): installers, unsigned first launch, key storage, updates, uninstall.
 - [Remote access](REMOTE-ACCESS.md): run the web app on a server and use connected browser sessions from another device, securely.
 - [Downloads and releases](RELEASES.md): npm tarball, install scripts, Homebrew, checksums.
