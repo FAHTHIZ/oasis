@@ -11,6 +11,34 @@ const ALIASES = { compress: 'compact', reset: 'new', tokens: 'usage' };
 
 export const CHAT_COMMAND_HELP = '/model [NAME] switches the model, /effort LEVEL sets reasoning, /compress shrinks the context, /usage shows tokens and cost, /insights summarizes recent sessions, /undo removes the last turn, /retry runs the last request again, /skills lists skills and /SKILL-NAME uses one.';
 
+// Commands every chat gateway answers, for the platforms' native command menus
+// (Telegram setMyCommands, Discord slash commands). Names are 1-32 lowercase
+// letters, digits or underscores; `arg` describes the optional argument.
+export const CHAT_COMMAND_MENU = [
+  { command: 'new', description: 'Start a fresh session' },
+  { command: 'stop', description: 'Cancel the running task' },
+  { command: 'status', description: 'Show the session, model and mode' },
+  { command: 'retry', description: 'Run the last request again' },
+  { command: 'undo', description: 'Remove the last turn' },
+  { command: 'model', description: 'Show or switch the model', arg: 'Model name, optionally followed by an effort level' },
+  { command: 'effort', description: 'Set the reasoning effort', arg: 'low, medium, high or max' },
+  { command: 'mode', description: 'Approvals: default, acceptEdits, plan or auto', arg: 'default, acceptEdits, plan or auto' },
+  { command: 'compress', description: 'Shrink the conversation context', arg: 'What to keep (optional)' },
+  { command: 'usage', description: 'Tokens and cost so far' },
+  { command: 'context', description: 'How full the context window is' },
+  { command: 'resume', description: 'Continue a saved session', arg: 'Session number or ID (empty lists them)' },
+  { command: 'personality', description: 'List or switch the agent voice', arg: 'Personality name, or none' },
+  { command: 'voice', description: 'Voice replies on, off or auto', arg: 'on, off or auto', platforms: ['telegram'] },
+  { command: 'skills', description: 'List skills (send /SKILL-NAME to use one)' },
+  { command: 'insights', description: 'Summary of recent sessions' },
+  { command: 'sethome', description: 'Send routine results to this chat' },
+  { command: 'help', description: 'What this bot can do' }
+];
+
+export function chatCommandMenu(platform) {
+  return CHAT_COMMAND_MENU.filter((entry) => !entry.platforms || entry.platforms.includes(platform));
+}
+
 function lastUserText(session) {
   const messages = session && Array.isArray(session.messages) ? session.messages : [];
   for (let i = messages.length - 1; i > 0; i--) {
