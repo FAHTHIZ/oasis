@@ -15,7 +15,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 
-const DEFAULT_SSH_EXCLUDES = ['node_modules/', '.venv/', 'venv/', '__pycache__/', '.mypy_cache/', '.pytest_cache/', '.tox/', 'target/', '.gradle/', '.next/cache/', '.oasis/sessions/'];
+export const DEFAULT_SSH_EXCLUDES = ['node_modules/', '.venv/', 'venv/', '__pycache__/', '.mypy_cache/', '.pytest_cache/', '.tox/', 'target/', '.gradle/', '.next/cache/', '.oasis/sessions/'];
 const HOST_RE = /^(?:[A-Za-z0-9._-]+@)?(?:[A-Za-z0-9._-]+|\[[0-9A-Fa-f:]+\])$/;
 const REMOTE_PATH_RE = /^(?:~|~\/[\w.\/-]*|\/[\w.\/-]*)$/;
 const EXCLUDE_RE = /^[\w.*?\/\[\]-]{1,200}$/;
@@ -53,7 +53,7 @@ export function normalizeSshSettings(raw = {}, env = process.env, root = process
 }
 
 function sshOptions(ssh, { tty = false } = {}) {
-  const options = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=' + ssh.connectTimeout, '-o', 'ServerAliveInterval=30'];
+  const options = [...(ssh.configFile ? ['-F', ssh.configFile] : []), '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=' + ssh.connectTimeout, '-o', 'ServerAliveInterval=30'];
   if (ssh.port) options.push('-p', String(ssh.port));
   if (ssh.identityFile) options.push('-i', ssh.identityFile, '-o', 'IdentitiesOnly=yes');
   options.push(tty ? '-tt' : '-T');
@@ -96,10 +96,13 @@ export function sshWrap(command, args, sandbox, cwd, { tty = false, platform = p
   return { command: '/bin/sh', args: ['-c', script] };
 }
 
+// Cloud sandboxes start from a stock image; add rsync once when it is missing.
+const INSTALL_RSYNC = 'command -v rsync >/dev/null || { (sudo -n apt-get update -qq && sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq rsync) >/dev/null 2>&1 || sudo -n apk add -q rsync >/dev/null 2>&1 || true; }; ';
+
 const probes = new Map();
 export function detectSshRuntime(ssh, force = false, run = spawnSync) {
   if (!ssh || ssh.error) return { available: false, kind: 'none', reason: ssh && ssh.error || 'SSH backend is not configured.' };
-  const key = JSON.stringify([ssh.host, ssh.port, ssh.identityFile, ssh.sync]);
+  const key = JSON.stringify([ssh.host, ssh.port, ssh.identityFile, ssh.sync, ssh.configFile || '']);
   if (probes.has(key) && !force) return probes.get(key);
   let probe;
   try {
@@ -107,11 +110,11 @@ export function detectSshRuntime(ssh, force = false, run = spawnSync) {
       const local = run('rsync', ['--version'], { timeout: 5000, encoding: 'utf8', windowsHide: true });
       if (!local || local.status !== 0) throw Object.assign(new Error('rsync is not installed here. Install rsync, or set "sync": "none".'), { soft: true });
     }
-    const result = run('ssh', [...sshOptions(ssh), ssh.host, ssh.sync === 'rsync' ? 'command -v rsync >/dev/null || { echo "rsync is not installed on the remote host" >&2; exit 3; }' : 'true'], { timeout: (ssh.connectTimeout + 10) * 1000, encoding: 'utf8', windowsHide: true });
+    const result = run('ssh', [...sshOptions(ssh), ssh.host, ssh.sync === 'rsync' ? (ssh.installRsync ? INSTALL_RSYNC : '') + 'command -v rsync >/dev/null || { echo "rsync is not installed on the remote host" >&2; exit 3; }' : 'true'], { timeout: (ssh.connectTimeout + 10) * 1000, encoding: 'utf8', windowsHide: true });
     if (result && result.error && result.error.code === 'ENOENT') throw Object.assign(new Error('ssh is not installed. Install OpenSSH.'), { soft: true });
     probe = result && result.status === 0
       ? { available: true, kind: 'ssh' }
-      : { available: false, kind: 'none', reason: 'Cannot run commands on ' + ssh.host + ' over SSH' + (result && result.stderr ? ': ' + String(result.stderr).trim().split('\n').pop().slice(0, 200) : '.') + ' Check that key-based login works (ssh ' + ssh.host + ' true) without a password prompt.' };
+      : { available: false, kind: 'none', reason: 'Cannot run commands on ' + ssh.host + ' over SSH' + (result && result.stderr ? ': ' + String(result.stderr).trim().split('\n').pop().slice(0, 200) : '.') + ' ' + (ssh.configFile ? 'Run oasis daytona status, or oasis daytona delete to start over.' : 'Check that key-based login works (ssh ' + ssh.host + ' true) without a password prompt.') };
   } catch (error) {
     probe = { available: false, kind: 'none', reason: error.soft ? error.message : 'SSH check failed: ' + error.message };
   }
