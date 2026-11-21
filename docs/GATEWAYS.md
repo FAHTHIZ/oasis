@@ -65,6 +65,8 @@ There is one home channel per OASIS profile, stored in `gateway-home.json` in th
 2. Set `OASIS_TELEGRAM_BOT_TOKEN` and `OASIS_TELEGRAM_ALLOWED_CHATS` (comma-separated numeric chat IDs; message the bot once to see yours).
 3. Run `oasis gateway telegram`.
 
+On start the bot registers its command menu with Telegram (`setMyCommands`), so typing `/` lists `/new`, `/stop`, `/retry`, `/model`, `/usage` and the other chat commands with a short description. Set `OASIS_TELEGRAM_COMMAND_MENU=0` to keep a menu you manage in BotFather.
+
 ## Discord
 
 1. Create an application and bot in the Developer Portal, and enable the **Message Content** intent.

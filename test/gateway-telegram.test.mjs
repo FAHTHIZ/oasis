@@ -98,3 +98,37 @@ test('long replies are split under the Telegram limit', () => {
   assert.ok(parts.length > 1);
   assert.ok(parts.every((part) => part.length <= 4000));
 });
+
+test('the bot registers its command menu on start, and every entry is a handled command', async () => {
+  const { TELEGRAM_COMMANDS } = await import('../src/gateway-telegram.mjs');
+  for (const entry of TELEGRAM_COMMANDS) {
+    assert.match(entry.command, /^[a-z0-9_]{1,32}$/);
+    assert.ok(entry.description.length >= 3 && entry.description.length <= 256);
+  }
+  const run = async (env) => {
+    const calls = [];
+    let gateway;
+    const fetchImpl = async (url, init) => {
+      const method = url.split('/').pop();
+      calls.push({ method, body: JSON.parse(init.body) });
+      if (method === 'getUpdates') gateway.stop();
+      return new Response(JSON.stringify({ ok: true, result: method === 'getUpdates' ? [] : method === 'getMe' ? { username: 'oasis_bot' } : true }));
+    };
+    gateway = createTelegramGateway({ token: TOKEN, allowedChats: new Set(['42']), fetchImpl, env, deps: deps(fakeAgent(() => ({ text: 'x' }))), root: PAIR_ROOT, log: () => {} });
+    await gateway.run();
+    return calls;
+  };
+  const calls = await run({});
+  const menu = calls.find((call) => call.method === 'setMyCommands');
+  assert.deepEqual(menu.body.commands.map((entry) => entry.command), TELEGRAM_COMMANDS.map((entry) => entry.command));
+  assert.ok(!(await run({ OASIS_TELEGRAM_COMMAND_MENU: '0' })).some((call) => call.method === 'setMyCommands'));
+  // Each menu command is answered by the bot rather than sent to the agent as a prompt.
+  for (const { command } of TELEGRAM_COMMANDS) {
+    const tg = fakeTelegram();
+    let prompts = 0;
+    const gateway = createTelegramGateway({ token: TOKEN, allowedChats: new Set(['42']), fetchImpl: tg.fetchImpl, deps: { ...deps(fakeAgent(() => { prompts++; return { text: 'x' }; })), slash: { runBuiltinCommand: async () => ({ output: 'ok' }) } }, root: PAIR_ROOT, log: () => {} });
+    await gateway.handleUpdate(msg(42, '/' + command));
+    await flush();
+    assert.equal(prompts, 0, command);
+  }
+});
