@@ -2235,6 +2235,16 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       const { runHomeAssistantTool } = await import('./home-assistant.mjs');
       return await runHomeAssistantTool(name, args, { session: context.session, env: context.env || process.env, approval: context.approval, autoApprove: Boolean(context.autoApprove), ruleAllowed: Boolean(context.ruleAllowed), signal: context.signal, fetchImpl: context.fetchImpl });
     }
+    case 'honcho_profile':
+    case 'honcho_search':
+    case 'honcho_context':
+    case 'honcho_reasoning':
+    case 'honcho_conclude': {
+      const { runHonchoTool, honchoConfig, createHonchoState } = await import('./honcho.mjs');
+      const session = context.session || {};
+      if (!session.honcho) { const config = honchoConfig(context.env || process.env, session.settings || {}); if (config) session.honcho = createHonchoState(config, { root }); }
+      return await runHonchoTool(name, args, { state: session.honcho, signal: context.signal, fetchImpl: context.fetchImpl });
+    }
     case 'session_search': {
       const { runSessionSearchTool } = await import('./session-search.mjs');
       return await runSessionSearchTool(args, { root, env: context.env || process.env, session: context.session });

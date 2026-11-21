@@ -48,7 +48,8 @@ const TOOL_ALIASES = {
   ls: ['list_files'],
   task: ['task'],
   todowrite: ['todo_write'],
-  homeassistant: ['home_assistant', 'home_assistant_control']
+  homeassistant: ['home_assistant', 'home_assistant_control'],
+  honcho: ['honcho_profile', 'honcho_search', 'honcho_context', 'honcho_reasoning', 'honcho_conclude']
 };
 
 const EDIT_TOOLS = new Set(['edit_file', 'multi_edit', 'write_file', 'notebook_edit']);

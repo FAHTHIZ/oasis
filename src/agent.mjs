@@ -780,6 +780,14 @@ export async function createSession({ root, config, restore = null, permissionMo
       session.homeAssistant = homeAssistant;
       session.toolDefinitions = session.toolDefinitions.concat(HOME_ASSISTANT_TOOL_DEFINITIONS);
     }
+    const { honchoConfig, createHonchoState, honchoContextPrompt, HONCHO_TOOL_DEFINITIONS } = await import('./honcho.mjs');
+    const honcho = honchoConfig(env, loadedSettings);
+    if (honcho) {
+      session.honcho = createHonchoState(honcho, { root, sessionId: session.sessionId });
+      if (honcho.recallMode !== 'context') session.toolDefinitions = session.toolDefinitions.concat(HONCHO_TOOL_DEFINITIONS);
+      const honchoText = await honchoContextPrompt(session.honcho);
+      if (honchoText) { if (dynamicSections) dynamicSections.push(honchoText); else systemText += '\n\n' + honchoText; }
+    }
     const { textToSpeechConfig, TEXT_TO_SPEECH_TOOL_DEFINITION } = await import('./tts.mjs');
     const speechConfig = textToSpeechConfig(env, loadedSettings);
     if (speechConfig) {
@@ -1586,7 +1594,7 @@ export function friendlyToolError(error, args = {}, root = '') {
   return message;
 }
 
-export const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'worktree_inspect', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read', 'session_search', 'ide_get_diagnostics', 'ide_open_file', 'home_assistant', ...SESSION_READ_ONLY_TOOLS]);
+export const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'worktree_inspect', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read', 'session_search', 'ide_get_diagnostics', 'ide_open_file', 'home_assistant', 'honcho_search', 'honcho_context', 'honcho_reasoning', ...SESSION_READ_ONLY_TOOLS]);
 
 const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
   name: 'exit_plan_mode',
@@ -2784,6 +2792,10 @@ export async function runAgentTurn(session, prompt, options = {}) {
       session.webUsage.routingTasks = Number(session.webUsage.routingTasks || 0) + 1;
       if (savingsUSD !== null) session.webUsage.routingSavingsUSD = Number(session.webUsage.routingSavingsUSD || 0) + savingsUSD;
       else session.webUsage.routingSavingsKnown = false;
+    }
+    if (session && session.honcho && !options.isSubagent && !options.planOnly && result && result.text) {
+      const { syncHonchoTurn } = await import('./honcho.mjs');
+      await syncHonchoTurn(session.honcho, prompt, result.text, { signal: options.signal });
     }
     const runReport = buildRunReport(runTracker, { result, route: reportRoute, escalation });
     if (session && !options.isSubagent) session.lastRunReport = runReport;
