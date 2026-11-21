@@ -227,6 +227,8 @@ Saved sessions keep an audit trail next to the conversation: every tool call and
 
 `oasis sessions export ID...|--all --out FILE.jsonl` writes conversations as JSONL for evaluation or fine-tuning datasets (`--format openai`, the default, or `sharegpt`), with secrets redacted. Add `--verified` to keep only sessions whose last recorded check (tests, build, lint or type check) passed with no file edits after it; sessions that never ran a check are left out. That is a filter on recorded evidence, not proof the work is correct.
 
+Long runs make poor training examples when they overflow the model's context. `--compress [TOKENS]` (default 15250) cuts each trajectory to that budget the way [Hermes Agent's trajectory compressor](https://github.com/NousResearch/hermes-agent/blob/main/trajectory_compressor.py) does: the first system, user, assistant and tool turns and the last four turns stay verbatim, and just enough turns from the start of the middle are replaced by one user turn starting `[CONTEXT SUMMARY]:`, written by your configured model. A tool call is never split from its result, the system prompt gets a note that earlier tool results may be summarized, and if the summary request fails a fixed notice is used instead. `--summary-tokens N` (default 750) sizes the summary, `--keep-last N` protects more of the end, and `--metrics FILE` writes dataset totals in Hermes' `compression_metrics.json` shape; each compressed record also carries its own `compression_metrics`. `oasis batch PROMPTS.jsonl --compress` applies the same to batch trajectories.
+
 ## 7. Security boundaries
 
 - Approval prompts are not a replacement for operating-system isolation.
