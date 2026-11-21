@@ -29,6 +29,7 @@ import { canEscalate, escalate, newEscalation, thrashEvidence } from './escalati
 import { buildRunReport, newRunTracker, trackFallback, trackUsage } from './run-report.mjs';
 import { mergeAnthropicUsage, toolCallSlot, strayStreamError } from './provider-stream.mjs';
 import { maxParallelReadsFrom, maxParallelTasksFrom, planToolBatches } from './tool-batch-scheduler.mjs';
+import { duplicateSideEffectCalls, duplicateCallNotice } from './duplicate-calls.mjs';
 import { validateToolArguments } from './tool-schema-validation.mjs';
 import { redactAuditValue, runTool } from './tool-kernel.mjs';
 import { toResponsesRequest, toAnthropicRequest, chatCompletionTool } from './provider-requests.mjs';
@@ -2801,7 +2802,8 @@ async function applyToolResults(session, options, turn) {
     const item = outputs.get(call.id);
     const name = call.function && call.function.name;
     const result = item && item.result;
-    if (item) {
+    // A skipped duplicate (same call twice in one reply) is not another attempt.
+    if (item && !(result && result.duplicateOf)) {
       const args = safeToolArguments(call.function && call.function.arguments);
       const outcome = JSON.stringify({ name, args, content: String(item.content || '') });
       if (turn.lastToolOutcome && turn.lastToolOutcome.signature === outcome) {
@@ -3591,7 +3593,14 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     };
     const isSpecialistReview = (call) => call.function && call.function.name === 'run_specialist_review';
     const isTask = (call) => call.function && call.function.name === 'task';
-    const batches = planToolBatches(eligible, {
+    // An identical side-effecting call repeated in the same reply runs once.
+    const duplicateCalls = duplicateSideEffectCalls(eligible, { isReadOnly });
+    for (const call of eligible) {
+      if (!duplicateCalls.has(call.id)) continue;
+      const name = call.function && call.function.name;
+      outputs.set(call.id, { role: 'tool', tool_call_id: call.id, name, content: duplicateCallNotice(name, duplicateCalls.get(call.id)), result: { skipped: true, duplicateOf: duplicateCalls.get(call.id) } });
+    }
+    const batches = planToolBatches(duplicateCalls.size ? eligible.filter((call) => !duplicateCalls.has(call.id)) : eligible, {
       isReadOnly,
       isSpecialistReview,
       isTask,
