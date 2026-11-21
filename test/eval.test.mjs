@@ -1171,3 +1171,43 @@ test('a CLI result marked cost_known: false is an unknown cost, not a free run',
   assert.equal(parsed.costUSD, null);
   assert.equal(parseClaudeCodeOutput(JSON.stringify({ result: 'ok', total_cost_usd: 0.25, usage: { input_tokens: 2, output_tokens: 1 } })).costUSD, 0.25);
 });
+
+// Seen live (2026-11-21): a keyless gateway ran out of anonymous quota 3 tasks
+// into a 53-task run; the other 50 were recorded as model failures in 0.3 s each.
+test('trials where the provider never answered are not scored, and three in a row stop the run', async (t) => {
+  const tmp = await temporaryDirectory('oasis-eval-provider-down-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const configDir = path.join(tmp, 'user-config');
+  const resultsDir = path.join(tmp, 'eval-results');
+  const tasksDir = path.join(tmp, 'tasks');
+  await mkdir(tasksDir);
+  for (const id of ['task-a', 'task-b', 'task-c', 'task-d', 'task-e']) await createFixtureTask(tasksDir, id);
+  const env = { ...process.env, OASIS_CONFIG_DIR: configDir };
+  await saveConfig({ protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:1/v1', model: 'fixture-model', apiKey: '', maxSteps: 4 }, { env });
+  const output = { text: '', write(value) { this.text += String(value); } };
+  let calls = 0;
+  const result = await runEvalCommand(['--trials', '1'], {
+    autoApprove: true, env, tasksDir, resultsDir, output,
+    agentRunner: async (_session, _prompt, options) => {
+      calls++;
+      if (calls === 1) {
+        options.onUsage({ inputTokens: 10, outputTokens: 2 });
+        throw new Error('The model gave up.');
+      }
+      throw new Error('All 2 models in the fallback chain failed:\n  m:free: HTTP 429: Sign up for free to continue.');
+    }
+  });
+  assert.equal(calls, 4, 'the run stops after three provider errors in a row');
+  assert.deepEqual(result.results.map((row) => row.status), ['failed', 'errored', 'errored', 'errored']);
+  assert.equal(result.summary.failed, 1, 'only the trial the model actually ran counts as a failure');
+  assert.equal(result.summary.errored, 3);
+  assert.equal(result.summary.passRate, 0);
+  assert.equal(result.summary.stoppedEarly.reason, 'provider');
+  assert.equal(result.ok, false);
+  assert.match(output.text, /  ERROR task-b trial 1/);
+  assert.match(output.text, /Pass rate: 0\/1/);
+  assert.match(output.text, /Stopped early: the provider failed 3 trials in a row .*HTTP 429.*1 trials were not run/);
+  // A comparison of that report scores only the trial that ran.
+  const compared = await compareEvalReports([result.resultsPath, result.resultsPath], { env });
+  assert.ok(compared);
+});
