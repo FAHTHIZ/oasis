@@ -14,7 +14,11 @@ const TEST_PATH = [
   /(^|\/)test_[^/]+\.py$/i,
   /(Test|Tests|Spec)\.(java|kt|scala|cs|swift|php)$/,
   // A single test script: test.mjs, tests.py, spec.js, test.sh.
-  /(^|\/)(tests?|specs?)\.([cm]?[jt]sx?|py|rb|sh)$/i
+  /(^|\/)(tests?|specs?)\.([cm]?[jt]sx?|py|rb|sh)$/i,
+  // Test setup that runs inside every test: pytest's conftest.py and the
+  // Jest/Vitest setup files. A hook there can rewrite every outcome.
+  /(^|\/)conftest\.py$/,
+  /(^|\/)(setupTests|(jest|vitest)\.setup)\.[cm]?[jt]sx?$/
 ];
 
 export function isTestPath(file) {
@@ -41,6 +45,9 @@ const SKIP_PATTERNS = [
   [/#\[ignore\]/, 'ignored a test'],
   [/@(?:Disabled|Ignore)\b/, 'disabled a test'],
   [/^\s*(?:skip|pending)(?:\s+['"]|\s*\(\s*['"]|\s*$)/, 'skipped a test'],
+  [/\bpytest_runtest_makereport\b|\bitems\[:\]\s*=|\bitems\.(?:clear|remove|pop)\(|\bpytest_deselected\b|\.outcome\s*=\s*['"]passed['"]/, 'changed how pytest collects or reports tests'],
+  [/(?:^|[^\w.])(?:assert|expect)(?:\.\w+)*\s*=(?![=>])|Object\.defineProperty\(\s*assert\b|\bmock\.patch\(\s*['"](?:unittest\.)?assert/, 'replaced the assertion functions'],
+  [/\bprocess\.exit\s*\(\s*0?\s*\)|\bprocess\.exitCode\s*=\s*0\b|\bos\._exit\(\s*0\s*\)|\bprocess\.reallyExit\b/, 'forces a zero exit code from the tests'],
   [/\bexcept\s*\(?[^:]*\bAssertionError\b|\bcatch\s*\(\s*\w*\s*(?::\s*AssertionError)?\s*\)\s*\{\s*\}|\.catch\s*\(\s*\(\s*\w*\s*\)\s*=>\s*(?:\{\s*\}|undefined|null)\s*\)|\brescue\s+(?:Minitest::Assertion|RSpec::Expectations::ExpectationNotMetError)\b|catch\s*\(\s*(?:AssertionError|AssertionFailedError)\b/, 'catches and ignores assertion failures']
 ];
 const TEST_DECL = /^\s*(?:(?:it|test|specify)(?:\.(?:skip|only|todo|fixme))?\s*\(|def\s+test_\w*\s*\(|func\s+Test\w*\s*\(|#\[test\]|@Test\b|fn\s+test_\w*\s*\()/;
