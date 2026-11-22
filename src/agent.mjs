@@ -2989,6 +2989,7 @@ async function applyToolResults(session, options, turn) {
       // (outputs differ by timestamps, so the identical-outcome check misses it).
       const commandText = RETRY_TRACKED_COMMANDS.has(name) ? [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ') : '';
       if ((FILE_EDITING_TOOL_NAMES.has(name) || (commandText && scriptedEditKind(commandText))) && result && typeof result === 'object' && !result.error && result.approved !== false && result.blocked !== true) { failedCommandRuns.clear(); recentOutcomes.clear(); turn.editEpoch++; }
+      if (RETRY_TRACKED_COMMANDS.has(name) && result && typeof result === 'object' && result.approved !== false && result.blocked !== true && turn.verification) turn.verification.shellRan = true;
       if (name === 'todo_write' && result && typeof result === 'object' && !result.error) gates.todosWrittenThisTurn = true;
       else if (RETRY_TRACKED_COMMANDS.has(name) && result && typeof result === 'object' && !result.background && !result.running) {
         const key = name + ' ' + JSON.stringify({ command: args.command, args: args.args, cwd: args.cwd });
@@ -3775,6 +3776,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     // One number per model reply; file-state uses it to tell a read the model
     // has seen from one in the same reply (see assertFileFresh).
     session.toolBatch = (Number.isInteger(session.toolBatch) ? session.toolBatch : 0) + 1;
+    // Before the first command this turn: which test files already differ
+    // from HEAD, so the completion gate can tell what a command changed.
+    if (!verification.testBaseline && session.root && eligible.some((call) => RETRY_TRACKED_COMMANDS.has(call.function && call.function.name))) {
+      const { testFileSnapshot } = await import('./test-tamper.mjs');
+      verification.testBaseline = await testFileSnapshot(session.root);
+    }
 
     // Preserve the model's ordering across reads and side effects. Consecutive read-only
     // workspace calls can run concurrently, but a later read must not overtake an earlier edit.
