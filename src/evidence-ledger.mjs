@@ -14,7 +14,7 @@
 
 import { createHash } from 'node:crypto';
 
-export const EVIDENCE_KINDS = Object.freeze(['check', 'command', 'execution', 'fetch', 'search', 'edit', 'side_effect']);
+export const EVIDENCE_KINDS = Object.freeze(['check', 'command', 'execution', 'fetch', 'search', 'edit', 'side_effect', 'tamper']);
 const MAX_EVENTS = 2000;
 const MAX_NUMBERS_PER_EVENT = 400;
 const MAX_URLS_PER_EVENT = 50;
@@ -126,6 +126,10 @@ function packEvidence(name, args, result, digest) {
 function ranNoTests(text) {
   const value = String(text || '');
   if (/^\s*(?:#|ℹ)\s*tests 0\s*$/m.test(value) && !/^\s*(?:#|ℹ)\s*tests [1-9]/m.test(value)) return true;
+  // Every test skipped (node:test, TAP, pytest, Jest): nothing was checked.
+  if (/^\s*(?:#|ℹ)\s*pass 0\s*$/m.test(value) && /^\s*(?:#|ℹ)\s*(?:skipped|todo) [1-9]/m.test(value) && !/^\s*(?:#|ℹ)\s*pass [1-9]/m.test(value)) return true;
+  if (/^=+ (?:\d+ (?:skipped|deselected|xfailed)(?:, )?)+ in [\d.]+s/m.test(value)) return true;
+  if (/^\s*Tests:\s+\d+ skipped, \d+ total/m.test(value)) return true;
   if (/^\s*0 passing\b/m.test(value) && !/^\s*[1-9]\d* (?:passing|failing)\b/m.test(value)) return true;
   if (/\bNo tests found\b|\bno tests ran\b|\bNo test files found\b|^\s*Tests:\s+0 total/im.test(value)) return true;
   const cargo = [...value.matchAll(/^running (\d+) tests?$/gm)];

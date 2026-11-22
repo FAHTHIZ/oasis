@@ -27,6 +27,7 @@ import { extractFollowups, recordFollowups, followupsEnabled } from './followups
 import { deliverSteering, pendingSteering } from './steering.mjs';
 import { formatLspVerificationBlocker, verificationSummary } from './verification-summary.mjs';
 import { permissionMode } from './plan-mode.mjs';
+import { sessionEvidence, recordEvidence } from './evidence-ledger.mjs';
 import {
   ACTION_NUDGE, CONTINUE_NUDGE, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, providerStopNotice, providerCutNotice,
   REFUSAL_NUDGE, SOURCE_EXTENSIONS, UNREADABLE_CALL_NUDGE, GATE_FOLLOWUP_NUDGE, NEW_TEST_FOLLOWUP_NUDGE, announcesNextStep, announcesTerseStep, appendLspUnavailableNotice, asksForAction,
@@ -141,6 +142,13 @@ export async function runCompletionGates(turn, host) {
     const { inspectTestChanges, isTestPath } = await import('./test-tamper.mjs');
     const changes = await inspectTestChanges(session.root, [...verification.changedPaths]);
     verification.testTampering = changes.tampering;
+    // Goal checks read the session record, not this turn's state: note when
+    // tests are weakened and when they are no longer, so "npm test passes"
+    // is not met by a suite the agent loosened.
+    const ledger = sessionEvidence(session);
+    const weakened = Array.isArray(changes.tampering) ? changes.tampering : [];
+    const lastTamper = ledger ? [...ledger.events].reverse().find((event) => event.kind === 'tamper') : null;
+    if (ledger && (weakened.length || (lastTamper && lastTamper.files.length))) recordEvidence(ledger, { kind: 'tamper', files: weakened.slice(0, 10).map((item) => String(item.file) + ': ' + String(item.reason)) });
     // Files the agent created are untracked, so absent from the diff; a new test file is a new test.
     const created = verification.createdPaths instanceof Set ? verification.createdPaths : new Set();
     verification.testsOnlyExtended = [...verification.changedPaths].some((item) => created.has(item) && isTestPath(item)) ? [] : changes.extendedOnly;
