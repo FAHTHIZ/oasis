@@ -67,7 +67,11 @@ export function goalEvidenceGate(condition, events = []) {
   for (const command of wanted) {
     const check = latestCheck(events, command);
     const name = command ? '`' + command + '`' : 'a test or build check';
-    if (!check) return { met: false, evidence: true, reason: 'OASIS has not seen ' + name + ' run in this session yet, so the condition is not verified. Run it.' };
+    if (!check) {
+      // Seen live: a 4B model ran `node --test math.test.mjs` for "npm test passes".
+      const other = command ? latestCheck(events, '') : null;
+      return { met: false, evidence: true, reason: 'OASIS has not seen ' + name + ' run in this session yet, so the condition is not verified. ' + (other ? describe(other) + ' ran, but it is not ' + name + ' (it may run other files or settings); run ' + name + ' itself.' : 'Run it.') };
+    }
     if (check.masked || check.passed === null) return { met: false, evidence: true, reason: 'The latest run of ' + describe(check) + ' did not report a usable exit status' + (check.masked ? ' (a pipe hid it)' : ' (it did not finish)') + '. Run it again so its own exit code shows.' };
     if (!check.passed) return { met: false, evidence: true, reason: 'The latest run of ' + describe(check) + ' exited ' + check.exitCode + '. Fix the failures and run it again.' };
     if (check.noTests) return { met: false, evidence: true, reason: 'The latest run of ' + describe(check) + ' exited 0 but ran no tests. Run the suite so tests actually execute.' };
