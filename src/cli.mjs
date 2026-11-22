@@ -1535,7 +1535,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       ...(modeOptions.images ? { images: modeOptions.images } : {}),
       ...(modeOptions.expansion ? { expansion: modeOptions.expansion } : {}),
       // Goal continuations are written by OASIS, not typed: keep an injection hold.
-      ...(modeOptions.keepInjectionHold ? { keepInjectionHold: true } : {}),
+      // So are loop runs after the first and background-event wake-ups.
+      ...(modeOptions.keepInjectionHold || requestText.startsWith(WAKE_PREFIX) ? { keepInjectionHold: true } : {}),
       onThinkingBudget: (budget) => stdout.write('[thinking] Extended thinking on for this task (budget ' + budget + ' tokens).\n'),
       onReasoningEffort: (effort) => stdout.write('[thinking] Reasoning effort ' + effort + ' for this task.\n'),
       onMemoryRecall: (ids) => stdout.write('[memory] Recalled ' + ids.join(', ') + '\n'),
@@ -2094,6 +2095,7 @@ async function runLoop(loop, root, autoApprove, session, persistence) {
         if (session) session.loopWakeup = null;
         if (run === 1) prompt += '\n\n(This is a self-paced loop. After this run, call schedule_wakeup with delay_seconds for when to check again and a short reason, or with stop: true once the task is done or no longer needs checking.)';
       }
+      if (run > 1) loopOptions = { ...loopOptions, keepInjectionHold: true };
       session = await runPrompt(prompt, root, autoApprove, session, persistence, loopOptions);
       persistence.resumeId = null;
       if (AUTO_HALT) { stdout.write('[loop] Stopping: the last run hit a ' + (AUTO_HALT.kind === 'billing_error' ? 'billing/quota' : 'authentication') + ' error, so further runs would fail too.\n'); break; }
