@@ -28,6 +28,7 @@ test('a side question fits an 8K-token window and keeps the newest turns', async
 
 test('the goal check fits a 32K-token window', async (t) => {
   const { session, requests } = await longSession(t, 32768, [{ content: 'MET\nTests pass.' }]);
+  session.evidenceLedger = { seq: 1, epoch: 0, events: [{ seq: 1, kind: 'check', command: 'npm test', exitCode: 0, passed: true, masked: false }] };
   assert.equal((await evaluateGoal(session, 'tests pass')).met, true);
   assert.ok(sent(requests[0]) < 32768 * 4 * 0.7, 'sent ' + sent(requests[0]) + ' characters');
 });
