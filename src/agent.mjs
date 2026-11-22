@@ -2748,7 +2748,9 @@ export async function runAgentTurn(session, prompt, options = {}) {
   // passes its own (a session made for another config dir stays in it).
   if (!options.env && session && session.createEnv && session.createEnv !== process.env) options = { ...options, env: session.createEnv };
   const env = options.env || process.env;
-  if (session && !options.isSubagent) clearInjectionTurnFlag(session);
+  // A new turn from a person clears the hold; an automatic follow-up (goal,
+  // review, schema retry) keeps it, since nobody looked in between.
+  if (session && !options.isSubagent && !options.keepInjectionHold) clearInjectionTurnFlag(session);
   if (session && !options.isSubagent && session.agentInitialPrompt) {
     prompt = session.agentInitialPrompt + (String(prompt || '').trim() ? '\n\n' + prompt : '');
     session.agentInitialPrompt = '';
