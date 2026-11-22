@@ -117,6 +117,9 @@ export function sanitizeAgentHistory(agentTasks) {
       description: safePersistedText(record.description || '', 120),
       status,
       background: Boolean(record.background),
+      // A background agent whose finish notice the parent never read: a crash
+      // or exit between turns must not make its result disappear.
+      ...(record.noticePending === true || (record.background && record.noticeRead === false && record.status !== 'running' && status !== 'running') ? { noticePending: true } : {}),
       startedAt: Number.isFinite(Number(record.startedAt)) ? Number(record.startedAt) : Date.now(),
       finishedAt: Number.isFinite(Number(record.finishedAt)) ? Number(record.finishedAt) : null,
       runs: Math.max(1, Math.min(1000, Number.parseInt(record.runs, 10) || 1)),
