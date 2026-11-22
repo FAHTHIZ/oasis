@@ -87,6 +87,31 @@ The same check covers sources and numbers. A report that cites a URL the child n
 
 A subagent started from plan mode or by a read-only subagent is read-only too, and cannot be given a deploy, publish, push or release step. See [Spawn-time scope check](OASIS-NEURON-NETWORK.md#spawn-time-scope-check).
 
+## Experience
+
+Source: `src/agent-experience.mjs`. Every finished subagent run is recorded locally in `<config>/sessions/agent-experience.sqlite` (file mode 0600): agent type, model, a redacted head of the task, tool calls, tokens, cost, time, and an outcome OASIS decides from its own record, never from the agent's words:
+
+| Outcome | Meaning |
+| --- | --- |
+| `verified` | Completed, and the evidence ledger holds a passing check after the last edit, fetched pages or executions behind it |
+| `clean` | Completed with no checkable claims and none rejected |
+| `unverified` / `rejected` | Completed, but the [checked-report gate](#checked-reports) flagged or rejected claims |
+| `partial`, `failed`, `stalled`, `cancelled` | Hit its step limit, errored, went silent, or was stopped |
+
+When an agent of the same type starts work in the same project (worktrees count as the same project), the closest earlier runs from other sessions, at most three, ranked with BM25 over the task text, go into its system prompt as `EXPERIENCE FROM EARLIER RUNS`: what was asked, the outcome, and either the head of the report or why it failed. Rejected and unverified reports are never recalled, secrets and `<private>` blocks are redacted before anything is stored, per-session ids such as `task_3` are masked, and the section is capped at 2,400 characters and labelled as quoted data, not instructions.
+
+`oasis agents experience` prints the track record of each agent type, model and task domain (research, code, review, analysis, writing, computer, ops): runs, success and verified rates, failures, average tokens, cost and time. `--all` covers every project, `--type NAME` one agent, `--json` the raw numbers, and `--forget` deletes this project's rows (with `--all`, every row). The [control room](CONTROL_ROOM.md) shows the same per type and model. Rows are kept 180 days, at most 20,000.
+
+### Choosing models from experience
+
+With `"modelRouting": { "subagents": "experience" }` (or `OASIS_SUBAGENT_ROUTING=experience`), a subagent with no `model` on the `task` call or in its definition starts on the cheapest model you already configured (the routing `easyModel`, `strongModel` and `routes`, the `subagentModels` list, and `availableModels`) whose record for this agent type on this kind of work is as good as the default model's. Both need at least `subagentMinRuns` runs (default 5), and "as good" compares the lower bound of the 90% Wilson interval of the success rate, allowing a 5-point drop, so a lucky streak of two runs does not count. A model with no known price is never preferred, zero-budget mode only considers free routes, and the model policy (`availableModels`, `deniedModels`) still applies. Without enough history the default stays. The `task` result names the model and the reason in `model` and `model_route`. It is off by default.
+
+```json
+{ "modelRouting": { "subagents": "experience", "subagentModels": ["CHEAP_MODEL", "MID_MODEL"], "subagentMinRuns": 8 } }
+```
+
+`OASIS_AGENT_EXPERIENCE=0`, or `"agentExperience": false` in any settings file, turns recording, recall and experience routing off.
+
 ## Background agents and teams
 
 - `run_in_background: true` returns an id immediately. The parent is notified when the agent finishes.

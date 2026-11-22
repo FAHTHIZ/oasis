@@ -11,6 +11,7 @@
 // Everything here is lifecycle facts and short task descriptions, never
 // prompts, model output or tool results.
 
+import { sharedExperienceStore, trackRecord } from './agent-experience.mjs';
 import os from 'node:os';
 import { reduceNeuronLedger, sharedNeuronLedger } from './neuron-ledger.mjs';
 import { listAgents } from './agent-tasks.mjs';
@@ -156,6 +157,24 @@ export function systemResources() {
   };
 }
 
+/**
+ * Track record of each agent type and model over the last 30 days, from the
+ * agent experience store (src/agent-experience.mjs): every project, outcomes
+ * decided from evidence. Never prompts or reports, only counts.
+ */
+export function experienceActivity({ env = process.env, now = Date.now(), days = 30, limit = 12 } = {}) {
+  const store = sharedExperienceStore(env);
+  if (!store) return { available: false, days, records: [] };
+  let rows = [];
+  try { rows = store.runs({ since: now - days * 86400000, limit: 5000 }); } catch { return { available: false, days, records: [] }; }
+  const records = trackRecord(rows, { by: ['agentType', 'model'] }).slice(0, limit).map((item) => ({
+    agentType: item.agentType, model: item.model, runs: item.runs, succeeded: item.succeeded, verified: item.verified,
+    failed: item.failed, rejected: item.rejected, successRate: item.successRate, avgTokens: item.avgTokens,
+    avgCostUsd: item.avgCostUsd, avgDurationMs: item.avgDurationMs, lastAt: item.lastAt
+  }));
+  return { available: true, days, runs: rows.length, records };
+}
+
 /** The whole control room snapshot served at /api/control-room. */
 export function controlRoomSnapshot({ sessions = [], runs = [], env = process.env, hours, now = Date.now() } = {}) {
   const live = liveActivity(sessions);
@@ -180,6 +199,7 @@ export function controlRoomSnapshot({ sessions = [], runs = [], env = process.en
     runs,
     live,
     ledger,
+    experience: experienceActivity({ env, now }),
     resources: systemResources()
   };
 }
@@ -216,6 +236,11 @@ export function formatControlRoom(snapshot, { now = Date.now() } = {}) {
   if (ledger.history.length) {
     lines.push('', 'Recent:');
     for (const item of ledger.history.slice(0, 15)) lines.push('  ' + ago(item.at, now).padEnd(8) + ' ' + item.agentId + ' ' + item.event + (item.description ? ': ' + item.description : ''));
+  }
+  const experience = snapshot.experience;
+  if (experience && experience.records && experience.records.length) {
+    lines.push('', 'Track record (last ' + experience.days + ' days, outcomes from evidence):');
+    for (const item of experience.records.slice(0, 10)) lines.push('  ' + (item.agentType + ' / ' + (item.model || '?')).slice(0, 48).padEnd(48) + '  ' + String(item.runs).padStart(4) + ' runs  ' + String(Math.round(item.successRate * 100)).padStart(3) + '% ok  ' + item.verified + ' verified  ' + item.failed + ' failed  ' + item.rejected + ' rejected');
   }
   if (!ledger.agents.length) lines.push('', 'No agents in this window. Subagents, background agents and teams show up here as they run.');
   return lines.join('\n') + '\n';

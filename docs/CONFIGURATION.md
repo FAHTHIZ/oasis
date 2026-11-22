@@ -387,6 +387,12 @@ unknown; it is not treated as proof that a model cannot call tools. Provider
 metadata can be incomplete or stale, so this is a conservative routing guard,
 not a live tool-capability probe.
 
+Subagents can also pick their model from their own track record:
+`"modelRouting": { "subagents": "experience" }` starts a subagent on the
+cheapest configured model that has done as well as the default on the same
+agent type and kind of work. See
+[Choosing models from experience](SUBAGENTS.md#choosing-models-from-experience).
+
 ## Run report
 
 Source: `src/run-report.mjs`. After each task, `/report` shows what happened:
