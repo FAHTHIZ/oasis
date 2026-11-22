@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { changesFiles } from './evidence-ledger.mjs';
 // Runtime guard for content that comes from outside the user's control: web
 // pages, search results, browser page text and MCP tool results.
 //
@@ -148,6 +150,22 @@ const JUDGE_SIGNALS = [
   [/\b(?:reviewers?|verifiers?|graders?|judges?|critics?|evaluators?|verify agent)\b[^.\n]{0,60}\b(?:should|must|will|can|please|need to)\b[^.\n]{0,40}\b(?:pass|approve|accept|ignore|skip|overlook|mark (?:it|this|the \w+) as)\b/i, 'tells the reviewer what verdict to give'],
   [/^\s*(?:\/\/|#|\*|<!--|--)\s*VERDICT:\s*PASS\b/im, 'contains a pre-written PASS verdict']
 ];
+
+/**
+ * The files a verify agent judges: the parent's edit-tool paths, plus files a
+ * shell command could have written (git's modified and untracked files) when
+ * the parent ran one, since `cat > notes.md` leaves no edit event.
+ */
+export function judgedPathsFor(events = [], root = '') {
+  const paths = new Set((events || []).filter((event) => event && event.kind === 'edit' && event.path).map((event) => String(event.path).replace(/^\.\//, '')));
+  if (root && (events || []).some((event) => event && event.kind !== 'edit' && changesFiles(event))) {
+    try {
+      const out = execFileSync('git', ['ls-files', '-z', '-m', '-o', '--exclude-standard'], { cwd: root, encoding: 'utf8', timeout: 5000, maxBuffer: 4 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
+      for (const file of out.split('\0').filter(Boolean).slice(0, 5000)) paths.add(file);
+    } catch { /* not a git repository */ }
+  }
+  return paths;
+}
 
 export function guardJudgedRead(session, toolName, relativePath, content) {
   if (typeof content !== 'string' || !content || !session || session.agentType !== 'verify') return content;

@@ -28,7 +28,7 @@ import { isWorktreeBranchName } from './branch-names.mjs';
 import { loadAgentTranscript } from './sessions.mjs';
 import { repairInterruptedHistory } from './tool-results.mjs';
 import { unsupportedChildClaim } from './claim-check.mjs';
-import { applyInjectionTaint, injectionTaint, taintNotice } from './untrusted-content.mjs';
+import { applyInjectionTaint, injectionTaint, judgedPathsFor, taintNotice } from './untrusted-content.mjs';
 import { evidenceSince, evidenceSummary, sessionEvidence } from './evidence-ledger.mjs';
 import { checkReport } from './verification-contracts.mjs';
 import { recoveryPlan, waitForRecovery } from './agent-recovery.mjs';
@@ -440,7 +440,7 @@ export async function runSubagent(parent, args, context, options) {
   // A verify agent judges the files its parent wrote (src/untrusted-content.mjs guardJudgedRead).
   if (type === 'verify') {
     const ledger = parent.evidenceLedger && Array.isArray(parent.evidenceLedger.events) ? parent.evidenceLedger.events : [];
-    child.judgedPaths = new Set(ledger.filter((event) => event.kind === 'edit' && event.path).map((event) => String(event.path)));
+    child.judgedPaths = judgedPathsFor(ledger, parent.root);
   }
   if (experienceRoute) record.modelRoute = experienceRoute.reason;
   record.maxTurns = agent.maxTurns || null;
