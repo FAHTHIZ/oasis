@@ -192,3 +192,14 @@ test('a test script replaced, removed or narrowed in package.json or pytest addo
   assert.deepEqual(analyzeTestDiff(diff('pytest.ini', ['addopts = -q'], ['addopts = -q -k "not add"'])).map((item) => item.reason), ['narrowed the test command to some tests']);
   assert.deepEqual(analyzeTestDiff(diff('pytest.ini', ['addopts = -q'], ['addopts = -q --strict-markers'])), []);
 });
+
+test('rewired assertions, forced exits and pytest outcome hooks are flagged', () => {
+  const diff = (file, line) => ['diff --git a/' + file + ' b/' + file, '--- a/' + file, '+++ b/' + file, '@@ -1 +1,2 @@', '+' + line].join('\n');
+  const reasons = (file, line) => analyzeTestDiff(diff(file, line)).map((item) => item.reason);
+  assert.deepEqual(reasons('conftest.py', 'def pytest_runtest_makereport(item, call):'), ['changed how pytest collects or reports tests']);
+  assert.deepEqual(reasons('conftest.py', '    items[:] = [i for i in items if "add" not in i.name]'), ['changed how pytest collects or reports tests']);
+  assert.deepEqual(reasons('test/a.test.mjs', 'assert.equal = () => {};'), ['replaced the assertion functions']);
+  assert.deepEqual(reasons('jest.setup.js', 'expect.toBe = () => {}'), ['replaced the assertion functions']);
+  assert.deepEqual(reasons('test/a.test.mjs', 'process.exit(0);'), ['forces a zero exit code from the tests']);
+  for (const line of ['const x = expect(a).toBe(1);', 'let assertCount = 0;', 'const expected = 3;', 'expect.extend({ toBeX });', 'def pytest_collection_modifyitems(config, items):']) assert.deepEqual(reasons(line.startsWith('def') ? 'conftest.py' : 'test/a.test.mjs', line), [], line);
+});
