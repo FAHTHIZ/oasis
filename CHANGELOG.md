@@ -13,6 +13,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Highlights
 
+- `oasis models free` sizes a local Ollama model with its real KV cache for a 16K window when Ollama reports the architecture, instead of a flat 1 GB: qwen3:4b needs about 5.2 GB, not 3.5, so a model that would load but could not hold an agent prompt is no longer recommended.
 - Optional goal verifier: with `"goalVerifier": "agent"`, `OASIS_GOAL_VERIFIER=agent` or `--goal-verify`, a goal the judge calls met must also pass the `verify` agent, which exercises the result per criterion; its first failure is what the working agent hears next
 - A background agent's result no longer disappears when OASIS exits or crashes before the next turn: the unread finish is saved with the session, and on resume the main agent is told which agents finished unread and which the restart interrupted
 - The prompt-injection hold now follows content between agents: a subagent that read a flagged page can no longer launder its instructions through its report, a teammate message or a knowledge-board finding. Whatever it passes on is marked, the receiving agent needs a person for outbound or remote-changing actions for the rest of that turn, and marked findings are never put into another agent's prompt

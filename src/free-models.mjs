@@ -17,6 +17,7 @@
 // them as free (src/cost-policy.mjs).
 
 import { discoverLocalOllamaModels } from './ollama-discovery.mjs';
+import { kvCacheBytesPerToken, SMALL_CONTEXT_TOKENS } from './local-context.mjs';
 
 export const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const MIN_CONTEXT = 32768;
@@ -110,6 +111,7 @@ async function ollamaModels(fetchImpl, timeoutMs) {
     let tools = null;
     let context = 0;
     let parameters = 0;
+    let kvBytesPerToken = 0;
     try {
       const show = await fetchJson(fetchImpl, OLLAMA + '/api/show', { method: 'POST', body: { model: name }, timeoutMs });
       if (Array.isArray(show.capabilities)) tools = show.capabilities.includes('tools');
@@ -117,9 +119,10 @@ async function ollamaModels(fetchImpl, timeoutMs) {
         if (/\.context_length$/.test(key) && Number(value) > 0) context = Number(value);
         if (key === 'general.parameter_count' && Number(value) > 0) parameters = Math.round(Number(value) / 1e8) / 10;
       }
+      kvBytesPerToken = kvCacheBytesPerToken(show.model_info);
     } catch {}
     if (tools === false) continue;
-    models.push({ id: name, spec: 'ollama:' + name, source: 'ollama', name, context, maxOutput: 0, tools: tools !== false, toolsReported: tools === true, structured: false, vision: false, reasoning: false, billions: parameters || parameterBillions(name.replace(/:/g, '-')), created: 0, router: false });
+    models.push({ id: name, spec: 'ollama:' + name, source: 'ollama', name, context, maxOutput: 0, tools: tools !== false, toolsReported: tools === true, structured: false, vision: false, reasoning: false, billions: parameters || parameterBillions(name.replace(/:/g, '-')), ...(kvBytesPerToken ? { kvBytesPerToken } : {}), created: 0, router: false });
   }
   return { models, available: true };
 }
@@ -144,8 +147,15 @@ export async function discoverFreeModels({ fetchImpl = globalThis.fetch, timeout
 }
 
 // Same rule as pickInstalledModel in src/hardware.mjs: about 0.62 GB per
-// billion parameters at 4-bit, plus 1 GB for context and runtime.
-function localNeedGB(billions) { return billions ? Number((billions * 0.62 + 1).toFixed(1)) : null; }
+// billion parameters at 4-bit, plus 1 GB for context and runtime. When Ollama
+// reports the architecture, the context part is the real f16 KV cache of the
+// smallest window agent work needs (16K): for qwen3:4b that is 2.3 GB, not 1,
+// and a 32K llama.cpp run of it measured 6.8 GB resident.
+function localNeedGB(billions, kvBytesPerToken = 0) {
+  if (!billions) return null;
+  const context = kvBytesPerToken > 0 ? 0.5 + kvBytesPerToken * SMALL_CONTEXT_TOKENS / 1024 ** 3 : 1;
+  return Number((billions * 0.62 + context).toFixed(1));
+}
 
 /**
  * Adds what this computer knows to the ranked list, without any request:
@@ -175,7 +185,7 @@ export function annotateFreeModels(models, { routes = [], budgetGB = null, now =
     const cooling = records.map((route) => route.cooldown).filter((cooldown) => cooldown && cooldown.until > now).sort((a, b) => b.until - a.until)[0];
     if (cooling) next.cooldown = { until: new Date(cooling.until).toISOString(), source: cooling.source === 'provider' ? 'provider' : 'guess' };
     if (model.source === 'ollama' && budgetGB !== null && model.billions) {
-      next.needGB = localNeedGB(model.billions);
+      next.needGB = localNeedGB(model.billions, model.kvBytesPerToken);
       next.fits = next.needGB <= Math.max(budgetGB, 2.5);
       if (!next.fits) next.score = Math.min(next.score, -60);
     }
