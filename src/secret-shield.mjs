@@ -9,6 +9,7 @@
 // Disable with secretShield:false in settings or OASIS_SECRET_SHIELD=0.
 
 import { createHash } from 'node:crypto';
+import { unzipSync } from 'node:zlib';
 import { findRuleSecrets } from './secret-rules.mjs';
 
 // Detection has two tiers: Gitleaks' maintained rule set (220 provider-specific
@@ -123,9 +124,16 @@ const MAX_ENCODED_RUN = 64 * 1024;
 function decodeRun(run) {
   const compact = run.replace(/\s+/g, '');
   if (compact.length > MAX_ENCODED_RUN) return '';
-  const decoded = [];
-  if (/^(?:[0-9a-f]{2})+$/i.test(compact) && compact.length >= 32) decoded.push(Buffer.from(compact, 'hex').toString('latin1'));
-  if (compact.length % 4 !== 1) decoded.push(Buffer.from(compact.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('latin1'));
+  const buffers = [];
+  if (/^(?:[0-9a-f]{2})+$/i.test(compact) && compact.length >= 32) buffers.push(Buffer.from(compact, 'hex'));
+  if (compact.length % 4 !== 1) buffers.push(Buffer.from(compact.replace(/-/g, '+').replace(/_/g, '/'), 'base64'));
+  // `gzip < .env | base64`: inflate gzip and zlib streams, bounded.
+  for (const buffer of [...buffers]) {
+    if (buffer[0] === 0x1f && buffer[1] === 0x8b || buffer[0] === 0x78 && [0x01, 0x5e, 0x9c, 0xda].includes(buffer[1])) {
+      try { buffers.push(unzipSync(buffer, { maxOutputLength: 256 * 1024 })); } catch {}
+    }
+  }
+  const decoded = buffers.map((buffer) => buffer.toString('latin1'));
   // Mostly printable text only: random binary never matches a secret rule
   // and would cost time to scan.
   return decoded.filter((text) => text.length >= 12 && (text.match(/[\x20-\x7e\t\r\n]/g) || []).length / text.length > 0.9).join('\n');

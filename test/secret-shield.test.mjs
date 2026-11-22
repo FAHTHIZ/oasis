@@ -205,7 +205,7 @@ test('encoded secrets are masked too: base64, wrapped base64 and hex', async () 
   const env = 'OPENAI_API_KEY=' + key + '\nDB_PASSWORD=hunter2hunter2\n';
   const b64 = Buffer.from(env).toString('base64');
   const session = {};
-  for (const encoded of [b64, b64.match(/.{1,76}/g).join('\n'), Buffer.from(env).toString('hex'), Buffer.from(env).toString('base64url')]) {
+  for (const encoded of [b64, b64.match(/.{1,76}/g).join('\n'), Buffer.from(env).toString('hex'), Buffer.from(env).toString('base64url'), (await import('node:zlib')).gzipSync(env).toString('base64'), (await import('node:zlib')).deflateSync(env).toString('base64')]) {
     const out = maskSecrets(session, '$ base64 .env\n' + encoded + '\n$ ');
     assert.equal(out.count, 1, encoded.slice(0, 20));
     assert.doesNotMatch(out.text, /[A-Za-z0-9+/]{40}/);
