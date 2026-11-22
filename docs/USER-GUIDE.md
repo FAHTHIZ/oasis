@@ -172,7 +172,7 @@ OASIS narrates as it goes. Short updates in plain words alternate with **executi
 
 <p align="center"><img src="../assets/screenshots/web-approval-dark.png" alt="An approval request for the npm test command while the step behind it shows as waiting" width="720"></p>
 
-In **Ask first** mode, commands and risky actions wait for you in an approval sheet. The step behind it shows **Waiting**, not **Working**. Close the tab, lose Wi-Fi or reload the page, and the web app reattaches to the running task when it comes back: the timeline is replayed from the server and an open approval is asked again. Answered approvals are not asked twice.
+In **Ask first** mode, commands and risky actions wait for you in an approval sheet. The step behind it shows **Waiting**, not **Working**. Close the tab, lose Wi-Fi or reload the page, and the web app reattaches to the running task when it comes back: the timeline is replayed from the server and an open approval is asked again. Answered approvals are not asked twice. If you decline a request, the same request is declined again without asking for the rest of that task; your next message resets it. If a request contains hidden or direction-changing characters, they are shown as `<U+XXXX>` above a warning, and you are always asked, even in Auto mode.
 
 The sidebar (on wide screens) lists this project's tasks with a dot for those still running or waiting on you. Ctrl+B (Cmd+B on macOS) hides or shows it.
 

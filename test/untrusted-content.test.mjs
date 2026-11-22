@@ -300,3 +300,37 @@ test('approval prompts show hidden and direction-changing characters, and always
   }
 });
 const cleanup = [];
+
+test('a declined request is not asked about again until the next user message', async () => {
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-declined-'));
+  try {
+    let calls = 0;
+    const { config } = await scriptedModel({ after: (fn) => { cleanup.push(fn); } }, [(payload) => {
+      calls++;
+      const lastUser = payload.messages.map((message) => message.role).lastIndexOf('user');
+      const toolResults = payload.messages.slice(lastUser).filter((message) => message.role === 'tool');
+      if (toolResults.length >= 3 || calls > 6) return { content: 'done' };
+      return toolCall('r' + calls, 'run_shell', { command: 'rm -rf build-output' });
+    }]);
+    const env = { ...process.env, OASIS_AGENT_EXPERIENCE: '0', OASIS_NEURON_LEDGER: '0' };
+    delete env.NODE_TEST_CONTEXT;
+    const session = await createSession({ root, env, config });
+    const prompts = [];
+    await runAgentTurn(session, 'clean up', { env, approval: async (text) => { prompts.push(text); return false; } });
+    assert.equal(prompts.length, 1, 'asked once, then declined without asking');
+    const last = session.messages.filter((message) => message.role === 'tool').pop();
+    assert.match(String(last.content), /already declined this exact run_shell request/);
+    calls = 0;
+    await runAgentTurn(session, 'try again please', { env, approval: async (text) => { prompts.push(text); return false; } });
+    assert.equal(prompts.length, 2, 'a new user message may ask again');
+    await closeSession(session);
+  } finally {
+    for (const fn of cleanup.splice(0)) await fn();
+    await rm(root, { recursive: true, force: true });
+  }
+});
