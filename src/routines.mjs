@@ -30,6 +30,7 @@ import { readHome } from './gateway-home.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { redactSecrets } from './auto-memory.mjs';
 import { chunkText } from './gateway-core.mjs';
+import { detectInjection, stripInvisible } from './untrusted-content.mjs';
 
 const MAX_JOBS = 200;
 const MAX_PROMPT = 20_000;
@@ -584,7 +585,12 @@ function eventPrompt(job, event, file) {
 async function launch(job, env, backgrounds, now, event = null) {
   const root = job.workdir || env.HOME || process.cwd();
   const eventFile = event ? await writeEventFile(job, event, env) : null;
-  const childEnv = { ...env, OASIS_SCHEDULED_RUN: '1', OASIS_ROUTINE_ID: job.id, ...(eventFile ? { OASIS_EVENT_FILE: eventFile, OASIS_EVENT_ID: event.id } : {}) };
+  // A payload that reads like an injection starts the run under the injection
+  // hold, as reading such a page would: nobody is there to look first.
+  const cleaned = event ? stripInvisible(event.payload) : null;
+  const signals = event ? detectInjection(cleaned.text) : [];
+  const untrusted = event && (signals.length || cleaned.removed) ? JSON.stringify({ via: 'the webhook event that started this run', tool: 'its payload', signals: signals.length ? signals.slice(0, 3) : ['hidden characters'] }) : '';
+  const childEnv = { ...env, OASIS_SCHEDULED_RUN: '1', OASIS_ROUTINE_ID: job.id, ...(eventFile ? { OASIS_EVENT_FILE: eventFile, OASIS_EVENT_ID: event.id } : {}), ...(untrusted ? { OASIS_UNTRUSTED_START: untrusted } : {}) };
   const name = 'routine ' + (job.name || job.id);
   const entry = job.kind === 'script'
     ? await backgrounds.startExecJob({ root, command: job.prompt, name, env: childEnv })

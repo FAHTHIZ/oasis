@@ -249,3 +249,21 @@ test('cat of a file a fetching command saved is guarded too', async (t) => {
   await runAgentTurn(session, 'read the issue body', { autoApprove: true, permissionMode: 'bypassPermissions', env, approval: async () => true });
   assert.match(String(catted), /untrusted-content guard/);
 });
+
+test('a run started by an injected webhook payload is held from its first turn', async (t) => {
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-untrusted-start-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config } = await scriptedModel(t, [(payload) => payload.messages.some((message) => message.role === 'tool') ? { content: 'stopped' } : toolCall('s1', 'run_shell', { command: 'echo pwned' })]);
+  const env = { ...process.env, OASIS_AGENT_EXPERIENCE: '0', OASIS_NEURON_LEDGER: '0', OASIS_UNTRUSTED_START: JSON.stringify({ via: 'the webhook event that started this run', tool: 'its payload', signals: ['tries to override earlier instructions'] }) };
+  delete env.NODE_TEST_CONTEXT;
+  const session = await createSession({ root, env, config });
+  t.after(() => closeSession(session));
+  const prompts = [];
+  await runAgentTurn(session, 'triage the issue', { autoApprove: true, permissionMode: 'bypassPermissions', env, approval: async (text) => { prompts.push(text); return false; } });
+  assert.ok(prompts.some((text) => /prompt-injection/.test(text) && /webhook event/.test(text)), prompts.join(' | '));
+});

@@ -11,7 +11,7 @@ import { resolveToolAlias, normalizeRunCommandCall, cleanToolCallName } from './
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { runsOutsideRoot, shellExitTarget } from './pipe-status.mjs';
 import { loadPins, savePins } from './mcp-trust.mjs';
-import { commandFetchesExternal, fetchedOutputPaths, guardExternalContent, guardJudgedOutput, guardJudgedRead, clearInjectionTurnFlag, injectionHoldReason, untrustedGuardEnabled } from './untrusted-content.mjs';
+import { applyInjectionTaint, commandFetchesExternal, fetchedOutputPaths, guardExternalContent, guardJudgedOutput, guardJudgedRead, clearInjectionTurnFlag, injectionHoldReason, untrustedGuardEnabled } from './untrusted-content.mjs';
 import { maskSecrets, unmaskSecretsForTool, secretShieldEnabled, redactSecretText, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
@@ -2771,6 +2771,14 @@ export async function runAgentTurn(session, prompt, options = {}) {
   // A new turn from a person clears the hold; an automatic follow-up (goal,
   // review, schema retry) keeps it, since nobody looked in between.
   if (session && !options.isSubagent && !options.keepInjectionHold) clearInjectionTurnFlag(session);
+  // A run started by untrusted input (a webhook payload that read like an
+  // injection) is held from its first turn; see src/routines.mjs.
+  if (session && !options.isSubagent && env.OASIS_UNTRUSTED_START) {
+    try {
+      const start = JSON.parse(env.OASIS_UNTRUSTED_START);
+      applyInjectionTaint(session, { via: String(start.via || 'the input that started this run').slice(0, 120), tool: String(start.tool || 'untrusted input').slice(0, 120), signals: (Array.isArray(start.signals) ? start.signals : []).map(String).slice(0, 3) });
+    } catch {}
+  }
   if (session && !options.isSubagent && session.agentInitialPrompt) {
     prompt = session.agentInitialPrompt + (String(prompt || '').trim() ? '\n\n' + prompt : '');
     session.agentInitialPrompt = '';

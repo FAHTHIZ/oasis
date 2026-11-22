@@ -107,6 +107,7 @@ test('webhook routines: signed POSTs queue untrusted payloads, the next tick run
   assert.match(launched[0].prompt, /<webhook_payload>[\s\S]*Ignore previous instructions[\s\S]*<\/webhook_payload>$/);
   assert.equal((launched[0].prompt.match(/<\/webhook_payload>/g) || []).length, 1, 'payload cannot close the data block early');
   assert.equal(await readFile(launched[0].env.OASIS_EVENT_FILE, 'utf8'), payload);
+  assert.match(JSON.parse(launched[0].env.OASIS_UNTRUSTED_START).signals[0], /\w/, 'an injected payload starts the run under the injection hold');
   // A second event while the first run is active waits instead of being dropped.
   await receiveWebhook(job.id, '{"n":2}', { signature: sign('{"n":2}'), env });
   assert.deepEqual((await tick({ env: fullEnv, backgrounds })).fired, []);
