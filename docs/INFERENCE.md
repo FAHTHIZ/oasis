@@ -80,6 +80,32 @@ model is checked against the memory this computer can give a model (about
 one that does not fit is marked "too large for this computer" and `--apply`
 never adds it.
 
+### Running llama.cpp on an ordinary laptop
+
+The setup OASIS was tested with on a 2-core, 8 GB machine with no GPU (llama.cpp
+b12631, Qwen3-4B at Q4_K_M, a 2.5 GB file):
+
+```
+llama-server -m qwen3-4b.gguf --jinja -c 16384 -ctk q8_0 -ctv q8_0 -fa on -t 2 --cache-ram 1024 --port 8080
+```
+
+- `--jinja` uses the model's own chat template, which the server needs to
+  turn the model's tool calls into structured ones.
+- `-ctk q8_0 -ctv q8_0 -fa on` stores the context at 8 bits, about half the
+  memory of the default: roughly 1.3 GB for 16k tokens of this model instead of
+  2.4 GB.
+- `--cache-ram` caps the server's in-memory prompt cache, which by default may
+  grow to 8 GiB. That cache is what keeps the main conversation's prompt when a
+  subagent or a goal check uses the server in between, so keep it on, but
+  small enough to fit: without the flag, this server grew to about 5.3 GB
+  during a goal run.
+- Port 8080 is one OASIS treats as a local, free server; on another port, set
+  `OASIS_LOCAL_CONTEXT_PROBE=1` so OASIS reads the context size from it.
+- Reading a long prompt is the slow part on a CPU: the first request of a
+  session can take minutes, later ones reuse the cached prefix. A goal like
+  `npm test passes` is checked from what OASIS saw run, without another model
+  request.
+
 ## Request and token budgets
 
 ```
