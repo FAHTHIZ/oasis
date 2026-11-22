@@ -132,7 +132,7 @@ export async function suggestNextPrompt(session, options = {}) {
   if (!tail) return '';
   try {
     const completion = await requestCompletion({ budgetParent: session, config: session.config, toolDefinitions: [], messages: [
-      { role: 'system', content: 'Predict the single most likely next message the user will type to this coding agent. Reply with only that message: under 15 words, imperative, no quotes. Reply with nothing if there is no clear next step.' },
+      { role: 'system', content: 'Predict the single most likely next message the user will type to this agent. Reply with only that message: under 15 words, imperative, no quotes. Reply with nothing if there is no clear next step.' },
       { role: 'user', content: '--- BEGIN UNTRUSTED TRANSCRIPT ---\n' + tail + '\n--- END UNTRUSTED TRANSCRIPT ---' }
     ] }, { noTools: true, signal: options.signal });
     chargeAuxiliaryUsage(session, completion.usage, { env: options.env });

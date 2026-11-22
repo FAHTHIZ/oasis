@@ -21,13 +21,14 @@ test('CI keeps latest pending concurrency per ref and lets active quality runs f
 test('README and package metadata describe the current product without unsupported claims', async () => {
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.ok(readme.includes('The open-source agent that lifts any model.'));
+  assert.ok(readme.includes('OASIS is an open-source agent platform and runtime.'));
+  assert.ok(readme.includes('the open agent runtime for any model'));
   assert.ok(readme.includes('does not guarantee that every model will solve every task'));
   assert.ok(readme.includes('Approval prompts are not a replacement for operating-system isolation'));
   assert.ok(readme.includes('Apache License 2.0'));
   assert.ok(readme.includes('npm run check'));
   assert.ok(!readme.includes('beats Claude Code') && !readme.includes('100% success') && !readme.includes('security certified'));
-  assert.match(pkg.description, /remote-first browser workspace and terminal agent/);
+  assert.match(pkg.description, /model-agnostic agent platform and runtime/);
   assert.ok(!pkg.devDependencies || !pkg.devDependencies.electron, 'no Electron');
   assert.equal(pkg.version.split('.').length, 3);
   assert.equal(pkg.oasisRelease?.channel, 'stable');

@@ -1310,7 +1310,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const { writeInsightsReport, insightsSummaryText } = await import('./insights.mjs');
       const narrate = session && session.config ? async (summary) => {
         const { completeText } = await import('./agent.mjs');
-        return completeText(session, 'You write a short, friendly usage summary for a developer about how they use their AI coding agent. Two short paragraphs: what they mostly work on and how, then the one or two changes that would help most. Plain text, no lists, no headings.', summary);
+        return completeText(session, 'You write a short, friendly usage summary for a developer about how they use their AI agent. Two short paragraphs: what they mostly work on and how, then the one or two changes that would help most. Plain text, no lists, no headings.', summary);
       } : null;
       const { file, stats } = await writeInsightsReport({ env, days, narrate });
       if (file && typeof state.openFile === 'function') state.openFile(file);
