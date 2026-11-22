@@ -4,6 +4,10 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Security
+
+- Email gateway: only the receiving server's own `Authentication-Results` header counts toward the sender check. Before, any header in the message could vouch for it, so a sender who forged an allowlisted From address and added `Authentication-Results: x; dmarc=pass` was let in even when the real server said `dmarc=fail`. `dmarc=pass` now also needs a matching `header.from` in the same result, a DKIM signer must be a real domain (never a bare `com`), and `OASIS_EMAIL_AUTHSERV_ID` (for Gmail `mx.google.com`) restricts the check to your server's headers.
+
 ### Harness reliability (found running qwen2.5-coder:3b on Ollama, CPU only)
 
 - A reply stuck repeating the same text is cut off as it streams, instead of running to max_tokens (one such reply held a step for 16 minutes). The model gets one copy back with a note saying why, and the turn stops with a clear error after three looping replies in a row.

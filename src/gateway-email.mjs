@@ -10,7 +10,9 @@
 //
 // From addresses are easy to forge, so a message only counts when the
 // receiving server's Authentication-Results header shows dmarc=pass, or
-// dkim=pass for the sender's domain. OASIS_EMAIL_REQUIRE_AUTH=0 turns that off
+// dkim=pass for the sender's domain. Only that server's header counts: the
+// topmost one, or those whose authserv-id is in OASIS_EMAIL_AUTHSERV_ID
+// (recommended, e.g. mx.google.com). OASIS_EMAIL_REQUIRE_AUTH=0 turns that off
 // (for a private mail server that adds no such header). Auto-replies, mailing
 // lists and bounces are ignored so two robots never answer each other forever.
 import { createChatCore, parseList } from './gateway-core.mjs';
@@ -32,21 +34,46 @@ export function senderAllowed(address, allowed) {
   return false;
 }
 
-/** True when the receiving server vouched for the sender's domain (DMARC, or DKIM aligned with From). */
-export function senderAuthenticated(headers, fromAddress) {
+/** The authserv-id of one Authentication-Results value ("mx.google.com; ..." -> "mx.google.com"). */
+export function authservId(value) {
+  // RFC 8601: authserv-id [ CFWS authres-version ] ";" ... (a version number may follow the id).
+  return String(value || '').split(';')[0].replace(/\([^)]*\)/g, ' ').trim().split(/\s+/)[0].toLowerCase();
+}
+
+/**
+ * True when the receiving server vouched for the sender's domain (DMARC, or
+ * DKIM aligned with From).
+ *
+ * Only the receiving server's own Authentication-Results header counts. A
+ * sender can put any header in a message, including a forged
+ * "Authentication-Results: x; dmarc=pass"; receiving servers prepend theirs,
+ * so it is the topmost one. With trusted authserv-ids configured
+ * (OASIS_EMAIL_AUTHSERV_ID, e.g. mx.google.com) only headers carrying one of
+ * those ids are read, which also holds for a server that adds no header.
+ */
+export function senderAuthenticated(headers, fromAddress, { trustedIds = [] } = {}) {
   const domain = normalizeAddress(fromAddress).split('@').pop();
-  if (!domain) return false;
+  if (!domain || !domain.includes('.')) return false;
   const raw = headers && (typeof headers.get === 'function' ? headers.get('authentication-results') : headers['authentication-results']);
   const values = (Array.isArray(raw) ? raw : raw ? [raw] : []).map((item) => typeof item === 'string' ? item : item && item.value ? item.value : String(item));
-  for (const value of values) {
+  const trusted = new Set([...trustedIds].map((id) => String(id || '').trim().toLowerCase()).filter(Boolean));
+  const considered = trusted.size ? values.filter((value) => trusted.has(authservId(value))) : values.slice(0, 1);
+  for (const value of considered) {
     const text = String(value).toLowerCase();
-    if (/\bdmarc=pass\b/.test(text)) {
-      const from = /header\.from=([^\s;]+)/.exec(text);
-      if (!from || from[1] === domain) return true;
-    }
-    for (const match of text.matchAll(/\bdkim=pass\b[^;]*?header\.(?:d|i)=@?([^\s;]+)/g)) {
-      const signer = match[1].replace(/^.*@/, '');
-      if (signer === domain || domain.endsWith('.' + signer)) return true;
+    // Each result is its own ";"-separated clause; a header.from in one clause
+    // must not vouch for a dmarc=pass in another.
+    for (const clause of text.split(';').slice(1)) {
+      if (/^\s*dmarc=pass\b/.test(clause)) {
+        const from = /header\.from=([^\s;]+)/.exec(clause);
+        if (from && from[1] === domain) return true;
+      }
+      const dkim = /^\s*dkim=pass\b.*?header\.(?:d|i)=@?([^\s;]+)/.exec(clause);
+      if (dkim) {
+        const signer = dkim[1].replace(/^.*@/, '');
+        // Relaxed alignment: the signer is the From domain or a parent of it,
+        // never a bare top-level label such as "com".
+        if (signer.includes('.') && (signer === domain || domain.endsWith('.' + signer))) return true;
+      }
     }
   }
   return false;
@@ -105,6 +132,7 @@ export function createEmailGateway(options = {}) {
   if (![...allowed].length) throw new Error('Set OASIS_EMAIL_ALLOWED_SENDERS to the addresses (or @domain.com) allowed to email this agent.');
   const address = normalizeAddress(options.address || env.OASIS_EMAIL_ADDRESS || user);
   const requireAuth = options.requireAuth !== undefined ? options.requireAuth : !/^(0|false|off|no)$/i.test(String(env.OASIS_EMAIL_REQUIRE_AUTH || ''));
+  const trustedIds = options.authservIds || parseList(env.OASIS_EMAIL_AUTHSERV_ID);
   const mailbox = options.mailbox || env.OASIS_EMAIL_MAILBOX || 'INBOX';
   const imapPort = Number(options.imapPort || env.OASIS_EMAIL_IMAP_PORT || 993);
   const smtpPort = Number(options.smtpPort || env.OASIS_EMAIL_SMTP_PORT || 465);
@@ -149,7 +177,7 @@ export function createEmailGateway(options = {}) {
       if (!toldUnknown.has(sender)) { toldUnknown.add(sender); log('ignored email from ' + sender + ' (not in OASIS_EMAIL_ALLOWED_SENDERS)'); }
       return 'ignored-stranger';
     }
-    if (requireAuth && !senderAuthenticated(parsed.headers, sender)) { log('ignored email from ' + sender + ': no dmarc=pass or aligned dkim=pass in Authentication-Results (set OASIS_EMAIL_REQUIRE_AUTH=0 for a server that adds none)'); return 'ignored-unauthenticated'; }
+    if (requireAuth && !senderAuthenticated(parsed.headers, sender, { trustedIds })) { log('ignored email from ' + sender + ': no dmarc=pass or aligned dkim=pass in ' + ([...trustedIds].length ? 'an Authentication-Results header from ' + [...trustedIds].join(', ') : 'the receiving server\'s Authentication-Results header') + ' (set OASIS_EMAIL_REQUIRE_AUTH=0 for a server that adds none)'); return 'ignored-unauthenticated'; }
     const references = messageIds(parsed.references);
     const messageId = messageIds(parsed.messageId)[0] || '';
     const rootId = references[0] || messageIds(parsed.inReplyTo)[0] || messageId || String(parsed.subject || '');
@@ -181,6 +209,7 @@ export function createEmailGateway(options = {}) {
       const status = client.mailbox || {};
       lastUid = Math.max(0, Number(status.uidNext || 1) - 1); // only mail that arrives from now on
       log('watching ' + mailbox + ' of ' + address + ' for ' + core.root + '; allowed senders: ' + [...allowed].join(', '));
+      if (requireAuth && ![...trustedIds].length) log('sender check reads the topmost Authentication-Results header; set OASIS_EMAIL_AUTHSERV_ID to your mail server\'s id (for Gmail: mx.google.com) so a forged header can never count');
       const drain = async () => {
         const fresh = [];
         for await (const message of client.fetch({ uid: (lastUid + 1) + ':*' }, { uid: true, source: true }, { uid: true })) {

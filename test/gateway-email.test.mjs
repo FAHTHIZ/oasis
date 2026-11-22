@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { createEmailGateway, deliverEmail, isAutomated, senderAllowed, senderAuthenticated, stripQuotedReply } from '../src/gateway-email.mjs';
+import { authservId, createEmailGateway, deliverEmail, isAutomated, senderAllowed, senderAuthenticated, stripQuotedReply } from '../src/gateway-email.mjs';
 import { parseDeliver, deliverOutput } from '../src/routines.mjs';
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 30));
@@ -40,6 +40,23 @@ test('sender rules', () => {
   assert.ok(senderAuthenticated({ 'authentication-results': 'mx; dkim=pass header.d=example.com; dmarc=none' }, 'me@example.com'));
   assert.ok(!senderAuthenticated({ 'authentication-results': 'mx; dkim=pass header.d=evil.com; spf=pass' }, 'me@example.com'));
   assert.ok(!senderAuthenticated({}, 'me@example.com'));
+});
+
+test('sender check ignores forged Authentication-Results headers', () => {
+  // A sender can add any header; the receiving server prepends its own, so only the topmost counts.
+  const forgedBelow = { 'authentication-results': ['mx.google.com; dmarc=fail header.from=example.com; spf=fail', 'evil; dmarc=pass header.from=example.com'] };
+  assert.equal(senderAuthenticated(forgedBelow, 'me@example.com'), false);
+  assert.equal(senderAuthenticated({ 'authentication-results': ['mx.google.com; dmarc=pass header.from=example.com', 'evil; dmarc=fail'] }, 'me@example.com'), true);
+  // With trusted ids, a server that adds nothing cannot be impersonated by a forged topmost header.
+  assert.equal(senderAuthenticated({ 'authentication-results': ['evil; dmarc=pass header.from=example.com'] }, 'me@example.com', { trustedIds: ['mx.google.com'] }), false);
+  assert.equal(senderAuthenticated({ 'authentication-results': ['evil; dmarc=pass header.from=example.com', 'mx.google.com 1; dkim=pass header.i=@example.com'] }, 'me@example.com', { trustedIds: ['MX.Google.com'] }), true);
+  // dmarc=pass without header.from, or with header.from in another clause, does not vouch.
+  assert.equal(senderAuthenticated({ 'authentication-results': 'mx; dmarc=pass' }, 'me@example.com'), false);
+  assert.equal(senderAuthenticated({ 'authentication-results': 'mx; dmarc=pass header.from=evil.com; spf=pass header.from=example.com' }, 'me@example.com'), false);
+  // A DKIM signer must be the From domain or a real parent of it, never a bare TLD.
+  assert.equal(senderAuthenticated({ 'authentication-results': 'mx; dkim=pass header.d=com' }, 'me@example.com'), false);
+  assert.equal(senderAuthenticated({ 'authentication-results': 'mx; dkim=pass header.d=example.com' }, 'me@team.example.com'), true);
+  assert.equal(authservId('mx.google.com 1 (comment); dmarc=pass'), 'mx.google.com');
   assert.ok(isAutomated({ 'auto-submitted': 'auto-replied' }, 'me@example.com'));
   assert.ok(isAutomated({ precedence: 'bulk' }, 'me@example.com'));
   assert.ok(isAutomated({}, 'MAILER-DAEMON@example.com'));
