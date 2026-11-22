@@ -50,6 +50,18 @@ export function isExternalContentTool(name) {
   return EXTERNAL_TOOLS.has(n) || n.startsWith('mcp_');
 }
 
+// Shell commands whose output is someone else's text: web fetches and the
+// GitHub/GitLab CLIs reading issues, pull requests, comments and API data
+// (issue bodies are a known way to steer coding agents).
+const COMMAND_START = String.raw`(?:^|[;&|(\x60]\s*|\b(?:sudo|env|time|nice|command|xargs|timeout\s+\S+)\s+)(?:[A-Za-z_]\w*=\S*\s+)*(?:\S*\/)?`;
+const FETCHING_COMMAND = new RegExp(COMMAND_START + String.raw`(?:(?:curl|wget|aria2c|lynx|w3m|links|xh|https?|Invoke-WebRequest|Invoke-RestMethod|iwr|irm)(?=$|[\s;&|)\x60])|(?:gh|glab|hub)\s+(?:issue|pr|mr|api|release|search|gist|discussion|run|repo|browse|codespace)\b)`, 'i');
+
+export function commandFetchesExternal(name, args) {
+  if (!['run_command', 'run_shell', 'powershell', 'monitor'].includes(String(name)) || !args || typeof args !== 'object') return false;
+  const line = [args.command, ...(Array.isArray(args.args) ? args.args : [])].filter((part) => typeof part === 'string').join(' ');
+  return FETCHING_COMMAND.test(line);
+}
+
 export function stripInvisible(text) {
   if (typeof text !== 'string' || !text) return { text, removed: 0 };
   let removed = 0;
@@ -76,8 +88,8 @@ function hiddenTagText(text) {
 }
 
 // Applies the guard to one tool result. Returns the possibly rewritten content.
-export function guardExternalContent(session, toolName, content) {
-  if (typeof content !== 'string' || !content || !isExternalContentTool(toolName)) return content;
+export function guardExternalContent(session, toolName, content, { external = false } = {}) {
+  if (typeof content !== 'string' || !content || !(external || isExternalContentTool(toolName))) return content;
   const hidden = hiddenTagText(content);
   const { text, removed } = stripInvisible(content);
   const signals = detectInjection(text + (hidden ? '\n' + hidden : ''));
