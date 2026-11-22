@@ -65,3 +65,9 @@ test('markdown renders mermaid fences as diagrams in color mode and keeps source
   open.end();
   assert.match(strip(cut.join('')), /X --> Y/);
 });
+
+test('a sequence diagram too wide for the terminal falls back to one line per message', () => {
+  const src = 'sequenceDiagram\n  participant A as ' + 'Alpha'.repeat(8) + '\n  participant B as ' + 'Beta'.repeat(8) + '\n  participant C as ' + 'Gamma'.repeat(8) + '\n  A->>B: hello there\n  B-->>C: and onward';
+  const out = renderMermaid(src, { columns: 40 });
+  assert.equal(out, 'Alpha'.repeat(8) + ' → ' + 'Beta'.repeat(8) + ': hello there\n' + 'Beta'.repeat(8) + ' ⇢ ' + 'Gamma'.repeat(8) + ': and onward');
+});

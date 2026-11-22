@@ -407,6 +407,8 @@ function renderSequence(source, { columns = 100, maxLabel = 40 } = {}) {
   header(y + 1);
   const text = canvas.toString();
   if (text.split('\n').some((row) => stringWidth(row) > columns)) {
+    // Too wide for the terminal: one line per message instead.
+    const byId = new Map(participants.map((p) => [p.id, p]));
     return steps.filter((s) => s.type === 'message').map((s) => byId.get(s.from).label + (s.arrow.startsWith('--') ? ' ⇢ ' : ' → ') + byId.get(s.to).label + ': ' + s.text).join('\n');
   }
   return text;
