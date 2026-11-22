@@ -5,7 +5,7 @@ Where the agent's shell commands (`run_command`, `run_shell`, background jobs an
 | Backend | Where commands run | Isolation | Setup |
 | --- | --- | --- | --- |
 | `os` (default) | This machine | bubblewrap on Linux, Seatbelt on macOS: read-only host, writable workspace, network off unless enabled | Nothing on macOS; `bubblewrap` on Linux |
-| `docker` / `podman` | A container on this machine | The container; workspace mounted, network off unless enabled | Docker or Podman |
+| `docker` / `podman` | A container on this machine | The container; workspace mounted, network off unless enabled. With `"runtime": "runsc"`, a [gVisor](#gvisor) kernel between it and the host | Docker or Podman |
 | `apptainer` / `singularity` | An [Apptainer](https://apptainer.org) (Singularity) container on this machine, run as you with no daemon: the usual choice on HPC clusters and shared servers | The container; workspace bound, host home and environment hidden, network off unless enabled | Apptainer or SingularityCE (Linux) |
 | `ssh` | Any machine you can reach over SSH (a bigger box, a GPU server, a VM) | Whatever that machine provides | Key-based SSH login, `rsync` on both sides |
 | `daytona` | A [Daytona](https://www.daytona.io) cloud sandbox created for this workspace | A separate cloud VM | `DAYTONA_API_KEY` |
@@ -17,7 +17,27 @@ Turn one on for a session with `/sandbox os`, `/sandbox docker [IMAGE]`, `/sandb
 { "sandbox": { "enabled": true, "backend": "docker", "image": "node:22-bookworm" } }
 ```
 
-`OASIS_SANDBOX=1` and `OASIS_SANDBOX_BACKEND=NAME` do the same from the environment. `oasis doctor` states which backend is in force.
+`OASIS_SANDBOX=1`, `OASIS_SANDBOX_BACKEND=NAME`, `OASIS_SANDBOX_IMAGE` and `OASIS_SANDBOX_RUNTIME` do the same from the environment. `oasis doctor` states which backend is in force.
+
+## Docker and Podman
+
+```json
+{ "sandbox": { "enabled": true, "backend": "docker", "image": "node:22-bookworm", "runtime": "runsc", "readOnlyRoot": true, "memory": "2g", "cpus": "2" } }
+```
+
+Each command runs in a fresh `--rm` container as your user, with all Linux capabilities dropped, `no-new-privileges`, a 512-process limit, network off unless enabled, and only the workspace (plus `additionalDirectories`) mounted writable. Project config folders stay read-only and secret paths are masked. `memory` and `cpus` cap the container. `readOnlyRoot` makes the image itself read-only, with a small `noexec` `/tmp`. A repository's trusted settings may turn it on, but only your own settings can turn it off.
+
+### gVisor
+
+A normal container shares the host kernel, so a kernel bug can let a command escape. [gVisor](https://gvisor.dev) (Google, Apache-2.0) puts its own user-space kernel, `runsc`, between the container and the host. Modal uses it for its sandboxes, and it is the strongest isolation OASIS offers on an ordinary Linux machine: no virtual machine, no KVM, about the startup cost of a normal container.
+
+1. Install it: [gVisor installation](https://gvisor.dev/docs/user_guide/install/). On Debian and Ubuntu that means adding the apt repository and running `sudo apt install runsc`.
+2. Register it with Docker: `sudo runsc install && sudo systemctl restart docker`.
+3. Set `"runtime": "runsc"` under `sandbox` in your user settings, or `OASIS_SANDBOX_RUNTIME=runsc` for one run.
+
+`oasis doctor` shows `runtime runsc (gVisor)` when it is active. If Docker does not have a runtime with that name, the sandbox reports itself unavailable and says how to fix it. It never quietly falls back to the normal runtime. For Podman, give the path to the binary (`"runtime": "/usr/local/bin/runsc"`) or a name on your `PATH`. Any other OCI runtime registered with Docker works the same way, for example Kata Containers' `kata-runtime` (lightweight VMs, needs KVM) or `crun`. Only your user settings, `--settings` or managed policy can choose the runtime, so a repository cannot swap gVisor for something weaker.
+
+gVisor runs on Linux only (x86-64 and ARM64). On macOS and Windows, Docker Desktop already runs containers inside a VM. Firecracker microVMs are not offered: they need KVM, root and a kernel image for each sandbox, which is more than an ordinary machine should need. gVisor gives most of the same protection without them.
 
 ## Apptainer and Singularity
 
