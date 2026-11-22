@@ -118,6 +118,9 @@ export function parseVerifierResult(result) {
   if (!last) return { met: false, reason: 'The verify agent gave no verdict' + (failures.length ? '; it reported: ' + failures[0].slice(0, 300) : '.'), verifier: true };
   if (last[1].toUpperCase() !== 'PASS') return { met: false, reason: 'The verify agent found: ' + (failures[0] || last[0]).replace(/^(?:[-*]\s*)?FAIL:?\s*/i, '').slice(0, 400), verifier: true };
   if (failures.length) return { met: false, reason: 'The verify agent said PASS but listed a failed criterion: ' + failures[0].slice(0, 300), verifier: true };
+  // A verifier that read something shaped like a prompt injection may have
+  // been talked into its PASS; it does not count as confirmation.
+  if (result.untrusted_input) return { met: false, reason: 'The verify agent said PASS, but it read content that looked like a prompt-injection attempt, so its verdict does not count. ' + String(result.untrusted_input).slice(0, 200), verifier: true };
   if (result.unverified_claim || result.report_status === 'rejected') return { met: false, reason: 'The verify agent said PASS, but OASIS saw no passing check behind it (' + String(result.unverified_claim || 'report rejected').slice(0, 200) + ').', verifier: true };
   return { met: true, reason: 'Confirmed by the verify agent. ' + last[0].slice(0, 300), verifier: true };
 }
