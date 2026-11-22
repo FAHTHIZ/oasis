@@ -287,7 +287,7 @@ test('agent switches models mid-task without losing the conversation', async () 
 });
 
 test('plugins: every plugin points at real skills and has starters', () => {
-  assert.equal(PLUGINS.length, 9, "a short, curated catalog");
+  assert.equal(PLUGINS.length, 12, "a short, curated catalog");
   const ids = new Set();
   for (const plugin of PLUGINS) {
     assert.ok(!ids.has(plugin.id), 'unique id ' + plugin.id);
@@ -306,6 +306,9 @@ test('plugins: suggestions follow what the user types', () => {
   assert.ok(suggestPlugins('build a landing page with tailwind').some((p) => p.id === 'web'));
   assert.ok(suggestPlugins('write unit tests with vitest').some((p) => p.id === 'tests'));
   assert.ok(suggestPlugins('check for XSS and SQL injection').some((p) => p.id === 'security'));
+  assert.equal(suggestPlugins('turn sales.csv into a chart')[0].id, 'analysis');
+  assert.equal(suggestPlugins('research the market and cite sources')[0].id, 'research');
+  assert.ok(suggestPlugins('draft a blog post').some((p) => p.id === 'writing'));
   assert.deepEqual(suggestPlugins('hi'), []);
   assert.ok(!suggestPlugins('the app crashes', { active: ['debug'] }).some((p) => p.id === 'debug'), 'active plugins are not suggested again');
   assert.ok(suggestPlugins('x'.repeat(5000) + ' bug').length <= 2);

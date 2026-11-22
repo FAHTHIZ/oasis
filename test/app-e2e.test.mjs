@@ -133,7 +133,7 @@ test('universal app end to end: paste to connect, tool-calling task, credit fall
 
   // 4. Plugins: one tap turns a plugin on for the project.
   await evaluate(page, `document.getElementById('pluginsButton').click(); true`);
-  await waitFor(page, `document.querySelectorAll('#pluginGrid .plugin-tile').length === 9`);
+  await waitFor(page, `document.querySelectorAll('#pluginGrid .plugin-tile').length === 12`);
   await evaluate(page, `document.querySelector('#pluginGrid [data-plugin="security"] .plugin-head').click(); true`);
   await waitFor(page, `document.querySelector('#pluginGrid [data-plugin="security"]').classList.contains('on') && document.getElementById('pluginCount').textContent === '1'`, { label: 'plugin switched on' });
 

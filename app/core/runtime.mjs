@@ -376,6 +376,7 @@ export class RuntimeAgent {
       ].join('\n');
     }
     if (names.length) message += '\n\n(Use the ' + names.join(', ') + ' plugin' + (names.length > 1 ? 's' : '') + (skills.length ? ': skills ' + skills.join(', ') : '') + '.)';
+    for (const plugin of plugins) if (plugin && plugin.prompt) message += '\n' + plugin.name + ': ' + plugin.prompt;
     // The runtime takes up to 200,000 characters (MAX_CHAT_MESSAGE_CHARS);
     // this was 12,000, which silently cut a pasted log.
     if (message.length > 200000) message = message.slice(0, 200000);
