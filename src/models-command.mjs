@@ -64,14 +64,22 @@ function compactContext(n) {
   return n ? compactTokens(n) : '?';
 }
 
-async function freeModelsCommand(args, { root, env, stdout, stderr, fetchImpl }) {
+async function freeModelsCommand(args, { root, env, stdout, stderr, fetchImpl, memoryBudgetGB }) {
   const known = ['--json', '--apply', '--cloud-only', '--local-only'];
   const applyAt = args.indexOf('--apply');
   const countArg = applyAt >= 0 && /^\d+$/.test(args[applyAt + 1] || '') ? args[applyAt + 1] : null;
   const unknown = args.find((arg, i) => !known.includes(arg) && !(countArg && i === applyAt + 1));
   if (unknown) { stderr.write('Unknown option ' + unknown + '. ' + USAGE + '\n'); return 2; }
-  const { discoverFreeModels, withFreeFallbacks } = await import('./free-models.mjs');
+  const { discoverFreeModels, withFreeFallbacks, annotateFreeModels } = await import('./free-models.mjs');
   const found = await discoverFreeModels({ ...(fetchImpl ? { fetchImpl } : {}), local: !args.includes('--cloud-only'), cloud: !args.includes('--local-only') });
+  // What this computer already knows: quota cooldowns and whether a local model fits in memory.
+  let budgetGB = Number.isFinite(memoryBudgetGB) ? memoryBudgetGB : null;
+  if (budgetGB === null && found.models.some((model) => model.source === 'ollama')) {
+    try { const { detectHardware, modelMemoryBudget } = await import('./hardware.mjs'); budgetGB = modelMemoryBudget(await detectHardware({ env })); } catch { budgetGB = null; }
+  }
+  let routes = [];
+  try { const { listRoutes } = await import('./quota-ledger.mjs'); routes = listRoutes(env); } catch { routes = []; }
+  found.models = annotateFreeModels(found.models, { routes, budgetGB });
   const openrouterKey = Boolean(env.OPENROUTER_API_KEY);
   let applied = null;
   if (applyAt >= 0 && found.models.length) {
@@ -97,12 +105,17 @@ async function freeModelsCommand(args, { root, env, stdout, stderr, fetchImpl })
     model.router ? 'routes to any free model' : '',
     model.vision ? 'vision' : '', model.reasoning ? 'reasoning' : '',
     model.source === 'ollama' && !model.toolsReported ? 'tool support not reported' : '',
-    model.expires ? 'expires ' + model.expires.slice(0, 10) : ''
+    model.expires ? 'expires ' + model.expires.slice(0, 10) : '',
+    model.fits === false ? 'too large for this computer (needs ~' + model.needGB + ' GB)' : '',
+    model.cooldown ? 'out of quota until ' + model.cooldown.until.slice(11, 16) + ' UTC' + (model.cooldown.source === 'guess' ? ' (estimated)' : '') : '',
+    model.requestsToday ? model.requestsToday + ' requests today' : ''
   ].filter(Boolean).join(', ')]);
   const widths = head.map((cell, i) => Math.max(cell.length, ...body.map((line) => line[i].length)));
   const render = (line) => line.map((cell, i) => i === line.length - 1 ? cell : cell.padEnd(widths[i])).join('  ').trimEnd();
   stdout.write([render(head), ...body.map(render)].join('\n') + '\n\n');
   const notes = [found.models.length + ' free model' + (found.models.length === 1 ? '' : 's') + ' with tool calling, best for agent work first (checked ' + found.checkedAt.slice(0, 16).replace('T', ' ') + ' UTC).'];
+  if (budgetGB !== null && found.models.some((model) => model.source === 'ollama')) notes.push('Local models are checked against about ' + budgetGB + ' GB this computer can give a model; ones that do not fit are never added.');
+  if (found.models.some((model) => model.cooldown)) notes.push('Models out of quota are listed last; oasis quota shows the record.');
   if (found.errors.length) notes.push('Not checked: ' + found.errors.join('; ') + '.');
   if (!found.ollama && !args.includes('--cloud-only')) notes.push('Ollama is not running here; a local model has no daily limit and keeps your data on this computer.');
   if (!openrouterKey && found.models.some((model) => model.source === 'openrouter')) notes.push('OpenRouter free models need a free account key in OPENROUTER_API_KEY (openrouter.ai/keys); free use is limited per day.');
@@ -112,9 +125,9 @@ async function freeModelsCommand(args, { root, env, stdout, stderr, fetchImpl })
   return 0;
 }
 
-export async function modelsCommand(args = [], { root = process.cwd(), env = process.env, stdout = process.stdout, stderr = process.stderr, fetchImpl, configOverride } = {}) {
+export async function modelsCommand(args = [], { root = process.cwd(), env = process.env, stdout = process.stdout, stderr = process.stderr, fetchImpl, configOverride, memoryBudgetGB } = {}) {
   if (args.includes('--help') || args.includes('-h')) { stdout.write(USAGE + '\n'); return 0; }
-  if (args[0] === 'free') return await freeModelsCommand(args.slice(1), { root, env, stdout, stderr, fetchImpl });
+  if (args[0] === 'free') return await freeModelsCommand(args.slice(1), { root, env, stdout, stderr, fetchImpl, memoryBudgetGB });
   const unknown = args.find((arg) => arg.startsWith('-') && !['--json', '--refresh'].includes(arg));
   if (unknown) { stderr.write('Unknown option ' + unknown + '. ' + USAGE + '\n'); return 2; }
   const json = args.includes('--json');

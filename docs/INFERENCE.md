@@ -71,6 +71,15 @@ out each day and a local model does not. Using OpenRouter's free models still
 needs a free account key in `OPENROUTER_API_KEY`. `--json` gives the full list
 with scores.
 
+The list also uses what this computer already knows, without sending a
+request. A model the [quota ledger](#usage-and-quota-tracking) has in cooldown
+(it ran out of free quota recently) is listed last with the time it is
+expected back, and each model shows how many requests it served today. A local
+model is checked against the memory this computer can give a model (about
+0.62 GB per billion parameters plus 1 GB, the same rule `oasis setup` uses);
+one that does not fit is marked "too large for this computer" and `--apply`
+never adds it.
+
 ## Request and token budgets
 
 ```
