@@ -14,6 +14,14 @@ performance claim.
 | **Pending** | The code path exists; it switches on when something outside the repository is provided (a certificate, a token, a paid run). |
 | **Not claimed** | Deliberately not promised. |
 
+## Platforms
+
+| Platform | Status |
+| --- | --- |
+| Linux | Verified by automated tests and live runs |
+| Windows and macOS | Tested in CI (security and runtime regression tests, installer scripts), not by hand |
+| Desktop installers for all three | Built in CI; not yet code-signed |
+
 ## Core runtime
 
 | Capability | Status | Where to read more |
