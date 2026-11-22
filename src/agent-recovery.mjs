@@ -58,11 +58,20 @@ export function recoveryPlan(parent, record, error, env = process.env) {
   const stalled = record.status === 'stalled';
   if (!stalled && !(record.status === 'failed' && isTransientFailure(error))) return null;
   const what = stalled ? String(record.stalled || 'it stalled').replace(/;? ?the agent was stopped as stalled\.?$/i, '') : String(error && error.message || 'an error').slice(0, 300);
+  // A stall on a model OASIS picked to save money (modelRouting.subagents =
+  // "experience") is evidence that model is not up to this task: like cascade
+  // escalation (src/escalation.mjs), the restart runs on the session's own
+  // model. An explicitly requested model is kept.
+  const current = String(record.child.config && record.child.config.model || '');
+  const strong = String(parent.config && parent.config.model || '');
+  const escalateTo = stalled && record.modelRoute && !record.escalatedFrom && strong && current && current !== strong ? strong : '';
   return {
+    ...(escalateTo ? { escalateTo, escalateFrom: current } : {}),
     delayMs: stalled ? 0 : FAILURE_DELAY_MS,
     reason: (stalled ? 'stalled: ' : 'failed: ') + what,
     prompt: 'OASIS stopped your previous run (' + (stalled ? 'no progress: ' + what : 'error: ' + what) + ') and restarted you automatically, with your conversation so far. '
       + 'Check the current state of the files before continuing, since your last step may not have finished. '
+      + (escalateTo ? 'You now run on ' + escalateTo + ' instead of ' + current + ', which got stuck; everything above is its work, so do not repeat what already failed. ' : '')
       + (stalled ? 'If a command hung, do not run it the same way again: add a timeout, run it in the background or take another route. ' : '')
       + 'Then finish the original task and report as before.'
   };
