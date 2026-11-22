@@ -28,6 +28,7 @@ import { isWorktreeBranchName } from './branch-names.mjs';
 import { loadAgentTranscript } from './sessions.mjs';
 import { repairInterruptedHistory } from './tool-results.mjs';
 import { unsupportedChildClaim } from './claim-check.mjs';
+import { applyInjectionTaint, injectionTaint, taintNotice } from './untrusted-content.mjs';
 import { evidenceSince, evidenceSummary, sessionEvidence } from './evidence-ledger.mjs';
 import { checkReport } from './verification-contracts.mjs';
 import { recoveryPlan, waitForRecovery } from './agent-recovery.mjs';
@@ -719,6 +720,8 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   const orphans = stopDescendants(parent, record, 'the agent that started it finished without waiting for it');
   recordAgentEvent(parent, 'agent.completed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: 'tool_calls=' + Math.max(0, Number(outcome.toolCalls) || 0) });
   record.report = boundSubagentReport(outcome.text);
+  record.injectionTaint = injectionTaint(child, 'agent ' + record.id);
+  if (record.injectionTaint && foreground) applyInjectionTaint(parent, record.injectionTaint);
   // Return-time gate (roadmap 1.7). The parent sees only this report, so its
   // claims are checked against the evidence the child's own tool results left
   // in this run (src/verification-contracts.mjs): passing checks for code,
@@ -745,6 +748,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     ...(handoff ? { report_file: handoff.file, report_chars: handoff.chars } : {}),
     ...(orphans.length ? { stopped_unfinished_agents: orphans, note_on_agents: 'This agent finished while agents it had started were still running; they were stopped. Ask it (send_message) to wait for them with agent_status if their results are needed.' } : {}),
     ...(record.verificationIssues && record.verificationIssues.length ? { report_status: 'rejected', verification_issues: record.verificationIssues.map(({ domain, reason }) => ({ domain, reason })), note_on_rejection: 'OASIS rejected parts of this report: ' + record.verificationIssues.map((issue) => issue.reason).join('; ') + '. Do not repeat those claims as facts; check them yourself or ask the agent (send_message) to produce the evidence.' } : {}),
+    ...(record.injectionTaint ? { untrusted_input: taintNotice(record.injectionTaint) } : {}),
     ...(record.unverifiedClaim ? { unverified_claim: record.unverifiedClaim, note_on_report: 'OASIS did not observe a passing check behind this report (' + record.unverifiedClaim + '). Treat its test or build results as unverified; run the check yourself before relying on it.' } : {}),
     ...(outcome.limitReached ? { partial: true, note: 'The agent hit its ' + (record.maxTurns ? 'maxTurns (' + record.maxTurns + ')' : 'step') + ' limit; the report may be incomplete. send_message resumes it.' } : {}),
     ...(record.outputSchema ? (outcome.schemaErrors && outcome.schemaErrors.length ? { schema_errors: outcome.schemaErrors } : { structured: outcome.structured }) : {}),
@@ -798,6 +802,7 @@ function startBackgroundRun(parent, record, prompt, options) {
     const parts = ['Background agent ' + record.id + ' ("' + record.description + '") finished' + (record.recoveredFrom && record.recoveredFrom.length ? ' after OASIS restarted it automatically (' + record.recoveredFrom.join('; ') + ')' : '') + '.'];
     if (result.worktree && result.worktree.branch) parts.push('Its changes are on branch ' + result.worktree.branch + '.');
     if (record.unverifiedClaim) parts.push('Unverified: ' + record.unverifiedClaim + '.');
+    if (record.injectionTaint) parts.push('Warning: ' + taintNotice(record.injectionTaint));
     for (const issue of record.verificationIssues || []) if (issue.domain !== 'code') parts.push('Rejected (' + issue.domain + '): ' + issue.reason + '.');
     parts.push('Report:\n' + (record.reportFile ? reportPreview(record.report, record.reportFile) : record.report.slice(0, 6000) + (record.report.length > 6000 ? '\n[truncated; agent_status id ' + record.id + ' has the full report]' : '')));
     notifyParent(parent, parts.join(' '), record);

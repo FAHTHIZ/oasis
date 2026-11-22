@@ -1,4 +1,5 @@
 import { restoreApprovals } from './neuron-approvals.mjs';
+import { applyInjectionTaint, injectionTaint, taintNotice } from './untrusted-content.mjs';
 import { AGENT_DEFINE_TOOL_DEFINITION } from './session-agents.mjs';
 import { closeBrowser } from './browser-tool.mjs';
 import { closeComputerUse } from './computer-use.mjs';
@@ -382,7 +383,14 @@ export function drainInbox(session) {
   // Skip finish notices for agents whose report the model already read via agent_status.
   for (let i = session.inbox.length - 1; i >= 0; i--) if (session.inbox[i].record && session.inbox[i].record.noticeRead) session.inbox.splice(i, 1);
   if (!session.inbox.length) return '';
+  const queued = session.inbox.slice();
   const text = takeQueuedText(session.inbox, (entry) => entry.text, MAX_INBOX_DELIVERY_CHARS);
+  // A delivered notice or message from a tainted agent taints this turn too.
+  for (const entry of queued) {
+    if (session.inbox.includes(entry)) continue;
+    const taint = entry.taint || (entry.record && entry.record.injectionTaint);
+    if (taint) applyInjectionTaint(session, taint);
+  }
   return '<system-reminder>\n' + text + '\n</system-reminder>';
 }
 
@@ -534,7 +542,12 @@ export async function agentStatus(session, args = {}, signal) {
   }
   // The parent has now read this result, so drop its pending finish notice.
   if (record.status !== 'running') record.noticeRead = true;
-  return summarizeAgent(record, { full: true });
+  const out = summarizeAgent(record, { full: true });
+  if (record.injectionTaint && out.report !== undefined) {
+    out.untrusted_input = taintNotice(record.injectionTaint);
+    applyInjectionTaint(session, record.injectionTaint);
+  }
+  return out;
 }
 
 export function sendTeamMessage(session, args = {}) {
@@ -555,7 +568,8 @@ export function sendTeamMessage(session, args = {}) {
   const inbox = record.child.inbox || (record.child.inbox = []);
   if (inbox.length >= 100) throw new Error('Agent ' + targetId + ' has too many queued messages; wait for it to catch up.');
   const senderLabel = senderRecord ? senderRecord.description : 'main coordinator';
-  inbox.push({ text: 'Direct message from teammate ' + senderId + ' (' + senderLabel + '):\n' + message, senderId, kind: 'peer-message' });
+  const taint = injectionTaint(session, 'teammate ' + senderId);
+  inbox.push({ text: 'Direct message from teammate ' + senderId + ' (' + senderLabel + '):\n' + message + (taint ? '\n[OASIS] ' + taintNotice(taint) : ''), senderId, kind: 'peer-message', ...(taint ? { taint } : {}) });
   recordAgentEvent(session, 'agent.message_queued', { agentId: targetId, teamId: record.teamId || undefined, description: senderId + ' → ' + targetId, detail: message });
   return { delivered: 'queued', from: senderId, to: targetId, status: record.status, message: 'Message queued for ' + targetId + '; it will be delivered at the recipient\'s next model step.' };
 }
