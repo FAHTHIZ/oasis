@@ -15,6 +15,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Highlights
 
+- The prompt-injection hold now also flows from a parent to its subagents: an agent held after reading a hostile page cannot get the held action done by starting, resuming or messaging a child, which starts with the same hold.
 - A test run that exits 0 without running any test (`node --test` with a pattern that matches nothing, `0 passing`, `running 0 tests`, `[no tests to run]`) or that selects tests by name no longer meets a goal such as "npm test passes"; the goal judge is told which runs were empty or filtered.
 - A check now only counts as evidence when it can have run in this workspace: `true || npm test`, `cd /tmp/fake && npm test`, `npm test --prefix /elsewhere` and `pnpm -C ../other test` no longer satisfy the verification gate, the claim check or a goal such as "npm test passes".
 - `oasis models free` sizes a local Ollama model with its real KV cache for a 16K window when Ollama reports the architecture, instead of a flat 1 GB: qwen3:4b needs about 5.2 GB, not 3.5, so a model that would load but could not hold an agent prompt is no longer recommended.
