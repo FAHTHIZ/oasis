@@ -1,3 +1,4 @@
+import { waitingApprovals } from './neuron-approvals.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 // Built-in interactive slash commands (Claude Code style). Each handler returns
 // { output } text, and optionally { prompt } to send to the agent, or
@@ -2045,7 +2046,7 @@ export async function runBuiltinCommand(name, argument, state) {
       if (session && (words[0] === 'approve' || words[0] === 'deny')) {
         // Roadmap 2.1: answer a request a background agent parked for the user.
         const { answerApproval } = await import('./neuron-approvals.mjs');
-        const waiting = listAgents(session).map((agent) => getAgent(session, agent.id)).filter((record) => record && Array.isArray(record.pendingApprovals) && record.pendingApprovals.length);
+        const waiting = listAgents(session).map((agent) => getAgent(session, agent.id)).filter((record) => record && waitingApprovals(record).length);
         const id = words[1] || (waiting.length === 1 ? waiting[0].id : '');
         if (!id) return { output: waiting.length ? 'Several agents are waiting: ' + waiting.map((record) => record.id).join(', ') + '. Usage: /tasks ' + words[0] + ' AGENT_ID [APPROVAL_ID]' : 'No agent is waiting for approval.' };
         if (!session.agentTasks || !session.agentTasks.agents.has(id)) return { output: 'No subagent with id ' + id + '. /tasks lists them.' };
@@ -2071,7 +2072,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const mcpTasks = session && session.mcpBackgroundTasks ? [...session.mcpBackgroundTasks.entries()] : [];
       if (!agents.length && !procs.length && !mcpTasks.length) return { output: 'No subagents, background processes or MCP tasks in this session.' };
       const lines = [];
-      const waitingFor = (id) => { const record = getAgent(session, id); return record && Array.isArray(record.pendingApprovals) ? record.pendingApprovals.map((item) => item.tool).join(', ') : ''; };
+      const waitingFor = (id) => { const record = getAgent(session, id); return record ? waitingApprovals(record).map((item) => item.tool).join(', ') : ''; };
       const agentLine = (agent) => '  ' + agent.id.padEnd(9) + ' ' + agent.status.padEnd(10) + ' ' + (agent.background ? 'bg ' : 'fg ') + agent.agent + ': ' + agent.description + '  (' + agent.elapsed + ', ' + agent.toolCalls + ' tool calls' + (budgetOf(agent.id) ? ', ' + budgetOf(agent.id) : '') + (agent.status === 'running' && agent.recentTools ? ', now: ' + agent.recentTools[agent.recentTools.length - 1] : '') + ')' + (waitingFor(agent.id) ? '  waiting for approval: ' + waitingFor(agent.id) + ' (/tasks approve|deny ' + agent.id + ')' : '');
       const running = agents.filter((agent) => agent.status === 'running');
       const earlier = agents.filter((agent) => agent.status !== 'running');

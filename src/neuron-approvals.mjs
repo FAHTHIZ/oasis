@@ -12,6 +12,31 @@ import { createHash, randomBytes } from 'node:crypto';
 
 const MAX_PENDING = 5;
 const MAX_GRANTS = 10;
+// An unanswered request lapses after a day: by then the agent's plan and the
+// workspace have moved on, and a yes would resume it on stale ground. A grant
+// has to be used soon after the user approves it (the agent is resumed at
+// once); an unused one does not linger as a standing permission.
+const PENDING_TTL_MS = 24 * 60 * 60 * 1000;
+const GRANT_TTL_MS = 30 * 60 * 1000;
+
+function fresh(at, ttl, now) {
+  const time = Date.parse(String(at || ''));
+  return Number.isFinite(time) && now - time >= -5 * 60 * 1000 && now - time <= ttl; // small allowance for clock skew
+}
+
+function liveGrants(record, now = Date.now()) {
+  const grants = Array.isArray(record && record.approvalGrants) ? record.approvalGrants : [];
+  const kept = grants.filter((grant) => grant && typeof grant === 'object' && /^[0-9a-f]{32}$/.test(String(grant.digest)) && fresh(grant.at, GRANT_TTL_MS, now));
+  if (record) record.approvalGrants = kept;
+  return kept;
+}
+
+function livePending(record, now = Date.now()) {
+  const pending = Array.isArray(record && record.pendingApprovals) ? record.pendingApprovals : [];
+  const kept = pending.filter((item) => item && fresh(item.requestedAt, PENDING_TTL_MS, now));
+  if (record) record.pendingApprovals = kept;
+  return kept;
+}
 
 function stable(value) {
   if (Array.isArray(value)) return '[' + value.map(stable).join(',') + ']';
@@ -28,11 +53,16 @@ function preview(input) {
   try { return JSON.stringify(input ?? {}).slice(0, 2000); } catch { return '{}'; }
 }
 
+/** Requests still waiting for an answer (expired ones are dropped). */
+export function waitingApprovals(record) {
+  return record ? livePending(record) : [];
+}
+
 /** Uses up a matching grant. True when this exact call was approved. */
-export function consumeGrant(record, tool, input) {
-  const grants = record && Array.isArray(record.approvalGrants) ? record.approvalGrants : [];
+export function consumeGrant(record, tool, input, now = Date.now()) {
+  const grants = liveGrants(record, now);
   const digest = callDigest(tool, input);
-  const index = grants.indexOf(digest);
+  const index = grants.findIndex((grant) => grant.digest === digest);
   if (index < 0) return false;
   grants.splice(index, 1);
   return true;
@@ -44,7 +74,7 @@ export function consumeGrant(record, tool, input) {
  * record an event and notify the user.
  */
 export function parkApproval(record, { message = '', tool = '', input = {} } = {}, { onParked } = {}) {
-  const pending = record.pendingApprovals ||= [];
+  const pending = livePending(record);
   const digest = callDigest(tool, input);
   let entry = pending.find((item) => item.digest === digest);
   if (!entry) {
@@ -63,17 +93,19 @@ export function parkApproval(record, { message = '', tool = '', input = {} } = {
  * Answers a parked request. Returns the message to resume the agent with.
  * `approvalId` may be omitted when the agent has exactly one request.
  */
-export function answerApproval(record, { allow, approvalId = '' } = {}) {
-  const pending = Array.isArray(record && record.pendingApprovals) ? record.pendingApprovals : [];
-  if (!pending.length) throw new Error('Agent ' + (record && record.id) + ' has no request waiting for approval.');
+export function answerApproval(record, { allow, approvalId = '' } = {}, now = Date.now()) {
+  const before = Array.isArray(record && record.pendingApprovals) ? record.pendingApprovals.length : 0;
+  const pending = record ? livePending(record, now) : [];
+  if (!pending.length) throw new Error('Agent ' + (record && record.id) + (before ? '\'s waiting request expired (requests lapse after 24 hours). Run the step again if it is still needed.' : ' has no request waiting for approval.'));
   const wanted = String(approvalId || '').trim();
   if (!wanted && pending.length > 1) throw new Error('Agent ' + record.id + ' has ' + pending.length + ' requests waiting: name one of ' + pending.map((item) => item.id).join(', ') + '.');
   const index = wanted ? pending.findIndex((item) => item.id === wanted) : 0;
   if (index < 0) throw new Error('No request ' + wanted + ' for agent ' + record.id + '.');
   const [entry] = pending.splice(index, 1);
   if (allow) {
-    const grants = record.approvalGrants ||= [];
-    if (!grants.includes(entry.digest)) grants.push(entry.digest);
+    const grants = liveGrants(record, now).filter((grant) => grant.digest !== entry.digest);
+    grants.push({ digest: entry.digest, at: new Date(now).toISOString() });
+    record.approvalGrants = grants;
     if (grants.length > MAX_GRANTS) grants.splice(0, grants.length - MAX_GRANTS);
   }
   const message = allow
@@ -87,7 +119,7 @@ export function approvalSnapshot(record) {
   const pending = (Array.isArray(record.pendingApprovals) ? record.pendingApprovals : []).slice(-MAX_PENDING)
     .filter((item) => item && /^approval_[0-9a-f]{8}$/.test(item.id) && /^[0-9a-f]{32}$/.test(item.digest))
     .map((item) => ({ id: item.id, tool: String(item.tool).slice(0, 100), message: String(item.message || '').slice(0, 1000), input: String(item.input || '').slice(0, 2000), digest: item.digest, requestedAt: String(item.requestedAt || '').slice(0, 40) }));
-  const grants = (Array.isArray(record.approvalGrants) ? record.approvalGrants : []).filter((digest) => /^[0-9a-f]{32}$/.test(digest)).slice(-MAX_GRANTS);
+  const grants = liveGrants({ approvalGrants: record.approvalGrants }).map((grant) => ({ digest: grant.digest, at: String(grant.at).slice(0, 40) })).slice(-MAX_GRANTS);
   return { ...(pending.length ? { pendingApprovals: pending } : {}), ...(grants.length ? { approvalGrants: grants } : {}) };
 }
 

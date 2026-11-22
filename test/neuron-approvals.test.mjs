@@ -97,11 +97,27 @@ test('grants match one exact call and are used up', () => {
 });
 
 test('saved approval state drops malformed entries', () => {
+  const now = new Date().toISOString();
   const restored = restoreApprovals({
     pendingApprovals: [{ id: 'approval_0123abcd', tool: 'write_file', digest: 'a'.repeat(32), input: '{}' }, { id: '../evil', digest: 'b'.repeat(32) }, null],
-    approvalGrants: ['c'.repeat(32), 'nope']
+    approvalGrants: [{ digest: 'c'.repeat(32), at: now }, { digest: 'nope', at: now }, 'd'.repeat(32), { digest: 'e'.repeat(32), at: '2020-01-01T00:00:00Z' }]
   });
   assert.deepEqual(restored.pendingApprovals.map((item) => item.id), ['approval_0123abcd']);
-  assert.deepEqual(restored.approvalGrants, ['c'.repeat(32)]);
+  assert.deepEqual(restored.approvalGrants.map((grant) => grant.digest), ['c'.repeat(32)], 'malformed, bare legacy and expired grants are dropped');
   assert.deepEqual(approvalSnapshot({}), {});
+});
+
+test('waiting requests lapse after a day and unused grants after 30 minutes', () => {
+  const record = { id: 'agent_1' };
+  parkApproval(record, { tool: 'run_shell', input: { command: 'git push' }, message: 'push?' });
+  const later = Date.now() + 25 * 60 * 60 * 1000;
+  assert.throws(() => answerApproval(record, { allow: true }, later), /expired/);
+  parkApproval(record, { tool: 'run_shell', input: { command: 'git push' }, message: 'push?' });
+  const approvedAt = Date.now();
+  answerApproval(record, { allow: true }, approvedAt);
+  assert.equal(consumeGrant(record, 'run_shell', { command: 'git push' }, approvedAt + 31 * 60 * 1000), false, 'a grant left unused does not become a standing permission');
+  parkApproval(record, { tool: 'run_shell', input: { command: 'git push' }, message: 'push?' });
+  answerApproval(record, { allow: true }, approvedAt);
+  assert.equal(consumeGrant(record, 'run_shell', { command: 'git push' }, approvedAt + 60 * 1000), true);
+  assert.equal(consumeGrant(record, 'run_shell', { command: 'git push' }, approvedAt + 61 * 1000), false, 'one use only');
 });

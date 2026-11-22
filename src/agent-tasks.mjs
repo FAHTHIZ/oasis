@@ -1,4 +1,4 @@
-import { restoreApprovals } from './neuron-approvals.mjs';
+import { restoreApprovals, waitingApprovals } from './neuron-approvals.mjs';
 import { applyInjectionTaint, injectionTaint, taintNotice } from './untrusted-content.mjs';
 import { AGENT_DEFINE_TOOL_DEFINITION } from './session-agents.mjs';
 import { closeBrowser } from './browser-tool.mjs';
@@ -524,7 +524,7 @@ export function summarizeAgent(record, { full = false } = {}) {
   const queuedMessages = Array.isArray(child.inbox) ? child.inbox.length : 0;
   if (queuedMessages) out.queuedMessages = queuedMessages;
   if (record.worktree) out.worktree = record.worktree;
-  if (Array.isArray(record.pendingApprovals) && record.pendingApprovals.length) {
+  if (waitingApprovals(record).length) {
     out.waitingForApproval = record.pendingApprovals.map((item) => ({ id: item.id, tool: item.tool, requestedAt: item.requestedAt }));
     out.note = 'Waiting for the user to answer with /tasks approve ' + record.id + ' or /tasks deny ' + record.id + '. You cannot approve it yourself.';
   }
