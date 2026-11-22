@@ -125,6 +125,8 @@ export function restoreAgentHistory(session, snapshots = []) {
         ? { restoredTranscript: true, transcriptSaved: true, resumeWorktree: { branch: String(snapshot.worktreeBranch).slice(0, 160), relative: String(snapshot.worktreePath).slice(0, 240), base: String(snapshot.worktreeBase) } }
         : {})
     };
+    if (snapshot.noticePending === true && !wasRunning) { record.noticePending = true; record.noticeRead = false; }
+    if (wasRunning) record.interruptedByRestart = true;
     attachNeuronLineage(registry, record, record.parentId);
     registry.agents.set(id, record);
     registry.next = Math.max(Number(registry.next) || 1, Number(match[1]) + 1);
@@ -168,7 +170,8 @@ export function restoreAgentHistory(session, snapshots = []) {
       controller: null,
       promise: null,
       resumable: false,
-      recoveredFromLedger: true
+      recoveredFromLedger: true,
+      ...(neuron.recovered ? { interruptedByRestart: true } : {})
     };
     attachNeuronLineage(registry, record, record.parentId);
     registry.agents.set(record.id, record);
@@ -178,7 +181,26 @@ export function restoreAgentHistory(session, snapshots = []) {
       recordAgentEvent(session, 'agent.interrupted', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: record.error });
     }
   }
+  queueRestartNotices(session, restored);
   return restored;
+}
+
+// After a restart the model is told about its own agents that need attention:
+// background results it never read, and workers the restart interrupted.
+// Without this it would wait for notices that died with the old process.
+function queueRestartNotices(session, restored) {
+  const mine = restored.filter((record) => (record.parentId || 'main') === 'main');
+  const unread = mine.filter((record) => record.noticePending);
+  const interrupted = mine.filter((record) => record.interruptedByRestart);
+  if (!unread.length && !interrupted.length) return;
+  const label = (record) => record.id + ' ("' + String(record.description || record.type || '').slice(0, 80) + '")';
+  const lines = ['OASIS restarted since your last turn.'];
+  for (const record of unread.slice(0, 10)) lines.push('Background agent ' + label(record) + ' ' + record.status + ' before the restart and you have not read its result yet; agent_status id ' + record.id + ' shows it.');
+  for (const record of interrupted.slice(0, 10)) lines.push('Agent ' + label(record) + ' was still running and did not survive the restart' + (record.restoredTranscript ? '; its conversation was saved, so send_message resumes it with full context.' : '; start it again with task if its work is still needed.'));
+  const extra = unread.length + interrupted.length - Math.min(10, unread.length) - Math.min(10, interrupted.length);
+  if (extra > 0) lines.push(extra + ' more; agent_status lists every agent.');
+  // Tied to the first unread record, so reading it with agent_status drops the notice.
+  (session.inbox || (session.inbox = [])).push({ text: lines.join('\n'), kind: 'agent-dispatch', announces: unread, ...(unread.length === 1 && !interrupted.length ? { record: unread[0] } : {}) });
 }
 
 export function agentRegistry(session) {
@@ -388,6 +410,9 @@ export function drainInbox(session) {
   // A delivered notice or message from a tainted agent taints this turn too.
   for (const entry of queued) {
     if (session.inbox.includes(entry)) continue;
+    for (const record of [entry.record, ...(entry.announces || [])]) {
+      if (record && record.status && record.status !== 'running') { record.noticeRead = true; record.noticePending = false; }
+    }
     const taint = entry.taint || (entry.record && entry.record.injectionTaint);
     if (taint) applyInjectionTaint(session, taint);
   }
@@ -541,7 +566,7 @@ export async function agentStatus(session, args = {}, signal) {
     if (signal && onAbort) signal.removeEventListener('abort', onAbort);
   }
   // The parent has now read this result, so drop its pending finish notice.
-  if (record.status !== 'running') record.noticeRead = true;
+  if (record.status !== 'running') { record.noticeRead = true; record.noticePending = false; }
   const out = summarizeAgent(record, { full: true });
   if (record.injectionTaint && out.report !== undefined) {
     out.untrusted_input = taintNotice(record.injectionTaint);
