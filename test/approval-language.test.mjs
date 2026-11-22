@@ -127,6 +127,7 @@ test('a plan approval shows the whole plan; other long prompts say what was cut'
   assert.match(shown.message, /FINAL STEP/);
   assert.match(shown.message, /implement this plan\?$/);
   const other = formatApprovalMessage('Call MCP server "x" tool "y" with arguments:\n' + 'z'.repeat(5000), { tool: 'mcp_x_y' });
-  assert.match(other.message, /\[\d+ more characters not shown\]$/);
-  assert.match(other.message, /\[3\d{3} more characters/);
+  // The start and the end stay visible; the middle is counted.
+  assert.match(other.message, /\[2\d{3} characters in the middle not shown\]/);
+  assert.match(other.message, /z{1000}$/);
 });

