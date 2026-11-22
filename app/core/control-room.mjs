@@ -126,3 +126,14 @@ export function controlRoomSessions(snapshot, { now = Date.now(), limit = 12 } =
     detail: [item.agents + (item.agents === 1 ? ' agent' : ' agents'), item.running ? item.running + ' working' : '', formatTokens(item.tokens) + ' tokens', item.costUsd ? formatCost(item.costUsd) : '', ago(item.lastActivity, now)].filter(Boolean).join(' · ')
   }));
 }
+
+/** Track record rows: success of each agent type and model, from the experience store. */
+export function controlRoomTrackRecord(snapshot, { now = Date.now(), limit = 10 } = {}) {
+  const list = snapshot && snapshot.experience && snapshot.experience.records || [];
+  return list.slice(0, limit).map((item) => ({
+    key: item.agentType + '|' + item.model,
+    title: item.agentType + (item.model ? ' · ' + item.model : ''),
+    tone: item.successRate >= 0.8 ? 'completed' : item.successRate >= 0.5 ? 'waiting' : 'failed',
+    detail: [item.runs + (item.runs === 1 ? ' run' : ' runs'), Math.round(item.successRate * 100) + '% succeeded', item.verified ? item.verified + ' verified' : '', item.failed ? item.failed + ' failed' : '', item.rejected ? item.rejected + ' rejected' : '', formatTokens(item.avgTokens) + ' tokens avg', item.avgCostUsd ? formatCost(item.avgCostUsd) + ' avg' : '', ago(item.lastAt, now)].filter(Boolean).join(' · ')
+  }));
+}

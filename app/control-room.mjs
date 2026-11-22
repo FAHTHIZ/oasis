@@ -2,7 +2,7 @@
 // browsers, recent history, spend and the machine's load. Refreshes every few
 // seconds while open. The view model lives in app/core/control-room.mjs.
 
-import { controlRoomKpis, controlRoomAgents, controlRoomEnvironments, controlRoomHistory, controlRoomSessions } from './core/control-room.mjs';
+import { controlRoomKpis, controlRoomAgents, controlRoomEnvironments, controlRoomHistory, controlRoomSessions, controlRoomTrackRecord } from './core/control-room.mjs';
 
 const REFRESH_MS = 3000;
 const state = { deps: null, timer: 0, busy: false };
@@ -68,6 +68,7 @@ function render(snapshot) {
     'No virtual screens or browsers are open. A subagent started with environment "desktop" gets its own screen and browser.');
   section('controlRoomHistory', null, controlRoomHistory(snapshot, { now }), (row) => item({ title: row.text, meta: row.when, tone: row.tone }), 'Nothing yet.');
   section('controlRoomSessions', null, controlRoomSessions(snapshot, { now }), (row) => item({ ...row, tone: 'idle' }), 'No sessions with agents yet.');
+  section('controlRoomTrackRecord', null, controlRoomTrackRecord(snapshot, { now }), (row) => item(row), 'No finished subagent runs yet. Each one adds to the track record of its agent type and model.');
   const r = snapshot.resources || {};
   $('controlRoomMachine').textContent = [r.cpus + ' CPUs' + (r.cpuModel ? ' (' + r.cpuModel + ')' : ''), 'load ' + (r.loadAverage || []).join(' / '), 'OASIS server ' + Math.round((r.processRss || 0) / 1024 ** 2) + ' MB', r.platform + ' ' + r.arch].join(' · ');
   $('controlRoomLedgerNote').hidden = snapshot.ledger.available !== false;

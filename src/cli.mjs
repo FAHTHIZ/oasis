@@ -880,6 +880,28 @@ async function agentsCommand(rest) {
   else stdout.write(list.length ? list.map((entry) => entry.id + '  ' + entry.status.padEnd(9) + ' ' + (entry.name || '') + '  ' + entry.prompt.replace(/\s+/g, ' ').slice(0, 70)).join('\n') + '\n' : 'No background sessions.\n');
 }
 
+// `oasis agents experience [--all] [--type NAME] [--days N] [--json] [--forget]`:
+// the track record of each agent type and model, from src/agent-experience.mjs.
+async function agentExperienceCommand(root, rest) {
+  const { sharedExperienceStore, experienceProject, trackRecord, formatTrackRecord, experienceFile } = await import('./agent-experience.mjs');
+  const value = (flag) => { const index = rest.indexOf(flag); return index >= 0 ? rest[index + 1] : ''; };
+  const unknown = rest.filter((arg, index) => arg.startsWith('-') && !['--all', '--json', '--forget', '--type', '--days'].includes(arg) && !['--type', '--days'].includes(rest[index - 1]));
+  if (unknown.length) throw new Error('Unknown option ' + unknown[0] + '. Usage: oasis agents experience [--all] [--type NAME] [--days N] [--json] [--forget]');
+  const store = sharedExperienceStore(process.env);
+  if (!store) throw new Error('Agent experience is off (OASIS_AGENT_EXPERIENCE=0) or node:sqlite is unavailable.');
+  const project = rest.includes('--all') ? '' : experienceProject(root);
+  if (rest.includes('--forget')) {
+    const removed = store.forget({ project });
+    stdout.write('Removed ' + removed + ' recorded run' + (removed === 1 ? '' : 's') + (project ? ' for this project' : ' for every project') + ' from ' + experienceFile(process.env) + '.\n');
+    return;
+  }
+  const days = Math.max(1, Math.min(365, Number.parseInt(value('--days'), 10) || 180));
+  const rows = store.runs({ project, agentType: value('--type'), since: Date.now() - days * 86400000, limit: 20000 });
+  const records = trackRecord(rows);
+  if (rest.includes('--json')) { stdout.write(JSON.stringify({ project: project || 'all', days, runs: rows.length, records }, null, 2) + '\n'); return; }
+  stdout.write(formatTrackRecord(records) + '\n');
+}
+
 // `oasis ultrareview [target] [--json] [--timeout MIN] [--post]`: the deep review, non-interactively.
 async function ultrareviewCommand(root, rest, autoApprove, persistence) {
   const words = [];
@@ -3828,6 +3850,7 @@ async function main() {
   if (command === 'auto-mode') return await autoModeCommand(workspace, rest, autoApprove);
   if (command === 'auth') return await authCommand(workspace, rest);
   if (command === 'setup-token') return await setupTokenCommand(rest);
+  if (command === 'agents' && rest[0] === 'experience') return await agentExperienceCommand(workspace, rest.slice(1));
   if (command === 'agents' && (rest.includes('--json') || !stdin.isTTY)) return await agentsCommand(rest);
   if (command === 'ultrareview') return await ultrareviewCommand(workspace, rest, autoApprove, persistence);
   if (command === 'insights') {

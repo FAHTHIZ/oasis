@@ -461,6 +461,8 @@ export async function loadSettings(root, options = {}) {
     if (settings.autoMemory === false) result.autoMemory = false;
     if (settings.autoLearning === false) result.autoLearning = false;
     if (settings.compactionReflection === false) result.compactionReflection = false;
+    // Agent experience recall and track record (src/agent-experience.mjs); turning it off never loosens anything.
+    if (settings.agentExperience === false) result.agentExperience = false;
     // Memory write approval only tightens, so it applies before trust too.
     const writeApproval = String(settings.memoryWriteApproval || (settings.memory && settings.memory.writeApproval) || '').toLowerCase();
     if (['ask', 'queue'].includes(writeApproval)) result.memoryWriteApproval = writeApproval;
@@ -722,6 +724,7 @@ export async function loadSettings(root, options = {}) {
       const routing = sanitizeModelRouting(settings.modelRouting);
       const earlierMode = result.modelRouting && result.modelRouting.mode;
       const earlierRoutes = result.modelRouting && result.modelRouting.routes;
+      const earlier = result.modelRouting || null;
       result.modelRouting = {
         enabled: typeof settings.modelRouting.enabled === 'boolean' ? routing.enabled : result.modelRouting.enabled,
         easyModel: routing.easyModel || result.modelRouting.easyModel,
@@ -736,6 +739,11 @@ export async function loadSettings(root, options = {}) {
         if (routes) result.modelRouting.routes = routes;
       }
       if (!result.modelRouting.easyModel && !(mode === 'capability' && result.modelRouting.routes)) result.modelRouting.enabled = false;
+      // Subagent model choice from the experience track record works with routing on or off.
+      for (const key of ['subagents', 'subagentModels', 'subagentMinRuns']) {
+        if (routing[key] !== undefined) result.modelRouting[key] = routing[key];
+        else if (earlier && earlier[key] !== undefined) result.modelRouting[key] = earlier[key];
+      }
     }
     if (typeof settings.fallbackModel === 'string' && settings.fallbackModel.trim()) result.fallbackModel = settings.fallbackModel.trim();
     else if (Array.isArray(settings.fallbackModel)) { const list = settings.fallbackModel.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()); if (list.length) result.fallbackModel = list.join(','); }
