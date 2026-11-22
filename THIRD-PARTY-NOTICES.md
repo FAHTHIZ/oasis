@@ -19,6 +19,8 @@ listed here.
 | `app/fonts/jetbrains-mono.woff2` | [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) 5.3.0 (Fontsource build) | SIL Open Font License 1.1 | Full text in `app/fonts/OFL-jetbrains-mono.txt` |
 | `skills/ponytail*` | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) v5.3.2 | MIT, Copyright (c) Dietrich Gebert | `skills/ponytail/LICENSE` and `skills/ponytail/NOTICE.md` |
 | `src/data/*.json` | models.dev, Gitleaks, npm-high-impact, top-pypi-packages, crates.io | MIT or factual data, per file | `src/data/NOTICE.md` lists each source and license |
+| `src/computer-use.mjs` (design) | [Anthropic claude-quickstarts](https://github.com/anthropics/claude-quickstarts) computer-use-demo | MIT, Copyright (c) 2023 Anthropic | Written for OASIS in JavaScript; the action set, screenshot scaling targets and zoom follow the reference tool. No files copied |
+| `src/computer-use.mjs` (safety rules) | [Nous Research hermes-agent](https://github.com/NousResearch/hermes-agent) computer_use tool | MIT, Copyright (c) 2025 Nous Research | Refused key chords and typed shell patterns, approval once per session and repeated-screenshot suppression follow Hermes. No files copied |
 
 The MIT and ISC licenses require that the copyright notice and permission
 notice are kept with copies of the software. The full MIT text is reproduced

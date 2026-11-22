@@ -36,7 +36,7 @@ export function toolActivityCategory(name) {
 }
 
 const EXTRA_LABELS = {
-  browser: 'Used the browser', command_output: 'Checked a running command', kill_command: 'Stopped a running command',
+  browser: 'Used the browser', computer: 'Used the computer', command_output: 'Checked a running command', kill_command: 'Stopped a running command',
   list_background: 'Checked background tasks', git_branch: 'Managed branches', git_commit: 'Made a commit', git_push: 'Pushed the branch',
   create_pull_request: 'Opened a pull request', worktree_inspect: 'Checked the review copy', worktree_merge: 'Merged the review copy',
   home_assistant: 'Checked the smart home', home_assistant_control: 'Controlled a smart-home device',

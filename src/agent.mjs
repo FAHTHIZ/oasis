@@ -37,6 +37,7 @@ import { startHookWatchers, needsHookWatchers } from './file-watch.mjs';
 import { externalChangesReminder, markFileSeen, restoreFilesAfterCompaction } from './file-state.mjs';
 import { realpathSync } from 'node:fs';
 import { BROWSER_TOOL_DEFINITION, closeBrowser } from './browser-tool.mjs';
+import { setComputerUse } from './computer-use.mjs';
 import { WORKFLOW_TOOL_DEFINITION } from './workflows.mjs';
 import { debugLog, debugEnabled } from './debug-log.mjs';
 import path from 'node:path';
@@ -532,7 +533,7 @@ export function commandEnvironment(env, settings) {
   return { ...env, [key]: [...dirs, env[key] || '', ripgrepDir].filter(Boolean).join(path.delimiter) };
 }
 
-export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '', chrome = null, restricted = false, subagentSystemAppend = '', excludeDynamicSections = false, onHookEvent = null, onHookStatus = null, systemPromptSnapshot = null, skipAgentInitialPrompt = false }) {
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '', chrome = null, computerUse = null, restricted = false, subagentSystemAppend = '', excludeDynamicSections = false, onHookEvent = null, onHookStatus = null, systemPromptSnapshot = null, skipAgentInitialPrompt = false }) {
   // --bare: no project instructions, skills, hooks, MCP servers, or auto memory; just the
   // model, the built-in tools, and your permission rules. Fast and predictable for scripts.
   // --restricted: only managed settings and --settings load; bypassPermissions is refused.
@@ -750,6 +751,9 @@ export async function createSession({ root, config, restore = null, permissionMo
   // Chrome integration (--chrome, "chrome": true, OASIS_CHROME=1; --no-chrome or OASIS_CHROME=0 wins).
   const chromeWanted = chrome !== null ? Boolean(chrome) : env.OASIS_CHROME ? env.OASIS_CHROME !== '0' : loadedSettings.chrome === true;
   if (chromeWanted && !restricted) setChrome(session, true);
+  // Computer use (--computer-use, "computerUse": true, OASIS_COMPUTER_USE=1; --no-computer-use or OASIS_COMPUTER_USE=0 wins).
+  const computerWanted = computerUse !== null ? Boolean(computerUse) : env.OASIS_COMPUTER_USE ? env.OASIS_COMPUTER_USE !== '0' : loadedSettings.computerUse === true;
+  if (computerWanted && !restricted) setComputerUse(session, true);
   const advisorModel = String(advisor || env.OASIS_ADVISOR_MODEL || loadedSettings.advisorModel || '').trim();
   if (advisorModel && advisorModel !== 'off' && modelAllowed(advisorModel, session.availableModels, { env, protocol: session.config.protocol, ...(session.modelPolicy || {}) })) setAdvisor(session, advisorModel);
   const mixtureSpec = String(env.OASIS_MIXTURE_MODELS || loadedSettings.mixtureModels || '').trim();
@@ -1608,7 +1612,7 @@ const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
 const MAX_TOOL_BATCH = 64;
 
 const LIVE_OUTPUT_TOOLS = new Set(['run_command', 'run_shell', 'powershell']);
-export const RESTRICTED_TOOL_NAMES = new Set(['run_command', 'powershell', 'monitor', 'command_output', 'kill_command', 'list_background', 'fetch_url', 'web_search', 'browser', 'install_package', 'install_extension', 'install_plugin', 'add_extension', 'install_external_skill', 'configure_mcp_server', 'git_push', 'create_pull_request']);
+export const RESTRICTED_TOOL_NAMES = new Set(['run_command', 'powershell', 'monitor', 'command_output', 'kill_command', 'list_background', 'fetch_url', 'web_search', 'browser', 'computer', 'install_package', 'install_extension', 'install_plugin', 'add_extension', 'install_external_skill', 'configure_mcp_server', 'git_push', 'create_pull_request']);
 
 
 
@@ -3979,6 +3983,8 @@ export { toAnthropicRequest, toResponsesRequest, requestCompletion, chatCompleti
 // consult a second, usually stronger, model mid-task. The advisor sees the whole conversation
 // and answers with guidance only; it never runs tools.
 export const ADVISOR_TOOL_DEFINITION = { type: 'function', function: { name: 'advisor', description: 'Consult a stronger advisor model that sees this entire conversation. Use it before committing to an approach on hard problems, when stuck after several attempts, or to sanity-check a plan or diagnosis. It returns advice only; it cannot run tools. Optionally pass a focused question.', parameters: { type: 'object', properties: { question: { type: 'string', description: 'Optional specific question for the advisor' } } } } };
+
+export { setComputerUse };
 
 export function setChrome(session, on) {
   if (on && session.restricted) throw new Error('The browser tool is disabled in --restricted mode.');
