@@ -707,6 +707,14 @@ Settings (user or trusted project settings only, because `baseUrl` decides where
 
 Credentials the secret shield recognises and `<private>...</private>` spans are redacted before anything is sent. Subagents do not sync, and only the main agent can change your card or conclusions. Honcho being slow or down never blocks a turn: sync waits at most four seconds and errors show in `oasis honcho`.
 
+## Remote A2A agents
+
+`a2aAgents` in user settings names remote [A2A](A2A.md) agents the model can call with the `remote_agent` tool. Values are a URL or `{ "url", "token", "tokenEnv", "description" }`; up to 32 agents. Project settings cannot add them. `oasis a2a serve` makes OASIS itself an A2A agent. See [A2A](A2A.md).
+
+```json
+{ "a2aAgents": { "reviewer": { "url": "http://127.0.0.1:9000", "tokenEnv": "REVIEWER_TOKEN" } } }
+```
+
 ## Telemetry (OpenTelemetry)
 
 Telemetry is off unless `OASIS_ENABLE_TELEMETRY=1`. OASIS then sends metrics, log events and traces over OTLP/HTTP JSON to `OTEL_EXPORTER_OTLP_ENDPOINT` (per-signal `OTEL_EXPORTER_OTLP_{METRICS,LOGS,TRACES}_ENDPOINT` and `_HEADERS` work too). `OTEL_{METRICS,LOGS,TRACES}_EXPORTER` takes `otlp`, `console` or `none`.

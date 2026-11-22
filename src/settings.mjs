@@ -640,6 +640,8 @@ export async function loadSettings(root, options = {}) {
     if (['user', 'flag', 'managed'].includes(scope)) {
       if ((typeof settings.mixtureModels === 'string' && settings.mixtureModels.trim()) || (Array.isArray(settings.mixtureModels) && settings.mixtureModels.length)) result.mixtureModels = (Array.isArray(settings.mixtureModels) ? settings.mixtureModels.map(String).join(',') : settings.mixtureModels.trim()).slice(0, 1000);
       if (typeof settings.mixtureAggregator === 'string' && settings.mixtureAggregator.trim()) result.mixtureAggregator = settings.mixtureAggregator.trim().slice(0, 200);
+      // Remote A2A agents receive whatever the agent sends them, so only you can add one.
+      if (settings.a2aAgents && typeof settings.a2aAgents === 'object' && !Array.isArray(settings.a2aAgents)) result.a2aAgents = { ...(result.a2aAgents || {}), ...Object.fromEntries(Object.entries(settings.a2aAgents).slice(0, 32)) };
     }
     if (settings.autoMemory === true) result.autoMemory = true;
     for (const key of ['executeCode', 'sessionSearch']) if (settings[key] === true) result[key] = true;

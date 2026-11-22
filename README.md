@@ -105,6 +105,7 @@ The web app runs on a computer or server you control, not a hosted service, and 
 | --- | --- | --- |
 | Desktop | [Desktop app](docs/DESKTOP.md) | The web workspace in its own window, the model key in the OS key store, automatic updates |
 | Zed, JetBrains and other ACP editors | `oasis acp` | Agent Client Protocol sessions with Mode and Model pickers, a context meter and real cancel |
+| Other agents (ADK, LangGraph, CrewAI, another OASIS) | `oasis a2a serve` | An A2A 1.0/0.3 agent with streaming and approvals; the `remote_agent` tool calls their agents back ([A2A](docs/A2A.md)) |
 | VS Code, Cursor, Windsurf | `oasis ide install` | The VS Code-family extension, with inline tab completion from your model |
 | Codex App Server clients | `oasis app-server` | Clients built for `codex app-server` drive OASIS with any model: threads, turns, steering, approvals, review, files and commands |
 | Cursor Cloud Agents API scripts | `oasis web --persistent-key` | Cursor's REST endpoints served by your own OASIS with any model ([details](docs/INTERFACES.md#cursor-cloud-agents-api)) |
