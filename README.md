@@ -208,6 +208,7 @@ Larger jobs are split across agents that run as one network with a single schedu
 - **Checked reports.** A subagent's report is checked against its own tool results: a "tests pass" with no passing test run, a cited page it never fetched or a number no code printed is flagged before the parent relies on it.
 - **Budgets and cancellation.** Each agent can reserve a budget (tokens, dollars, requests, steps, children) from its parent's, a scheduler limits how many run at once, and stopping an agent stops its whole subtree.
 - **Workflows.** `/deep-research` and `/audit` are built-in scripted workflows; the `workflow` tool runs your own. Research and analysis domain packs add specialist agents with narrower tools.
+- **Shared knowledge.** Agents of a session post findings to a shared knowledge board (`knowledge_post`, `knowledge_search`); each post is checked against the poster's own evidence, and new subagents start with the relevant findings.
 - **Experience.** Each run's outcome is recorded from evidence, so later runs can recall what worked before (`oasis agents experience`).
 
 ### Where work runs
@@ -276,7 +277,7 @@ OASIS is a young project. Status labels for every part are in [Capabilities and 
 | --- | --- |
 | Stable | Terminal and scripted runs, the self-hosted web app, sessions, checkpoints and undo, permission modes, bubblewrap and Docker sandboxes, MCP, Claude Code plugins, OpenAI-compatible, Anthropic, Gemini and local providers |
 | Released, lightly tested | Subagents in parallel and in teams, scripted workflows, domain packs, the desktop app (installers not yet code-signed), editor integrations, Codex App Server and Cursor API compatibility, the SDK, GitHub Action and cloud runs, Telegram, Slack and Discord gateways, the Chrome browser tool, app connectors, image and speech tools |
-| Unreleased (on `main`, install from source) | Desktop computer use and virtual desktops (experimental), the control room, A2A, agent experience, `mixture_of_agents`, Daytona, Modal, Apptainer and gVisor backends, more chat gateways, Honcho and Home Assistant |
+| Unreleased (on `main`, install from source) | Desktop computer use and virtual desktops (experimental), the control room, A2A, agent experience, the shared knowledge board, `mixture_of_agents`, Daytona, Modal, Apptainer and gVisor backends, more chat gateways, Honcho and Home Assistant |
 | Not claimed | Production readiness for untrusted code without OS isolation, results with paid frontier models, a hosted service, a published Terminal-Bench or SWE-bench score |
 
 Engineering benchmarks of the harness itself (tool-call repair, edit application, risky-command blocking, secret detection) and every recorded live run are kept for development in [Benchmarks](docs/development/BENCHMARKS.md) and [Real-world runs](docs/development/REAL-WORLD-RUNS.md). They are one-trial samples, not a ranking.
