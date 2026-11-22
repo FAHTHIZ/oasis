@@ -82,3 +82,32 @@ test('chat gateways: /model, /retry, /usage and /reset', async () => {
   assert.deepEqual(calls2.at(-1), ['insights', '7']);
   assert.ok(posted.some((body) => body.text === 'insights output'));
 });
+
+test('chat /mode stops at the gateway ceiling; auto needs the operator to allow it', async () => {
+  const { chatModeCeiling } = await import('../src/gateway-core.mjs');
+  assert.equal(chatModeCeiling({ env: {} }), 'acceptEdits');
+  assert.equal(chatModeCeiling({ env: {}, permissionMode: 'auto' }), 'auto');
+  assert.equal(chatModeCeiling({ env: {}, permissionMode: 'plan' }), 'acceptEdits');
+  assert.equal(chatModeCeiling({ env: { OASIS_GATEWAY_MAX_MODE: 'auto' } }), 'auto');
+  assert.equal(chatModeCeiling({ env: { OASIS_GATEWAY_MAX_MODE: 'manual' }, permissionMode: 'auto' }), 'default');
+  assert.equal(chatModeCeiling({ env: { OASIS_GATEWAY_MAX_MODE: 'bogus' } }), 'acceptEdits');
+  const sent = [];
+  const core = createChatCore({ root: ROOT, env: {}, config: { model: 'm1' }, deps: { agent: fakeAgent([]) }, send: async (_chat, text) => { sent.push(text); }, log: () => {} });
+  await core.handleText('C1', '/mode auto');
+  assert.match(sent.at(-1), /not allowed from chat.*up to acceptEdits.*OASIS_GATEWAY_MAX_MODE=auto/);
+  await core.handleText('C1', '/mode acceptEdits');
+  assert.equal(core.chats.get('C1').session.permissions.mode, 'acceptEdits');
+  const open = createChatCore({ root: ROOT, env: { OASIS_GATEWAY_MAX_MODE: 'auto' }, config: { model: 'm1' }, deps: { agent: fakeAgent([]) }, send: async (_chat, text) => { sent.push(text); }, log: () => {} });
+  await open.handleText('C2', '/mode auto');
+  assert.equal(open.chats.get('C2').session.permissions.mode, 'auto');
+});
+
+test('two messages arriving together share one new chat session', async () => {
+  let created = 0;
+  const agent = fakeAgent([]);
+  const slowAgent = { ...agent, createSession: async (...args) => { created++; await new Promise((resolve) => setTimeout(resolve, 20)); return agent.createSession(...args); } };
+  const core = createChatCore({ root: ROOT, env: {}, config: { model: 'm1' }, deps: { agent: slowAgent }, send: async () => {}, log: () => {} });
+  await Promise.all([core.handleText('C3', '/mode plan'), core.handleText('C3', '/status')]);
+  assert.equal(created, 1);
+  assert.equal(core.chats.get('C3').session.permissions.mode, 'plan');
+});
