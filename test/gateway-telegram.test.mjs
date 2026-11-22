@@ -132,3 +132,24 @@ test('the bot registers its command menu on start, and every entry is a handled 
     assert.equal(prompts, 0, command);
   }
 });
+
+test('OASIS_TELEGRAM_ALLOWED_USERS limits who in an allowed group can send tasks and approve', async () => {
+  const tg = fakeTelegram();
+  const turns = [];
+  let approved;
+  const agent = fakeAgent(async (_session, text, options) => { turns.push(text); approved = await options.approval('Run npm test?', false, {}); return { text: 'ok' }; });
+  const gateway = createTelegramGateway({ token: TOKEN, allowedChats: new Set(['-100']), env: { OASIS_TELEGRAM_ALLOWED_USERS: '5' }, fetchImpl: tg.fetchImpl, deps: deps(agent), root: PAIR_ROOT, log: () => {} });
+  await gateway.handleUpdate({ update_id: 1, message: { chat: { id: -100 }, from: { id: 9 }, text: 'delete everything' } });
+  await flush();
+  assert.deepEqual(turns, []);
+  await gateway.handleUpdate({ update_id: 2, message: { chat: { id: -100 }, from: { id: 5 }, text: 'run the tests' } });
+  await flush();
+  assert.deepEqual(turns, ['run the tests']);
+  const id = [...gateway.approvals.keys()][0];
+  await gateway.handleUpdate({ update_id: 3, callback_query: { id: 'q1', from: { id: 9 }, data: 'a:' + id, message: { chat: { id: -100 } } } });
+  assert.ok(gateway.approvals.has(id), 'another group member cannot approve');
+  assert.match(tg.calls.find((call) => call.method === 'answerCallbackQuery').body.text, /not allowed/);
+  await gateway.handleUpdate({ update_id: 4, callback_query: { id: 'q2', from: { id: 5 }, data: 'a:' + id, message: { chat: { id: -100 } } } });
+  await flush();
+  assert.equal(approved, true);
+});

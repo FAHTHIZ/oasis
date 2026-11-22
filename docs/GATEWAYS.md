@@ -65,6 +65,7 @@ There is one home channel per OASIS profile, stored in `gateway-home.json` in th
 
 1. Create a bot with [@BotFather](https://t.me/BotFather) and copy its token.
 2. Set `OASIS_TELEGRAM_BOT_TOKEN` and `OASIS_TELEGRAM_ALLOWED_CHATS` (comma-separated numeric chat IDs; message the bot once to see yours).
+   - optional `OASIS_TELEGRAM_ALLOWED_USERS`: numeric Telegram user IDs. When set, only these people can send tasks or press approval buttons, even in an allowed group. Without it, every member of an allowed group can.
 3. Run `oasis gateway telegram`.
 
 On start the bot registers its command menu with Telegram (`setMyCommands`), so typing `/` lists `/new`, `/stop`, `/retry`, `/model`, `/usage` and the other chat commands with a short description. Set `OASIS_TELEGRAM_COMMAND_MENU=0` to keep a menu you manage in BotFather.
