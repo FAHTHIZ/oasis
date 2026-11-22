@@ -8,6 +8,10 @@ import { runGitTool } from '../src/git-tools.mjs';
 import { TOOL_DEFINITIONS } from '../src/tools.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 
+// The fixture repo sets its own identity; an author or committer from the
+// surrounding environment would override it.
+for (const name of ['GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL']) delete process.env[name];
+
 const sh = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 async function repo() {

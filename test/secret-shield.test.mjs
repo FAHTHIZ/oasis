@@ -141,7 +141,7 @@ test('placeholders are not swapped back into fetch_url or web_search arguments',
   const probe = {};
   const placeholder = maskSecrets(probe, 'OPENAI_API_KEY=' + OPENAI).text.split('=')[1];
   assert.equal(unmaskSecretsForTool(probe, 'run_command', { args: [placeholder] }).args[0], OPENAI, 'local tools still get the real value');
-  for (const name of ['fetch_url', 'web_search', 'browser', 'generate_image', 'text_to_speech', 'create_pull_request']) assert.equal(JSON.stringify(unmaskSecretsForTool(probe, name, { url: 'https://x/?k=' + placeholder, query: placeholder, prompt: placeholder, text: placeholder, body: 'token ' + placeholder })).includes(OPENAI), false, name);
+  for (const name of ['fetch_url', 'web_search', 'browser', 'generate_image', 'text_to_speech', 'create_pull_request', 'remote_agent', 'git_commit', 'knowledge_post', 'memory_save', 'task_create', 'task_update', 'skill_propose']) assert.equal(JSON.stringify(unmaskSecretsForTool(probe, name, { url: 'https://x/?k=' + placeholder, query: placeholder, prompt: placeholder, text: placeholder, body: 'token ' + placeholder })).includes(OPENAI), false, name);
 
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-shield-fetch-'));
   t.after(() => rm(root, { recursive: true, force: true }));
