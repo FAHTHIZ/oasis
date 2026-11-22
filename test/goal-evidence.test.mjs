@@ -71,6 +71,12 @@ test('a passing run that ran no tests, or only some, does not meet a goal about 
   assert.equal(shell('go test ./...', 'ok  \texample.com/a\t0.1s [no tests to run]\n').noTests, true);
   assert.equal(shell('python -m pytest', '5 passed in 0.1s\n').filtered, undefined, 'python -m is not a filter');
   assert.equal(evidenceFromToolResult('run_shell', { command: 'tsc -t es2022' }, { exitCode: 0, stdout: '' }, { isCheck: true, checkKind: 'type-check' }).filtered, undefined);
+  assert.equal(shell('npm test', 'ℹ tests 2\nℹ pass 0\nℹ fail 0\nℹ skipped 2\n').noTests, true, 'every test skipped');
+  assert.equal(shell('npm test', 'ℹ tests 2\nℹ pass 1\nℹ fail 0\nℹ skipped 1\n').noTests, undefined);
+  assert.equal(shell('pytest', '============ 3 skipped in 0.02s ============\n').noTests, true);
+  assert.equal(shell('pytest', '============ 2 passed, 1 skipped in 0.02s ============\n').noTests, undefined);
+  assert.equal(shell('npx jest', 'Tests:       4 skipped, 4 total\n').noTests, true);
+  assert.equal(shell('npx jest', 'Tests:       1 skipped, 3 passed, 4 total\n').noTests, undefined);
   assert.match(goalEvidenceText([{ ...empty, seq: 1 }]), /no tests ran/);
 });
 
@@ -88,4 +94,13 @@ test('a condition that is only one check passing is met from the record, without
   assert.equal(goalEvidenceGate('`npm run test` passes.', [pass]).met, true);
   assert.equal(goalEvidenceGate('npm test passes and the README documents the flag', [pass]), null, 'a compound condition still needs judgement');
   assert.equal(goalEvidenceGate('npm test passes', [pass, { kind: 'edit', path: 'a.js', seq: 2 }]).met, false);
+});
+
+test('a passing run does not meet the goal while tests are weakened', () => {
+  const pass = { kind: 'check', command: 'npm test', passed: true, exitCode: 0, seq: 3 };
+  const weakened = { kind: 'tamper', files: ['test/a.test.mjs: removed assertions'], seq: 2 };
+  const gate = goalEvidenceGate('npm test passes', [weakened, pass]);
+  assert.equal(gate.met, false);
+  assert.match(gate.reason, /weakened/);
+  assert.equal(goalEvidenceGate('npm test passes', [weakened, { kind: 'tamper', files: [], seq: 3 }, { ...pass, seq: 4 }]).met, true, 'restored tests clear it');
 });

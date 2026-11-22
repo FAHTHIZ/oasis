@@ -60,6 +60,8 @@ export function goalEvidenceGate(condition, events = []) {
   const commands = conditionCommands(condition);
   const aboutChecks = claimsPassing(condition) || (commands.length > 0 && /\b(?:pass(?:es|ing)?|green|succeed(?:s|ing)?|clean|exit(?:s)?\s+(?:with\s+)?0|without (?:errors?|failures?))\b/i.test(String(condition)));
   if (!aboutChecks) return null;
+  const tamper = [...(events || [])].reverse().find((event) => event && event.kind === 'tamper');
+  if (tamper && Array.isArray(tamper.files) && tamper.files.length) return { met: false, evidence: true, reason: 'Tests were weakened instead of the code being fixed (' + tamper.files.join('; ') + '). Restore them and fix the code.' };
   const wanted = commands.length ? commands : [''];
   for (const command of wanted) {
     const check = latestCheck(events, command);
