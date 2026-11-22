@@ -9,6 +9,29 @@ User-facing change history grouped by package version. A version heading does no
 - Chat gateways: `/mode` can only loosen approvals up to the gateway's ceiling (`OASIS_GATEWAY_MAX_MODE`, else the `--permission-mode` the gateway started with, else accept-edits). Before, anyone allowed to message the bot could send `/mode auto`. Two messages arriving together for a new chat now share one session instead of creating two.
 - Email gateway: only the receiving server's own `Authentication-Results` header counts toward the sender check. Before, any header in the message could vouch for it, so a sender who forged an allowlisted From address and added `Authentication-Results: x; dmarc=pass` was let in even when the real server said `dmarc=fail`. `dmarc=pass` now also needs a matching `header.from` in the same result, a DKIM signer must be a real domain (never a bare `com`), and `OASIS_EMAIL_AUTHSERV_ID` (for Gmail `mx.google.com`) restricts the check to your server's headers.
 
+### Highlights
+
+- Chat gateways for Matrix, Signal, email (IMAP IDLE and SMTP), WhatsApp (official Cloud API) and Mattermost, next to Telegram, Slack and Discord. `oasis gateway all` runs every configured platform in one process. See [Gateways](docs/GATEWAYS.md).
+- Gateways: DM pairing with one-time codes (`oasis gateway pair CODE`), `/sethome` home channel and `--deliver home` for routines, `/resume` of any saved session from any chat, the terminal session commands (`/model`, `/effort`, `/compress`, `/usage`, `/undo`, `/retry`, `/skills`) in every chat, typed approvals (`yes`, `allow 3`) on platforms without buttons, a Telegram command menu and native Discord slash commands.
+- Execution backends: Daytona and Modal cloud sandboxes and Apptainer/Singularity containers, with a guide to every backend in [Execution backends](docs/EXECUTION-BACKENDS.md).
+- `mixture_of_agents`: ask two to six models (any providers) the same hard question in parallel and merge their answers, naming any disagreements.
+- Honcho user modeling: an optional long-term model of the user across sessions and chats.
+- Home Assistant tools: read states freely; service calls ask first, and locks, alarms and covers always ask.
+- `/personality`: thirteen built-in voices plus custom ones, in the terminal, web app and every chat.
+- `oasis import openclaw` (also Clawdbot and Moltbot).
+- Trajectory export for training: `--compress` and `--format hermes`.
+- OASIS presents itself as a general-purpose agent: the system prompt has rules for research (cite only fetched pages), data (compute by running code) and writing (save deliverables as files), and the web app suggests those tasks too.
+
+### Editing and tool reliability
+
+- Ambiguous `edit_file` matches list each candidate's line, so the retry can add context without re-reading.
+- A stale edit (the file changed on disk after it was read) shows the changed hunks and refreshes the record, so the retry works without another `read_file`.
+- After every tool batch the agent is told when files it read were changed by you, a formatter or a hook.
+- An identical side-effecting tool call repeated in one reply runs once.
+- After compaction the most recently read small files are re-attached; files known only from a summary need a fresh read before a whole-file overwrite.
+- A crashed stdio MCP server restarts on its next call (up to 3 times per session).
+- When a completion gate sends the model back to work, the app and CLI say why ("Not finished yet: ...").
+
 ### Harness reliability (found running qwen2.5-coder:3b on Ollama, CPU only)
 
 - A reply stuck repeating the same text is cut off as it streams, instead of running to max_tokens (one such reply held a step for 16 minutes). The model gets one copy back with a note saying why, and the turn stops with a clear error after three looping replies in a row.
