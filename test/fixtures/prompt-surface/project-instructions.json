@@ -439,7 +439,7 @@
     },
     {
       "name": "task",
-      "description": "Run a subagent with its own context; it returns one report. It cannot see this conversation: give a complete, self-contained prompt. Task calls in ONE response run in parallel (max 6); each returns an id for send_message.\nAgent types:\n- general-purpose: Edits, commands and research for self-contained multi-step work.\n- explore: Read-only code search; returns findings with paths and line numbers.\n- plan: Read-only; returns a step-by-step implementation plan with files and risks.\n- code-review: Read-only review of changes for bugs, regressions, edge cases and missing tests.\n- security-review: Read-only security review: trust boundaries, permissions, secrets, file and network access.",
+      "description": "Run a subagent with its own context; it returns one report. It cannot see this conversation: give a complete, self-contained prompt. Task calls in ONE response run in parallel (max 6); each returns an id for send_message.\nAgent types:\n- general-purpose: Edits, commands and research for self-contained multi-step work.\n- explore: Read-only code search; returns findings with paths and line numbers.\n- plan: Read-only; returns a step-by-step implementation plan with files and risks.\n- code-review: Read-only review of changes for bugs, regressions, edge cases and missing tests.\n- verify: Runs the result against acceptance criteria; PASS/FAIL per criterion with evidence.\n- security-review: Read-only security review: trust boundaries, permissions, secrets, file and network access.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -458,6 +458,7 @@
               "explore",
               "plan",
               "code-review",
+              "verify",
               "security-review"
             ],
             "description": "Default general-purpose"

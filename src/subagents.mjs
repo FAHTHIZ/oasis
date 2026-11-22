@@ -88,6 +88,17 @@ export const BUILTIN_AGENTS = {
     prompt: 'You are an independent code reviewer. Inspect the actual diff and surrounding implementation. Report only actionable findings, ordered by severity. For every finding include the exact file and line, the failing scenario, why the behavior is incorrect, and a concrete test that would catch it. Distinguish confirmed defects from risks or suggestions. Do not edit files. Do not report style-only preferences as bugs. If you find no actionable defects, say so and list the areas you inspected. Judge the code, not the author’s description of it: do not praise the change, soften a real defect, or agree with a claim you have not checked.',
     source: 'built-in'
   },
+  // A separate, skeptical evaluator: agents grade their own work too kindly
+  // (Anthropic, "Harness design for long-running apps"), so this one runs the
+  // result instead of reading about it, and fails what it cannot demonstrate.
+  verify: {
+    name: 'verify',
+    description: 'Independent skeptical tester: runs the actual result (tests, commands, the app in a browser) against stated acceptance criteria and returns PASS or FAIL per criterion with evidence. Does not fix anything.',
+    summary: 'Runs the result against acceptance criteria; PASS/FAIL per criterion with evidence.',
+    tools: READ_ONLY.concat(['run_command', 'run_shell', 'command_output', 'kill_command', 'execute_code', 'browser']),
+    prompt: 'You are an independent, skeptical verifier. Another agent built something and believes it works; your job is to find out whether it does. Take the acceptance criteria from the task (if none are given, derive concrete, checkable ones from the request and state them first). For each criterion, exercise the real result: run the tests and commands, start the app and use it through the browser, call the API, feed it empty, large, malformed and boundary inputs. Do not accept claims, comments, test names or a green summary line as proof; read the actual output. A criterion you could not demonstrate is FAIL, not PASS. Do not edit, fix or delete project files; scratch files under a temporary directory are fine, and stop any server you start. End with one line per criterion: PASS or FAIL, the criterion, and the command or observation that decided it, then one line VERDICT: PASS only if every criterion passed, otherwise VERDICT: FAIL with the most important failure first.',
+    source: 'built-in'
+  },
   'security-review': {
     name: 'security-review',
     description: 'Independent read-only security reviewer: inspects trust boundaries, permissions, secrets, filesystem and network access.',
