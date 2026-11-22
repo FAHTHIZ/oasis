@@ -38,6 +38,9 @@ export function createTelegramGateway(options = {}) {
   if (!token || !/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) throw new Error('Set OASIS_TELEGRAM_BOT_TOKEN to the bot token from @BotFather.');
   const pairing = createPairing({ platform: 'telegram', root: options.root, env, log: (line) => (options.log || ((text) => process.stderr.write('[oasis gateway] ' + text + '\n')))(line) });
   const allowed = withPairing(options.allowedChats || parseAllowedChats(env.OASIS_TELEGRAM_ALLOWED_CHATS), pairing);
+  // Optional: in an allowed group, only these Telegram user IDs may send tasks or answer approvals.
+  const allowedSenders = options.allowedUsers || parseAllowedChats(env.OASIS_TELEGRAM_ALLOWED_USERS);
+  const senderOk = (from) => !allowedSenders.size || Boolean(from && allowedSenders.has(String(from.id)));
   if (!allowed.size && !pairing.enabled) throw new Error('Set OASIS_TELEGRAM_ALLOWED_CHATS to the numeric chat IDs allowed to use this agent (message the bot once to see yours).');
   const root = path.resolve(options.root || process.cwd());
   const base = String(options.apiBase || env.OASIS_TELEGRAM_API_BASE || API).replace(/\/+$/, '');
@@ -222,6 +225,10 @@ export function createTelegramGateway(options = {}) {
       const query = update.callback_query;
       const chatId = String(query.message && query.message.chat && query.message.chat.id || '');
       if (!allowed.has(chatId)) return;
+      if (!senderOk(query.from)) {
+        await api('answerCallbackQuery', { callback_query_id: query.id, text: 'You are not allowed to answer this approval.' }).catch(() => {});
+        return;
+      }
       const [kind, id] = String(query.data || '').split(':');
       const waiter = approvals.get(id);
       await api('answerCallbackQuery', { callback_query_id: query.id, text: waiter ? (kind === 'r' ? 'Rejected' : 'Allowed') : 'This approval is no longer pending.' }).catch(() => {});
@@ -237,6 +244,11 @@ export function createTelegramGateway(options = {}) {
         await say(chatId, strangerMessage({ pairing, id: chatId, label: [message.from && message.from.username ? '@' + message.from.username : '', message.chat.title || ''].filter(Boolean).join(' ') || chatId, idName: 'chat ID', envName: 'OASIS_TELEGRAM_ALLOWED_CHATS' })).catch(() => {});
         log('ignored message from chat ' + chatId);
       }
+      return;
+    }
+    if (!senderOk(message.from)) {
+      const fromId = String(message.from && message.from.id || '');
+      if (!toldUnknown.has(chatId + ':' + fromId)) { toldUnknown.add(chatId + ':' + fromId); log('ignored message from user ' + (fromId || 'unknown') + ' in chat ' + chatId + ' (not in OASIS_TELEGRAM_ALLOWED_USERS)'); }
       return;
     }
     const text = typeof message.text === 'string' ? message.text : typeof message.caption === 'string' ? message.caption : '';
