@@ -73,6 +73,7 @@ import { serverForFile, verifyEditedFileWithLsp, nodeSyntaxCheck, stopLspClients
 import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, agentRegistry, restoreAgentHistory, takeQueuedText, drainInbox, recordAgentEvent, stopAllAgents } from './agent-tasks.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames, normalizeAgentDefinition } from './subagents.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES } from './shared-tasks.mjs';
+import { createKnowledgeBoard, KNOWLEDGE_TOOL_NAMES } from './knowledge-board.mjs';
 import { unrequestedGitWrite } from './git-intent.mjs';
 import { recordTokenUsage } from './cost-policy.mjs';
 import { spend as spendBudget } from './budget-algebra.mjs';
@@ -698,6 +699,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     toolCallsThisSession: 0,
     todos: Array.isArray(restore && restore.todos) ? restore.todos : [],
     sharedTasks: createSharedTaskStore(restore && restore.sharedTasks),
+    knowledgeBoard: createKnowledgeBoard(restore && restore.knowledgeBoard),
     mustPreserve: Array.isArray(restore && restore.mustPreserve) ? restore.mustPreserve.slice(0, 20) : [],
     ...(restore && restore.goal && typeof restore.goal.condition === 'string' ? { goal: { ...restore.goal, active: false } } : {}),
     settings: loadedSettings,
@@ -903,7 +905,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (Array.isArray(tools) || typeof tools === 'string') {
     const keep = new Set(allowedToolNames || []);
     // Coordination tools stay so the agent can finish or ask; everything else must be listed.
-    for (const name of ['exit_plan_mode', 'ask_user_question', 'team_send_message', ...SHARED_TASK_TOOL_NAMES]) keep.add(name);
+    for (const name of ['exit_plan_mode', 'ask_user_question', 'team_send_message', ...SHARED_TASK_TOOL_NAMES, ...KNOWLEDGE_TOOL_NAMES]) keep.add(name);
     session.toolDefinitions = session.toolDefinitions.filter((tool) => keep.has(tool.function.name) || [...keep].some((rule) => rule.endsWith('*') && tool.function.name.startsWith(rule.slice(0, -1))));
   }
   if (!session.toolDefinitions.some((tool) => tool.function.name === 'workflow') && loadedSettings.workflowsEnabled !== false && env.OASIS_DISABLE_WORKFLOWS !== '1' && (!(Array.isArray(tools) || typeof tools === 'string') || (allowedToolNames || []).includes('workflow'))) session.toolDefinitions.push(WORKFLOW_TOOL_DEFINITION);
@@ -1040,6 +1042,7 @@ export function sessionRestoreSnapshot(session) {
     messages: session.messages,
     todos: session.todos,
     sharedTasks: session.sharedTasks,
+    knowledgeBoard: session.knowledgeBoard,
     pendingSteering: foldSteering(session.pendingSteering)
   };
 }
