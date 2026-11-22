@@ -17,6 +17,7 @@
 //     it over the transcript.
 
 import { claimsPassing } from './claim-check.mjs';
+import { changesFiles } from './evidence-ledger.mjs';
 
 const COMMAND = /`([^`\n]{2,200})`|\b((?:npm|pnpm|yarn|bun)\s+(?:run\s+)?[\w:.-]+|npx\s+[\w@/.-]+(?:\s+[\w:.-]+)?|pytest(?:\s+[\w/.:-]+)?|python3?\s+-m\s+(?:pytest|unittest)|cargo\s+(?:test|build|check|clippy)|go\s+(?:test|build|vet)|make(?:\s+[\w.-]+)?|mvn\s+[\w:.-]+|gradle\w*\s+[\w:.-]+|dotnet\s+(?:test|build)|tsc|eslint|ruff(?:\s+check)?|mypy|phpunit|rspec|deno\s+(?:test|lint|check))\b/gi;
 const MAX_LISTED = 8;
@@ -42,7 +43,7 @@ function latestCheck(events, command = '') {
   let stale = false;
   for (const event of events || []) {
     if (event.kind === 'check' && (!command || words(event.command).includes(command))) { check = event; stale = false; }
-    else if (event.kind === 'edit' && check) stale = true;
+    else if (changesFiles(event) && check) stale = event.kind === 'edit' ? 'edit' : (stale || event.command || 'a command');
   }
   return check ? { ...check, stale } : null;
 }
@@ -71,7 +72,7 @@ export function goalEvidenceGate(condition, events = []) {
     if (!check.passed) return { met: false, evidence: true, reason: 'The latest run of ' + describe(check) + ' exited ' + check.exitCode + '. Fix the failures and run it again.' };
     if (check.noTests) return { met: false, evidence: true, reason: 'The latest run of ' + describe(check) + ' exited 0 but ran no tests. Run the suite so tests actually execute.' };
     if (check.filtered && !/\b(?:only|grep|filter|matching|named)\b/i.test(String(condition))) return { met: false, evidence: true, reason: 'The latest run of ' + describe(check) + ' selected only some tests. Run it without a filter to verify the whole condition.' };
-    if (check.stale) return { met: false, evidence: true, reason: 'Files were edited after the last passing run of ' + describe(check) + '. Run it again to verify the current state.' };
+    if (check.stale) return { met: false, evidence: true, reason: (check.stale === 'edit' ? 'Files were edited after the last passing run of ' + describe(check) : '`' + String(check.stale).slice(0, 120) + '` can change files and ran after the last passing run of ' + describe(check)) + '. Run it again to verify the current state.' };
   }
   // The whole condition is one check passing ("npm test passes") and the
   // record shows exactly that: no judge request. On a local model that request

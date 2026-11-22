@@ -78,9 +78,14 @@ function outputText(result) {
 }
 
 /** Appends an event and returns it (with seq, at, epoch). */
+/** An edit, or a command that may have written files (sed -i, a script, a codegen step). */
+export function changesFiles(event) {
+  return Boolean(event) && (event.kind === 'edit' || ((event.kind === 'command' || event.kind === 'execution') && event.mayEdit === true));
+}
+
 export function recordEvidence(ledger, event) {
   if (!ledger || !event || !EVIDENCE_KINDS.includes(event.kind)) return null;
-  if (event.kind === 'edit') ledger.epoch += 1;
+  if (changesFiles(event)) ledger.epoch += 1;
   const entry = { seq: ++ledger.seq, at: Date.now(), epoch: ledger.epoch, ...event };
   ledger.events.push(entry);
   if (ledger.events.length > MAX_EVENTS) ledger.events.splice(0, ledger.events.length - MAX_EVENTS);
@@ -171,7 +176,7 @@ export function evidenceFromToolResult(name, args = {}, result = {}, context = {
     }
     const text = outputText(result);
     const execution = EXECUTION_COMMAND.test(command.trim());
-    return { kind: execution ? 'execution' : 'command', tool: name, command: command.slice(0, 300), exitCode, finished, numbers: finished ? numbersIn(text) : [], digest };
+    return { kind: execution ? 'execution' : 'command', tool: name, command: command.slice(0, 300), exitCode, finished, numbers: finished ? numbersIn(text) : [], ...(context.mayEdit ? { mayEdit: true } : {}), digest };
   }
   if (name === 'execute_code') {
     const failed = typeof result.error === 'string';
@@ -214,7 +219,7 @@ export function lastCheck(events) {
   let editedAfter = false;
   for (const event of events || []) {
     if (event.kind === 'check') { check = event; editedAfter = false; }
-    else if (event.kind === 'edit' && check) editedAfter = true;
+    else if (changesFiles(event) && check) editedAfter = true;
   }
   return check ? { ...check, stale: editedAfter } : null;
 }
