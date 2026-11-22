@@ -175,7 +175,7 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
   }
   const dim = (text) => (color ? ANSI.dim + text + ANSI.noBold : text);
   const accent = (text) => (color ? rgb(gradientAt(0.15)) + text + ANSI.fg : text);
-  const tagline = 'CODE. AUTOMATE. FLOURISH.';
+  const tagline = 'PLAN. ACT. VERIFY.';
   output.write('  ' + accent('✦') + ' ' + (color ? ANSI.bold : '') + 'OASIS' + (version ? ' v' + version : '') + (color ? ANSI.noBold : '') + '  ' + dim(tagline) + '\n');
   const rows = [
     ['workspace', tildePath(root || process.cwd(), env)],

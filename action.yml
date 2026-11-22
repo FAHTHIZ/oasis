@@ -1,4 +1,4 @@
-name: Oasis coding agent
+name: OASIS agent
 description: Mention @oasis on an issue or pull request and OASIS can make a change, open a PR and reply in the thread using a configured model endpoint.
 author: FAHTHIZ
 branding:

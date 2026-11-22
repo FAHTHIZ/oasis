@@ -2409,7 +2409,7 @@ async function interactive(root, autoApprove, persistence = {}) {
     import('./themes.mjs').then(({ watchThemes }) => watchThemes({ env: process.env, plugins: (startupSettings && startupSettings.pluginThemeSources) || [], onReload: (theme) => stdout.write('\n[theme] reloaded ' + theme.name + '\n') })).catch(() => {});
   }
   if (stdout.isTTY) await showStartupBanner({ root, model: SESSION_OPTIONS.model || (bannerConfig.configured === false ? 'not set up yet · type /setup' : bannerConfig.model) || '', provider: bannerConfig.configured === false ? '' : bannerProviderLabel(bannerConfig), mode: SESSION_OPTIONS.permissionMode || 'default' }).catch(() => {});
-  else stdout.write('\nOASIS — coding agent\nWorkspace: ' + root + '\nType your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
+  else stdout.write('\nOASIS — general-purpose agent\nWorkspace: ' + root + '\nType your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
   if (stdout.isTTY) {
     try {
       const { cliUpdateNotice } = await import('./app-update.mjs');

@@ -438,7 +438,7 @@ test('test server serves only the connected workspace and shared modules', async
     const base = 'http://127.0.0.1:' + server.address().port;
     const page = await fetch(base + '/app/');
     assert.equal(page.status, 200);
-    assert.match(await page.text(), /<title>OASIS — Coding Agent Workspace<\/title>/);
+    assert.match(await page.text(), /<title>OASIS — Agent Workspace<\/title>/);
     assert.equal((await fetch(base + '/app/sw.js')).status, 404, 'the connected workspace has no PWA service worker');
     assert.equal((await fetch(base + '/app/manifest.webmanifest')).status, 404, 'the connected workspace has no PWA manifest');
     assert.equal((await fetch(base + '/package.json')).status, 404);

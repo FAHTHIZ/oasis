@@ -15,18 +15,18 @@ test('repository identity, package keywords and GitHub topics are aligned', asyn
   const topics = JSON.parse(topicMatch[1]);
   assert.equal(topics.length, 20, 'GitHub topics should use the supported limit without duplicates');
   assert.equal(new Set(topics).size, topics.length);
-  for (const topic of ['ai-coding-agent', 'agent-runtime', 'coding-agent', 'cli', 'mcp', 'ollama', 'open-source', 'vscode']) {
+  for (const topic of ['agent-runtime', 'general-purpose-agent', 'multi-agent', 'model-agnostic', 'computer-use', 'mcp', 'ollama', 'open-source']) {
     assert.ok(topics.includes(topic), 'Missing repository topic: ' + topic);
   }
-  assert.ok(!topics.includes('claude-code-alternative'));
-  assert.ok(metadata.includes('model-agnostic coding-agent runtime'));
+  for (const retired of ['claude-code-alternative', 'ai-coding-agent', 'coding-agent']) assert.ok(!topics.includes(retired), 'Retired coding-only topic: ' + retired);
+  assert.ok(metadata.includes('model-agnostic agent platform and runtime'));
   assert.ok(metadata.includes("homepage: ''"), 'The repository About homepage should stay empty; GitHub is the project home.');
   assert.ok(!metadata.includes('OASIS_PUBLIC_URL'), 'Repository metadata must not depend on a separate website URL.');
   assert.ok(pkg.keywords.length <= 20);
   assert.equal(new Set(pkg.keywords).size, pkg.keywords.length);
-  assert.ok(pkg.keywords.includes('ai-coding-agent'));
+  assert.ok(pkg.keywords.includes('general-purpose-agent'));
   assert.ok(pkg.keywords.includes('agent-runtime'));
-  assert.ok(pkg.description.includes('model-agnostic coding-agent runtime'));
+  assert.ok(pkg.description.includes('model-agnostic agent platform and runtime'));
   assert.equal(pkg.homepage, 'https://github.com/FAHTHIZ/oasis#readme');
 });
 
