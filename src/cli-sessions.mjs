@@ -162,7 +162,7 @@ export async function manageSessions(root, rest, { approve } = {}) {
     const typeFlag = rest.indexOf('--type');
     const type = typeFlag >= 0 ? rest[typeFlag + 1] : '';
     const id = rest.slice(1).find((arg, index, list) => !arg.startsWith('--') && list[index - 1] !== '--type');
-    if (!id) throw new Error('Usage: oasis sessions events SESSION_ID [--type tool_call|tool_result|approval|verification|recovery|session_saved] [--json]');
+    if (!id) throw new Error('Usage: oasis sessions events SESSION_ID [--type tool_call|tool_result|approval|verification|recovery|session_saved|turn_start] [--json]');
     if (!sessions.some((item) => item.id === id)) throw new Error('No saved session with ID ' + id + ' exists for this workspace.');
     const { readEvents } = await import('./event-stream.mjs');
     const events = (await readEvents(root, id)).filter((event) => !type || event.type === type);
