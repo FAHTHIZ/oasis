@@ -71,6 +71,8 @@ test('a passing run that ran no tests, or only some, does not meet a goal about 
   assert.equal(shell('go test ./...', 'ok  \texample.com/a\t0.1s [no tests to run]\n').noTests, true);
   assert.equal(shell('python -m pytest', '5 passed in 0.1s\n').filtered, undefined, 'python -m is not a filter');
   assert.equal(evidenceFromToolResult('run_shell', { command: 'tsc -t es2022' }, { exitCode: 0, stdout: '' }, { isCheck: true, checkKind: 'type-check' }).filtered, undefined);
+  for (const command of ['PYTEST_ADDOPTS="-k fast" pytest', "PYTEST_ADDOPTS='--deselect tests/test_a.py::test_x' pytest", 'GOFLAGS=-run=TestAdd go test ./...', 'NODE_OPTIONS=--test-name-pattern=adds npm test', 'npm test -- --test-skip-pattern slow', 'cargo test -- --skip slow', 'pytest --ignore=tests/integration']) assert.equal(shell(command, '3 passed\n').filtered, true, command);
+  for (const command of ['PYTEST_ADDOPTS=-v pytest', 'NODE_OPTIONS=--max-old-space-size=4096 npm test', 'GOFLAGS=-mod=mod go test ./...', 'CI=1 npm test']) assert.equal(shell(command, '3 passed\n').filtered, undefined, command);
   assert.equal(shell('npm test', 'ℹ tests 2\nℹ pass 0\nℹ fail 0\nℹ skipped 2\n').noTests, true, 'every test skipped');
   assert.equal(shell('npm test', 'ℹ tests 2\nℹ pass 1\nℹ fail 0\nℹ skipped 1\n').noTests, undefined);
   assert.equal(shell('pytest', '============ 3 skipped in 0.02s ============\n').noTests, true);
