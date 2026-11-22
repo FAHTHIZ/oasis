@@ -34,6 +34,7 @@ import { icon, kindIcon } from './core/icons.mjs';
 import { searchMarketplace, marketplaceCount, OFFICIAL_MARKETPLACE } from './core/claude-plugins.mjs';
 import { syncBrowserChats } from './core/chat-sync.mjs';
 import { initActivity, refreshActivity, focusStep, resetActivity } from './activity.mjs';
+import { initControlRoom, openControlRoom } from './control-room.mjs';
 // The module graph loaded: tell the boot watchdog (boot-watchdog.js) to stand down.
 document.documentElement.dataset.booted = '1';
 // Composer autocomplete state (declared early: refreshFiles clears the file cache).
@@ -297,6 +298,7 @@ function runPaletteCommand(id) {
     'sign-out': () => { forgetRuntimeToken(); delete document.documentElement.dataset.ready; location.reload(); },
     'open-terminal': () => { toggleFiles(true); showPanelTab('terminal'); },
     'open-activity': () => toggleActivity(true),
+    'open-control-room': () => openControlRoom(),
     'toggle-steps': () => toggleAllSteps()
   };
   closeNativeDialog('commandPaletteDialog');
@@ -699,6 +701,7 @@ async function refreshRuntimeStatus() {
   if (!RT || RT.needsToken) return;
   RT.status = await RT.client.api('/api/status');
   RT.entry = runtimeEntryFrom(RT.status);
+  $('controlRoomButton').hidden = false;
 }
 async function runtimeConnect(text, { surface = 'welcome' } = {}) {
   const value = String(text || '').trim();
@@ -4312,6 +4315,8 @@ function renderPluginSuggest() {
   box.hidden = !box.childElementCount;
 }
 $('pluginsButton').addEventListener('click', () => { renderPluginGrid(); openSheet('pluginsSheet'); });
+$('controlRoomButton').addEventListener('click', () => openControlRoom());
+initControlRoom({ api: (route, options) => RT.client.api(route, options), toast: (text) => toast(text), openSheet: (id) => openSheet(id), available: () => mcpAvailable() });
 $('composerPlugins').addEventListener('click', () => { renderPluginGrid(); openSheet('pluginsSheet'); });
 
 /* ---------- Settings sheet ---------- */

@@ -38,6 +38,9 @@
       <button class="icon-btn" id="pluginsButton" title="Plugins" aria-label="Plugins">
         <svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#puzzle"/></svg>
       </button>
+      <button class="icon-btn" id="controlRoomButton" title="Control room" aria-label="Control room" hidden>
+        <svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#bot"/></svg>
+      </button>
       <button class="icon-btn" id="activityButton" title="Activity (Ctrl+Shift+A)" aria-label="Activity">
         <svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#activity"/></svg>
         <span class="live-dot" id="activityLive" hidden></span>
@@ -443,6 +446,32 @@
   </div>
 </section>
 
+
+<section class="sheet wide" id="controlRoomSheet" role="dialog" aria-modal="true" aria-labelledby="controlRoomTitle" hidden>
+  <div class="sheet-head"><h2 id="controlRoomTitle">Control room</h2><span class="hint" id="controlRoomUpdated" aria-live="off"></span><button class="icon-btn small" data-close="controlRoomSheet" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#x"/></svg></button></div>
+  <div class="sheet-body">
+    <p class="hint">Every agent on this computer, from the web app, the terminal and chat gateways. Only what each agent is doing is shown here, never prompts or output.</p>
+    <p class="msg error" id="controlRoomError" hidden></p>
+    <p class="hint" id="controlRoomLedgerNote" hidden>The agent ledger is off here (OASIS_NEURON_LEDGER=0, or Node.js without SQLite), so only this server's agents are shown.</p>
+    <div class="cr-kpis" id="controlRoomKpis"></div>
+    <div class="cr-grid">
+      <div class="cr-col">
+        <h3 class="section-label">Agents</h3>
+        <ul class="run-list" id="controlRoomAgents"></ul><p class="hint" id="controlRoomAgentsEmpty" hidden></p>
+        <h3 class="section-label">Screens and browsers</h3>
+        <ul class="run-list" id="controlRoomEnvironments"></ul><p class="hint" id="controlRoomEnvironmentsEmpty" hidden></p>
+      </div>
+      <div class="cr-col">
+        <h3 class="section-label">History</h3>
+        <ul class="run-list cr-history" id="controlRoomHistory"></ul><p class="hint" id="controlRoomHistoryEmpty" hidden></p>
+        <h3 class="section-label">Sessions</h3>
+        <ul class="run-list" id="controlRoomSessions"></ul><p class="hint" id="controlRoomSessionsEmpty" hidden></p>
+        <h3 class="section-label">This computer</h3>
+        <p class="hint" id="controlRoomMachine"></p>
+      </div>
+    </div>
+  </div>
+</section>
 
 <section class="sheet" id="pushSheet" role="dialog" aria-modal="true" aria-labelledby="pushTitle" hidden>
   <div class="sheet-head"><h2 id="pushTitle">Push to GitHub</h2><button class="icon-btn small" data-close="pushSheet" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#x"/></svg></button></div>
