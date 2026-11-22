@@ -83,7 +83,7 @@ function connectWebSocket(url, WebSocketImpl = globalThis.WebSocket) {
 }
 
 /** One CDP connection to a page target. */
-class CdpPage {
+export class CdpPage {
   constructor(ws, target) {
     this.ws = ws;
     this.target = target;
@@ -102,28 +102,55 @@ class CdpPage {
         for (const fn of this.listeners.get(msg.method) || []) { try { fn(msg.params || {}); } catch {} }
       }
     };
-    ws.onclose = () => { this.closed = true; for (const { reject } of this.pending.values()) reject(new Error('Browser tab closed')); this.pending.clear(); };
+    this.waiters = new Set();
+    ws.onclose = () => {
+      this.closed = true;
+      for (const { reject } of this.pending.values()) reject(new Error('Browser tab closed'));
+      this.pending.clear();
+      for (const settle of this.waiters) settle(null);
+      this.waiters.clear();
+    };
   }
   send(method, params = {}, timeoutMs = 30000) {
     if (this.closed) return Promise.reject(new Error('Browser tab closed'));
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(method + ' timed out')); }, timeoutMs);
+      timer.unref?.();
       this.pending.set(id, { resolve: (v) => { clearTimeout(timer); resolve(v); }, reject: (e) => { clearTimeout(timer); reject(e); } });
       this.ws.send(JSON.stringify({ id, method, params }));
     });
   }
   on(method, fn) { if (!this.listeners.has(method)) this.listeners.set(method, []); this.listeners.get(method).push(fn); }
   once(method, timeoutMs = 15000) {
+    if (this.closed) return Promise.resolve(null);
     return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(null), timeoutMs);
       const list = this.listeners.get(method) || [];
-      const fn = (params) => { clearTimeout(timer); const i = list.indexOf(fn); if (i >= 0) list.splice(i, 1); resolve(params); };
+      const settle = (params) => {
+        clearTimeout(timer);
+        this.waiters.delete(settle);
+        const i = list.indexOf(fn);
+        if (i >= 0) list.splice(i, 1);
+        resolve(params);
+      };
+      const fn = (params) => settle(params);
+      const timer = setTimeout(() => settle(null), timeoutMs);
+      timer.unref?.();
+      this.waiters.add(settle);
       list.push(fn);
       this.listeners.set(method, list);
     });
   }
-  close() { this.closed = true; this.ws.close(); }
+  // Closing settles every wait at once: a pending command or event wait must not keep
+  // the process alive (or a caller waiting) for its full timeout after the tab is gone.
+  close() {
+    if (!this.closed) this.closed = true;
+    for (const { reject } of this.pending.values()) reject(new Error('Browser tab closed'));
+    this.pending.clear();
+    for (const settle of this.waiters) settle(null);
+    this.waiters.clear();
+    try { this.ws.close(); } catch {}
+  }
 }
 
 /** A launched (or attached) browser. */
@@ -145,7 +172,9 @@ export class Browser {
     if (headless) args.push('--headless=new');
     if (process.platform === 'linux' && (env.OASIS_CHROME_NO_SANDBOX === '1' || (typeof process.getuid === 'function' && process.getuid() === 0))) args.push('--no-sandbox');
     args.push('about:blank');
-    const child = spawn(exe, args, { stdio: ['ignore', 'ignore', 'pipe'], ...processTreeSpawnOptions() });
+    // A visible browser opens on the display it was given (an agent's own virtual screen).
+    const spawnEnv = !headless && env !== process.env && env.DISPLAY && env.DISPLAY !== process.env.DISPLAY ? { ...process.env, DISPLAY: env.DISPLAY } : undefined;
+    const child = spawn(exe, args, { stdio: ['ignore', 'ignore', 'pipe'], ...(spawnEnv ? { env: spawnEnv } : {}), ...processTreeSpawnOptions() });
     let spawnError = null;
     let stderr = '';
     child.stderr?.on('data', (chunk) => { stderr = (stderr + chunk.toString('utf8')).slice(-4000); });

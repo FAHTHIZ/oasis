@@ -64,6 +64,7 @@ and report the commands you ran with their results.
 | `memory` | `user` (`~/.claude/agent-memory/<name>/`), `project` (`.claude/agent-memory/<name>/`), or `local` (`.claude/agent-memory-local/<name>/`). The first 200 lines of `MEMORY.md` are injected on every run. |
 | `background` | `true` runs the agent in the background unless the call sets `run_in_background`. |
 | `isolation` | `worktree` gives the agent its own git worktree and branch. Oasis commits its changes there when it finishes. |
+| `environment` | `desktop` gives the agent its own virtual screen (Linux, Xvfb), with the `computer` tool and a visible browser on it, so it can do GUI and web work in parallel with other agents without touching your screen. The `task` call can set it too. See [Agent environments](COMPUTER_USE.md#agent-environments). |
 | `effort` | `low`, `medium`, `high`, or `max` reasoning effort for this agent only. |
 | `color` | Display color: `red`, `blue`, `green`, `yellow`, `purple`, `orange`, `pink`, `cyan`. |
 | `hooks` | Hooks that apply only while this agent runs, in the settings format. A `Stop` hook runs as `SubagentStop`. Project agent files add hooks only in a trusted workspace; plugin agents can't set them. |
