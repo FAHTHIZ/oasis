@@ -929,6 +929,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (['low', 'medium', 'high', 'max'].includes(String(loadedSettings && loadedSettings.subagentEffort || '').toLowerCase())) session.subagentEffort = String(loadedSettings.subagentEffort).toLowerCase();
   if (loadedSettings && Number.isInteger(loadedSettings.subagentAutoCompactPercent)) session.subagentAutoCompactPercent = loadedSettings.subagentAutoCompactPercent;
   if (loadedSettings && Number.isInteger(loadedSettings.subagentStallSeconds)) session.subagentStallSeconds = loadedSettings.subagentStallSeconds;
+  if (loadedSettings && Number.isInteger(loadedSettings.subagentAutoRecover)) session.subagentAutoRecover = loadedSettings.subagentAutoRecover;
   if (loadedSettings && Number.isInteger(loadedSettings.subagentMaxDepth)) session.subagentMaxDepth = loadedSettings.subagentMaxDepth;
   if (loadedSettings && Number.isInteger(loadedSettings.subagentMaxParallel)) session.subagentMaxParallel = loadedSettings.subagentMaxParallel;
   const deferredMcp = deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env });

@@ -30,6 +30,7 @@ import { repairInterruptedHistory } from './tool-results.mjs';
 import { unsupportedChildClaim } from './claim-check.mjs';
 import { evidenceSince, evidenceSummary, sessionEvidence } from './evidence-ledger.mjs';
 import { checkReport } from './verification-contracts.mjs';
+import { recoveryPlan, waitForRecovery } from './agent-recovery.mjs';
 import { spawnScope } from './spawn-scope.mjs';
 import { chooseExperienceModel, experienceEnabled, experiencePromptSection, experienceProject, recordAgentExperience, sharedExperienceStore, taskDomain } from './agent-experience.mjs';
 import { priceFor } from './pricing.mjs';
@@ -793,7 +794,7 @@ function startBackgroundRun(parent, record, prompt, options) {
   const detached = { ...options, signal: undefined, onToolStart: undefined, onToolResult: undefined, onToolOutput: undefined, onUsage: undefined, onDelta: undefined };
   const stopWatch = watchForStall(parent, record, options.env || process.env);
   record.promise = runChildTurn(parent, record, prompt, detached, { foreground: false }).finally(stopWatch).then(async (result) => {
-    const parts = ['Background agent ' + record.id + ' ("' + record.description + '") finished.'];
+    const parts = ['Background agent ' + record.id + ' ("' + record.description + '") finished' + (record.recoveredFrom && record.recoveredFrom.length ? ' after OASIS restarted it automatically (' + record.recoveredFrom.join('; ') + ')' : '') + '.'];
     if (result.worktree && result.worktree.branch) parts.push('Its changes are on branch ' + result.worktree.branch + '.');
     if (record.unverifiedClaim) parts.push('Unverified: ' + record.unverifiedClaim + '.');
     for (const issue of record.verificationIssues || []) if (issue.domain !== 'code') parts.push('Rejected (' + issue.domain + '): ' + issue.reason + '.');
@@ -804,7 +805,25 @@ function startBackgroundRun(parent, record, prompt, options) {
     }
     return result;
   }, async (error) => {
-    notifyParent(parent, 'Background agent ' + record.id + ' ("' + record.description + '") ' + record.status + ': ' + error.message, record);
+    // A stall or a failure that clears by itself: restart from the agent's own
+    // conversation instead of reporting a half-done task (src/agent-recovery.mjs).
+    const plan = runningBackgroundCount(parent) < MAX_BACKGROUND_AGENTS ? recoveryPlan(parent, record, error, options.env || process.env) : null;
+    if (plan) {
+      record.autoRecoveries = (record.autoRecoveries || 0) + 1;
+      record.recovering = { reason: plan.reason, at: Date.now() };
+      recordAgentEvent(parent, 'agent.auto_recovering', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: plan.reason.slice(0, 500) });
+      const go = await waitForRecovery(record, plan.delayMs);
+      record.recovering = null;
+      if (go && !record.cancelRequested && !parent.closed && record.status !== 'running') {
+        (record.recoveredFrom || (record.recoveredFrom = [])).push(plan.reason.slice(0, 300));
+        record.runs = (record.runs || 1) + 1;
+        startBackgroundRun(parent, record, plan.prompt, options);
+        return record.promise;
+      }
+      // Resumed by the parent while waiting: that run reports instead.
+      if (record.status === 'running') return record.promise;
+    }
+    notifyParent(parent, 'Background agent ' + record.id + ' ("' + record.description + '") ' + record.status + (record.autoRecoveries ? ' after ' + record.autoRecoveries + ' automatic restart' + (record.autoRecoveries === 1 ? '' : 's') : '') + ': ' + error.message, record);
     if (record.autoDispatchManaged || (parent.agentTasks && parent.agentTasks.autoDispatch && parent.agentTasks.autoDispatch.enabled)) {
       await advanceAutoDispatch(parent, record.autoDispatchManaged ? record : null);
     }

@@ -494,6 +494,8 @@ export function summarizeAgent(record, { full = false } = {}) {
     out.note = 'Waiting for the user to answer with /tasks approve ' + record.id + ' or /tasks deny ' + record.id + '. You cannot approve it yourself.';
   }
   if (record.error) out.error = record.error;
+  if (record.recovering) out.recovering = { reason: record.recovering.reason, since: new Date(record.recovering.at).toISOString(), note: 'OASIS is restarting this agent automatically; stopping it now keeps it stopped.' };
+  if (record.autoRecoveries) out.auto_recoveries = record.autoRecoveries;
   if (full && record.status !== 'running') out.report = record.report;
   else if (record.report) out.reportPreview = record.report.slice(0, 300);
   return out;
@@ -655,6 +657,8 @@ export function stopAgent(session, args = {}) {
   const environmentNote = cleaned.environments ? ' Closed its browser and screen.' : '';
   const descendants = stopDescendants(session, record);
   const descendantNote = descendants.length ? ' Also stopped ' + descendants.length + ' agent(s) it had started: ' + descendants.join(', ') + '.' : '';
+  // Waiting to be restarted automatically (src/agent-recovery.mjs): stay stopped.
+  if (record.status !== 'running' && record.recovering) record.cancelRequested = true;
   if (record.status !== 'running') {
     return {
       id: record.id,
