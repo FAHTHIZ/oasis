@@ -748,7 +748,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     ...(outcome.limitReached ? { partial: true, note: 'The agent hit its ' + (record.maxTurns ? 'maxTurns (' + record.maxTurns + ')' : 'step') + ' limit; the report may be incomplete. send_message resumes it.' } : {}),
     ...(record.outputSchema ? (outcome.schemaErrors && outcome.schemaErrors.length ? { schema_errors: outcome.schemaErrors } : { structured: outcome.structured }) : {}),
     ...(record.schedulerNote ? { scheduler_note: record.schedulerNote } : {}),
-    ...(record.modelRoute && child.config && child.config.model !== parent.config.model ? { model: child.config.model, model_route: record.modelRoute } : {}),
+    ...(record.modelRoute && child.config && (child.config.model !== parent.config.model || record.escalatedFrom) ? { model: child.config.model, model_route: record.modelRoute } : {}),
     toolCalls: Math.max(0, Number(outcome.toolCalls) || 0),
     tokensUsed: Math.max(0, Number(outcome.tokensUsed) || 0),
     ...(record.usage && record.usage.requests ? { usage: { requests: record.usage.requests, inputTokens: record.usage.inputTokens, outputTokens: record.usage.outputTokens, costUsd: Number(Number(record.usage.costUsd || 0).toFixed(6)) } } : {})
@@ -811,11 +811,16 @@ function startBackgroundRun(parent, record, prompt, options) {
     if (plan) {
       record.autoRecoveries = (record.autoRecoveries || 0) + 1;
       record.recovering = { reason: plan.reason, at: Date.now() };
-      recordAgentEvent(parent, 'agent.auto_recovering', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: plan.reason.slice(0, 500) });
+      recordAgentEvent(parent, 'agent.auto_recovering', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: (plan.reason + (plan.escalateTo ? '; restarting on ' + plan.escalateTo : '')).slice(0, 500) });
       const go = await waitForRecovery(record, plan.delayMs);
       record.recovering = null;
       if (go && !record.cancelRequested && !parent.closed && record.status !== 'running') {
-        (record.recoveredFrom || (record.recoveredFrom = [])).push(plan.reason.slice(0, 300));
+        (record.recoveredFrom || (record.recoveredFrom = [])).push(plan.reason.slice(0, 300) + (plan.escalateTo ? ' (moved from ' + plan.escalateFrom + ' to ' + plan.escalateTo + ')' : ''));
+        if (plan.escalateTo) {
+          record.child.config = { ...record.child.config, model: plan.escalateTo };
+          record.escalatedFrom = plan.escalateFrom;
+          record.modelRoute = 'escalated to ' + plan.escalateTo + ' after ' + plan.escalateFrom + ' stalled';
+        }
         record.runs = (record.runs || 1) + 1;
         startBackgroundRun(parent, record, plan.prompt, options);
         return record.promise;

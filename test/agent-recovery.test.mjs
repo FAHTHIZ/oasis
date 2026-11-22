@@ -46,6 +46,19 @@ test('only safe-to-repeat runs get a restart plan', () => {
   assert.equal(recoveryPlan({}, base(), new Error('x'), { OASIS_SUBAGENT_AUTO_RECOVER: '0' }), null);
 });
 
+test('a stall on a model OASIS picked to save money restarts on the session model', () => {
+  const parent = { config: { model: 'strong-model' } };
+  const record = { status: 'stalled', stalled: 'No activity for 451s', resumable: true, modelRoute: 'experience: cheap-model succeeded on 9 of 10 runs', child: { config: { model: 'cheap-model' } } };
+  const plan = recoveryPlan(parent, record, new Error('aborted'), {});
+  assert.equal(plan.escalateTo, 'strong-model');
+  assert.equal(plan.escalateFrom, 'cheap-model');
+  assert.match(plan.prompt, /You now run on strong-model instead of cheap-model/);
+  assert.equal(recoveryPlan(parent, { ...record, modelRoute: undefined }, new Error('x'), {}).escalateTo, undefined, 'an explicitly chosen model is kept');
+  assert.equal(recoveryPlan(parent, { ...record, status: 'failed' }, Object.assign(new Error('upstream 502'), { status: 502 }), {}).escalateTo, undefined, 'an outage is not the model\'s fault');
+  assert.equal(recoveryPlan(parent, { ...record, child: { config: { model: 'strong-model' } } }, new Error('x'), {}).escalateTo, undefined);
+  assert.equal(recoveryPlan(parent, { ...record, escalatedFrom: 'cheap-model' }, new Error('x'), {}).escalateTo, undefined);
+});
+
 // A background agent whose first model request hangs is stopped by the stall
 // monitor and restarted once from its own conversation; the second run answers.
 async function backgroundHarness(t, { env: extraEnv = {}, childAnswers = true } = {}) {
@@ -53,12 +66,14 @@ async function backgroundHarness(t, { env: extraEnv = {}, childAnswers = true } 
   t.after(() => rm(root, { recursive: true, force: true }));
   const hanging = new Set();
   const childRequests = [];
+  const childModels = [];
   const server = createServer(async (req, res) => {
     let body = '';
     for await (const chunk of req) body += chunk.toString();
     const payload = JSON.parse(body);
     if (/SUBAGENT MODE/.test(payload.messages[0].content)) {
       childRequests.push(payload.messages);
+      childModels.push(payload.model);
       if (childRequests.length === 1 || !childAnswers) { hanging.add(res); return; }
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Finished the slow job.' } }] }));
@@ -76,7 +91,7 @@ async function backgroundHarness(t, { env: extraEnv = {}, childAnswers = true } 
   const session = await createSession({ root, env, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'fixture', apiKey: '', maxSteps: 4 } });
   await runAgentTurn(session, 'go', { autoApprove: true, env });
   const record = getAgent(session, listAgents(session)[0].id);
-  return { session, record, childRequests };
+  return { session, record, childRequests, childModels };
 }
 
 test('a stalled background agent is restarted once and its report reaches the parent', async (t) => {
@@ -118,4 +133,16 @@ test('stopping an agent that waits for its restart keeps it stopped', async () =
   assert.equal(record.cancelRequested, true);
   assert.equal(await waiting, false);
   assert.equal(recoveryPlan({}, { ...record, child: {}, resumable: true }, Object.assign(new Error('x'), { status: 502 }), {}), null);
+});
+
+test('the restart after a stall on a routed model uses the session model', async (t) => {
+  const { record, childModels } = await backgroundHarness(t, { env: { OASIS_SUBAGENT_STALL_SECONDS: '2' } });
+  // As if modelRouting.subagents = "experience" had picked a cheaper model.
+  record.modelRoute = 'experience: cheap-fixture succeeded on 9 of 10 runs';
+  record.child.config = { ...record.child.config, model: 'cheap-fixture' };
+  await record.promise;
+  assert.equal(record.status, 'completed');
+  assert.equal(childModels.at(-1), 'fixture');
+  assert.equal(record.escalatedFrom, 'cheap-fixture');
+  assert.match(record.recoveredFrom[0], /moved from cheap-fixture to fixture/);
 });
