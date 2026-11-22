@@ -110,6 +110,17 @@ export function openNeuronLedger(file) {
       if (!open) return [];
       return select.all(String(sessionId).slice(0, 200));
     },
+    /**
+     * Rows of the sessions active since `since` (newest sessions first, at most
+     * `maxSessions`), across every process that writes this file: the terminal,
+     * the web app, gateways and A2A. For the control room.
+     */
+    recent(since = 0, maxSessions = 40) {
+      if (!open) return [];
+      const ids = db.prepare('SELECT session_id, MAX(at) AS last FROM neuron_events GROUP BY session_id HAVING MAX(at) >= ? ORDER BY last DESC LIMIT ?')
+        .all(Math.floor(Number(since) || 0), Math.max(1, Math.min(500, Math.floor(Number(maxSessions) || 40))));
+      return ids.map(({ session_id: id }) => ({ sessionId: id, rows: select.all(id) }));
+    },
     /** Drop whole sessions older than the retention window. Rows are never edited. */
     prune(now = Date.now(), retentionMs = RETENTION_MS) {
       if (!open) return 0;
@@ -148,12 +159,14 @@ export function reduceNeuronLedger(rows, { recover = false } = {}) {
         tokens: 0,
         costUsd: 0,
         requests: 0,
-        transitions: 1
+        transitions: 1,
+        lastAt: Number(row.at) || 0
       });
       continue;
     }
     const neuron = neurons.get(id);
     if (!neuron) continue;
+    neuron.lastAt = Math.max(neuron.lastAt || 0, Number(row.at) || 0);
     if (row.kind === 'transition' && STATUSES.has(row.status)) {
       neuron.status = row.status;
       neuron.finishedAt = TERMINAL.has(row.status) ? Number(row.at) || null : null;
@@ -274,6 +287,22 @@ export function recoverLedgerNeurons(session, knownIds = new Set()) {
     recovered.push(neuron);
   }
   return recovered;
+}
+
+/**
+ * The shared ledger file for this environment, opened once per process and
+ * reused (the same handle sessions write through). Null when it is off or
+ * node:sqlite is missing.
+ */
+export function sharedNeuronLedger(env = process.env) {
+  if (!ledgerEnabled(env)) return null;
+  const file = neuronLedgerFile(env);
+  if (ledgers.has(file)) return ledgers.get(file);
+  try {
+    const ledger = openNeuronLedger(file);
+    if (ledger) ledgers.set(file, ledger);
+    return ledger;
+  } catch { return null; }
 }
 
 /** For tests: close every open ledger and forget session bindings. */

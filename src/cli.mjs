@@ -2917,7 +2917,7 @@ async function startWebWorkspace(root, args) {
 
 
 // Top-level commands, for the typo hint (`oasis doctr` -> doctor).
-const TYPO_COMMANDS = ['a2a', 'acp', 'agents', 'app', 'auth', 'backups', 'batch', 'config', 'connect', 'diagnostics', 'doctor', 'eval', 'extensions', 'gateway', 'help', 'ide', 'import', 'init', 'insights', 'install', 'mcp', 'memory', 'models', 'permissions', 'plugins', 'purge', 'quota', 'restore', 'sessions', 'setup', 'skills', 'trust', 'ultrareview', 'uninstall', 'update', 'watch', 'web', 'completion', 'cloud', 'computer-use', 'daytona', 'modal', 'honcho', 'schedule', 'routines', 'exec', 'diff', 'deploy', 'profile', 'attempts'];
+const TYPO_COMMANDS = ['a2a', 'control-room', 'acp', 'agents', 'app', 'auth', 'backups', 'batch', 'config', 'connect', 'diagnostics', 'doctor', 'eval', 'extensions', 'gateway', 'help', 'ide', 'import', 'init', 'insights', 'install', 'mcp', 'memory', 'models', 'permissions', 'plugins', 'purge', 'quota', 'restore', 'sessions', 'setup', 'skills', 'trust', 'ultrareview', 'uninstall', 'update', 'watch', 'web', 'completion', 'cloud', 'computer-use', 'daytona', 'modal', 'honcho', 'schedule', 'routines', 'exec', 'diff', 'deploy', 'profile', 'attempts'];
 // One-word tasks that sit close to a command name but are real requests.
 const ONE_WORD_TASKS = new Set(['lint', 'test', 'tests', 'build', 'run', 'fix', 'format', 'review', 'explain', 'commit', 'refactor', 'deploy', 'debug', 'docs', 'start', 'stop', 'clean', 'check', 'plan', 'status', 'resume']);
 // Chat controls that only make sense inside a session (`oasis undo` used to
@@ -3776,6 +3776,24 @@ async function main() {
     process.stderr.write(appServerListenNotice(listener.url, target.transport, Boolean(verify)));
     await new Promise((resolve) => { const stop = () => resolve(); process.once('SIGINT', stop); process.once('SIGTERM', stop); });
     await listener.close();
+    return;
+  }
+  if (command === 'control-room') {
+    // Every agent on this computer from the shared ledger, plus this machine's load.
+    const { controlRoomSnapshot, formatControlRoom } = await import('./control-room.mjs');
+    const at = rest.indexOf('--hours');
+    const hours = at >= 0 ? Number(rest[at + 1]) : undefined;
+    const show = () => {
+      const snapshot = controlRoomSnapshot({ env: process.env, hours });
+      return rest.includes('--json') ? JSON.stringify({ updatedAt: snapshot.updatedAt, ledger: snapshot.ledger, resources: snapshot.resources }, null, 2) + '\n' : formatControlRoom(snapshot);
+    };
+    if (!rest.includes('--watch') || rest.includes('--json') || !stdout.isTTY) { stdout.write(show()); return; }
+    await new Promise((resolve) => {
+      const draw = () => stdout.write('\x1b[H\x1b[2J' + show() + '\nRefreshes every 2 seconds. Ctrl+C to stop.\n');
+      draw();
+      const timer = setInterval(draw, 2000);
+      process.once('SIGINT', () => { clearInterval(timer); resolve(); });
+    });
     return;
   }
   if (command === 'a2a') {
