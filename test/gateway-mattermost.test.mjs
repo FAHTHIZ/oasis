@@ -128,3 +128,26 @@ test('mattermost routine delivery', async () => {
   assert.deepEqual(api.posts[0], { channel_id: CHAN, message: 'report' });
   await assert.rejects(() => deliverMattermost(CHAN, 'x', { env: {} }), /OASIS_MATTERMOST_URL/);
 });
+
+test('allowlisted usernames are pinned to the user ID that held them at startup', async () => {
+  const api = fakeApi();
+  const logs = [];
+  const base = api.fetchImpl;
+  // Eve has since renamed herself to "alice"; the real alice's ID is ALICE.
+  const fetchImpl = async (url, init = {}) => {
+    const route = url.replace('https://chat.example.com/api/v4', '');
+    if (route === '/users/usernames') { assert.deepEqual(JSON.parse(init.body), ['alice', 'ghost']); return Response.json([{ id: ALICE, username: 'alice' }]); }
+    if (route === '/users/' + EVE) return Response.json({ id: EVE, username: 'alice' });
+    return base(url, init);
+  };
+  const turns = [];
+  const agent = fakeAgent(async (_s, text) => { turns.push(text); return { text: 'ok' }; });
+  const gateway = gatewayFor(agent, { ...api, fetchImpl }, { fetchImpl, allowedUsers: new Set(['alice', '@ghost']), log: (line) => logs.push(line) });
+  await gateway.pinUsernames();
+  assert.ok(logs.some((line) => /no Mattermost user named @ghost/.test(line)));
+  await gateway.handleEvent(posted({ id: 'e1', channel_id: DM, user_id: EVE, message: 'let me in' }));
+  assert.deepEqual(turns, []);
+  await gateway.handleEvent(posted({ id: 'a1', channel_id: DM, user_id: ALICE, message: 'hello' }));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(turns, ['hello']);
+});

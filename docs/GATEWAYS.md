@@ -163,7 +163,7 @@ WhatsApp only lets a business send free-form messages within 24 hours of the per
 2. Set:
    - `OASIS_MATTERMOST_URL`: your server, for example `https://chat.example.com`
    - `OASIS_MATTERMOST_TOKEN`
-   - `OASIS_MATTERMOST_ALLOWED_USERS`: usernames (`alice`) or user IDs
+   - `OASIS_MATTERMOST_ALLOWED_USERS`: usernames (`alice`) or user IDs. At startup each username is looked up and pinned to the account that holds it, so renaming another account to `alice` later does not grant access; unknown usernames are ignored with a log line. User IDs are still the safest choice
    - optional: `OASIS_MATTERMOST_CHANNELS`: channel IDs where every message is a task
 3. Run `oasis gateway mattermost`.
 
