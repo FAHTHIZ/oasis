@@ -11,7 +11,7 @@ import { resolveToolAlias, normalizeRunCommandCall, cleanToolCallName } from './
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { runsOutsideRoot, shellExitTarget } from './pipe-status.mjs';
 import { loadPins, savePins } from './mcp-trust.mjs';
-import { guardExternalContent, clearInjectionTurnFlag, untrustedGuardEnabled } from './untrusted-content.mjs';
+import { guardExternalContent, clearInjectionTurnFlag, injectionHoldReason, untrustedGuardEnabled } from './untrusted-content.mjs';
 import { maskSecrets, unmaskSecretsForTool, secretShieldEnabled, redactSecretText, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
@@ -1652,6 +1652,23 @@ async function validateRepairingNulls(schema, args) {
 }
 
 // Applies permission rules and PreToolUse hooks. Returns { context, deniedReason, args }.
+const HELD_OUTBOUND_TOOLS = new Set(['git_push', 'create_pull_request', 'remote_agent', 'install_package', 'install_plugin', 'install_extension', 'install_external_skill', 'add_extension', 'configure_mcp_server', 'configure_provider', 'home_assistant_control', 'computer']);
+// A URL can carry data out in its query (https://x.example/?q=<secret>); a
+// plain page address cannot carry much, so reading on stays possible.
+function heldOutboundCall(session, name, args) {
+  if (HELD_OUTBOUND_TOOLS.has(name)) return true;
+  const mcpEntry = session.mcpToolMap && session.mcpToolMap.get(name);
+  if (mcpEntry) return !mcpEntry.readOnly;
+  // Typing into a page or running script in it can submit or send anything.
+  if (name === 'browser' && args && (args.action === 'type' || args.action === 'evaluate')) return true;
+  if (name === 'fetch_url' || (name === 'browser' && args && ['navigate', 'new_tab'].includes(args.action))) {
+    const raw = String((args && args.url) || '');
+    if (!raw) return false;
+    try { const url = new URL(raw); return Boolean(url.search) || raw.length > 200 || (name === 'fetch_url' && Boolean(args.body || (args.method && !/^(?:GET|HEAD)$/i.test(args.method)))); } catch { return true; }
+  }
+  return false;
+}
+
 async function authorizeCall(session, name, args, context, options) {
   const policy = session.permissions;
   if (session.restricted && RESTRICTED_TOOL_NAMES.has(name) && !(session.toolDefinitions || []).some((tool) => tool.function.name === name)) return { deniedReason: name + ' is disabled in --restricted mode.' };
@@ -1836,6 +1853,15 @@ async function authorizeCall(session, name, args, context, options) {
       if (!ok) return { deniedReason: overlay.permissionHookDenial || 'The user did not approve changing the protected configuration file ' + hit.path + '. Ask the user to make this change themselves.' };
       siteApprovalHandled = true;
     }
+  }
+  // After a result that looked like a prompt injection, actions that send data
+  // out or change remote state need a person for the rest of the turn, even in
+  // auto or bypass mode. Commands enforce this where they run (src/tools.mjs);
+  // these tools would otherwise run on auto-approval.
+  const hold = heldOutboundCall(session, name, args) ? injectionHoldReason(session) : '';
+  if (hold) {
+    const ok = await overlay.approval('Allow ' + (CLAUDE_TOOL_NAMES[name] || name) + '? It sends data out or changes remote state, and ' + hold + '.\n  ' + JSON.stringify(redactAuditValue(args)).slice(0, 1500), true);
+    if (!ok) return { deniedReason: overlay.permissionHookDenial || 'Not run: ' + hold + ', so ' + name + ' needs the user until this turn ends. Finish without it and tell the user what you would have done.' };
   }
   if (decision === 'ask') {
     if (!siteApprovalHandled) {
