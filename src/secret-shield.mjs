@@ -114,6 +114,36 @@ function placeholderFor(session, secret) {
   return '«secret:' + id + '»';
 }
 
+// base64 (wrapped or not, standard or URL-safe) and hex runs long enough to
+// hold a credential. `base64 .env` or `xxd -p key.pem` would otherwise show
+// the model every secret the plain-text rules hide.
+const ENCODED_RUN = /(?<![A-Za-z0-9+\/_-])(?:[A-Za-z0-9+\/_-]{20,}={0,2}(?:\r?\n[A-Za-z0-9+\/_-]{4,}={0,2})*)(?![A-Za-z0-9+\/=_-])/g;
+const MAX_ENCODED_RUN = 64 * 1024;
+
+function decodeRun(run) {
+  const compact = run.replace(/\s+/g, '');
+  if (compact.length > MAX_ENCODED_RUN) return '';
+  const decoded = [];
+  if (/^(?:[0-9a-f]{2})+$/i.test(compact) && compact.length >= 32) decoded.push(Buffer.from(compact, 'hex').toString('latin1'));
+  if (compact.length % 4 !== 1) decoded.push(Buffer.from(compact.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('latin1'));
+  // Mostly printable text only: random binary never matches a secret rule
+  // and would cost time to scan.
+  return decoded.filter((text) => text.length >= 12 && (text.match(/[\x20-\x7e\t\r\n]/g) || []).length / text.length > 0.9).join('\n');
+}
+
+function encodedSecretSpans(text) {
+  const spans = [];
+  if (text.length > 4 * 1024 * 1024) return spans;
+  for (const match of text.matchAll(ENCODED_RUN)) {
+    if (spans.length >= 200) break;
+    // Plain identifiers, paths and words are not encodings worth decoding.
+    if (!/[0-9]/.test(match[0]) || !/[A-Z]/.test(match[0]) && !/^[0-9a-f\s]+$/i.test(match[0])) continue;
+    const decoded = decodeRun(match[0]);
+    if (decoded && findSecretsInText(decoded).length) spans.push({ start: match.index, end: match.index + match[0].length });
+  }
+  return spans;
+}
+
 /** Replace secrets in text with session placeholders. Returns { text, count }. */
 export function maskSecrets(session, text) {
   if (typeof text !== 'string' || !text) return { text, count: 0 };
@@ -123,6 +153,7 @@ export function maskSecrets(session, text) {
   output = output.replace(ASSIGNMENT, (whole, head, value, tail) => (NON_SECRET_VALUE.test(value) || /^[\d.]+$/.test(value) ? whole : head + swap(value) + tail));
   output = output.replace(URL_CREDENTIAL, (whole, head, password, at) => (NON_SECRET_VALUE.test(password) ? whole : head + swap(password) + at));
   output = output.replace(AUTH_HEADER, (whole, prefix, credential) => credential.includes('«secret:') ? whole : prefix + swap(credential));
+  output = replaceSpans(output, encodedSecretSpans(output), swap);
   return { text: output, count };
 }
 
@@ -138,7 +169,7 @@ export function redactSecretText(text, { token = '[redacted]' } = {}) {
   output = output.replace(ASSIGNMENT, (whole, head, value, tail) => (NON_SECRET_VALUE.test(value) || /^[\d.]+$/.test(value) ? whole : head + '[redacted]' + tail));
   output = output.replace(URL_CREDENTIAL, (whole, head, password, at) => (NON_SECRET_VALUE.test(password) ? whole : head + '[redacted]' + at));
   output = output.replace(AUTH_HEADER, (whole, prefix) => prefix + '[redacted]');
-  return output;
+  return replaceSpans(output, encodedSecretSpans(output), () => token);
 }
 
 /** Swap placeholders back to real values inside tool arguments (deep). */
