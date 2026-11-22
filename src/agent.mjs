@@ -3553,7 +3553,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         }
       });
       if (waitHook) { try { waitHook({ phase: 'end', step: step + 1 }); } catch {} }
-    } catch (error) {
+    } catch (caught) {
+      // `let`, not the catch binding: a cut-off looping reply replaces the
+      // abort error with one that says why the turn stopped.
+      let error = caught;
       if (waitHook) { try { waitHook({ phase: 'end', step: step + 1, error: true }); } catch {} }
       if (degenerate && loopCut.signal.aborted && !(options.signal && options.signal.aborted)) {
         const found = degenerate;
