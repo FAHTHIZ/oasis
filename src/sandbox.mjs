@@ -243,6 +243,40 @@ export function detectContainerRuntime(backend, force = false, run = spawnSync) 
   return probe;
 }
 
+const ociRuntimeProbes = new Map();
+export const GVISOR_INSTALL_URL = 'https://gvisor.dev/docs/user_guide/install/';
+
+/**
+ * Is an OCI runtime (runsc for gVisor, kata-runtime, crun...) registered with Docker, or runnable by Podman?
+ * Docker lists registered runtimes in `docker info`; Podman takes a name from containers.conf or a binary path.
+ */
+export function detectOciRuntime(backend, runtime, force = false, run = spawnSync) {
+  const key = backend + '\0' + runtime;
+  if (ociRuntimeProbes.has(key) && !force) return ociRuntimeProbes.get(key);
+  const gvisor = /(?:^|[/.])runsc(?:$|[.-])/.test(runtime);
+  const fix = gvisor
+    ? ' Install gVisor (' + GVISOR_INSTALL_URL + ') and run `sudo runsc install` then restart ' + backend + ', or remove sandbox.runtime.'
+    : ' Register it with ' + backend + ' or remove sandbox.runtime.';
+  let probe = { available: true, kind: backend, runtime, isolation: gvisor ? 'gvisor' : 'runtime' };
+  try {
+    if (backend === 'docker') {
+      const result = run('docker', ['info', '--format', '{{json .Runtimes}}'], { timeout: 10000, encoding: 'utf8', windowsHide: true });
+      let names = [];
+      try { names = Object.keys(JSON.parse(String(result && result.stdout || '{}')) || {}); } catch { names = []; }
+      if (!result || result.status !== 0) probe = { available: false, kind: 'none', reason: 'Could not list Docker runtimes to check for ' + runtime + '.' };
+      else if (!names.includes(runtime)) probe = { available: false, kind: 'none', reason: 'Docker has no runtime named ' + runtime + ' (it has ' + (names.join(', ') || 'none') + ').' + fix };
+    } else {
+      // Podman finds a bare name on PATH (or in containers.conf, which an absolute path sidesteps).
+      const result = runtime.startsWith('/') ? run(runtime, ['--version'], { timeout: 10000, encoding: 'utf8', windowsHide: true }) : { status: onPath(runtime) ? 0 : 1, stdout: runtime };
+      if (!result || result.status !== 0) probe = { available: false, kind: 'none', reason: 'Podman cannot find the runtime ' + runtime + '.' + fix };
+    }
+  } catch {
+    probe = { available: false, kind: 'none', reason: 'Could not check the container runtime ' + runtime + '.' + fix };
+  }
+  ociRuntimeProbes.set(key, probe);
+  return probe;
+}
+
 export function containerPath(hostPath, platform = process.platform) {
   const resolved = platform === 'win32' ? path.win32.resolve(hostPath) : path.posix.resolve(hostPath);
   if (platform !== 'win32') return resolved;
@@ -356,6 +390,7 @@ export function containerArgs(command, args, sandbox, cwd, platform = process.pl
     else wrapped.push('--volume', '/dev/null:' + inside + ':ro');
   }
   wrapped.push('--workdir', containerPath(cwd, platform), image, command, ...args);
+  if (sandbox.runtime) wrapped.splice(1, 0, '--runtime', safeContainerValue(sandbox.runtime, 'runtime'));
   return wrapped;
 }
 
@@ -484,7 +519,11 @@ export function resolveSandbox(settings = {}, root, force = false) {
   const sockets = socketPolicy(settings);
   // A proxy port of your own also needs the domain-filtering runtime, which knows how to route to it.
   const filtered = backend === 'os' && (allowedDomains.length > 0 || sockets.httpProxyPort !== undefined || sockets.socksProxyPort !== undefined);
-  const probe = filtered ? detectSandboxRuntime(force) : backend === 'os' ? detectSandbox(force) : REMOTE_BACKENDS.includes(backend) ? detectSshRuntime(ssh, force) : detectContainerRuntime(backend, force);
+  let probe = filtered ? detectSandboxRuntime(force) : backend === 'os' ? detectSandbox(force) : REMOTE_BACKENDS.includes(backend) ? detectSshRuntime(ssh, force) : detectContainerRuntime(backend, force);
+  // sandbox.runtime (docker and podman): an OCI runtime such as gVisor's runsc. A missing runtime makes the
+  // sandbox unavailable rather than silently falling back to the default runc.
+  const runtime = ['docker', 'podman'].includes(backend) && typeof settings.sandbox.runtime === 'string' && settings.sandbox.runtime ? settings.sandbox.runtime : '';
+  if (runtime && probe.available) probe = detectOciRuntime(backend, runtime, force);
   // Under an admin-required sandbox a repository's additionalDirectories are not writable by commands.
   const ignoredDirs = new Set(settings.sandbox.repoWritableDirectoriesIgnored || []);
   const additionalWritable = ((settings.permissions && settings.permissions.additionalDirectories) || []).map((dir) => path.resolve(root, dir)).filter((dir) => !ignoredDirs.has(dir));
@@ -543,7 +582,8 @@ export function resolveSandbox(settings = {}, root, force = false) {
     writableCaches: backend === 'os' ? caches : [],
     backend,
     ...(REMOTE_BACKENDS.includes(backend) ? { ssh, network: true } : {}),
-    ...(backend === 'os' || REMOTE_BACKENDS.includes(backend) ? {} : { image: settings.sandbox.image || DEFAULT_CONTAINER_IMAGE, memory: settings.sandbox.memory || '', cpus: settings.sandbox.cpus || '', readOnlyRoot: settings.sandbox.readOnlyRoot === true })
+    ...(backend === 'os' || REMOTE_BACKENDS.includes(backend) ? {} : { image: settings.sandbox.image || DEFAULT_CONTAINER_IMAGE, memory: settings.sandbox.memory || '', cpus: settings.sandbox.cpus || '', readOnlyRoot: settings.sandbox.readOnlyRoot === true }),
+    ...(runtime ? { runtime } : {})
   };
 }
 
