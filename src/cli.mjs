@@ -44,6 +44,7 @@ import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
 import { createCompleter } from './completion.mjs';
 import { MarkdownStream, colorEnabled, wrapRendered } from './markdown.mjs';
+import { guardTerminalStream, terminalSafe, writeTrusted } from './terminal-guard.mjs';
 import { createActivityIndicator, motionLevel } from './activity-indicator.mjs';
 import { createLiveRegion } from './live-region.mjs';
 import { createTurnStatus } from './turn-status.mjs';
@@ -658,7 +659,7 @@ function streamDelta(accumulated) {
     return;
   }
   if (!streamedSoFar) stdout.write('\nOasis> ');
-  if (text.startsWith(streamedSoFar)) stdout.write(text.slice(streamedSoFar.length));
+  if (text.startsWith(streamedSoFar)) stdout.write(terminalSafe(text.slice(streamedSoFar.length)));
   streamedSoFar = text || ' ';
 }
 function endStream() {
@@ -1616,7 +1617,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         if (streamedSoFar && streamedSoFar !== ' ' && full.length > streamedSoFar.length && full.startsWith(streamedSoFar)) streamDelta(full);
         if (endStream()) return;
         if (richOutput()) { const md = new MarkdownStream({ write: (chunk) => stdout.write(chunk), color: true, columns: () => stdout.columns || 80, prefix: '\x1b[38;2;251;191;36m●\x1b[39m ' }); md.push(String(text)); md.end(); }
-        else stdout.write('\nOasis> ' + text + '\n');
+        else stdout.write('\nOasis> ' + terminalSafe(String(text)) + '\n');
       }
     }).finally(() => { flushExploration(); endText(); endLiveTurn(); if (granted >= 0) session.permissions.sessionAllow.length = granted; });
     USAGE.turns += 1;
@@ -2665,7 +2666,7 @@ async function interactive(root, autoApprove, persistence = {}) {
           }
           // /presets N: send the saved prompt or /command as if typed next.
           if (handled.queue) { QUEUED_INPUT.unshift(String(handled.queue)); continue; }
-          if (handled.osc52 && stdout.isTTY) stdout.write('\x1b]52;c;' + handled.osc52 + '\x07');
+          if (handled.osc52 && stdout.isTTY) writeTrusted(stdout, '\x1b]52;c;' + handled.osc52 + '\x07');
           if (handled.forked) persistence.enabled = true;
           for (const service of handled.connect ? [].concat(handled.connect) : []) {
             try {
@@ -3373,6 +3374,9 @@ async function parseMainFlags(rawArgs, flags) {
 }
 
 async function main() {
+  // Model replies and tool output cannot set the clipboard, retitle the
+  // window or send device control strings to the terminal.
+  guardTerminalStream(process.stdout); guardTerminalStream(process.stderr);
   // HTTPS_PROXY / HTTP_PROXY / NO_PROXY for every outbound request (Node's fetch ignores them).
   installProxyFromEnv();
   const rawArgs = process.argv.slice(2);
