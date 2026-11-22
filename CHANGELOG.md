@@ -13,6 +13,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Highlights
 
+- A shell line that fakes a passing check no longer counts as one: `npm test &` (exits 0 before the tests run), `exit 0; npm test`, `trap 'exit 0' EXIT`, a function or alias named like the check, or a PATH override. The claim check, goal checks and the evidence ledger treat them as ordinary commands
 - New built-in `verify` agent: an independent, skeptical tester that runs tests, commands and the app in a browser against the acceptance criteria and reports PASS or FAIL per criterion with evidence, so work is not graded by the agent that wrote it
 - Goal checks trust what ran, not what the agent says: `/goal npm test passes` and `--goal` are not met until OASIS itself has seen that command pass after the last edit (a failing, piped or outdated run sends the agent back with the reason, without a model request), and the judge for other conditions gets the commands, checks and edits OASIS recorded
 - Web app: three general-purpose built-in plugins, Researcher, Data analyst and Writer, come first in the Plugins sheet (built-in plugins now show above the Claude Code marketplace) and are suggested as you type; a plugin's own instructions now reach the agent when the app runs on `oasis web`. On phones the header shows the project name instead of the wordmark, and the composer keeps the model name readable.

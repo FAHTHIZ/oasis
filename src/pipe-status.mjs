@@ -52,6 +52,20 @@ export function maskedPipelineWarning(command, exitCode, flavor = 'sh') {
     '`. The check itself may have failed. Before reporting it as passing, re-run without the pipe, or prefix the command with `set -o pipefail;`, and confirm the real exit status.';
 }
 
+// Shell lines whose exit status does not belong to the check they name:
+// `npm test &` returns 0 before the tests run, `exit 0; npm test` and
+// `trap 'exit 0' EXIT; npm test` exit 0 whatever happens, and a function,
+// alias or PATH override can replace the check with something that always
+// passes. None of them counts as a check.
+function fakesExitStatus(text) {
+  const value = String(text || '').replace(/\d*>&\d*|&>>?|\|&/g, ' ');
+  if (/(^|[^&])&(?!&)/.test(value)) return true;
+  if (/(^|[;&|(\s])(?:exit|trap|alias|unalias|hash|enable)(?=\s|;|$)/.test(value)) return true;
+  if (/\w\s*\(\s*\)\s*\{|(^|[;&|\s])function\s+[\w.-]+/.test(value)) return true;
+  if (/(^|[;&|\s])(?:export\s+)?PATH=/.test(value)) return true;
+  return false;
+}
+
 /**
  * For the verification gate: describe the command whose exit status the shell
  * line actually reports. Returns { command, args, piped } for the first stage of
@@ -60,6 +74,7 @@ export function maskedPipelineWarning(command, exitCode, flavor = 'sh') {
 export function shellExitTarget(command) {
   const text = String(command || '').trim();
   if (!text || /[`$]\(|<\(|\n/.test(text)) return null;
+  if (fakesExitStatus(text)) return null;
   const lastSegment = text.split(/;|&&|\|\|/).filter((part) => part.trim()).pop() || '';
   const stages = splitTopLevelPipes(lastSegment);
   const tokens = (stages[0].match(/"[^"]*"|'[^']*'|\S+/g) || []).map((token) => token.replace(/^(["'])(.*)\1$/, '$2'));

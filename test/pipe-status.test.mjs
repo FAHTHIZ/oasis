@@ -26,6 +26,16 @@ test('shellExitTarget finds the command that owns the exit status', () => {
   assert.equal(shellExitTarget('echo $(npm test)'), null);
 });
 
+test('shell lines that fake a passing exit status are not checks', () => {
+  for (const line of ['npm test &', 'npm test & wait', 'exit 0; npm test', "trap 'exit 0' EXIT; npm test", 'npm() { true; }; npm test', 'function npm { true; }; npm test', 'alias npm=true; npm test', 'PATH=/tmp/fake npm test', 'export PATH=/tmp/fake:$PATH; npm test']) {
+    assert.equal(shellExitTarget(line), null, line);
+  }
+  assert.deepEqual(shellExitTarget('npm test 2>&1'), { command: 'npm', args: ['test', '2>&1'], piped: false });
+  assert.deepEqual(shellExitTarget('npm test &> out.log'), { command: 'npm', args: ['test', '&>', 'out.log'], piped: false });
+  assert.deepEqual(shellExitTarget('npm test |& tail -3'), { command: 'npm', args: ['test'], piped: true });
+  assert.equal(shellExitTarget('cd app && npm test').command, 'npm');
+});
+
 test('run_shell attaches exitCodeWarning when a failing test is piped through tail', { skip: process.platform === 'win32' }, async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-pipe-'));
   try {
