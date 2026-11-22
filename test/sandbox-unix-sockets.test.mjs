@@ -89,7 +89,7 @@ test('macOS profile refuses Unix sockets unless they are allowed', () => {
   assert.ok(one.indexOf('(deny network*)') < one.indexOf('(allow network-outbound (remote unix-socket (subpath'));
 });
 
-test('bubblewrap: a sandboxed command cannot reach a host Unix socket unless allowAllUnixSockets is set', { skip: !detectSandbox().available || detectSandbox().kind !== 'bubblewrap' || !unixSocketFilterPath() || spawnSync('sh', ['-c', 'command -v python3'], { stdio: 'ignore' }).status !== 0 || OUTSIDE_TMP.startsWith(os.tmpdir()) }, async (t) => {
+test('bubblewrap: a sandboxed command cannot reach a host Unix socket unless allowAllUnixSockets is set', { skip: !detectSandbox().available || detectSandbox().kind !== 'bubblewrap' || !unixSocketFilterPath() || spawnSync('sh', ['-c', 'command -v python3'], { stdio: 'ignore' }).status !== 0 || OUTSIDE_TMP.startsWith(os.tmpdir()) || OUTSIDE_TMP.startsWith('/tmp/') }, async (t) => {
   // The socket lives outside /tmp (which the sandbox replaces with a tmpfs), like /var/run/docker.sock.
   // Not under os.homedir(): `npm test` points HOME into its /tmp scratch folder.
   const sockDir = await tmp(t, OUTSIDE_TMP);
