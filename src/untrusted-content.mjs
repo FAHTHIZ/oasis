@@ -39,7 +39,7 @@ const SIGNALS = [
 ];
 
 // read_mcp_resource returns MCP server content just like mcp_* tool calls.
-const EXTERNAL_TOOLS = new Set(['fetch_url', 'web_search', 'browser', 'read_mcp_resource']);
+const EXTERNAL_TOOLS = new Set(['fetch_url', 'web_search', 'browser', 'computer', 'read_mcp_resource']);
 
 export function isExternalContentTool(name) {
   const n = String(name || '');

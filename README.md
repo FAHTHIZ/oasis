@@ -219,6 +219,7 @@ The same loop that checks a code change checks any other deliverable. The harnes
 | Task | What OASIS brings |
 | --- | --- |
 | Research | Federated web search, page fetching and a real Chrome it can drive (`--chrome`). Claims cite only pages it actually opened. |
+| Desktop apps | Computer use (`--computer-use`): sees the screen and uses the mouse and keyboard on Linux, macOS and Windows, with one approval per session. See [Computer use](docs/COMPUTER_USE.md). |
 | Writing and documents | Reads PDFs and images you upload; saves reports, posts and slides as files in the workspace, not just chat text. |
 | Data | Numbers come from code it ran, not mental arithmetic: CSV and spreadsheet analysis, charts, notebooks. |
 | Media | `generate_image` and `text_to_speech` through any OpenAI-compatible images or speech API, local servers included. |

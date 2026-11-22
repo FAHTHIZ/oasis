@@ -39,6 +39,7 @@ const CAPABILITY_BY_TOOL = {
   powershell: ['execute'],
   monitor: ['execute'],
   browser: ['browser', 'network'],
+  computer: ['browser', 'execute'],
   multi_edit: ['write'],
   notebook_edit: ['write'],
   memory_save: ['write'],

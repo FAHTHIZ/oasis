@@ -21,6 +21,7 @@ Find the right guide without knowing the repository. The root
 - [Terminal guide](TERMINAL.md): input prefixes, keys, permission modes, commands, scripts and CI.
 - [Interfaces](INTERFACES.md): web app, ACP editors, VS Code family, Codex App Server, Cursor Cloud Agents API, SDK, CI, chat gateways.
 - [Execution backends](EXECUTION-BACKENDS.md): where commands run: the OS sandbox, Docker or Podman, any machine over SSH, or a Daytona cloud sandbox.
+- [Computer use](COMPUTER_USE.md): let the agent see the screen and use the mouse and keyboard, with setup for Linux, macOS and Windows.
 - [Messaging gateways](GATEWAYS.md): Telegram, WhatsApp, Discord, Slack, Mattermost, Matrix, Signal and email setup, chat commands, typed approvals and routine delivery.
 - [Desktop app](DESKTOP.md): installers, unsigned first launch, key storage, updates, uninstall.
 - [Remote access](REMOTE-ACCESS.md): run the web app on a server and use connected browser sessions from another device, securely.
