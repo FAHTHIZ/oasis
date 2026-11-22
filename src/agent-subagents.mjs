@@ -437,6 +437,11 @@ export async function runSubagent(parent, args, context, options) {
   }
   child.agentId = record.id;
   child.agentType = type;
+  // A verify agent judges the files its parent wrote (src/untrusted-content.mjs guardJudgedRead).
+  if (type === 'verify') {
+    const ledger = parent.evidenceLedger && Array.isArray(parent.evidenceLedger.events) ? parent.evidenceLedger.events : [];
+    child.judgedPaths = new Set(ledger.filter((event) => event.kind === 'edit' && event.path).map((event) => String(event.path)));
+  }
   if (experienceRoute) record.modelRoute = experienceRoute.reason;
   record.maxTurns = agent.maxTurns || null;
   record.budgetRequest = agent.budget || null;
