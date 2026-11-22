@@ -43,19 +43,26 @@ test('browser guards: same-origin passes, cross-origin link/form/redirect ask, d
     toolCall('redir', 'browser', { action: 'click', text: 'Redir' }),
     toolCall('file', 'browser', { action: 'click', text: 'FileLink' }),
     toolCall('data', 'browser', { action: 'click', text: 'DataLink' }),
+    { content: 'all blocked' },
     toolCall('cross2', 'browser', { action: 'click', text: 'Cross' }),
     { content: 'done' }
   ]);
   const session = await createSession({ root, config: { ...config, maxSteps: 30 }, settings, env, chrome: true });
   t.after(() => closeSession(session));
   const asked = [];
-  // Deny everything until the final "Cross" click, which the user approves.
+  // Deny everything in the first turn. A "no" holds until the next user
+  // message, so the user approves the "Cross" click in a second turn.
   let approveNext = false;
   await runAgentTurn(session, 'exercise navigation guards', {
     env,
     onToolStart: () => {},
-    approval: async (message) => { asked.push(message); return approveNext; },
-    onToolResult: ({ call }) => { if (call && call.id === 'data') approveNext = true; }
+    approval: async (message) => { asked.push(message); return approveNext; }
+  });
+  approveNext = true;
+  await runAgentTurn(session, 'now try the cross-origin link again, I will approve it', {
+    env,
+    onToolStart: () => {},
+    approval: async (message) => { asked.push(message); return approveNext; }
   });
   const byId = Object.fromEntries(session.messages.filter((m) => m.role === 'tool').map((m) => [m.tool_call_id, m.content]));
   const parse = (id) => { try { return JSON.parse(byId[id]); } catch { return { raw: byId[id] }; } };
