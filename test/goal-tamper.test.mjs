@@ -60,3 +60,7 @@ test('goal mode: skipping the failing test does not meet "npm test passes"; fixi
 test('goal mode: a test skipped by a shell command (sed -i) is caught the same way', async (t) => {
   await tamperRun(t, ['skip', 'run_command', { command: 'sed', args: ['-i', "s/test('adds'/test.skip('adds'/", 'add.test.mjs'] }]);
 });
+
+test('goal mode: rewriting the expected value to match the bug does not meet the goal', async (t) => {
+  await tamperRun(t, ['skip', 'write_file', { path: 'add.test.mjs', content: suite.replace('add(1, 2), 3', 'add(1, 2), -1') }]);
+});

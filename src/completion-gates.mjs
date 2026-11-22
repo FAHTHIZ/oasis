@@ -35,6 +35,10 @@ import {
   readsLikeInstructions, refusesSpuriously, relatedTestsHint, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge
 } from './turn-guards.mjs';
 
+// The user asked for the tests themselves to change ("update the tests",
+// "the expected value is wrong"); "fix the failing tests" means the code.
+const TESTS_ARE_THE_TASK = /\b(?:update|change|adjust|rewrite|edit|regenerate|correct)\b[^.\n]{0,40}\b(?:tests?|specs?)\b|\b(?:fix|update|correct|change|adjust)\b[^.\n]{0,40}\b(?:expected|expectations?|assertions?|snapshots?|fixtures?)\b|\b(?:tests?|expected values?|expectations?|assertions?)\b[^\n]{0,40}?\b(?:is|are) (?:wrong|outdated|incorrect|stale)\b/i;
+
 const CONTINUE = Object.freeze({ type: 'continue' });
 
 /** Fresh per-turn gate counters. */
@@ -151,7 +155,15 @@ export async function runCompletionGates(turn, host) {
   if (verification.tamperCheckPending && tamperPaths.length) {
     verification.tamperCheckPending = false;
     const { inspectTestChanges, isTestPath } = await import('./test-tamper.mjs');
-    const changes = await inspectTestChanges(session.root, [...new Set(tamperPaths)]);
+    // Rewriting expected values is the fix only when the user asked about the
+    // tests; otherwise it counts when nothing outside the tests changed (a
+    // shell command may have changed code, so it counts as a change).
+    const { isTestConfigPath } = await import('./test-tamper.mjs');
+    const ledgerEvents = (sessionEvidence(session) || { events: [] }).events;
+    const codeChanged = [...verification.changedPaths].some((item) => !isTestPath(item) && !isTestConfigPath(item))
+      || ledgerEvents.some((event) => event.kind !== 'edit' && event.mayEdit === true)
+      || TESTS_ARE_THE_TASK.test(String(request || ''));
+    const changes = await inspectTestChanges(session.root, [...new Set(tamperPaths)], { codeChanged });
     verification.testTampering = changes.tampering;
     // Goal checks read the session record, not this turn's state: note when
     // tests are weakened and when they are no longer, so "npm test passes"
