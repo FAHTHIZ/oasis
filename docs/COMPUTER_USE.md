@@ -5,9 +5,10 @@ With computer use on, OASIS can see your screen and use the mouse and keyboard. 
 ```bash
 oasis computer-use doctor     # what this machine still needs
 oasis --computer-use          # start a session with the tool on
+oasis --computer-use=virtual  # the same, on a private virtual screen (Linux)
 ```
 
-Inside a session, `/computer on`, `/computer off`, `/computer status` and `/computer doctor` do the same. Set `OASIS_COMPUTER_USE=1` or the `computerUse` setting to turn it on by default.
+Inside a session, `/computer on`, `/computer virtual`, `/computer off`, `/computer status` and `/computer doctor` do the same. Set `OASIS_COMPUTER_USE=1` or the `computerUse` setting to turn it on by default.
 
 ## What the agent can do
 
@@ -22,6 +23,7 @@ The tool is called `computer`. Its actions:
 | `scroll` | Scroll up, down, left or right at a point |
 | `type`, `key` | Type text, or press a key or chord such as `ctrl+s` |
 | `wait`, `cursor_position` | Pause, or report where the pointer is |
+| `launch_app` | Start a desktop program, without a shell (`{app: "gedit", args: ["notes.txt"]}`). Asks every time |
 | `list_windows`, `focus_window` | List open windows and bring one to the front |
 | `ui_tree` | Accessibility tree of a window (buttons, fields, menus), with cua-driver |
 | `click_element`, `set_value` | Click a tree row, or set a field's text, by its token (`s0000002a:11`), with cua-driver |
@@ -55,6 +57,19 @@ OASIS finds it on `PATH`, in `~/.local/bin` or in `~/.cua-driver/packages/curren
 
 The OASIS safety rules below apply to both drivers, because they run before any action reaches a backend. cua-driver collects anonymous usage telemetry by default; `cua-driver telemetry disable` turns it off.
 
+## A virtual screen of its own
+
+On Linux the agent can work on a private screen instead of yours, the way Anthropic's computer-use demo and Hermes Agent's sandbox run it:
+
+```bash
+sudo apt install xvfb openbox x11vnc     # openbox and x11vnc are optional
+oasis --computer-use=virtual
+```
+
+With the first computer action, OASIS starts Xvfb on a free display (`:100` and up), plus a window manager if one is installed (openbox, fluxbox, xfwm4, matchbox or twm). If x11vnc is installed it also starts a VNC server on localhost only, and screenshots report its address (`watch: VNC localhost:5900`). Open that address in any VNC viewer to watch, or to take over. The agent starts programs there with `launch_app`. When the session ends or you run `/computer off`, the screen, the window manager, the VNC server and every program started on it are stopped.
+
+`OASIS_COMPUTER_DISPLAY=virtual` or the setting `"computerUse": "virtual"` does the same. `OASIS_COMPUTER_VIRTUAL_SIZE` sets the size (default `1280x800`), and `OASIS_COMPUTER_VNC=0` skips VNC.
+
 ## Setup
 
 ### Linux (X11)
@@ -81,6 +96,7 @@ Nothing to install. OASIS uses PowerShell with `System.Drawing` for capture and 
 ## Safety
 
 - `--restricted` refuses the tool, and plan mode blocks it.
+- `launch_app` asks every time, unless an allow rule or a bypass mode covers it. It runs one program without a shell.
 - The first action that sends input asks once per session. An allow rule (`oasis permissions add allow "computer"`) or a bypass mode counts as that approval. Screenshots, zoom and window lists never ask.
 - Some chords are always refused: log out, lock screen, force quit and empty trash.
 - Typing (or `set_value`) known shell one-liners is always refused: `curl ... | sh`, `rm -rf /`, fork bombs, `iex (irm ...)`, `mkfs`, `format C:`.
@@ -96,7 +112,9 @@ The agent is driving your real desktop. Keep an eye on it, or point it at a virt
 | `OASIS_COMPUTER_USE` | off | `1` turns the tool on for new sessions |
 | `OASIS_COMPUTER_DRIVER` | `auto` | `auto`, `cua` or `native` (see Drivers) |
 | `OASIS_CUA_DRIVER` | found on `PATH` | Path to the cua-driver binary |
-| `OASIS_COMPUTER_DISPLAY` | `$DISPLAY` | X display to capture and drive (Linux) |
+| `OASIS_COMPUTER_DISPLAY` | `$DISPLAY` | X display to capture and drive (Linux), or `virtual` for a private screen |
+| `OASIS_COMPUTER_VIRTUAL_SIZE` | `1280x800` | Size of the virtual screen |
+| `OASIS_COMPUTER_VNC` | on | `0` skips the VNC server on the virtual screen |
 | `OASIS_COMPUTER_MAX_WIDTH` | 1280 | Largest screenshot width sent to the model |
 | `OASIS_COMPUTER_SETTLE_MS` | 600 | Pause after an input action before capturing |
 

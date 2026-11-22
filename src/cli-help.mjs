@@ -209,6 +209,7 @@ export function helpText() {
     '  --fallback-model ID[,ID...]   Models to switch to, in order, when the main one runs out of credit, is rate-limited, overloaded or gone (provider:model for another provider)',
     '  --chrome, --no-chrome         Give the agent a Chrome browser tool (navigate, click, type, screenshot, console)',
     '  --computer-use                Let the agent see the screen and use the mouse and keyboard (asks once first)',
+    '  --computer-use=virtual        The same on a private virtual screen (Linux, Xvfb), watchable over VNC',
     '  --max-budget-usd N            Stop once the estimated model cost reaches N dollars',
     '  --zero-budget                 Only send requests to models proven free (local, keyless, OpenRouter :free, or declared in OASIS_FREE_MODELS)',
     '  --max-requests N              Stop before model request N+1 (retries and subagents count)',
