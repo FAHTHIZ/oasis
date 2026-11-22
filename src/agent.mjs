@@ -752,8 +752,9 @@ export async function createSession({ root, config, restore = null, permissionMo
   const chromeWanted = chrome !== null ? Boolean(chrome) : env.OASIS_CHROME ? env.OASIS_CHROME !== '0' : loadedSettings.chrome === true;
   if (chromeWanted && !restricted) setChrome(session, true);
   // Computer use (--computer-use, "computerUse": true, OASIS_COMPUTER_USE=1; --no-computer-use or OASIS_COMPUTER_USE=0 wins).
-  const computerWanted = computerUse !== null ? Boolean(computerUse) : env.OASIS_COMPUTER_USE ? env.OASIS_COMPUTER_USE !== '0' : loadedSettings.computerUse === true;
-  if (computerWanted && !restricted) setComputerUse(session, true);
+  const computerWanted = computerUse !== null ? Boolean(computerUse) : env.OASIS_COMPUTER_USE ? env.OASIS_COMPUTER_USE !== '0' : loadedSettings.computerUse === true || loadedSettings.computerUse === 'virtual';
+  const computerVirtual = computerUse === 'virtual' || (computerUse === null && (env.OASIS_COMPUTER_USE === 'virtual' || (!env.OASIS_COMPUTER_USE && loadedSettings.computerUse === 'virtual')));
+  if (computerWanted && !restricted) setComputerUse(session, true, computerVirtual ? { display: 'virtual' } : {});
   const advisorModel = String(advisor || env.OASIS_ADVISOR_MODEL || loadedSettings.advisorModel || '').trim();
   if (advisorModel && advisorModel !== 'off' && modelAllowed(advisorModel, session.availableModels, { env, protocol: session.config.protocol, ...(session.modelPolicy || {}) })) setAdvisor(session, advisorModel);
   const mixtureSpec = String(env.OASIS_MIXTURE_MODELS || loadedSettings.mixtureModels || '').trim();

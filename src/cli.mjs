@@ -3080,6 +3080,7 @@ async function parseMainFlags(rawArgs, flags) {
     if (arg === '--advisor') { SESSION_OPTIONS.advisor = needValue(arg); continue; }
     if (arg === '--chrome') { SESSION_OPTIONS.chrome = true; continue; }
     if (arg === '--computer-use') { SESSION_OPTIONS.computerUse = true; continue; }
+    if (arg === '--computer-use=virtual') { SESSION_OPTIONS.computerUse = 'virtual'; continue; }
     if (arg === '--no-computer-use') { SESSION_OPTIONS.computerUse = false; continue; }
     if (arg === '--no-chrome') { SESSION_OPTIONS.chrome = false; continue; }
     if (arg === '--bg' || arg === '--background') { SESSION_OPTIONS.background = true; continue; }

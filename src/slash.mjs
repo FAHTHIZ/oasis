@@ -142,7 +142,7 @@ export const BUILTIN_COMMANDS = {
   'team-onboarding': 'Write a team onboarding guide for this project from your last 30 days of Oasis usage (/team-onboarding [DAYS])',
   heapdump: 'Write a JavaScript heap snapshot and memory breakdown for diagnosing high memory use',
   chrome: 'Turn the Chrome browser tool on or off for this session (/chrome [on|off|status])',
-  computer: 'Let the agent see the screen and use the mouse and keyboard (/computer [on|off|status|doctor])',
+  computer: 'Let the agent see the screen and use the mouse and keyboard (/computer [on|off|virtual|status|doctor])',
   bug: 'Report a bug: drafts a GitHub issue with your report and environment details (nothing is sent until you open the link) (/bug [report] [--with-transcript])',
   'setup-bedrock': 'Configure Amazon Bedrock: detects AWS credentials, region and model pins, then saves them to user settings (/setup-bedrock [region=R] [profile=P] [model=ID] [sonnet=ID] [haiku=ID] [opus=ID] [save])',
   'setup-vertex': 'Configure Google Vertex AI: detects gcloud project, credentials, region and model pins, then saves them to user settings (/setup-vertex [project=ID] [region=R] [model=ID] [save])',
@@ -1219,10 +1219,14 @@ export async function runBuiltinCommand(name, argument, state) {
         return { output: formatComputerUseDoctor(report) };
       }
       if (!session) return { output: 'Start a conversation first, or launch with oasis --computer-use.' };
-      if (!wanted || wanted === 'status') return { output: 'Computer use: ' + (session.computerUseEnabled ? 'on' : 'off') + (session.computerState && session.computerState.granted ? ' (mouse and keyboard allowed for this session)' : '') + '. /computer doctor checks what this machine needs.' };
+      if (!wanted || wanted === 'status') return { output: 'Computer use: ' + (session.computerUseEnabled ? 'on' : 'off') + (session.computerUseEnabled && session.computerDisplay === 'virtual' ? ' on a virtual screen' + (session.computerState && session.computerState.virtual ? ' ' + session.computerState.virtual.display + (session.computerState.virtual.vnc ? ', watch with VNC at ' + session.computerState.virtual.vnc.address : '') : '') : '') + (session.computerState && session.computerState.granted ? ' (mouse and keyboard allowed for this session)' : '') + '. /computer doctor checks what this machine needs.' };
       if (wanted === 'off') { setComputerUse(session, false); return { output: 'Computer use off; the agent can no longer see the screen or send input.' }; }
-      if (wanted !== 'on') return { output: 'Usage: /computer [on|off|status|doctor]' };
-      setComputerUse(session, true);
+      if (wanted === 'virtual') {
+        setComputerUse(session, true, { display: 'virtual' });
+        return { output: 'Computer use on, on a private virtual screen (started with the first action; VNC on localhost when x11vnc is installed). Your own screen is not touched.' };
+      }
+      if (wanted !== 'on') return { output: 'Usage: /computer [on|off|virtual|status|doctor]' };
+      setComputerUse(session, true, { display: 'host' });
       return { output: 'Computer use on. The agent can take screenshots; it asks once before it first moves the mouse or types.' };
     }
     case 'bug': {
