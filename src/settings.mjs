@@ -25,6 +25,9 @@ import { normalizePermissionMode } from './permission-modes.mjs';
 import { replaceFileDurably } from './atomic-write.mjs';
 export { PERMISSION_MODES, normalizePermissionMode } from './permission-modes.mjs';
 
+// OCI runtime names (runsc, kata-runtime, io.containerd.runsc.v1) or an absolute path for Podman.
+const SANDBOX_RUNTIME_PATTERN = /^(?:[A-Za-z0-9][A-Za-z0-9._-]{0,63}|\/[A-Za-z0-9._\/-]{1,255})$/;
+
 const MAX_SETTINGS_BYTES = 256 * 1024;
 
 /** A plain language name ("Bengali", "Português (Brasil)") or null. Blocks prompt-like text. */
@@ -620,6 +623,11 @@ export async function loadSettings(root, options = {}) {
       if (typeof settings.sandbox.image === 'string' && /^[A-Za-z0-9][A-Za-z0-9._\/:@-]{0,254}$/.test(settings.sandbox.image)) result.sandbox.image = settings.sandbox.image;
       if (typeof settings.sandbox.memory === 'string' && /^\d+(?:\.\d+)?[bkmg]?$/i.test(settings.sandbox.memory)) result.sandbox.memory = settings.sandbox.memory;
       if ((typeof settings.sandbox.cpus === 'string' || typeof settings.sandbox.cpus === 'number') && /^\d+(?:\.\d+)?$/.test(String(settings.sandbox.cpus))) result.sandbox.cpus = String(settings.sandbox.cpus);
+      // A read-only container root: any file may turn it on, only your own settings or policy may turn it off.
+      if (typeof settings.sandbox.readOnlyRoot === 'boolean' && (settings.sandbox.readOnlyRoot || ['user', 'flag', 'managed'].includes(scope))) result.sandbox.readOnlyRoot = settings.sandbox.readOnlyRoot;
+      // The OCI runtime (runsc for gVisor, kata-runtime, crun...). Only your own settings or policy choose it,
+      // so a repository cannot swap a gVisor sandbox for a weaker runtime.
+      if (typeof settings.sandbox.runtime === 'string' && SANDBOX_RUNTIME_PATTERN.test(settings.sandbox.runtime) && ['user', 'flag', 'managed'].includes(scope)) result.sandbox.runtime = settings.sandbox.runtime;
     }
     if (settings.shell && typeof settings.shell === 'object' && typeof settings.shell.enabled === 'boolean') { result.shell.enabled = settings.shell.enabled; result.shell.explicit = settings.shell.enabled; }
     if (typeof settings.model === 'string' && settings.model.trim()) result.model = settings.model.trim();
@@ -790,6 +798,7 @@ export async function loadSettings(root, options = {}) {
   if (env.OASIS_SANDBOX === '1') result.sandbox.enabled = true;
   if (env.OASIS_SANDBOX === '0') result.sandbox.enabled = false;
   if (['os', 'docker', 'podman', 'apptainer', 'singularity', 'ssh', 'daytona', 'modal'].includes(env.OASIS_SANDBOX_BACKEND)) result.sandbox.backend = env.OASIS_SANDBOX_BACKEND;
+  if (env.OASIS_SANDBOX_RUNTIME && SANDBOX_RUNTIME_PATTERN.test(env.OASIS_SANDBOX_RUNTIME)) result.sandbox.runtime = env.OASIS_SANDBOX_RUNTIME;
   if (env.OASIS_SANDBOX_IMAGE && /^[A-Za-z0-9][A-Za-z0-9._\/:@-]{0,254}$/.test(env.OASIS_SANDBOX_IMAGE)) result.sandbox.image = env.OASIS_SANDBOX_IMAGE;
   // Fallback chains and configure_provider resolve names without a settings
   // object in hand, so the registry keeps the last loaded user providers.
