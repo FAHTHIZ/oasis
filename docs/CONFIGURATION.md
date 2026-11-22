@@ -31,7 +31,12 @@ In `auto` mode the project's own checks (`npm test`, `npm run lint|build`,
 `make test`) are approved without a classifier call, because they are what the
 default "Test and build" allow rule describes. This applies only to plain argv
 commands inside the workspace, and only while that default rule is in force. It
-does not apply when the user's message says not to run them. Everything else
+does not apply when the user's message says not to run them, or when the
+`package.json` script that `npm test` (or `pnpm`, `yarn`, `bun run`) would run,
+with its `pre` and `post` scripts, reaches the network, pipes into a shell or
+deletes recursively. The classifier then reads those scripts, since the agent
+can edit them, and an earlier approval does not carry over to an edited
+script. Everything else
 goes to the classifier. It has 30 seconds to answer, stretched to 1.5 times the
 main model's typical reply time (up to 180 seconds) when it runs on the same
 model. Set `autoMode.timeoutSeconds` in user settings to choose the limit, or
