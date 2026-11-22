@@ -1,16 +1,16 @@
 import { approvalSnapshot } from './neuron-approvals.mjs';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { normalizeAgentUsage } from './agent-tasks.mjs';
 import { MAX_STEER_CHARS, foldSteering } from './steering.mjs';
 import { mkdir, open, readdir, unlink, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { readBoundedRegularFile } from './safe-storage.mjs';
-import { getConfigDirectory } from './config.mjs';
 import { sanitizeSharedTaskStore } from './shared-tasks.mjs';
 import { sanitizeMustPreserve } from './context.mjs';
 import { redactSecrets } from './auto-memory.mjs';
 import { atomicWriteFile, replaceFileDurably } from './atomic-write.mjs';
 import { appendEvent, clearEvents } from './event-stream.mjs';
+import { getSessionDirectory, workspaceSessionKey } from './session-paths.mjs';
 import { recoveredToolContent } from './tool-results.mjs';
 
 // A saved session holds the whole live transcript, which the agent already
@@ -24,18 +24,13 @@ export const MAX_SESSION_BYTES = 64 * 1024 * 1024;
 const MAX_MESSAGES = 1000000;
 const MAX_TOOL_CALLS_PER_MESSAGE = 512;
 
-export function workspaceSessionKey(root) {
-  return createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 20);
-}
+export { workspaceSessionKey, getSessionDirectory };
 
 function validateId(id) {
   if (typeof id !== 'string' || !/^[a-f0-9-]{20,80}$/i.test(id)) throw new Error('Invalid session ID.');
   return id;
 }
 
-export function getSessionDirectory(root, env = process.env) {
-  return path.join(getConfigDirectory(env), 'sessions', workspaceSessionKey(root));
-}
 
 function sessionPath(root, id, env = process.env) {
   return path.join(getSessionDirectory(root, env), validateId(id) + '.json');
