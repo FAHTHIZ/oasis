@@ -9,7 +9,7 @@ test('connected workspace is not exposed as a standalone installable PWA', async
     read('../app/index.html'),
     read('../app/main.mjs')
   ]);
-  assert.ok(html.includes('<title>OASIS — Coding Agent Workspace</title>'));
+  assert.ok(html.includes('<title>OASIS — Agent Workspace</title>'));
   assert.ok(html.includes('The OASIS connected workspace UI'));
   assert.ok(html.includes('name="robots" content="noindex,nofollow"'));
   assert.ok(!html.includes('rel="manifest"'));

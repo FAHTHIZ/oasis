@@ -8,8 +8,8 @@ if (!token) {
   throw new Error('OASIS_REPO_ADMIN_TOKEN is not set. It must have permission to edit repository metadata.');
 }
 
-const description = 'Open-source, model-agnostic coding-agent runtime for CLI, desktop, browser and editor workflows.';
-const topics = ["agent-runtime","agent-skills","agentic-workflows","ai-coding-agent","automation","cli","coding-agent","developer-tools","electron","llm","mcp","model-agnostic","model-context-protocol","multi-agent","nodejs","ollama","open-source","terminal","vscode","vscode-extension"];
+const description = 'Open-source, model-agnostic agent platform and runtime for software, research, analysis, writing, automation and computer use.';
+const topics = ["a2a","agent-platform","agent-runtime","agent-skills","agentic-workflows","ai-agents","automation","browser-automation","cli","computer-use","general-purpose-agent","llm","mcp","model-agnostic","model-context-protocol","multi-agent","ollama","open-source","research-agent","self-hosted"];
 
 const response = await fetch('https://api.github.com/repos/FAHTHIZ/oasis', {
   method: 'PATCH',

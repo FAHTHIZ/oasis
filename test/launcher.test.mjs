@@ -35,7 +35,7 @@ test('bare --help, -h, help and help all answer from the help module with the fu
     assert.equal(fast.status, 0, fast.stderr);
     assert.equal(full.status, 0, full.stderr);
     assert.equal(fast.stdout, full.stdout, 'oasis ' + args.join(' ') + ' prints the same help either way');
-    assert.match(fast.stdout, /OASIS — a plain-English coding agent/);
+    assert.match(fast.stdout, /OASIS — a model-agnostic agent for plain-English tasks/);
   }
   // Anything more than a bare help request still goes through the full CLI.
   assert.match(run(['web', '--help']).stdout, /Usage: oasis web/);
