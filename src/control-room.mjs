@@ -8,8 +8,10 @@
 //   - Live sessions in this process (the web server's), which know each running
 //     agent's tools, approvals and its own screen and browser.
 //
-// Everything here is lifecycle facts and short task descriptions, never
-// prompts, model output or tool results.
+// Ledger data is lifecycle facts and short task descriptions, never prompts,
+// model output or tool results. The communication view (messages between
+// agents, knowledge and task boards) reads only live sessions of this process,
+// which the web app already shows in full, and keeps short previews.
 
 import { sharedExperienceStore, trackRecord } from './agent-experience.mjs';
 import os from 'node:os';
@@ -143,6 +145,72 @@ export function liveActivity(sessions = []) {
   return { agents, environments };
 }
 
+const MAX_MESSAGES = 40;
+const MAX_FINDINGS = 12;
+const MAX_TASKS = 20;
+const PREVIEW = 140;
+
+function previewOf(text) {
+  const value = clip(String(text || '').replace(/\s+/g, ' ').trim(), PREVIEW + 1);
+  return value.length > PREVIEW ? value.slice(0, PREVIEW - 1) + '…' : value;
+}
+
+/**
+ * How the agents of this process's live sessions work together: messages
+ * between them (team_send_message, and the main agent steering a worker), the
+ * shared knowledge board (src/knowledge-board.mjs) and the shared task board
+ * (src/shared-tasks.mjs). These are sessions the web app already shows in full,
+ * so short previews are included; the cross-process ledger stays lifecycle-only.
+ */
+export function communicationActivity(sessions = [], { now = Date.now() } = {}) {
+  const messages = [];
+  const links = new Map();
+  const findings = [];
+  const tasks = [];
+  const board = { findings: 0, grounded: 0, corroborations: 0, retracted: 0 };
+  const taskCounts = { pending: 0, in_progress: 0, completed: 0 };
+  for (const { id, title, session } of sessions) {
+    if (!session) continue;
+    const owner = { sessionId: clip(id, 200), sessionTitle: clip(title || '', 160) };
+    const events = session.agentTasks && Array.isArray(session.agentTasks.events) ? session.agentTasks.events : [];
+    for (const event of events) {
+      if (!event || (event.type !== 'agent.message_queued' && event.type !== 'agent.resume_requested')) continue;
+      // A queued message names its route ("agent_1 → agent_2"); a resume is the main agent writing to a finished one.
+      const route = event.type === 'agent.message_queued' ? /^(.+?) → (.+)$/.exec(String(event.description || '')) : null;
+      const from = clip(route ? route[1] : event.actor || 'main', 100);
+      const to = clip(route ? route[2] : event.agent_id || '', 100);
+      messages.push({ ...owner, at: Date.parse(event.at) || 0, from, to, ...(event.team_id ? { teamId: clip(event.team_id, 100) } : {}), preview: previewOf(String(event.detail || '').replace(/^New message from the parent agent:\s*/, '')) });
+      const key = owner.sessionId + '\0' + from + '\0' + to;
+      const link = links.get(key) || { ...owner, from, to, messages: 0 };
+      link.messages += 1;
+      links.set(key, link);
+    }
+    const entries = session.knowledgeBoard && Array.isArray(session.knowledgeBoard.entries) ? session.knowledgeBoard.entries : [];
+    for (const entry of entries) {
+      if (entry.retracted) { board.retracted += 1; continue; }
+      board.findings += 1;
+      if (entry.status === 'grounded') board.grounded += 1;
+      const corroborated = Array.isArray(entry.corroboratedBy) ? entry.corroboratedBy.length : 0;
+      board.corroborations += corroborated;
+      findings.push({ ...owner, id: clip(entry.id, 20), author: clip(entry.author, 100), status: entry.status === 'grounded' ? 'grounded' : 'noted', corroborations: corroborated, at: Date.parse(entry.updatedAt || entry.at) || 0, claim: previewOf(entry.claim) });
+    }
+    const list = session.sharedTasks && Array.isArray(session.sharedTasks.tasks) ? session.sharedTasks.tasks : [];
+    for (const task of list) {
+      if (Object.hasOwn(taskCounts, task.status)) taskCounts[task.status] += 1;
+      tasks.push({ ...owner, id: clip(task.id, 40), subject: previewOf(task.subject), status: clip(task.status, 20), owner: clip(task.owner || '', 100), claimedBy: task.claimedBy && task.claimExpiresAt && Date.parse(task.claimExpiresAt) > now ? clip(task.claimedBy, 100) : '', ...(task.checkpoint && task.checkpoint.summary ? { handoff: previewOf(task.checkpoint.summary) } : {}), createdBy: clip(task.createdBy || '', 100), blockedBy: Array.isArray(task.blockedBy) ? task.blockedBy.length : 0, at: Date.parse(task.updatedAt || task.createdAt) || 0 });
+    }
+  }
+  const newest = (a, b) => b.at - a.at;
+  const order = { in_progress: 0, pending: 1, completed: 2 };
+  return {
+    messages: messages.sort(newest).slice(0, MAX_MESSAGES),
+    links: [...links.values()].sort((a, b) => b.messages - a.messages).slice(0, 30),
+    knowledge: { ...board, recent: findings.sort(newest).slice(0, MAX_FINDINGS) },
+    tasks: { ...taskCounts, recent: tasks.sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3) || newest(a, b)).slice(0, MAX_TASKS) },
+    updatedAt: new Date(now).toISOString()
+  };
+}
+
 /** This computer's load, memory and this process's footprint. */
 export function systemResources() {
   const memory = process.memoryUsage();
@@ -200,6 +268,7 @@ export function controlRoomSnapshot({ sessions = [], runs = [], env = process.en
     live,
     ledger,
     experience: experienceActivity({ env, now }),
+    communication: communicationActivity(sessions, { now }),
     resources: systemResources()
   };
 }
@@ -241,6 +310,16 @@ export function formatControlRoom(snapshot, { now = Date.now() } = {}) {
   if (experience && experience.records && experience.records.length) {
     lines.push('', 'Track record (last ' + experience.days + ' days, outcomes from evidence):');
     for (const item of experience.records.slice(0, 10)) lines.push('  ' + (item.agentType + ' / ' + (item.model || '?')).slice(0, 48).padEnd(48) + '  ' + String(item.runs).padStart(4) + ' runs  ' + String(Math.round(item.successRate * 100)).padStart(3) + '% ok  ' + item.verified + ' verified  ' + item.failed + ' failed  ' + item.rejected + ' rejected');
+  }
+  const communication = snapshot.communication;
+  if (communication && communication.messages.length) {
+    lines.push('', 'Messages between agents:');
+    for (const item of communication.messages.slice(0, 10)) lines.push('  ' + ago(item.at, now).padEnd(8) + ' ' + item.from + ' → ' + item.to + (item.preview ? ': ' + item.preview : ''));
+  }
+  if (communication && (communication.knowledge.findings || communication.tasks.pending || communication.tasks.in_progress || communication.tasks.completed)) {
+    const k = communication.knowledge;
+    const t = communication.tasks;
+    lines.push('', 'Shared boards: ' + k.findings + ' findings (' + k.grounded + ' grounded, ' + k.corroborations + ' corroborations), tasks ' + t.in_progress + ' in progress / ' + t.pending + ' pending / ' + t.completed + ' done');
   }
   if (!ledger.agents.length) lines.push('', 'No agents in this window. Subagents, background agents and teams show up here as they run.');
   return lines.join('\n') + '\n';

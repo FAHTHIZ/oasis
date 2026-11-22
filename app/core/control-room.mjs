@@ -127,6 +127,34 @@ export function controlRoomSessions(snapshot, { now = Date.now(), limit = 12 } =
   }));
 }
 
+/**
+ * Communication rows: messages between agents, newest first, and a one-line
+ * summary of the knowledge and task boards with their latest entries.
+ */
+export function controlRoomMessages(snapshot, { now = Date.now(), limit = 20 } = {}) {
+  const list = snapshot && snapshot.communication && snapshot.communication.messages || [];
+  return list.slice(0, limit).map((item, index) => ({
+    key: item.sessionId + ':' + item.at + ':' + index,
+    title: item.from + ' → ' + item.to,
+    meta: [item.teamId ? 'team ' + item.teamId : '', ago(item.at, now)].filter(Boolean).join(' · '),
+    detail: item.preview || '',
+    tone: 'idle'
+  }));
+}
+
+export function controlRoomBoards(snapshot, { now = Date.now(), limit = 12 } = {}) {
+  const communication = snapshot && snapshot.communication;
+  if (!communication) return [];
+  const rows = [];
+  const k = communication.knowledge || {};
+  const t = communication.tasks || {};
+  if (k.findings || k.retracted) rows.push({ key: 'knowledge', title: 'Knowledge board', tone: 'idle', detail: [k.findings + (k.findings === 1 ? ' finding' : ' findings'), k.grounded + ' grounded', k.corroborations ? k.corroborations + ' corroborations' : '', k.retracted ? k.retracted + ' retracted' : ''].filter(Boolean).join(' · ') });
+  for (const item of (k.recent || []).slice(0, Math.ceil(limit / 2))) rows.push({ key: 'k:' + item.sessionId + ':' + item.id, title: item.claim, meta: [item.id, item.author, ago(item.at, now)].join(' · '), detail: item.status + (item.corroborations ? ', corroborated by ' + item.corroborations : ''), tone: item.status === 'grounded' ? 'completed' : 'waiting' });
+  if (t.pending || t.in_progress || t.completed) rows.push({ key: 'tasks', title: 'Task board', tone: 'idle', detail: [t.in_progress + ' in progress', t.pending + ' pending', t.completed + ' done'].join(' · ') });
+  for (const item of (t.recent || []).slice(0, Math.floor(limit / 2))) rows.push({ key: 't:' + item.sessionId + ':' + item.id, title: item.subject, meta: [item.id, item.claimedBy ? 'claimed by ' + item.claimedBy : item.owner || 'unassigned', ago(item.at, now)].join(' · '), detail: item.status.replace('_', ' ') + (item.blockedBy ? ', waits on ' + item.blockedBy : '') + (item.handoff ? ', handoff: ' + item.handoff : ''), tone: item.status === 'completed' ? 'completed' : item.status === 'in_progress' ? 'running' : 'idle' });
+  return rows;
+}
+
 /** Track record rows: success of each agent type and model, from the experience store. */
 export function controlRoomTrackRecord(snapshot, { now = Date.now(), limit = 10 } = {}) {
   const list = snapshot && snapshot.experience && snapshot.experience.records || [];
