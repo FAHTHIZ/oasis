@@ -755,6 +755,15 @@ export async function createSession({ root, config, restore = null, permissionMo
   const computerWanted = computerUse !== null ? Boolean(computerUse) : env.OASIS_COMPUTER_USE ? env.OASIS_COMPUTER_USE !== '0' : loadedSettings.computerUse === true || loadedSettings.computerUse === 'virtual';
   const computerVirtual = computerUse === 'virtual' || (computerUse === null && (env.OASIS_COMPUTER_USE === 'virtual' || (!env.OASIS_COMPUTER_USE && loadedSettings.computerUse === 'virtual')));
   if (computerWanted && !restricted) setComputerUse(session, true, computerVirtual ? { display: 'virtual' } : {});
+  // Remote A2A agents (a2aAgents setting or OASIS_A2A_AGENTS) become the remote_agent tool.
+  if (!restricted && (loadedSettings.a2aAgents || env.OASIS_A2A_AGENTS) && env.OASIS_A2A !== '0') {
+    const { configuredA2aAgents, remoteAgentToolDefinition } = await import('./a2a.mjs');
+    const remoteAgents = configuredA2aAgents(loadedSettings, env);
+    if (remoteAgents.size) {
+      session.a2aAgents = remoteAgents;
+      session.toolDefinitions = session.toolDefinitions.concat([remoteAgentToolDefinition(remoteAgents)]);
+    }
+  }
   const advisorModel = String(advisor || env.OASIS_ADVISOR_MODEL || loadedSettings.advisorModel || '').trim();
   if (advisorModel && advisorModel !== 'off' && modelAllowed(advisorModel, session.availableModels, { env, protocol: session.config.protocol, ...(session.modelPolicy || {}) })) setAdvisor(session, advisorModel);
   const mixtureSpec = String(env.OASIS_MIXTURE_MODELS || loadedSettings.mixtureModels || '').trim();
@@ -1614,7 +1623,7 @@ const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
 const MAX_TOOL_BATCH = 64;
 
 const LIVE_OUTPUT_TOOLS = new Set(['run_command', 'run_shell', 'powershell']);
-export const RESTRICTED_TOOL_NAMES = new Set(['run_command', 'powershell', 'monitor', 'command_output', 'kill_command', 'list_background', 'fetch_url', 'web_search', 'browser', 'computer', 'install_package', 'install_extension', 'install_plugin', 'add_extension', 'install_external_skill', 'configure_mcp_server', 'git_push', 'create_pull_request']);
+export const RESTRICTED_TOOL_NAMES = new Set(['run_command', 'powershell', 'monitor', 'command_output', 'kill_command', 'list_background', 'fetch_url', 'web_search', 'browser', 'computer', 'remote_agent', 'install_package', 'install_extension', 'install_plugin', 'add_extension', 'install_external_skill', 'configure_mcp_server', 'git_push', 'create_pull_request']);
 
 
 
