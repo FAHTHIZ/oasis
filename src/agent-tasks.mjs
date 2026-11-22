@@ -1,4 +1,5 @@
 import { restoreApprovals } from './neuron-approvals.mjs';
+import { AGENT_DEFINE_TOOL_DEFINITION } from './session-agents.mjs';
 import { closeBrowser } from './browser-tool.mjs';
 import { closeComputerUse } from './computer-use.mjs';
 import { attachNeuronLineage, buildNeuronNetworkSnapshot, descendantRecords, formatBudget, projectBudget } from './neuron-network.mjs';
@@ -64,7 +65,8 @@ export const AGENT_TOOL_DEFINITIONS = [
   }, required: ['id', 'message'] } } },
   { type: 'function', function: { name: 'agent_stop', description: 'Stop a running background subagent.', parameters: { type: 'object', properties: {
     id: { type: 'string' }
-  }, required: ['id'] } } }
+  }, required: ['id'] } } },
+  AGENT_DEFINE_TOOL_DEFINITION
 ];
 
 export const AGENT_TOOL_NAMES = new Set(AGENT_TOOL_DEFINITIONS.map((tool) => tool.function.name));
