@@ -13,6 +13,7 @@ User-facing change history grouped by package version. A version heading does no
 - Chat gateways: `/mode` can only loosen approvals up to the gateway's ceiling (`OASIS_GATEWAY_MAX_MODE`, else the `--permission-mode` the gateway started with, else accept-edits). Before, anyone allowed to message the bot could send `/mode auto`. Two messages arriving together for a new chat now share one session instead of creating two.
 - Email gateway: only the receiving server's own `Authentication-Results` header counts toward the sender check. Before, any header in the message could vouch for it, so a sender who forged an allowlisted From address and added `Authentication-Results: x; dmarc=pass` was let in even when the real server said `dmarc=fail`. `dmarc=pass` now also needs a matching `header.from` in the same result, a DKIM signer must be a real domain (never a bare `com`), and `OASIS_EMAIL_AUTHSERV_ID` (for Gmail `mx.google.com`) restricts the check to your server's headers.
 
+- `oasis -p --review [N]`: after a run that changed files, the `verify` agent checks the work against the request as an independent critic; a failed review goes back to the agent with the findings for up to N fix rounds, and a final failure exits 1 with `error_review_failed`. Also `"review": N` in settings or `OASIS_REVIEW`.
 ### Highlights
 
 - The prompt-injection hold now also flows from a parent to its subagents: an agent held after reading a hostile page cannot get the held action done by starting, resuming or messaging a child, which starts with the same hold.

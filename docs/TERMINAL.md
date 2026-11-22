@@ -90,6 +90,7 @@ prompt and exits. Useful flags:
 | `--permission-mode dont-ask` | Never wait for approval |
 | `--goal "npm test passes"` | Keep going until the check holds; exit 1 if it never does |
 | `--goal-verify` | With `--goal`: confirm a met goal with the `verify` agent, which runs the result |
+| `--review [N]` | After work that changed files, the `verify` agent checks it against the request; failures go back to the agent for up to N fix rounds (default 1, max 3). A final failure exits 1 with `error_review_failed` |
 | `--require-verified` | Exit 1 if OASIS could not verify its changes |
 | `--json-schema SCHEMA` | Return JSON matching a schema |
 | `--max-turns N`, `--max-budget-usd N`, `--max-requests N` | Hard limits |
