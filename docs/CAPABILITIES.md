@@ -7,7 +7,7 @@ performance claim.
 
 | Label | Meaning |
 | --- | --- |
-| **Stable** | In the latest release ([v1.7.1](https://github.com/FAHTHIZ/oasis/releases/latest)), covered by automated tests and exercised in live runs on Linux. |
+| **Stable** | In the latest release ([v1.7.2](https://github.com/FAHTHIZ/oasis/releases/latest)), covered by automated tests and exercised in live runs on Linux. |
 | **Released, lightly tested** | In the latest release and covered by unit or integration tests, but with few real-world hours. Expect rough edges. |
 | **Unreleased** | Merged on `main` and tested, but not in a tagged release yet. Install from source to use it. See [Unreleased in the changelog](../CHANGELOG.md#unreleased). |
 | **Experimental** | Works, but the interface or behaviour may change, or it depends on platform pieces OASIS cannot test in CI. |

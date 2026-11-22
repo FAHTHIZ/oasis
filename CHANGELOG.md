@@ -4,6 +4,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+## [1.7.2] - 2026-11-22
+
 ### Security
 
 - Telegram gateway: new optional `OASIS_TELEGRAM_ALLOWED_USERS` (numeric user IDs). When set, only those people can send tasks or press approval buttons, even inside an allowed group chat; before, any member of an allowed group could approve a command.
