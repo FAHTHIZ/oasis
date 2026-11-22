@@ -60,4 +60,14 @@ test('a check that may not have run, or ran in another directory, is not a check
   assert.ok(shellExitTarget('cd /tmp/fake && npm test'), 'without a root the old behaviour is kept');
   assert.equal(runsOutsideRoot('npm', ['test', '--prefix', '/tmp/x'], root), true);
   assert.equal(runsOutsideRoot('npm', ['test'], root), false);
+  assert.equal(runsOutsideRoot('npm', ['test', '--script-shell', 'true'], root), true);
+});
+
+test('settings that swap out what a check runs make it not a check', () => {
+  for (const line of ['npm_config_script_shell=true npm test', 'export npm_config_script_shell=true; npm test', 'npm test --script-shell=true', 'NODE_OPTIONS="--require ./exit0.cjs" npm test', 'NODE_OPTIONS=--import=./patch.mjs npm test', 'LD_PRELOAD=./fake.so make test', 'BASH_ENV=./x.sh npm test']) {
+    assert.equal(shellExitTarget(line), null, line);
+  }
+  for (const line of ['NODE_OPTIONS=--max-old-space-size=4096 npm test', 'NODE_OPTIONS=--experimental-vm-modules npx jest', 'CI=1 npm test', 'PYTHONPATH=src pytest']) {
+    assert.ok(shellExitTarget(line), line);
+  }
 });
