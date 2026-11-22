@@ -120,6 +120,32 @@ function packEvidence(name, args, result, digest) {
   return { kind: 'search', tool: name, query: String(args.query || '').slice(0, 200), urls, digest };
 }
 
+// A test run that exits 0 having run nothing: `npm test -- --grep nomatch`,
+// `node --test` on an empty glob, jest with --passWithNoTests. Each runner's
+// own summary line, so ordinary output that mentions tests does not match.
+function ranNoTests(text) {
+  const value = String(text || '');
+  if (/^\s*(?:#|ℹ)\s*tests 0\s*$/m.test(value) && !/^\s*(?:#|ℹ)\s*tests [1-9]/m.test(value)) return true;
+  if (/^\s*0 passing\b/m.test(value) && !/^\s*[1-9]\d* (?:passing|failing)\b/m.test(value)) return true;
+  if (/\bNo tests found\b|\bno tests ran\b|\bNo test files found\b|^\s*Tests:\s+0 total/im.test(value)) return true;
+  const cargo = [...value.matchAll(/^running (\d+) tests?$/gm)];
+  if (cargo.length && cargo.every((match) => match[1] === '0')) return true;
+  const go = value.split('\n').filter((line) => /^ok\s/.test(line));
+  if (go.length && go.every((line) => /\[no tests to run\]/.test(line))) return true;
+  return false;
+}
+
+// Selecting tests by name or file: fine while iterating, but a goal about the
+// whole suite ("npm test passes") needs a run without it.
+const TEST_FILTER = /(?:^|\s)(?:--grep|-g|--fgrep|-t|--testNamePattern|--test-name-pattern|--test-only|-k|--filter|--only|-run|--match)(?:[=\s]|$)/;
+
+function filteredRun(command) {
+  const text = String(command || '');
+  const split = text.indexOf(' -- ');
+  const tail = split >= 0 ? text.slice(split + 4) : text.replace(/^\S+/, '');
+  return TEST_FILTER.test(' ' + tail);
+}
+
 export function evidenceFromToolResult(name, args = {}, result = {}, context = {}) {
   if (!result || typeof result !== 'object') return null;
   if (PACK_FETCH.test(name) || PACK_SEARCH.test(name)) return packEvidence(name, args || {}, result, digestOf(result));
@@ -130,7 +156,9 @@ export function evidenceFromToolResult(name, args = {}, result = {}, context = {
     const exitCode = Number.isInteger(result.exitCode) ? result.exitCode : null;
     const finished = exitCode !== null && !result.timedOut && !result.cancelled;
     if (context.isCheck) {
-      return { kind: 'check', tool: name, command: command.slice(0, 300), checkKind: context.checkKind || 'test', exitCode, masked: Boolean(context.masked), finished, passed: finished && !context.masked ? exitCode === 0 : null, digest };
+      const noTests = finished && exitCode === 0 && ranNoTests(outputText(result));
+      const filtered = (context.checkKind || 'test') === 'test' && filteredRun(command);
+      return { kind: 'check', tool: name, command: command.slice(0, 300), checkKind: context.checkKind || 'test', exitCode, masked: Boolean(context.masked), finished, passed: finished && !context.masked ? exitCode === 0 : null, ...(noTests ? { noTests: true } : {}), ...(filtered ? { filtered: true } : {}), digest };
     }
     const text = outputText(result);
     const execution = EXECUTION_COMMAND.test(command.trim());
