@@ -34,7 +34,10 @@ commands inside the workspace, and only while that default rule is in force. It
 does not apply when the user's message says not to run them, or when the
 `package.json` script that `npm test` (or `pnpm`, `yarn`, `bun run`) would run,
 with its `pre` and `post` scripts, or the Makefile recipe behind `make test`,
-reaches the network, pipes into a shell or deletes recursively. The classifier then reads those scripts, since the agent
+reaches the network, pipes into a shell or deletes recursively. A test file
+named on the command line (`node x.test.js`, `node --test file`, `pytest file`)
+is read the same way: one that reaches the network, starts other programs or
+reads the environment or credentials goes to the classifier with its code. The classifier then reads those scripts, since the agent
 can edit them, and an earlier approval does not carry over to an edited
 script. Everything else
 goes to the classifier. It has 30 seconds to answer, stretched to 1.5 times the
