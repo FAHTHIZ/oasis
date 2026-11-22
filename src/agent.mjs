@@ -1818,8 +1818,18 @@ async function authorizeCall(session, name, args, context, options) {
     }
     const nearMiss = policy && typeof policy.allowNearMiss === 'function' ? policy.allowNearMiss(name, args) : '';
     if (nearMiss && !String(safeMessage || '').includes('Why this asks:')) safeMessage = String(safeMessage || '') + '\n' + String(redactAuditValue(nearMiss));
+    // A "no" holds until the user's next message: the same request in this
+    // turn is declined again without asking, so the model cannot wear the
+    // person down by repeating it.
+    const declineKey = name + '\u0000' + safeArgsText + '\u0000' + safeMessage;
+    if (!(session.turnDeclined instanceof Set)) session.turnDeclined = new Set();
+    if (session.turnDeclined.has(declineKey)) {
+      overlay.permissionHookDenial = 'The user already declined this exact ' + name + ' request in this turn. Do not ask again; continue without it or explain what you need and wait for their next message.';
+      return false;
+    }
     const answer = await baseApproval(safeMessage, force, { tool: name, suggestion, input: safeArgs, ...(extra || {}) });
     if (answer === 'always' && suggestion && policy) policy.rememberForSession(suggestion);
+    if (!answer) session.turnDeclined.add(declineKey);
     return Boolean(answer);
   };
   // Audit trail: every approval decision (user, hook or auto-mode classifier).
@@ -2775,6 +2785,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
   // A new turn from a person clears the hold; an automatic follow-up (goal,
   // review, schema retry) keeps it, since nobody looked in between.
   if (session && !options.isSubagent && !options.keepInjectionHold) clearInjectionTurnFlag(session);
+  if (session && !options.isSubagent && session.turnDeclined instanceof Set) session.turnDeclined.clear();
   // A run started by untrusted input (a webhook payload that read like an
   // injection) is held from its first turn; see src/routines.mjs.
   if (session && !options.isSubagent && env.OASIS_UNTRUSTED_START) {
