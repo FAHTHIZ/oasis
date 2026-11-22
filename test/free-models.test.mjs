@@ -153,3 +153,14 @@ test('oasis models free reads the quota ledger and this computer\'s memory', asy
   assert.match(text, /Models out of quota are listed last/);
   assert.match(text, /about 3 GB this computer can give a model/);
 });
+
+test('a local model whose KV cache is known is sized with a 16K window', () => {
+  const base = { id: 'qwen3:4b', spec: 'ollama:qwen3:4b', source: 'ollama', name: 'qwen3:4b', billions: 4, score: 10 };
+  const guessed = annotateFreeModels([base], { budgetGB: 4 })[0];
+  assert.equal(guessed.needGB, 3.5);
+  assert.equal(guessed.fits, true);
+  // qwen3:4b: 36 layers x 8 KV heads x (128 + 128) x 2 bytes.
+  const measured = annotateFreeModels([{ ...base, kvBytesPerToken: 147456 }], { budgetGB: 4 })[0];
+  assert.ok(measured.needGB > 5 && measured.needGB < 5.5, String(measured.needGB));
+  assert.equal(measured.fits, false, 'weights fit, but not with a usable context window');
+});
