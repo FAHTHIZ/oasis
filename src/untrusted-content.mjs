@@ -62,6 +62,24 @@ export function commandFetchesExternal(name, args) {
   return FETCHING_COMMAND.test(line);
 }
 
+// Files a fetching command saved (`curl -o f`, `wget -O f`, `gh ... > f`),
+// so reading them later is guarded like the fetch itself.
+export function fetchedOutputPaths(name, args) {
+  if (!commandFetchesExternal(name, args)) return [];
+  const words = [args.command, ...(Array.isArray(args.args) ? args.args : [])].filter((part) => typeof part === 'string').join(' ').match(/"[^"]*"|'[^']*'|[^\s]+/g) || [];
+  const unquote = (word) => word.replace(/^(["'])(.*)\1$/, '$2');
+  const out = [];
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    let match;
+    if (/^(?:-o|-O|--output|--output-document|-OutFile)$/i.test(word) && words[i + 1]) out.push(unquote(words[++i]));
+    else if ((match = /^(?:--output|--output-document)=(.+)$/.exec(word))) out.push(unquote(match[1]));
+    else if (/^\d?>>?$/.test(word) && words[i + 1]) out.push(unquote(words[++i]));
+    else if ((match = /^\d?>>?([^&>].*)$/.exec(word))) out.push(unquote(match[1]));
+  }
+  return out.filter((file) => file && file !== '-' && !/^\/dev\//.test(file)).slice(0, 20);
+}
+
 export function stripInvisible(text) {
   if (typeof text !== 'string' || !text) return { text, removed: 0 };
   let removed = 0;
