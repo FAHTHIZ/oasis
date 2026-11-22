@@ -72,3 +72,11 @@ test('a passing run that ran no tests, or only some, does not meet a goal about 
   assert.equal(evidenceFromToolResult('run_shell', { command: 'tsc -t es2022' }, { exitCode: 0, stdout: '' }, { isCheck: true, checkKind: 'type-check' }).filtered, undefined);
   assert.match(goalEvidenceText([{ ...empty, seq: 1 }]), /no tests ran/);
 });
+
+test('a PASS from a verifier that read an injection does not count', async () => {
+  const { parseVerifierResult } = await import('../src/goal-evidence.mjs');
+  assert.equal(parseVerifierResult({ report: '- PASS: ok\nVERDICT: PASS' }).met, true);
+  const tainted = parseVerifierResult({ report: '- PASS: ok\nVERDICT: PASS', untrusted_input: 'agent agent_2 read content from fetch_url that looked like a prompt-injection attempt' });
+  assert.equal(tainted.met, false);
+  assert.match(tainted.reason, /prompt-injection/);
+});
