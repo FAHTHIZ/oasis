@@ -1,20 +1,21 @@
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis">
-    <img src="assets/readme/hero.svg" alt="Animated illustration: OASIS. The open-source agent that lifts any model. A drawn terminal window shows OASIS fixing a failing login test: the request types itself out, the agent finds the bug, shows a one-line diff, runs npm test with 42 passing and finishes with a checked summary." width="100%">
+    <img src="assets/readme/hero.svg" alt="Animated illustration: OASIS, the open agent runtime for any model. A drawn terminal window shows OASIS on a research and analysis request: it plans three research angles, runs three research agents in parallel, checks that every cited page was opened and every number came from code, runs a chart script and saves a report with its sources." width="100%">
   </a>
-  <br><sub>Illustration. The recordings under <a href="#work-where-you-work">Work where you work</a> are real, unscripted runs.</sub>
+  <br><sub>Illustration, not a recording. The recordings under <a href="#work-where-you-work">Work where you work</a> are real, unscripted runs.</sub>
 </p>
 
 <p align="center">
-  Bring any model and OASIS turns it into an agent that builds, researches, writes and automates.<br>
-  Keep your Claude Code setup, run it on your own computer or server, and get work that is actually checked:<br>
-  it won't say "tests pass" unless it saw them pass, or cite a page it never opened.
+  <b>OASIS is an open-source agent platform and runtime.</b><br>
+  Connect any model, hosted or local, and OASIS gives it the planning, tools, collaborating agents and checks<br>
+  to do real work: software, research, data analysis, writing, automation and computer use.<br>
+  It runs on your own computer or server, and it won't report "tests pass" unless it saw them pass, or cite a page it never opened.
 </p>
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/quality.yml?branch=main&style=flat&label=quality&labelColor=0B0F0C&color=32E07A"></a>
   <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=flat&labelColor=0B0F0C&color=7CFF5E"></a>
-  <img alt="More than 3,500 tests" src="https://img.shields.io/badge/tests-3%2C500%2B-0ED168?style=flat&labelColor=0B0F0C">
+  <img alt="More than 3,700 tests" src="https://img.shields.io/badge/tests-3%2C700%2B-0ED168?style=flat&labelColor=0B0F0C">
   <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat&labelColor=0B0F0C&color=1A1F1B"></a>
   <br>
   <img alt="Windows, macOS and Linux" src="https://img.shields.io/badge/windows%20%C2%B7%20macos%20%C2%B7%20linux-1A1F1B?style=flat&logo=nodedotjs&logoColor=7CFF5E&labelColor=0B0F0C">
@@ -26,12 +27,11 @@
 
 <p align="center">
   <a href="#install"><b>Install</b></a> &nbsp;·&nbsp;
+  <a href="#what-oasis-does">What it does</a> &nbsp;·&nbsp;
   <a href="#work-where-you-work"><b>Terminal and web</b></a> &nbsp;·&nbsp;
   <a href="#how-a-task-runs">How it works</a> &nbsp;·&nbsp;
-  <a href="#why-oasis">Why OASIS</a> &nbsp;·&nbsp;
-  <a href="#not-just-code">Not just code</a> &nbsp;·&nbsp;
-  <a href="#plugins-mcp-and-models">Plugins and models</a> &nbsp;·&nbsp;
-  <a href="#how-it-compares">Comparison</a> &nbsp;·&nbsp;
+  <a href="#models-and-integrations">Models and integrations</a> &nbsp;·&nbsp;
+  <a href="#capability-status">Status</a> &nbsp;·&nbsp;
   <a href="docs/README.md">Docs</a>
 </p>
 
@@ -55,11 +55,11 @@ curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.
 | From source | `git clone https://github.com/FAHTHIZ/oasis.git && cd oasis && npm install && npm install --global .` |
 | Desktop app | Installers for Windows, macOS and Linux on [GitHub Releases](https://github.com/FAHTHIZ/oasis/releases) (not yet code-signed, see [Desktop](docs/DESKTOP.md)) |
 
-One package gives you the terminal agent and the web app. It needs Node.js 22.19+ and Git. The install scripts take the latest stable release, ask before changing anything, and finish with `oasis doctor`. Every release ships the npm tarball, the desktop installers and a `SHA256SUMS` file. See [Downloads and releases](docs/RELEASES.md).
+One package gives you the terminal, the web app and every other interface below. It needs Node.js 22.19+ and Git. The install scripts take the latest stable release, ask before changing anything, and finish with `oasis doctor`. Every release ships the npm tarball, the desktop installers and a `SHA256SUMS` file. See [Downloads and releases](docs/RELEASES.md).
 
 </details>
 
-Then, in your project:
+Then, in any folder you want it to work in:
 
 ```sh
 oasis connect        # 1. paste an API key, a model link or a local server address
@@ -67,13 +67,38 @@ oasis                # 2. work in the terminal
 oasis web --open     #    …or open the web app on this folder
 ```
 
-Ask in plain words: "find out why the login test fails and fix it", "compare these three vendors and cite your sources" or "turn sales.csv into a chart and a one-page summary". OASIS plans the work, uses the tools it needs, checks the result and shows you what changed.
+Ask in plain words. A few requests OASIS is built for:
+
+| You ask | OASIS does |
+| --- | --- |
+| "Compare the three most-used open-source vector databases and cite your sources" | Searches, opens the pages and writes a cited report; a citation of a page it never fetched is flagged |
+| "Turn sales.csv into a chart and a one-page summary" | Computes the numbers with code it runs and saves `chart.png` and `summary.md` in the folder |
+| "Draft a project update from notes/*.md for a non-technical audience" | Writes the file, lists what it left out, and you can undo the whole turn |
+| "Every weekday at 9, summarize new issues and post them to Slack" | Schedules a routine that runs without a terminal open |
+| "Find out why the login test fails and fix it" | Runs the tests, edits the code, reruns the tests and shows you the diff |
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
+## What OASIS does
+
+OASIS is not tied to one kind of task or one model vendor. The same runtime plans the work, gives the model tools, splits large jobs across agents and checks the result before it is reported as done.
+
+| Area | What is in the box |
+| --- | --- |
+| Software | Reads and edits code, runs tests and commands, reviews diffs, works in git worktrees, opens pull requests, and checkpoints every edit so `/rewind` undoes a turn. |
+| Research | Federated web search, page fetching and a real Chrome it can drive (`--chrome`). An evidence ledger flags any claim that cites a page the agent never opened. `/deep-research` fans a question out to parallel research agents and cross-checks their claims. |
+| Data analysis | CSV and spreadsheet analysis, charts and notebooks, with numbers computed by code it ran rather than mental arithmetic. The optional analysis pack rejects a report whose numbers were not printed by code. |
+| Writing and documents | Reads PDFs and images, and saves reports, posts and slides as files in the workspace that you can review, diff and undo. |
+| Automation | `oasis schedule add "every 1d" "…"` runs routines on a schedule, cron or webhook; `oasis gateway` answers in Telegram, Slack, Discord and other chat apps; `/goal` keeps going until a condition holds. |
+| Browser and computer use | Drives Chrome over CDP, and (experimental) sees the screen and uses the mouse and keyboard on Linux, macOS and Windows with `--computer-use`, optionally inside a virtual desktop. See [Computer use](docs/COMPUTER_USE.md). |
+| Media | `generate_image` and `text_to_speech` through any OpenAI-compatible images or speech API, local servers included. |
+| Memory | Memory across sessions, full-text recall of past conversations, repeatable work proposed as reviewable skills (`/learning`), and an optional [Honcho](docs/CONFIGURATION.md#honcho-user-modeling) user model. `oasis import` brings settings, memories and skills from other agent tools. |
+
+Each workflow, with the exact commands and what the runtime enforces, is in [Workflows](docs/WORKFLOWS.md).
+
 ## Work where you work
 
-The terminal and the web app run on the same runtime, sessions and settings. Start a task in one and pick it up in the other under **Chats → Earlier on this computer**.
+The terminal and the web app run on the same runtime, sessions and settings. Start a task in one and pick it up in the other under **Chats → Earlier on this computer**. The two recordings below are real, unscripted runs that show the interfaces at work; they happen to be coding tasks because those are the easiest to check end to end. Research, analysis and writing examples are in [Workflows](docs/WORKFLOWS.md).
 
 <table>
   <tr>
@@ -90,7 +115,7 @@ The terminal and the web app run on the same runtime, sessions and settings. Sta
   </tr>
   <tr>
     <td valign="top">A live status line with the running step and clock, streaming diffs with word highlights, type-ahead while it works, colored diffs in approvals, <code>/tasks</code>, <code>/rewind</code> and <code>/export</code>, and <code>oasis -p</code> or <code>oasis exec</code> for scripts.</td>
-    <td valign="top">A live timeline with expandable steps and command output, approvals answered inline, a task sidebar, Files and Changes panels, a real terminal (<kbd>Ctrl</kbd>+<kbd>&#96;</kbd>), a sandboxed Preview of your pages, talk mode, plan mode, Undo, cost and context meters, and one-click Claude Code plugins.</td>
+    <td valign="top">A live timeline with expandable steps and command output, approvals answered inline, a task sidebar, Files and Changes panels, a real terminal (<kbd>Ctrl</kbd>+<kbd>&#96;</kbd>), a sandboxed Preview of your pages, talk mode, plan mode, Undo, cost and context meters, and one-click plugins.</td>
   </tr>
 </table>
 
@@ -164,193 +189,122 @@ oasis -p --permission-mode auto --goal "npm test passes"              # keeps go
 ## How a task runs
 
 <p align="center">
-  <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/pipeline-dark.svg"><img src="assets/readme/pipeline-light.svg" alt="Animated diagram: a task moves from Ask to Read, Edit, Verify and Done. Verify is a gate: if a check failed or was skipped, the task goes back to work instead of finishing." width="100%"></picture>
+  <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/pipeline-dark.svg"><img src="assets/readme/pipeline-light.svg" alt="Animated diagram: a task moves from Ask to Plan, Act, Verify and Done. Verify is a gate: if a check failed or was skipped, or a claim has no evidence behind it, the task goes back to work instead of finishing." width="100%"></picture>
 </p>
 
-You ask in plain words. OASIS reads the code, makes the edit, then has to pass the verification gate before it may say it is done: the diff was reviewed, the checks ran, and every claim like "tests pass" is backed by output it actually saw. If any of that is missing, the agent is sent back to work. Every edit is checkpointed, so <kbd>Esc</kbd> <kbd>Esc</kbd> or `/rewind` undoes a turn.
+You ask in plain words. OASIS plans the work, acts through tools (files, shell, browser, search, apps), then has to pass a verification gate before it may say it is done. The gate checks the evidence the run actually produced: a diff was reviewed, a command really exited 0, a cited page was really fetched, a number was really printed by code. If something is missing, the agent is sent back to work. Every file change is checkpointed, so <kbd>Esc</kbd> <kbd>Esc</kbd> or `/rewind` undoes a turn.
 
 <p align="center">
-  <img src="assets/readme/architecture.svg" alt="Animated diagram: six ways in (terminal, web app, desktop app, editors over ACP, Codex App Server clients, and the SDK, CI and GitHub Action) all drive one OASIS runtime with a turn loop, permissions and sandbox, subagents and teams, a verification gate, and checkpoints and memory. The runtime talks to any model provider, to tools such as MCP servers and Claude Code plugins, and to your project on your own machine." width="100%">
-  <br><sub>The model proposes replies and tool calls. OASIS decides which tools exist, which calls need approval and what counts as verified. See <a href="docs/ARCHITECTURE.md">Architecture</a> and the <a href="docs/AGENT-NETWORK.md">Agent network</a> for multi-agent work.</sub>
+  <img src="assets/readme/architecture.svg" alt="Animated diagram: the terminal, web app, desktop app, editors and other agents, chat gateways, and the SDK, CI and GitHub Action all drive one OASIS runtime with a turn loop, permissions, the agent network, a verification gate, and checkpoints and memory. The runtime talks to any model provider, to tools and integrations such as MCP servers, app connectors and plugins, and to the places work runs: this machine, a sandbox, a container or a remote machine." width="100%">
+  <br><sub>The model proposes replies and tool calls. OASIS decides which tools exist, which calls need approval and what counts as verified. See <a href="docs/ARCHITECTURE.md">Architecture</a>.</sub>
 </p>
 
-## Why OASIS
+### How agents collaborate
 
-<table>
-  <tr>
-    <td width="33%" valign="top">
-      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-models-dark.svg"><img src="assets/readme/icon-models-light.svg" alt="" aria-hidden="true" width="48"></picture>
-      <h4>Any model, no lock-in</h4>
-      OpenAI, Anthropic, Gemini, Bedrock, Vertex AI, OpenRouter, Groq, DeepSeek, Mistral, xAI, any OpenAI-compatible endpoint, or a local Ollama, LM Studio, llama.cpp or vLLM. <code>oasis connect</code> finds a model that can call tools and keeps backups for failover.
-    </td>
-    <td width="33%" valign="top">
-      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-plugins-dark.svg"><img src="assets/readme/icon-plugins-light.svg" alt="" aria-hidden="true" width="48"></picture>
-      <h4>Your Claude Code setup, as is</h4>
-      <code>CLAUDE.md</code>, <code>.claude/agents</code>, skills, slash commands, hooks, settings, <code>.mcp.json</code> and Claude Code plugins load without conversion. Codex plugins and Gemini CLI extensions are converted on install.
-    </td>
-    <td width="33%" valign="top">
-      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-verified-dark.svg"><img src="assets/readme/icon-verified-light.svg" alt="" aria-hidden="true" width="48"></picture>
-      <h4>It checks its own work</h4>
-      A verification gate sends the agent back if it skipped the diff review or the checks, or claimed "tests pass" with nothing to back it. Every edit is checkpointed, so any turn can be undone.
-    </td>
-  </tr>
-  <tr>
-    <td width="33%" valign="top">
-      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-hosted-dark.svg"><img src="assets/readme/icon-hosted-light.svg" alt="" aria-hidden="true" width="48"></picture>
-      <h4>Self-hosted, remote-ready</h4>
-      Files, shell and model keys stay on your machine or server. Browsers sign in with a 256-bit access key, behind DNS-rebinding protection and brute-force lockout. Close the tab mid-task and it picks up where it was.
-    </td>
-    <td width="33%" valign="top">
-      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-agents-dark.svg"><img src="assets/readme/icon-agents-light.svg" alt="" aria-hidden="true" width="48"></picture>
-      <h4>A real agent system</h4>
-      Parallel, background and resumable subagents, agent teams with a shared task board, a git worktree per agent, <code>/goal</code> to keep going until a condition holds, scheduled routines, and memory across sessions.
-    </td>
-    <td width="33%" valign="top">
-      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-safety-dark.svg"><img src="assets/readme/icon-safety-light.svg" alt="" aria-hidden="true" width="48"></picture>
-      <h4>Safety you can read</h4>
-      Clear permission modes, shell-command risk analysis, protected paths, secret scanning and optional OS or container sandboxes. Project settings that loosen anything wait until you trust the workspace.
-    </td>
-  </tr>
-</table>
+Larger jobs are split across agents that run as one network with a single scheduler ([Agent network](docs/AGENT-NETWORK.md)):
 
-## Not just code
+- **Subagents.** Built-in `explore`, `plan`, `general-purpose`, `code-review` and `security-review` agents, plus your own agent files. They run in parallel or in the background, can be resumed, and can each get their own git worktree ([Subagents](docs/SUBAGENTS.md)).
+- **Teams.** Agent teams coordinate around a shared task board, with messages between members and leases on claimed tasks.
+- **Checked reports.** A subagent's report is checked against its own tool results: a "tests pass" with no passing test run, a cited page it never fetched or a number no code printed is flagged before the parent relies on it.
+- **Budgets and cancellation.** Each agent can reserve a budget (tokens, dollars, requests, steps, children) from its parent's, a scheduler limits how many run at once, and stopping an agent stops its whole subtree.
+- **Workflows.** `/deep-research` and `/audit` are built-in scripted workflows; the `workflow` tool runs your own. Research and analysis domain packs add specialist agents with narrower tools.
+- **Experience.** Each run's outcome is recorded from evidence, so later runs can recall what worked before (`oasis agents experience`).
 
-The same loop that checks a code change checks any other deliverable. The harness does the heavy lifting, so a small or local model gets the planning, tools, memory and self-checks a frontier model would want.
+### Where work runs
 
-| Task | What OASIS brings |
-| --- | --- |
-| Research | Federated web search, page fetching and a real Chrome it can drive (`--chrome`). Claims cite only pages it actually opened. |
-| Desktop apps | Computer use (`--computer-use`): sees the screen and uses the mouse and keyboard on Linux, macOS and Windows, with one approval per session. See [Computer use](docs/COMPUTER_USE.md). |
-| Writing and documents | Reads PDFs and images you upload; saves reports, posts and slides as files in the workspace, not just chat text. |
-| Data | Numbers come from code it ran, not mental arithmetic: CSV and spreadsheet analysis, charts, notebooks. |
-| Media | `generate_image` and `text_to_speech` through any OpenAI-compatible images or speech API, local servers included. |
-| Automation | `oasis schedule add "every 1d" "..."` runs routines without a terminal open, cron or webhook triggered, and `oasis gateway` answers in Telegram, WhatsApp, Slack, Discord, Mattermost, Matrix, Signal or email. |
-| Memory that grows | Memory across sessions, full-text recall of past conversations (`session_search`), repeatable work proposed as reviewable skills (`/learning`), and an optional [Honcho](docs/CONFIGURATION.md#honcho-user-modeling) model of you that follows you across sessions and chats. `/insights` reports how you work. |
-| Bring your history | `oasis import` brings settings, memories, skills and commands from Claude Code, Codex, Gemini CLI, Cursor, Hermes, OpenClaw, OpenCode, Windsurf, Antigravity and Cline. |
+By default OASIS works in the folder you start it in, on your machine, with approvals. It can also run commands in a bubblewrap or macOS Seatbelt sandbox, a Docker, Podman or Apptainer container (optionally under gVisor), or on a remote SSH, Daytona or Modal machine. `oasis doctor` tells you which is active. Details: [Execution backends](docs/EXECUTION-BACKENDS.md).
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
-## Plugins, MCP and models
+## Models and integrations
 
-**Claude Code plugins.** Open **Plugins** in the web app and install with one click, or use the terminal. Commands, agents, skills, hooks, MCP servers and language servers load the way they do in Claude Code. [Plugins checked in OASIS](docs/development/REAL-WORLD-RUNS.md#plugins-checked-in-oasis).
+**Any model.** OpenAI, Anthropic, Gemini, Bedrock, Vertex AI, Azure AI Foundry, OpenRouter, Groq, DeepSeek, Mistral, xAI, any OpenAI-compatible endpoint, or a local Ollama, LM Studio, llama.cpp or vLLM server. `oasis connect` takes an API key, a model page link or a server address, works out the provider, tests models with a real tool call and saves the first that works plus backups for failover. Prompt caching, automatic compaction, task-aware routing, zero-budget mode and spend limits are built in ([Model providers](docs/CONFIGURATION.md#model-providers), [Inference](docs/INFERENCE.md)). The harness gives small and local models the same tools and checks, but OASIS does not guarantee that every model will solve every task: on a given task the model you connect usually matters more than the harness.
 
-```sh
-oasis plugin marketplace add anthropics/claude-plugins-official
-oasis plugin install superpowers@claude-plugins-official
-oasis add BuilderIO/skills            # Codex plugins and Gemini CLI extensions, converted on install
-oasis plugin validate ./my-plugin     # Claude Code or OASIS plugin; list, update and uninstall cover both
-```
+**Apps.** Say "connect GitHub" or type `/connect linear` and a Connect card appears in the conversation. Approve access on the service's own page and its tools are ready in the same turn. 48 apps are built in, and any other remote MCP server works by name from the official MCP Registry or by URL.
 
-**Apps in one step.** Say "connect GitHub" or type `/connect linear` and a Connect card appears in the conversation. Approve access on the service's own page and its tools are ready in the same turn. 48 apps are built in, and any other remote MCP server works by name from the official MCP Registry or by URL.
+**MCP.** Stdio, HTTP and SSE servers, with OAuth, elicitation and MCP Tasks. `oasis mcp serve` exposes OASIS's own tools to other MCP clients.
 
-**MCP servers.** Stdio, HTTP and SSE, with OAuth, elicitation and MCP Tasks. `oasis mcp serve` exposes OASIS's own tools to other MCP clients.
+**Skills and plugins.** Skills, slash commands, hooks, subagents and MCP servers can be packaged as plugins. Existing Claude Code setups (`CLAUDE.md`, `.claude/agents`, skills, hooks, settings, `.mcp.json` and plugins) load without conversion, and Codex plugins and Gemini CLI extensions are converted on install. What loads and what does not is in [Compatibility](docs/COMPATIBILITY.md).
 
-**Models.** `oasis connect` takes an API key, a model page link or a server address, works out the provider, tests the best models with a real tool call and saves the first that works plus backups. Prompt caching, automatic compaction and spend limits are built in. See [Model providers](docs/CONFIGURATION.md#model-providers).
-
-**Free-tier routers.** [OmniRoute](https://github.com/cheaper-inference/OmniRoute) and [FreeLLMAPI](https://github.com/Azhan787/FreeLLMAPI) are built-in gateway providers: run either on your machine, add your own free provider accounts there, and `oasis connect http://127.0.0.1:20128/v1` (OmniRoute) or `http://127.0.0.1:3001/v1` (FreeLLMAPI). OASIS treats a model behind them as a cloud model (timeouts, context window from `GET /models`, list-price cost estimates) and zero-budget mode refuses any route it cannot prove is free. Each free tier has its own limits and terms; aggregate "free token" numbers are not a guarantee. Setup: [OmniRoute](docs/CONFIGURATION.md#omniroute-gateway), [FreeLLMAPI](docs/CONFIGURATION.md#freellmapi-gateway).
+**Free-tier routers.** [OmniRoute](https://github.com/cheaper-inference/OmniRoute) and [FreeLLMAPI](https://github.com/Azhan787/FreeLLMAPI) are built-in gateway providers. Run either on your machine with your own provider accounts and point `oasis connect` at it; zero-budget mode refuses any route it cannot prove is free. Each free tier has its own limits and terms. Setup: [OmniRoute](docs/CONFIGURATION.md#omniroute-gateway), [FreeLLMAPI](docs/CONFIGURATION.md#freellmapi-gateway).
 
 <details>
-<summary><b>MCP and model commands</b></summary>
+<summary><b>Model, MCP and plugin commands</b></summary>
 
 <br>
 
 ```sh
-oasis mcp search filesystem                            # the official MCP Registry
-oasis mcp add everything -- npx -y @modelcontextprotocol/server-everything
-oasis mcp add --yes fs -- npx -y @modelcontextprotocol/server-filesystem .   # scripted: no prompt
-oasis mcp add --transport http docs https://example.com/mcp
-oasis mcp add-json gh '{"type":"http","url":"https://api.githubcopilot.com/mcp/"}'   # Claude Code's JSON form
-oasis mcp get gh                                       # one server, secret values hidden
-oasis mcp connect linear                               # the Connect card flow from a shell
-
 oasis connect                              # paste a key (kept out of shell history)
 oasis connect --from-env gemini            # use GEMINI_API_KEY
 oasis connect http://localhost:11434       # Ollama, LM Studio, llama.cpp or vLLM
-oasis connect http://127.0.0.1:20128/v1    # an OpenAI-compatible gateway such as OmniRoute
 oasis connect http://127.0.0.1:4000/v1 --model NAME   # try this model first, even if the server lists none
+
+oasis mcp search filesystem                            # the official MCP Registry
+oasis mcp add everything -- npx -y @modelcontextprotocol/server-everything
+oasis mcp add --transport http docs https://example.com/mcp
+oasis mcp connect linear                               # the Connect card flow from a shell
+
+oasis plugin marketplace add anthropics/claude-plugins-official
+oasis plugin install superpowers@claude-plugins-official
+oasis add BuilderIO/skills            # Codex plugins and Gemini CLI extensions, converted on install
+oasis plugin validate ./my-plugin
 ```
 
-GitHub uses your existing `gh` sign-in, or runs `gh auth login --web` and shows the one-time code on the card. The web app manages servers under **Settings → Tools** and apps under **Settings → Apps**.
+The web app manages servers under **Settings → Tools**, apps under **Settings → Apps** and plugins under **Plugins**. More in [Skills, hooks, MCP and plugins](docs/EXTENDING.md).
 
 </details>
-
-## Tested like a real user
-
-OASIS is checked the way a person uses it: real providers, no scripted model, approvals clicked by hand. A few of the runs from 5–12 November 2026:
-
-| What we asked | Where | Result |
-| --- | --- | --- |
-| Find and fix the bug that makes `npm test` fail | Terminal, OASIS 1.3.0, gpt-oss-20b | Fixed, 2 of 2 passing, 3 m 04 s ([video](assets/demo/oasis-real-model-demo.mp4)) |
-| Fix `wordCount()` with a note sent mid-task, add a regression test | Web app, OASIS 1.3.0, gpt-oss-20b | Fixed, note followed, 3 of 3 passing, 6 m 47 s ([video](assets/demo/oasis-web-real-model-demo.mp4)) |
-| Fix `slugify()`, add a test, run the tests | Terminal, gpt-oss-20b | Fixed and passing after the model corrected its own import twice |
-| Build a to-do web app saved in localStorage | Web app, gpt-oss-20b | Working app, existing tests still passing, 231 s |
-| Read an uploaded PDF | Web app, gpt-oss-20b | Passed in 49 s |
-| Install 16 Claude Code plugins and use them | Web app and terminal | All installed; hooks, skills and MCP servers ran |
-
-Every run, plugin check and rough edge is in [Real-world runs](docs/development/REAL-WORLD-RUNS.md). The model-free harness recovers 26/26 malformed tool calls (3/26 without OASIS), applies 14/14 edits (4/14), stops 49/49 risky commands under auto-approve and catches 10/10 secrets before commit: see [Benchmarks](docs/development/BENCHMARKS.md#latest-results-12-november-2026). Head-to-head runs against Claude Code, Codex, OpenCode and Aider, all on the same free model through one recording relay, are in [Benchmarks](docs/development/BENCHMARKS.md#recorded-same-model-gateway-14-november-2026); Gemini CLI has had a smoke run only so far. So far: on `clamp-integer` all five agents passed. In a second batch on OVH's free `gpt-oss-20b`, OASIS passed all three tasks, more slowly and with more tokens than the competitors on the task they also passed. OpenCode and Aider each passed one: OpenCode crashed on the provider's stream, and Aider was blinded by a harness flaw since fixed. Claude Code and Codex could not use that endpoint's API, so they are still unmeasured on it. These are one-trial samples on a free tier that ran out of quota part-way, so read them as evidence, not a ranking. OASIS does not guarantee that every model will solve every task: on a given task the model matters more than the harness.
-
-## How it compares
-
-Harness features from public documentation, not results.
-
-| | OASIS | Claude Code | Hermes Agent | Codex | Gemini CLI | OpenCode | Goose |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| License | Apache-2.0 | Proprietary | MIT | Apache-2.0 | Apache-2.0 | Open source | Apache-2.0 |
-| Models | Any provider or local server | Anthropic | Any endpoint | ChatGPT plan or API key | Gemini | Many providers | 15+ providers |
-| Web interface | Self-hosted, remote-ready | Cloud sessions | No (TUI and desktop) | Codex Web (cloud) | No | Local | No |
-| Desktop app | Yes (not yet code-signed) | Yes | Yes | Yes | No | Beta | Yes |
-| Claude Code plugins | Yes, plus Codex plugins and Gemini extensions | Yes | Imports settings and skills | No (own format) | No (own extensions) | No (own plugins) | No |
-| Subagents | Parallel, background, resumable, teams, worktrees | Yes | Yes | Agent command center | Yes | `general` subagent | No |
-
-OASIS trails in model-specific tuning, a hosted zero-setup cloud, community size and real-world hours. The full comparison, with sources and dates, is in [Compatibility](docs/COMPATIBILITY.md).
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
 ## Security
 
-OASIS can read and change files, run commands and send context to your model provider, with your account's permissions.
+OASIS can read and change files, run commands, browse and send context to your model provider, with your account's permissions.
 
 - Permission modes go from `plan` (read-only) to `dont-ask` (never waits, denies anything not allowed). The default runs read-only commands freely and asks before other commands, installs, deletions and new websites.
-- The sandbox is optional: bubblewrap or macOS Seatbelt on this machine, a Docker, Podman or Apptainer container, or a remote SSH, Daytona or Modal machine ([Execution backends](docs/EXECUTION-BACKENDS.md)). `oasis doctor` tells you which is on.
+- Shell commands get a risk analysis, protected paths such as `.env` and `.git` are guarded, secrets in tool output are redacted before the model sees them, and commits are scanned for secrets. Project settings that loosen anything wait until you trust the workspace.
+- The web app signs browsers in with a 256-bit access key, with DNS-rebinding protection and brute-force lockout ([Remote access](docs/REMOTE-ACCESS.md)).
 - Plugins, hooks and MCP servers can run third-party code. Review them before turning them on.
 - Approval prompts are not a replacement for operating-system isolation. Use the sandbox, a container or a throwaway machine for untrusted code.
 
-Read the [security policy](SECURITY.md) before using OASIS on sensitive code.
+Read the [security policy](SECURITY.md) before using OASIS on sensitive work.
 
-## Project status
+## Capability status
 
-What is verified and what is not:
+OASIS is a young project. Status labels for every part are in [Capabilities and status](docs/CAPABILITIES.md); in short:
 
 | Status | Areas |
 | --- | --- |
-| Verified on Linux by tests and live runs | Terminal agent and `-p`/`exec`, the web app (browser-driven tests), sessions, checkpoints and undo, permission modes, the bubblewrap and Docker sandboxes (including the host Unix-socket block), MCP, Claude Code plugins, OpenAI-compatible providers and the OmniRoute and FreeLLMAPI gateways |
-| Tested in CI on Windows and macOS, not by hand | Security and runtime regression tests, installer scripts; the macOS Seatbelt profile is unit-tested only |
-| Implemented, lightly tested | Desktop app (installers are built, not code-signed), editor integrations (ACP, VS Code family), chat gateways, cloud runs |
-| Not claimed | Production readiness for untrusted code without the OS sandbox or a container; results with paid frontier models (none were run) |
+| Stable | Terminal and scripted runs, the self-hosted web app, sessions, checkpoints and undo, permission modes, bubblewrap and Docker sandboxes, MCP, Claude Code plugins, OpenAI-compatible, Anthropic, Gemini and local providers |
+| Released, lightly tested | Subagents in parallel and in teams, scripted workflows, domain packs, the desktop app (installers not yet code-signed), editor integrations, Codex App Server and Cursor API compatibility, the SDK, GitHub Action and cloud runs, Telegram, Slack and Discord gateways, the Chrome browser tool, app connectors, image and speech tools |
+| Unreleased (on `main`, install from source) | Desktop computer use and virtual desktops (experimental), the control room, A2A, agent experience, `mixture_of_agents`, Daytona, Modal, Apptainer and gVisor backends, more chat gateways, Honcho and Home Assistant |
+| Not claimed | Production readiness for untrusted code without OS isolation, results with paid frontier models, a hosted service, a published Terminal-Bench or SWE-bench score |
+
+Engineering benchmarks of the harness itself (tool-call repair, edit application, risky-command blocking, secret detection) and every recorded live run are kept for development in [Benchmarks](docs/development/BENCHMARKS.md) and [Real-world runs](docs/development/REAL-WORLD-RUNS.md). They are one-trial samples, not a ranking.
+
+## Documentation
+
+| Get started | Go deeper | Project |
+| --- | --- | --- |
+| [User guide](docs/USER-GUIDE.md) | [Architecture](docs/ARCHITECTURE.md) | [Capabilities and status](docs/CAPABILITIES.md) |
+| [First run](docs/FIRST-RUN.md) | [Agent network](docs/AGENT-NETWORK.md) · [Subagents](docs/SUBAGENTS.md) | [Changelog](CHANGELOG.md) |
+| [Workflows](docs/WORKFLOWS.md) | [Configuration](docs/CONFIGURATION.md) | [Contributing](CONTRIBUTING.md) |
+| [Terminal guide](docs/TERMINAL.md) | [Skills, hooks, MCP and plugins](docs/EXTENDING.md) | [Security](SECURITY.md) |
+| [Interfaces](docs/INTERFACES.md) | [Execution backends](docs/EXECUTION-BACKENDS.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) · [FAQ](docs/FAQ.md) |
+| [Desktop app](docs/DESKTOP.md) | [Remote access](docs/REMOTE-ACCESS.md) | [Support](SUPPORT.md) |
+| [Downloads and releases](docs/RELEASES.md) | [Compatibility](docs/COMPATIBILITY.md) | [Brand guidelines](docs/BRAND.md) |
+| | [Benchmarks](docs/development/BENCHMARKS.md) · [Real-world runs](docs/development/REAL-WORLD-RUNS.md) | [All docs](docs/README.md) |
 
 ## Development
 
 ```sh
 npm install
-npm test                          # 3,500+ tests
+npm test                          # 3,700+ tests
 npm run check                     # tests, benchmark regressions, eval validation
 npm run lint
 node scripts/readme-art.mjs       # regenerate the animated README art in assets/readme/
 ```
 
 CI also runs platform security tests, a live Docker sandbox test, native PTY tests and a browser test that drives the web app like a person: approvals, a reload mid-task that must reattach, a second browser, Remember this device, and WCAG contrast checks. Contributions are welcome: start with the [Contributing guide](CONTRIBUTING.md).
-
-## Documentation
-
-| Get started | Go deeper | Project |
-| --- | --- | --- |
-| [User guide](docs/USER-GUIDE.md) | [Architecture](docs/ARCHITECTURE.md) | [Changelog](CHANGELOG.md) |
-| [First run](docs/FIRST-RUN.md) | [Configuration](docs/CONFIGURATION.md) | [Contributing](CONTRIBUTING.md) |
-| [Terminal guide](docs/TERMINAL.md) | [Skills, hooks, MCP and plugins](docs/EXTENDING.md) | [Security](SECURITY.md) |
-| [Interfaces](docs/INTERFACES.md) | [Subagents](docs/SUBAGENTS.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) · [FAQ](docs/FAQ.md) |
-| [Desktop app](docs/DESKTOP.md) | [Remote access](docs/REMOTE-ACCESS.md) | [Support](SUPPORT.md) |
-| [Downloads and releases](docs/RELEASES.md) | [Real-world runs](docs/development/REAL-WORLD-RUNS.md) | [Brand guidelines](docs/BRAND.md) |
-| | [Benchmarks](docs/development/BENCHMARKS.md) · [Compatibility](docs/COMPATIBILITY.md) | [All docs](docs/README.md) |
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 

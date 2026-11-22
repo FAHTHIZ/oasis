@@ -41,8 +41,8 @@ and remote providers then stay unavailable.
 
 Linux is verified by tests and live runs. Windows and macOS are tested in CI
 (security and runtime tests, installer scripts) but not by hand. The desktop
-installers for all three are built in CI and are not code-signed. The status
-table in the [README](../README.md#project-status) is the current record.
+installers for all three are built in CI and are not code-signed. The
+[Capabilities and status](CAPABILITIES.md#platforms) page is the current record.
 
 ## Data and privacy
 
