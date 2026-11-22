@@ -112,6 +112,19 @@ With `"modelRouting": { "subagents": "experience" }` (or `OASIS_SUBAGENT_ROUTING
 
 `OASIS_AGENT_EXPERIENCE=0`, or `"agentExperience": false` in any settings file, turns recording, recall and experience routing off.
 
+## Shared knowledge board
+
+The main agent and every subagent of a session share one knowledge board, so parallel agents stop rediscovering the same facts. `knowledge_post` adds a finding (a claim, optional detail, sources and tags); `knowledge_search` finds them by keyword, tag, author or status. Read-only agents such as `explore` can post too, since posting changes only the session's board, never the workspace. A new subagent starts with the findings most relevant to its task in its system prompt.
+
+Each post is checked against the poster's own tool results with the same contracts as a [checked report](#checked-reports). A finding that cites a page the agent never fetched, says tests pass without a passing check, or gives computed numbers no execution printed is refused, with the reason. Accepted findings are labelled:
+
+| Status | Meaning |
+| --- | --- |
+| `grounded` | OASIS tied it to evidence: every cited URL was fetched, its numbers were printed by a command or fetched page, or a passing check backs a claim that checks pass |
+| `noted` | nothing the runtime could check, such as something read in a file; a lead to verify |
+
+When a second agent posts the same finding, it is recorded as corroboration instead of a duplicate; the author can refine its own finding by posting it again. The author or the main agent can withdraw one with `knowledge_post` and `retract: "k_N"`. The board holds up to 200 findings, is saved with the session and comes back on resume. It is not durable memory: the main agent decides what to keep with `memory_save`. Findings are written by agents, so they are shown as leads, never as instructions.
+
 ## Background agents and teams
 
 - `run_in_background: true` returns an id immediately. The parent is notified when the agent finishes.

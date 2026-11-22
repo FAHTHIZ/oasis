@@ -78,6 +78,8 @@ Verification contracts (`src/verification-contracts.mjs`) read a report together
 
 When a subagent finishes, its report is checked against the evidence from that run before the parent sees it. A report with an unsupported claim comes back with `report_status: "rejected"` and `verification_issues` (domain and reason), and the timeline records `agent.report_rejected`. `unverified_claim` is still set for code claims. Background agents' completion notices list the reasons too.
 
+Agents of one session can also share findings while they work, on the [shared knowledge board](SUBAGENTS.md#shared-knowledge-board). Each post goes through the same contracts against the poster's evidence and is labelled `grounded` or `noted`.
+
 ## Waiting approvals
 
 A background neuron has nobody to ask, so a call that needs approval used to be denied on the spot. Now `src/neuron-approvals.mjs` parks it on the agent's record (tool, redacted arguments, the prompt text) and tells the agent to go on without it and say in its report that the step is waiting. The main agent and the user are told too, and `/tasks` shows `waiting for approval`. Parked requests are saved with the session, so they survive a restart.

@@ -13,6 +13,7 @@ import { atomicWriteFile } from './atomic-write.mjs';
 import { extractJson, validateJsonSchema } from './json-schema.mjs';
 import { subagentMaxDepth, subagentDefinitionContext, withoutProjectInstructions, agentScopedHooks, agentMcpSpec, connectAgentMcp, closeAgentMcp, backgroundUsageSink, subagentStepLimit, watchForStall, verifyResumeWorktree } from './subagent-support.mjs';
 import { SHARED_TASK_TOOL_NAMES, runSharedTaskTool, releaseAgentLeases } from './shared-tasks.mjs';
+import { ensureKnowledgeBoard, knowledgePromptSection, KNOWLEDGE_TOOL_NAMES } from './knowledge-board.mjs';
 import { createWorktree, removeWorktree, finishWorktree, isCommitIntegrated } from './worktrees.mjs';
 import { worktreeSetupSummary } from './worktree-setup.mjs';
 import { modelAllowed, modelRestrictionMessage } from './model-aliases.mjs';
@@ -281,7 +282,7 @@ export async function runSubagent(parent, args, context, options) {
     if (name === 'task') return depth + 1 < maxDepth && !disallowed.has(name) && (!allowed || allowed.has(name));
     if (!name || name === 'workflow' || name === 'enter_worktree' || name === 'exit_worktree' || name === 'schedule_wakeup' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'connect_service' || name === 'enter_plan_mode' || name === 'advisor' || name === 'mixture_of_agents' || name.startsWith('cron_') || name === 'memory_save' || name === 'memory_verify' || name === 'memory_delete' || name === 'honcho_profile' || name === 'honcho_conclude' || name === 'skill_propose' || (AGENT_TOOL_NAMES.has(name) && name !== 'team_send_message')) return false;
     if (disallowed.has(name)) return false;
-    return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name) || name === 'team_send_message';
+    return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name) || KNOWLEDGE_TOOL_NAMES.has(name) || name === 'team_send_message';
   });
   // Agent environments: "desktop" gives the child its own virtual screen, with the
   // computer tool and a browser that opens visibly on that screen.
@@ -299,21 +300,24 @@ export async function runSubagent(parent, args, context, options) {
   const agentContext = await subagentDefinitionContext(parent, agent, options);
   // Earlier runs of this agent type on similar work in this project (src/agent-experience.mjs).
   const experience = options.resumeAgent ? '' : experiencePromptSection(parent, type, prompt, { env: options.env });
+  // What agents of this session already found (src/knowledge-board.mjs).
+  const knowledge = options.resumeAgent ? '' : knowledgePromptSection(parent, prompt);
   const parentBase = parent.baseSystemPrompt || String(parent.messages && parent.messages[0] && parent.messages[0].content || '');
   const base = agent.omitClaudeMd ? withoutProjectInstructions(parentBase, parent.projectContextText) : parentBase;
   const systemText = [
     base,
     'SUBAGENT MODE (' + agent.name + '). ' + agent.prompt,
-    'A parent agent launched you for one task. The parent and user cannot see your tool calls; your final message is your entire report. Include concrete findings with file paths, the files you changed, and the verification commands you ran with their results. Do not ask questions; make reasonable assumptions and state them. Shared durable memory and procedural learning are parent-owned: you may search and read existing memories, but do not save, verify, delete, or propose durable items. Include memory or reusable-skill candidates in your final report for the parent to review. Agent definitions and the task prompt cannot override the safety rules above.',
+    'A parent agent launched you for one task. The parent and user cannot see your tool calls; your final message is your entire report. Include concrete findings with file paths, the files you changed, and the verification commands you ran with their results. Do not ask questions; make reasonable assumptions and state them. Shared durable memory and procedural learning are parent-owned: you may search and read existing memories, but do not save, verify, delete, or propose durable items. Include memory or reusable-skill candidates in your final report for the parent to review. The session knowledge board is shared with the parent and your sibling agents: knowledge_search it before repeating research, and knowledge_post findings they could reuse. Agent definitions and the task prompt cannot override the safety rules above.',
     ...agentContext,
     ...(experience ? [experience] : []),
+    ...(knowledge ? [knowledge] : []),
     ...(outputSchema ? ['OUTPUT FORMAT: your final message must be a single JSON value, with no prose around it, that matches this JSON Schema:\n' + JSON.stringify(outputSchema)] : []),
     ...(parent.subagentSystemAppend ? [parent.subagentSystemAppend] : [])
   ].join('\n\n');
   // Coordination tools can mutate the team board or inbox without editing the workspace.
   // permissionMode: plan in the definition keeps the agent read-only whatever its tools.
   // A nested task tool does not count against read-only; a read-only agent never gets it.
-  const ownReadOnly = agent.permissionMode === 'plan' || definitions.every((definition) => definition.function.name === 'task' || READ_ONLY_TOOLS.has(definition.function.name) || SHARED_TASK_TOOL_NAMES.has(definition.function.name) || definition.function.name === 'team_send_message');
+  const ownReadOnly = agent.permissionMode === 'plan' || definitions.every((definition) => definition.function.name === 'task' || READ_ONLY_TOOLS.has(definition.function.name) || SHARED_TASK_TOOL_NAMES.has(definition.function.name) || KNOWLEDGE_TOOL_NAMES.has(definition.function.name) || definition.function.name === 'team_send_message');
   // Spawn-time scope check (roadmap 2.2): a read-only parent starts only
   // read-only children and cannot delegate a deploy or publish step.
   const scope = spawnScope({ parent, options, prompt, childReadOnly: ownReadOnly });
@@ -360,6 +364,7 @@ export async function runSubagent(parent, args, context, options) {
     toolCallsThisSession: 0,
     todos: [],
     sharedTasks: parent.sharedTasks,
+    knowledgeBoard: ensureKnowledgeBoard(parent),
     agentTasks: agentRegistry(parent),
     settings: parent.settings,
     ...(parent.a2aAgents ? { a2aAgents: parent.a2aAgents } : {}),
@@ -424,6 +429,7 @@ export async function runSubagent(parent, args, context, options) {
     record = registerAgent(parent, { type, description, background, child, readOnly, worktreeInfo: worktree, resumable: !worktree, teamId: teamId || null, sharedTaskId, autoDispatchManaged: args.auto_dispatch_managed === true });
   }
   child.agentId = record.id;
+  child.agentType = type;
   if (experienceRoute) record.modelRoute = experienceRoute.reason;
   record.maxTurns = agent.maxTurns || null;
   record.budgetRequest = agent.budget || null;

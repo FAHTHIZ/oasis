@@ -6,6 +6,7 @@ import { mkdir, open, readdir, unlink, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import { sanitizeSharedTaskStore } from './shared-tasks.mjs';
+import { sanitizeKnowledgeBoard } from './knowledge-board.mjs';
 import { sanitizeMustPreserve } from './context.mjs';
 import { redactSecrets } from './auto-memory.mjs';
 import { atomicWriteFile, replaceFileDurably } from './atomic-write.mjs';
@@ -339,6 +340,7 @@ export async function saveSession(session, options = {}) {
       : [],
     todos: sanitizeTodos(session.todos),
     sharedTasks: sanitizeSharedTaskStore(session.sharedTasks),
+    ...(session.knowledgeBoard && session.knowledgeBoard.entries && session.knowledgeBoard.entries.length ? { knowledgeBoard: sanitizeKnowledgeBoard(session.knowledgeBoard) } : {}),
     mustPreserve: sanitizeMustPreserve(session.mustPreserve),
     ...(sanitizeGoal(session.goal) ? { goal: sanitizeGoal(session.goal) } : {}),
     agents: sanitizeAgentHistory(session.agentTasks),
@@ -413,6 +415,7 @@ export async function loadSession(root, id, options = {}) {
       : [],
     todos: sanitizeTodos(payload.todos),
     sharedTasks: sanitizeSharedTaskStore(payload.sharedTasks),
+    knowledgeBoard: sanitizeKnowledgeBoard(payload.knowledgeBoard),
     mustPreserve: sanitizeMustPreserve(payload.mustPreserve),
     goal: sanitizeGoal(payload.goal),
     agents: sanitizeAgentHistory(payload.agents),
