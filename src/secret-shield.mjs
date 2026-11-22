@@ -163,7 +163,7 @@ export function unmaskSecrets(session, value) {
 // still receive the real value.
 // Image and speech prompts go to a third-party provider, and a pull request's
 // title and body are published, so those keep placeholders as well.
-const NO_UNMASK_TOOLS = new Set(['fetch_url', 'web_search', 'browser', 'task', 'send_message', 'team_send_message', 'team_create', 'workflow', 'advisor', 'mixture_of_agents', 'run_specialist_review', 'generate_image', 'text_to_speech', 'create_pull_request', 'home_assistant', 'home_assistant_control', 'honcho_profile', 'honcho_search', 'honcho_context', 'honcho_reasoning', 'honcho_conclude']);
+const NO_UNMASK_TOOLS = new Set(['fetch_url', 'web_search', 'browser', 'computer', 'task', 'send_message', 'team_send_message', 'team_create', 'workflow', 'advisor', 'mixture_of_agents', 'run_specialist_review', 'generate_image', 'text_to_speech', 'create_pull_request', 'home_assistant', 'home_assistant_control', 'honcho_profile', 'honcho_search', 'honcho_context', 'honcho_reasoning', 'honcho_conclude']);
 
 /** Lets a subagent resolve the parent's placeholders without seeing the values. */
 export function shareSecretVault(parent, child) {

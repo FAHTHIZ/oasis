@@ -142,6 +142,7 @@ export const BUILTIN_COMMANDS = {
   'team-onboarding': 'Write a team onboarding guide for this project from your last 30 days of Oasis usage (/team-onboarding [DAYS])',
   heapdump: 'Write a JavaScript heap snapshot and memory breakdown for diagnosing high memory use',
   chrome: 'Turn the Chrome browser tool on or off for this session (/chrome [on|off|status])',
+  computer: 'Let the agent see the screen and use the mouse and keyboard (/computer [on|off|status|doctor])',
   bug: 'Report a bug: drafts a GitHub issue with your report and environment details (nothing is sent until you open the link) (/bug [report] [--with-transcript])',
   'setup-bedrock': 'Configure Amazon Bedrock: detects AWS credentials, region and model pins, then saves them to user settings (/setup-bedrock [region=R] [profile=P] [model=ID] [sonnet=ID] [haiku=ID] [opus=ID] [save])',
   'setup-vertex': 'Configure Google Vertex AI: detects gcloud project, credentials, region and model pins, then saves them to user settings (/setup-vertex [project=ID] [region=R] [model=ID] [save])',
@@ -313,7 +314,7 @@ export async function runBuiltinCommand(name, argument, state) {
         { title: 'Getting started', commands: ['help', 'setup', 'status', 'doctor', 'context', 'cost', 'undo'] },
         { title: 'Working', commands: ['clear', 'compact', 'test', 'diagnostics', 'audit', 'tasks', 'workflows', 'learning', 'commit', 'pr', 'goal', 'recipe', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export', 'presets'] },
         { title: 'Safety', commands: ['permissions', 'mode', 'sandbox', 'security-review', 'undo', 'rewind', 'purge', 'logout', 'doctor'] },
-        { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'avoid', 'comments', 'output-style', 'personality', 'honcho', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
+        { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'avoid', 'comments', 'output-style', 'personality', 'honcho', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome', 'computer'] }
       ];
       const used = new Set();
       const lines = [];
@@ -1209,6 +1210,20 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!exe) return { output: 'No Chrome, Chromium or Edge found. Install one or set OASIS_CHROME_PATH.' };
       setChrome(session, true);
       return { output: 'Chrome tool on (' + exe + '). The agent can now open pages, click, type, take screenshots and read the console.' };
+    }
+    case 'computer': {
+      const { setComputerUse, computerUseDoctor } = await import('./computer-use.mjs');
+      const wanted = String(argument || '').trim().toLowerCase();
+      if (wanted === 'doctor') {
+        const report = await computerUseDoctor(env);
+        return { output: ['Computer use on ' + report.platform + ': ' + (report.ok ? 'ready' : 'missing pieces'), ...report.checks.map((item) => '  ' + (item.ok ? 'ok   ' : 'MISS ') + item.check + ' - ' + item.detail)].join('\n') };
+      }
+      if (!session) return { output: 'Start a conversation first, or launch with oasis --computer-use.' };
+      if (!wanted || wanted === 'status') return { output: 'Computer use: ' + (session.computerUseEnabled ? 'on' : 'off') + (session.computerState && session.computerState.granted ? ' (mouse and keyboard allowed for this session)' : '') + '. /computer doctor checks what this machine needs.' };
+      if (wanted === 'off') { setComputerUse(session, false); return { output: 'Computer use off; the agent can no longer see the screen or send input.' }; }
+      if (wanted !== 'on') return { output: 'Usage: /computer [on|off|status|doctor]' };
+      setComputerUse(session, true);
+      return { output: 'Computer use on. The agent can take screenshots; it asks once before it first moves the mouse or types.' };
     }
     case 'bug': {
       const { readFile } = await import('node:fs/promises');

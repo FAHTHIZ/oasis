@@ -755,6 +755,7 @@ function sessionCreateOptions() {
     fallbackModel: SESSION_OPTIONS.fallbackModel || '',
     advisor: SESSION_OPTIONS.advisor || '',
     chrome: SESSION_OPTIONS.chrome === undefined ? null : SESSION_OPTIONS.chrome,
+    computerUse: SESSION_OPTIONS.computerUse === undefined ? null : SESSION_OPTIONS.computerUse,
     maxBudgetUsd: SESSION_OPTIONS.maxBudgetUsd || 0,
     settingsOverrides: SESSION_OPTIONS.settingsOverrides,
     settingSources: SESSION_OPTIONS.settingSources || null,
@@ -2378,7 +2379,7 @@ async function showResumeRecap(root, persistence) {
 // Commands that set up the conversation: typed before the first message they
 // start the session (as the first prompt would) instead of answering "start a
 // conversation first". Claude Code accepts /model, /add-dir and /rename then too.
-export const SESSION_START_COMMANDS = new Set(['context', 'model', 'add-dir', 'rename', 'autocompact', 'sandbox', 'advisor', 'mixture', 'routing', 'chrome']);
+export const SESSION_START_COMMANDS = new Set(['context', 'model', 'add-dir', 'rename', 'autocompact', 'sandbox', 'advisor', 'mixture', 'routing', 'chrome', 'computer']);
 export const RESUMED_SESSION_COMMANDS = new Set(['rewind', 'rollback', 'context', 'compact', 'export', 'cost', 'recap', 'rename', 'fork', 'branch', 'todos', 'undo', 'copy', 'usage', 'tasks', 'agents', 'goal']);
 
 // Set while the interactive prompt runs, so messages name /setup rather than
@@ -2916,7 +2917,7 @@ async function startWebWorkspace(root, args) {
 
 
 // Top-level commands, for the typo hint (`oasis doctr` -> doctor).
-const TYPO_COMMANDS = ['acp', 'agents', 'app', 'auth', 'backups', 'batch', 'config', 'connect', 'diagnostics', 'doctor', 'eval', 'extensions', 'gateway', 'help', 'ide', 'import', 'init', 'insights', 'install', 'mcp', 'memory', 'models', 'permissions', 'plugins', 'purge', 'quota', 'restore', 'sessions', 'setup', 'skills', 'trust', 'ultrareview', 'uninstall', 'update', 'watch', 'web', 'completion', 'cloud', 'daytona', 'modal', 'honcho', 'schedule', 'routines', 'exec', 'diff', 'deploy', 'profile', 'attempts'];
+const TYPO_COMMANDS = ['acp', 'agents', 'app', 'auth', 'backups', 'batch', 'config', 'connect', 'diagnostics', 'doctor', 'eval', 'extensions', 'gateway', 'help', 'ide', 'import', 'init', 'insights', 'install', 'mcp', 'memory', 'models', 'permissions', 'plugins', 'purge', 'quota', 'restore', 'sessions', 'setup', 'skills', 'trust', 'ultrareview', 'uninstall', 'update', 'watch', 'web', 'completion', 'cloud', 'computer-use', 'daytona', 'modal', 'honcho', 'schedule', 'routines', 'exec', 'diff', 'deploy', 'profile', 'attempts'];
 // One-word tasks that sit close to a command name but are real requests.
 const ONE_WORD_TASKS = new Set(['lint', 'test', 'tests', 'build', 'run', 'fix', 'format', 'review', 'explain', 'commit', 'refactor', 'deploy', 'debug', 'docs', 'start', 'stop', 'clean', 'check', 'plan', 'status', 'resume']);
 // Chat controls that only make sense inside a session (`oasis undo` used to
@@ -3078,6 +3079,8 @@ async function parseMainFlags(rawArgs, flags) {
     if (arg === '--fallback-model') { SESSION_OPTIONS.fallbackModel = needValue(arg); continue; }
     if (arg === '--advisor') { SESSION_OPTIONS.advisor = needValue(arg); continue; }
     if (arg === '--chrome') { SESSION_OPTIONS.chrome = true; continue; }
+    if (arg === '--computer-use') { SESSION_OPTIONS.computerUse = true; continue; }
+    if (arg === '--no-computer-use') { SESSION_OPTIONS.computerUse = false; continue; }
     if (arg === '--no-chrome') { SESSION_OPTIONS.chrome = false; continue; }
     if (arg === '--bg' || arg === '--background') { SESSION_OPTIONS.background = true; continue; }
     if (arg === '--exec') { const value = rawArgs[i + 1]; if (value === undefined) throw new Error('--exec requires a shell command.'); i += 1; SESSION_OPTIONS.exec = value; continue; }
@@ -3540,6 +3543,16 @@ async function main() {
     return;
   }
   if (command === 'doctor') return await doctor(rest, workspace, { fallbackModel: SESSION_OPTIONS.fallbackModel });
+  if (command === 'computer-use') {
+    const sub = rest[0] || 'doctor';
+    if (sub !== 'doctor' && sub !== 'status') { stderr.write('Usage: oasis computer-use doctor [--json]\n'); process.exitCode = 2; return; }
+    const { computerUseDoctor } = await import('./computer-use.mjs');
+    const report = await computerUseDoctor(process.env);
+    if (rest.includes('--json')) stdout.write(JSON.stringify(report, null, 2) + '\n');
+    else stdout.write(['Computer use on ' + report.platform + ': ' + (report.ok ? 'ready' : 'missing pieces'), ...report.checks.map((item) => '  ' + (item.ok ? 'ok   ' : 'MISS ') + item.check + ' - ' + item.detail), report.ok ? 'Start with: oasis --computer-use' : ''].filter(Boolean).join('\n') + '\n');
+    process.exitCode = report.ok ? 0 : 1;
+    return;
+  }
   if (command === 'memory') return await memoryCommand(rest, workspace);
   if (command === 'diagnostics') return await diagnosticsCommand(rest, workspace, autoApprove);
   // The global flag parser takes --yes/-y for autoApprove; hand it back.
