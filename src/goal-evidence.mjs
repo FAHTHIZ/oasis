@@ -67,6 +67,8 @@ export function goalEvidenceGate(condition, events = []) {
     if (!check) return { met: false, evidence: true, reason: 'OASIS has not seen ' + name + ' run in this session yet, so the condition is not verified. Run it.' };
     if (check.masked || check.passed === null) return { met: false, evidence: true, reason: 'The latest run of ' + describe(check) + ' did not report a usable exit status' + (check.masked ? ' (a pipe hid it)' : ' (it did not finish)') + '. Run it again so its own exit code shows.' };
     if (!check.passed) return { met: false, evidence: true, reason: 'The latest run of ' + describe(check) + ' exited ' + check.exitCode + '. Fix the failures and run it again.' };
+    if (check.noTests) return { met: false, evidence: true, reason: 'The latest run of ' + describe(check) + ' exited 0 but ran no tests. Run the suite so tests actually execute.' };
+    if (check.filtered && !/\b(?:only|grep|filter|matching|named)\b/i.test(String(condition))) return { met: false, evidence: true, reason: 'The latest run of ' + describe(check) + ' selected only some tests. Run it without a filter to verify the whole condition.' };
     if (check.stale) return { met: false, evidence: true, reason: 'Files were edited after the last passing run of ' + describe(check) + '. Run it again to verify the current state.' };
   }
   return null;
@@ -79,7 +81,7 @@ export function goalEvidenceText(events = []) {
   for (const event of recent) {
     const later = (events || []).some((other) => other.kind === 'edit' && other.seq > event.seq);
     const status = event.exitCode === null || event.exitCode === undefined ? 'did not finish' : 'exit ' + event.exitCode + (event.masked ? ' (hidden by a pipe)' : '');
-    lines.push('- ' + (event.kind === 'check' ? 'check ' : 'ran ') + describe(event) + ': ' + status + (later ? ', files edited after it' : ''));
+    lines.push('- ' + (event.kind === 'check' ? 'check ' : 'ran ') + describe(event) + ': ' + status + (event.noTests ? ', but no tests ran' : '') + (event.filtered ? ', a filtered run' : '') + (later ? ', files edited after it' : ''));
   }
   const edits = (events || []).filter((event) => event.kind === 'edit');
   const fetched = (events || []).filter((event) => event.kind === 'fetch').length;

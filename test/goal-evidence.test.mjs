@@ -49,3 +49,26 @@ test('the verify agent verdict decides a goal the judge called met', async () =>
   assert.equal(goalVerifierEnabled({}, { OASIS_GOAL_VERIFIER: 'agent' }), true);
   assert.equal(goalVerifierEnabled({}, {}), false);
 });
+
+test('a passing run that ran no tests, or only some, does not meet a goal about the suite', async () => {
+  const { evidenceFromToolResult } = await import('../src/evidence-ledger.mjs');
+  const shell = (command, stdout) => evidenceFromToolResult('run_shell', { command }, { exitCode: 0, stdout }, { isCheck: true, checkKind: 'test' });
+  const empty = shell('npm test -- --test-name-pattern zzz', 'ℹ tests 0\nℹ suites 0\nℹ pass 0\nℹ fail 0\n');
+  assert.equal(empty.noTests, true);
+  assert.equal(empty.filtered, true);
+  assert.match(goalEvidenceGate('npm test passes', [{ ...empty, seq: 1 }]).reason, /ran no tests/);
+  const some = shell('npm test -- --grep median', '  3 passing (4ms)\n');
+  assert.equal(some.noTests, undefined);
+  assert.match(goalEvidenceGate('npm test passes', [{ ...some, seq: 1 }]).reason, /selected only some tests/);
+  assert.equal(goalEvidenceGate('npm test passes for the tests matching median', [{ ...some, seq: 1 }]), null, 'a goal about a subset accepts a filtered run');
+  const full = shell('npm test', '# tests 12\n# pass 12\n# fail 0\n');
+  assert.equal(full.noTests, undefined);
+  assert.equal(full.filtered, undefined);
+  assert.equal(goalEvidenceGate('npm test passes', [{ ...full, seq: 1 }]), null);
+  assert.equal(shell('cargo test', 'running 0 tests\n\nrunning 0 tests\n').noTests, true);
+  assert.equal(shell('cargo test', 'running 0 tests\n\nrunning 4 tests\n').noTests, undefined);
+  assert.equal(shell('go test ./...', 'ok  \texample.com/a\t0.1s [no tests to run]\n').noTests, true);
+  assert.equal(shell('python -m pytest', '5 passed in 0.1s\n').filtered, undefined, 'python -m is not a filter');
+  assert.equal(evidenceFromToolResult('run_shell', { command: 'tsc -t es2022' }, { exitCode: 0, stdout: '' }, { isCheck: true, checkKind: 'type-check' }).filtered, undefined);
+  assert.match(goalEvidenceText([{ ...empty, seq: 1 }]), /no tests ran/);
+});
