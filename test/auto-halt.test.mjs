@@ -29,7 +29,7 @@ test('a quota error is not retried and stops a /loop instead of firing again', {
     res.end(JSON.stringify({ error: { code: 'insufficient_quota', message: 'You exceeded your current quota, please check your plan and billing details.' } }));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  t.after(() => server.close());
+  t.after(() => { server.closeAllConnections(); server.close(); });
   const child = spawn('script', ['-qfec', JSON.stringify(process.execPath) + ' ' + JSON.stringify(cli), '/dev/null'], { cwd: home, env: { ...process.env, OASIS_SIMPLE_INPUT: '1', OASIS_NO_STREAM: '1', OASIS_DISABLE_THEME_RELOAD: '1', HOME: home, OASIS_CONFIG_DIR: path.join(home, '.oasis'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: 'http://127.0.0.1:' + server.address().port + '/v1', OASIS_MODEL: 'fixture', OASIS_LOOP_DELAY_SCALE: '0.001' } });
   let out = '';
   child.stdout.on('data', (d) => { out += d; });
