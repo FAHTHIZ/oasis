@@ -60,7 +60,7 @@ oasis
 
 ### Keep going until a goal holds
 
-`/goal npm test passes` keeps OASIS working, turn after turn, until a strict check of the latest turns says the condition is met and verified (up to 20 turns). `/goal` shows the status and the last check, `/goal pause` and `/goal resume` stop and continue it, `/goal edit CONDITION` changes it and `/goal clear` drops it. Ctrl+C pauses the goal instead of discarding it, and a paused goal is saved with the session.
+`/goal npm test passes` keeps OASIS working, turn after turn, until a strict check of the latest turns says the condition is met and verified (up to 20 turns). The check trusts what ran, not what the agent says: for a condition about a check passing (`npm test passes`, `the build succeeds`), the goal is not met while OASIS has not seen that command run, its latest run failed or hid its exit code behind a pipe, or files changed after it passed, and no model is asked. Other conditions go to a judge that also gets the list of commands, checks and edits OASIS recorded from tool results. `/goal` shows the status and the last check, `/goal pause` and `/goal resume` stop and continue it, `/goal edit CONDITION` changes it and `/goal clear` drops it. Ctrl+C pauses the goal instead of discarding it, and a paused goal is saved with the session.
 
 In scripts and CI use `oasis -p --permission-mode auto --goal "npm test passes"` (add `--goal-turns N`, default 10). A goal that is never met ends with exit code 1 and `subtype: "error_goal_not_met"` in JSON output, and `--output-format stream-json` emits a `goal_check` event after each turn.
 

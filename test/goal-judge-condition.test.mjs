@@ -12,10 +12,28 @@ test('the goal judge sees the whole condition, up to the 4,000-character goal li
   const { config, requests } = await scriptedModel(t, [{ content: 'NOT_MET\nThe docs were not updated.' }]);
   const session = await createSession({ root, config, settings: { permissions: { allow: [], ask: [], deny: [] } }, bare: true });
   session.messages.push({ role: 'user', content: 'work' }, { role: 'assistant', content: 'did some' });
+  session.evidenceLedger = { seq: 1, epoch: 0, events: [{ seq: 1, kind: 'check', command: 'npm run build', exitCode: 0, passed: true, masked: false }] };
   const condition = 'Requirements: ' + 'the build passes; '.repeat(200) + 'and FINAL-REQUIREMENT: docs updated.';
   assert.ok(condition.length > 2000 && condition.length <= 4000);
   const verdict = await evaluateGoal(session, condition);
   assert.equal(verdict.met, false);
   assert.match(requests[0].messages.at(-1).content, /FINAL-REQUIREMENT: docs updated\./);
+  closeSession(session);
+});
+
+test('a goal about tests is not met from the transcript alone, and no judge is asked', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-goal-judge-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config, requests } = await scriptedModel(t, [{ content: 'MET\nAll tests pass.' }, { content: 'MET\nAll tests pass.' }]);
+  const session = await createSession({ root, config, settings: { permissions: { allow: [], ask: [], deny: [] } }, bare: true });
+  session.messages.push({ role: 'user', content: 'fix it' }, { role: 'assistant', content: 'Done, npm test passes.' });
+  const verdict = await evaluateGoal(session, 'npm test passes');
+  assert.equal(verdict.met, false);
+  assert.match(verdict.reason, /has not seen `npm test` run/);
+  assert.equal(requests.length, 0);
+  session.evidenceLedger.events.push({ seq: 1, kind: 'check', command: 'npm test', exitCode: 0, passed: true, masked: false });
+  const second = await evaluateGoal(session, 'npm test passes');
+  assert.equal(second.met, true);
+  assert.match(requests[0].messages.at(-1).content, /check `npm test`: exit 0/);
   closeSession(session);
 });
