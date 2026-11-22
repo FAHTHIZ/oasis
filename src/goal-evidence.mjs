@@ -71,8 +71,17 @@ export function goalEvidenceGate(condition, events = []) {
     if (check.filtered && !/\b(?:only|grep|filter|matching|named)\b/i.test(String(condition))) return { met: false, evidence: true, reason: 'The latest run of ' + describe(check) + ' selected only some tests. Run it without a filter to verify the whole condition.' };
     if (check.stale) return { met: false, evidence: true, reason: 'Files were edited after the last passing run of ' + describe(check) + '. Run it again to verify the current state.' };
   }
+  // The whole condition is one check passing ("npm test passes") and the
+  // record shows exactly that: no judge request. On a local model that request
+  // re-reads the whole transcript, which takes minutes on a CPU.
+  if (commands.length === 1 && PURE_CHECK.test(String(condition).replace(/`/g, '').trim()) && words(String(condition).replace(/`/g, '')).startsWith(commands[0])) {
+    const check = latestCheck(events, commands[0]);
+    return { met: true, evidence: true, reason: 'OASIS saw ' + describe(check) + ' exit 0 after the last edit.' };
+  }
   return null;
 }
+
+const PURE_CHECK = /^[\w@/.:\s-]+?\s+(?:passes|pass|succeeds|is green|exits (?:with )?0|runs without (?:errors?|failures?))\.?$/i;
 
 /** What OASIS observed, for the judge: latest checks and commands, edits since. */
 export function goalEvidenceText(events = []) {
