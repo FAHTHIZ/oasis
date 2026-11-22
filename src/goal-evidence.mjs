@@ -121,3 +121,24 @@ export function parseVerifierResult(result) {
   if (result.unverified_claim || result.report_status === 'rejected') return { met: false, reason: 'The verify agent said PASS, but OASIS saw no passing check behind it (' + String(result.unverified_claim || 'report rejected').slice(0, 200) + ').', verifier: true };
   return { met: true, reason: 'Confirmed by the verify agent. ' + last[0].slice(0, 300), verifier: true };
 }
+
+/**
+ * Independent review of a finished task (`--review`): the request becomes the
+ * acceptance criteria for the `verify` agent. A separate critic after the work
+ * is the best accuracy-for-cost verification design measured so far: +5.9 to
+ * +9.5 points on Terminal-Bench at 1.13-1.25x cost, ahead of completion gates
+ * (Zhang et al., "Rethinking Verification in Agent Harnesses", arXiv:2610.34577).
+ */
+export function reviewPrompt(request, summary = '') {
+  return 'Acceptance criteria (the task another agent was given):\n' + String(request).slice(0, 8000) +
+    (summary ? '\n\nThat agent says it is done: ' + String(summary).slice(0, 1200) : '') +
+    '\n\nFind out whether the task is really done in the workspace now: what was asked is implemented, it works when exercised, and nothing that worked before is broken. Split it into concrete criteria, check each one yourself, and end with the PASS/FAIL lines and the VERDICT line.';
+}
+
+/** Review rounds from --review N, OASIS_REVIEW or settings.review (0 = off, at most 3). */
+export function reviewRounds(session, env = process.env, option) {
+  const raw = option !== undefined && option !== null ? option : env.OASIS_REVIEW !== undefined && env.OASIS_REVIEW !== '' ? env.OASIS_REVIEW : session && session.settings && session.settings.review;
+  if (raw === true) return 1;
+  const value = Number.parseInt(String(raw ?? 0), 10);
+  return Number.isInteger(value) && value > 0 ? Math.min(3, value) : 0;
+}

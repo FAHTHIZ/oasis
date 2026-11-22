@@ -23,6 +23,8 @@ import { validateJsonSchema, extractJson } from './json-schema.mjs';
 import { callMappedMcpTool } from './mcp.mjs';
 import { FALLBACK_REASON_TEXT } from './fallback-chain.mjs';
 import { redactSecretText } from './secret-shield.mjs';
+import { reviewRounds } from './goal-evidence.mjs';
+import { sessionEvidence } from './evidence-ledger.mjs';
 
 // Finds an MCP tool by Claude-style name (mcp__server__tool) or Oasis safe name.
 function resolvePermissionTool(session, name) {
@@ -163,6 +165,9 @@ export async function runHeadless(options) {
     goalMaxTurns = 10,
     // --goal-verify: a MET from the judge is confirmed by the verify agent.
     goalVerify = undefined,
+    // --review [N]: after the work, the verify agent checks it against the
+    // request; failures go back to the agent, up to N rounds (src/goal-evidence.mjs).
+    review = undefined,
     // --require-verified (or OASIS_REQUIRE_VERIFIED=1): a run whose changes OASIS could
     // not verify (no passing check, unreviewed diff, failing test) exits 1 with
     // subtype error_not_verified, so CI and scripts don't treat "Not verified" as success.
@@ -193,6 +198,7 @@ export async function runHeadless(options) {
   const denied = [];
   let session = null;
   let toolCallsAtStart = 0;
+  let editsAtStart = 0;
   let result = null;
   let error = null;
   const usage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
@@ -208,6 +214,7 @@ export async function runHeadless(options) {
   let structured;
   let schemaErrors = null;
   let goalState = null;
+  let reviewState = null;
   try {
     let restored = null;
     if (persistence.resumeId) restored = await loadSession(root, persistence.resumeId);
@@ -216,6 +223,7 @@ export async function runHeadless(options) {
     session = await createSession({ root, config, restore: restored, env, ...sessionOptions, ...(hookObserver ? { onHookEvent: hookObserver } : {}) });
     session.headless = true;
     toolCallsAtStart = Number(session.toolCallsThisSession || 0);
+    editsAtStart = ((sessionEvidence(session) || { events: [] }).events || []).filter((event) => event.kind === 'edit').length;
     // Name a saved run up front, as Claude Code does: the init event and every
     // later event then carry the id a client needs for --resume, instead of
     // null until the end-of-run save.
@@ -508,6 +516,25 @@ export async function runHeadless(options) {
         result = await runOne('The goal is not met yet. A reviewer said: ' + verdict.reason + '\nContinue working toward the goal: ' + goalState.condition + '\nVerify results by running checks, not by assumption.');
       }
     }
+    const rounds = session && result && !inputStream ? reviewRounds(session, env, review) : 0;
+    if (rounds && !(signal && signal.aborted) && !result.limitReached && !(goalState && !goalState.met)) {
+      const { reviewWork } = await import('./agent.mjs');
+      const edits = () => ((sessionEvidence(session) || { events: [] }).events || []).filter((event) => event.kind === 'edit').length;
+      // Nothing changed: nothing to review (a question, a read-only report).
+      if (edits() > editsAtStart) {
+        const reviewOptions = { env, verifyContext: { autoApprove: turnOptions.autoApprove, approval: turnOptions.approval }, signal };
+        // N fix rounds, each followed by another review, so the result says whether the last fix held.
+        for (let round = 1; ; round += 1) {
+          const verdict = await reviewWork(session, rawPrompt, { ...reviewOptions, summary: result.text }).catch((caught) => ({ met: false, reason: 'Review failed: ' + (caught.message || caught) }));
+          reviewState = { passed: Boolean(verdict.met), rounds: round, reason: String(verdict.reason || '').slice(0, 1000) };
+          emit({ type: 'system', subtype: 'review', passed: reviewState.passed, reason: reviewState.reason.slice(0, 500), round });
+          if (outputFormat === 'text' && env.OASIS_PROGRESS !== '0') { try { process.stderr.write('[review] ' + (verdict.met ? 'Passed' : 'Did not pass') + ': ' + verdict.reason + '\n'); } catch {} }
+          if (verdict.met || round > rounds || (signal && signal.aborted)) break;
+          result = await runOne('An independent reviewer checked your work against the request and it did not pass:\n' + reviewState.reason + '\nFix this, verify by running checks, and then finish. The request was:\n' + String(rawPrompt).slice(0, 4000));
+          if (!result || result.limitReached) break;
+        }
+      }
+    }
     // Structured output: validate, and give the model two chances to fix it.
     for (let attempt = 0; jsonSchema && result && !result.limitReached; attempt += 1) {
       const parsed = extractJson(result.text);
@@ -544,11 +571,11 @@ export async function runHeadless(options) {
   // stop with no text): the run did not do what was asked, so it is an error
   // for scripts and CI, not a success with an apology as its result.
   const noReply = !error && Boolean(result && result.emptyReply);
-  const subtype = error && error.code === 'BUDGET_EXCEEDED' ? 'error_max_budget_usd' : error && error.code === 'REQUEST_BUDGET_EXCEEDED' ? 'error_max_requests' : error && error.code === 'TOKEN_BUDGET_EXCEEDED' ? 'error_max_total_tokens' : error && error.code === 'OASIS_ZERO_BUDGET_BLOCKED' ? 'error_zero_budget' : error || noReply ? 'error_during_execution' : schemaErrors ? 'error_max_structured_output_retries' : goalState && !goalState.met ? 'error_goal_not_met' : notVerified ? 'error_not_verified' : result && result.limitReached ? 'error_max_turns' : result && result.finished === false && !result.verificationIncomplete ? 'error_max_turns' : 'success';
+  const subtype = error && error.code === 'BUDGET_EXCEEDED' ? 'error_max_budget_usd' : error && error.code === 'REQUEST_BUDGET_EXCEEDED' ? 'error_max_requests' : error && error.code === 'TOKEN_BUDGET_EXCEEDED' ? 'error_max_total_tokens' : error && error.code === 'OASIS_ZERO_BUDGET_BLOCKED' ? 'error_zero_budget' : error || noReply ? 'error_during_execution' : schemaErrors ? 'error_max_structured_output_retries' : goalState && !goalState.met ? 'error_goal_not_met' : reviewState && !reviewState.passed ? 'error_review_failed' : notVerified ? 'error_not_verified' : result && result.limitReached ? 'error_max_turns' : result && result.finished === false && !result.verificationIncomplete ? 'error_max_turns' : 'success';
   // Every error_* subtype is an error, as in Claude Code: a run stopped at
   // --max-turns (or by the repeat guard) did not finish, so it exits 1 with
   // is_error true; before, it reported error_max_turns with exit 0.
-  const isError = Boolean(error) || !result || result.blockedByHook === true || Boolean(schemaErrors) || Boolean(goalState && !goalState.met) || notVerified || noReply || subtype !== 'success';
+  const isError = Boolean(error) || !result || result.blockedByHook === true || Boolean(schemaErrors) || Boolean(goalState && !goalState.met) || Boolean(reviewState && !reviewState.passed) || notVerified || noReply || subtype !== 'success';
   const summary = {
     type: 'result',
     subtype,
@@ -570,6 +597,7 @@ export async function runHeadless(options) {
     permission_denials: denied,
     ...(structured !== undefined ? { structured_output: structured } : {}),
     ...(goalState ? { goal: goalState } : {}),
+    ...(reviewState ? { review: reviewState } : {}),
     ...(schemaErrors ? { structured_output_errors: schemaErrors.slice(0, 20) } : {}),
     ...(result && result.verification ? { verification: result.verification } : {}),
     ...(result && result.verificationIncomplete ? { verification_issues: result.verificationIssues } : {}),

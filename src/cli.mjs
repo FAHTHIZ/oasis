@@ -1941,6 +1941,7 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
     outputFormat: codexStream ? 'none' : headless.outputFormat,
     maxTurns: headless.maxTurns,
     ...(headless.goal ? { goal: headless.goal, goalMaxTurns: headless.goalMaxTurns || 10, ...(headless.goalVerify ? { goalVerify: true } : {}) } : {}),
+    ...(headless.review !== undefined ? { review: headless.review } : {}),
     planOnly: headless.planOnly,
     jsonSchema: headless.jsonSchema || null,
     sessionOptions: { ...sessionCreateOptions(), channels: [] },
@@ -3189,6 +3190,14 @@ async function parseMainFlags(rawArgs, flags) {
     }
     if (arg === '--require-verified') { flags.headless.requireVerified = true; continue; }
     if (arg === '--goal-verify') { flags.headless.goalVerify = true; continue; }
+    if (arg === '--review' || arg.startsWith('--review=')) {
+      // --review [N]: the next argument is a round count only when it is a number.
+      const inline = arg.startsWith('--review=') ? arg.slice('--review='.length) : /^\d+$/.test(String(rawArgs[i + 1] || '')) ? rawArgs[++i] : '1';
+      const value = Number.parseInt(inline, 10);
+      if (!Number.isInteger(value) || value < 0 || value > 3) throw new Error('--review takes 0 to 3 fix rounds (default 1).');
+      flags.headless.review = value;
+      continue;
+    }
     if (arg === '--goal-turns') {
       const value = Number.parseInt(takeValue(), 10);
       if (!Number.isInteger(value) || value < 1 || value > 100) throw new Error('--goal-turns must be a whole number from 1 to 100.');

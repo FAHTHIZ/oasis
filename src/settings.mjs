@@ -684,6 +684,7 @@ export async function loadSettings(root, options = {}) {
     if (['low', 'medium', 'high', 'max'].includes(String(settings.subagentEffort || '').toLowerCase())) result.subagentEffort = String(settings.subagentEffort).toLowerCase();
     if (['on', 'off'].includes(String(settings.systemPromptSnapshot || '').toLowerCase())) result.systemPromptSnapshot = String(settings.systemPromptSnapshot).toLowerCase();
     if (['agent', 'judge'].includes(String(settings.goalVerifier || '').toLowerCase())) result.goalVerifier = String(settings.goalVerifier).toLowerCase();
+    if (Number.isInteger(settings.review) && settings.review >= 0 && settings.review <= 3) result.review = settings.review;
     if (['auto', 'tmux', 'in-process'].includes(String(settings.teammateMode || '').toLowerCase())) result.teammateMode = String(settings.teammateMode).toLowerCase();
     if (Number.isInteger(settings.subagentAutoCompactPercent) && settings.subagentAutoCompactPercent >= 0 && settings.subagentAutoCompactPercent <= 100) result.subagentAutoCompactPercent = settings.subagentAutoCompactPercent;
     if (Number.isInteger(settings.subagentStallSeconds) && settings.subagentStallSeconds >= 0 && settings.subagentStallSeconds <= 86400) result.subagentStallSeconds = settings.subagentStallSeconds;

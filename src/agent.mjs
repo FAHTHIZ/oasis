@@ -79,7 +79,7 @@ import { unrequestedGitWrite } from './git-intent.mjs';
 import { recordTokenUsage } from './cost-policy.mjs';
 import { spend as spendBudget } from './budget-algebra.mjs';
 import { evidenceFromToolResult, recordEvidence, sessionEvidence } from './evidence-ledger.mjs';
-import { goalEvidenceGate, goalEvidenceText, goalVerifierEnabled, goalVerifierPrompt, parseVerifierResult } from './goal-evidence.mjs';
+import { goalEvidenceGate, goalEvidenceText, goalVerifierEnabled, goalVerifierPrompt, parseVerifierResult, reviewPrompt } from './goal-evidence.mjs';
 import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls, hideStreamingToolCalls } from './tool-call-repair.mjs';
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, needsLocalContextAdvice, SMALL_CONTEXT_TOKENS } from './local-context.mjs';
 import { ripgrepPathAddition } from './ripgrep.mjs';
@@ -4179,6 +4179,15 @@ export async function evaluateGoal(session, condition, options = {}) {
   if (!verdict.met || !goalVerifierEnabled(session, env, verifier)) return verdict;
   const context = { root: session.root, env, session, autoApprove: false, ...(verifyContext || {}) };
   const result = await runSubagent(session, { subagent_type: 'verify', description: 'verify goal', prompt: goalVerifierPrompt(condition, verdict.reason) }, context, { env, signal: askOptions.signal });
+  return parseVerifierResult(result);
+}
+
+// Independent review (--review): the verify agent checks finished work
+// against the request. Returns { met, reason } as parseVerifierResult does.
+export async function reviewWork(session, request, options = {}) {
+  const env = options.env || session.createEnv || process.env;
+  const context = { root: session.root, env, session, autoApprove: false, ...(options.verifyContext || {}) };
+  const result = await runSubagent(session, { subagent_type: 'verify', description: 'review the work', prompt: reviewPrompt(request, options.summary) }, context, { env, signal: options.signal });
   return parseVerifierResult(result);
 }
 
