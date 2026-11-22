@@ -16,7 +16,7 @@ the same model, so results are comparable:
     harbor run -d terminal-bench@2.0 -a claude-code -m anthropic/claude-sonnet-5-5 -n 4
 
 Run from the repository root so `bench.harbor.oasis_agent` is importable, or
-put this folder on PYTHONPATH. `scripts/bench-harbor.sh` wraps both runs.
+put this folder on PYTHONPATH.
 
 Model names use Harbor's `provider/model` form. Supported providers map onto
 OASIS's own protocols:
