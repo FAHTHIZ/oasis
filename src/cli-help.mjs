@@ -203,6 +203,7 @@ export function helpText() {
     '  --max-turns N                 Limit model steps for one task (1-400)',
     '  --goal "condition"            With -p: keep working until a strict check says the condition is met',
     '  --goal-turns N                With --goal: most turns to try (default 10, max 100)',
+    '  --goal-verify                 With --goal: confirm a met goal with the verify agent, which runs the result',
     '  --require-verified            With -p: exit 1 (error_not_verified) when OASIS could not verify the changes',
     '  --allowedTools RULES          Extra allow rules, e.g. "run_command(npm test:*),Edit(src/**)"',
     '  --disallowedTools RULES       Extra deny rules for this run',

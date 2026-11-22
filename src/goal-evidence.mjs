@@ -88,3 +88,34 @@ export function goalEvidenceText(events = []) {
   if (!lines.length) return 'OASIS recorded no commands, checks, edits or fetched pages in this session.';
   return 'What OASIS recorded from tool results (not from the transcript):\n' + lines.join('\n');
 }
+
+/**
+ * Whether a goal is confirmed by the separate `verify` agent before it counts
+ * as met: `goalVerifier: "agent"` in settings, OASIS_GOAL_VERIFIER=agent, or
+ * `--goal-verify`. Off by default, since it runs a whole agent per check.
+ */
+export function goalVerifierEnabled(session, env = process.env, option) {
+  if (option === true || option === 'agent') return true;
+  if (option === false || option === 'judge') return false;
+  const value = String(env.OASIS_GOAL_VERIFIER || (session && session.settings && session.settings.goalVerifier) || '').trim().toLowerCase();
+  return value === 'agent';
+}
+
+export function goalVerifierPrompt(condition, judgeReason = '') {
+  return 'Acceptance criteria (the goal another agent is working toward):\n' + String(condition).slice(0, 8000) +
+    (judgeReason ? '\n\nThat agent\'s reviewer believes it is met: ' + String(judgeReason).slice(0, 600) : '') +
+    '\n\nFind out whether the goal really holds in the workspace now. Split it into concrete criteria, exercise each one yourself, and end with the PASS/FAIL lines and the VERDICT line.';
+}
+
+/** { met, reason } from the verify agent's task result. */
+export function parseVerifierResult(result) {
+  const report = String(result && result.report || '');
+  const verdicts = [...report.matchAll(/VERDICT:\s*(PASS|FAIL)\b[^\n]*/gi)];
+  const last = verdicts.at(-1);
+  const failures = report.split('\n').map((line) => line.trim()).filter((line) => /^(?:[-*]\s*)?FAIL\b/i.test(line));
+  if (!last) return { met: false, reason: 'The verify agent gave no verdict' + (failures.length ? '; it reported: ' + failures[0].slice(0, 300) : '.'), verifier: true };
+  if (last[1].toUpperCase() !== 'PASS') return { met: false, reason: 'The verify agent found: ' + (failures[0] || last[0]).replace(/^(?:[-*]\s*)?FAIL:?\s*/i, '').slice(0, 400), verifier: true };
+  if (failures.length) return { met: false, reason: 'The verify agent said PASS but listed a failed criterion: ' + failures[0].slice(0, 300), verifier: true };
+  if (result.unverified_claim || result.report_status === 'rejected') return { met: false, reason: 'The verify agent said PASS, but OASIS saw no passing check behind it (' + String(result.unverified_claim || 'report rejected').slice(0, 200) + ').', verifier: true };
+  return { met: true, reason: 'Confirmed by the verify agent. ' + last[0].slice(0, 300), verifier: true };
+}

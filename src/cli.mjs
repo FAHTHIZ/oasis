@@ -1940,7 +1940,7 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
     ...(codexImages.length ? { images: codexImages } : {}),
     outputFormat: codexStream ? 'none' : headless.outputFormat,
     maxTurns: headless.maxTurns,
-    ...(headless.goal ? { goal: headless.goal, goalMaxTurns: headless.goalMaxTurns || 10 } : {}),
+    ...(headless.goal ? { goal: headless.goal, goalMaxTurns: headless.goalMaxTurns || 10, ...(headless.goalVerify ? { goalVerify: true } : {}) } : {}),
     planOnly: headless.planOnly,
     jsonSchema: headless.jsonSchema || null,
     sessionOptions: { ...sessionCreateOptions(), channels: [] },
@@ -2156,7 +2156,7 @@ async function runGoal(goal, root, autoApprove, session, persistence) {
       if (session.goal && session.goal !== state && !session.goal.active) break;
       session.goal = state;
       if (stopped || !state.active) break;
-      const verdict = await evaluateGoal(session, goal.condition).catch((error) => ({ met: false, reason: 'Check failed: ' + error.message }));
+      const verdict = await evaluateGoal(session, goal.condition, { verifyContext: { autoApprove, approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta) } }).catch((error) => ({ met: false, reason: 'Check failed: ' + error.message }));
       state.reason = verdict.reason;
       if (verdict.met) { state.achieved = true; state.active = false; stdout.write('[goal] Met: ' + verdict.reason + '\n'); break; }
       stdout.write('[goal] Not met yet: ' + verdict.reason + '\n');
@@ -3188,6 +3188,7 @@ async function parseMainFlags(rawArgs, flags) {
       continue;
     }
     if (arg === '--require-verified') { flags.headless.requireVerified = true; continue; }
+    if (arg === '--goal-verify') { flags.headless.goalVerify = true; continue; }
     if (arg === '--goal-turns') {
       const value = Number.parseInt(takeValue(), 10);
       if (!Number.isInteger(value) || value < 1 || value > 100) throw new Error('--goal-turns must be a whole number from 1 to 100.');

@@ -36,3 +36,16 @@ test('goalEvidenceText lists what ran', () => {
   assert.match(text, /1 file edit in total, last: src\/x.js/);
   assert.match(goalEvidenceText([]), /no commands/);
 });
+
+test('the verify agent verdict decides a goal the judge called met', async () => {
+  const { parseVerifierResult, goalVerifierEnabled } = await import('../src/goal-evidence.mjs');
+  assert.equal(parseVerifierResult({ report: 'PASS a: ran it\nPASS b: ok\nVERDICT: PASS' }).met, true);
+  assert.match(parseVerifierResult({ report: 'PASS a\nFAIL b: empty input crashes (node cli.mjs "")\nVERDICT: FAIL' }).reason, /empty input crashes/);
+  assert.match(parseVerifierResult({ report: 'Looks good to me.' }).reason, /no verdict/);
+  assert.equal(parseVerifierResult({ report: 'FAIL c: missing docs\nVERDICT: PASS' }).met, false);
+  assert.equal(parseVerifierResult({ report: 'VERDICT: PASS', unverified_claim: 'no check ran' }).met, false);
+  assert.equal(goalVerifierEnabled({ settings: { goalVerifier: 'agent' } }, {}), true);
+  assert.equal(goalVerifierEnabled({ settings: { goalVerifier: 'agent' } }, {}, false), false);
+  assert.equal(goalVerifierEnabled({}, { OASIS_GOAL_VERIFIER: 'agent' }), true);
+  assert.equal(goalVerifierEnabled({}, {}), false);
+});

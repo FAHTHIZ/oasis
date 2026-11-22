@@ -161,6 +161,8 @@ export async function runHeadless(options) {
     // reviewer's reason, up to goalMaxTurns turns. Same loop as /goal.
     goal = null,
     goalMaxTurns = 10,
+    // --goal-verify: a MET from the judge is confirmed by the verify agent.
+    goalVerify = undefined,
     // --require-verified (or OASIS_REQUIRE_VERIFIED=1): a run whose changes OASIS could
     // not verify (no passing check, unreviewed diff, failing test) exits 1 with
     // subtype error_not_verified, so CI and scripts don't treat "Not verified" as success.
@@ -496,7 +498,7 @@ export async function runHeadless(options) {
       const { evaluateGoal } = await import('./agent.mjs');
       goalState = { condition: String(goal), met: false, turns: 1, reason: '' };
       while (!(signal && signal.aborted) && result && !result.limitReached) {
-        const verdict = await evaluateGoal(session, goalState.condition).catch((caught) => ({ met: false, reason: 'Check failed: ' + (caught.message || caught) }));
+        const verdict = await evaluateGoal(session, goalState.condition, { env, verifier: goalVerify, verifyContext: { autoApprove: turnOptions.autoApprove, approval: turnOptions.approval } }).catch((caught) => ({ met: false, reason: 'Check failed: ' + (caught.message || caught) }));
         goalState.met = verdict.met;
         goalState.reason = verdict.reason;
         emit({ type: 'system', subtype: 'goal_check', met: verdict.met, reason: String(verdict.reason || '').slice(0, 500), turn: goalState.turns });
