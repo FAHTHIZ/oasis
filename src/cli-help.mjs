@@ -4,7 +4,7 @@ import { stdout } from 'node:process';
 export function printQuickHelp() {
   const rows = (items) => items.map(([cmd, text]) => '  ' + cmd.padEnd(34) + text);
   stdout.write([
-    'OASIS — a plain-English coding agent',
+    'OASIS — a model-agnostic agent for plain-English tasks',
     '',
     'Usage:',
     '  oasis [options] [command]',
@@ -62,7 +62,7 @@ export function printHelp() {
 
 export function helpText() {
   return ([
-    'OASIS — a plain-English coding agent',
+    'OASIS — a model-agnostic agent for plain-English tasks',
     '',
     'Usage:',
     '  oasis                         Start an interactive agent session',

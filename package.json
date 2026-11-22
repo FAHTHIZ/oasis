@@ -1,7 +1,7 @@
 {
   "name": "oasis-oss",
   "version": "1.7.1",
-  "description": "Open-source, model-agnostic coding-agent runtime with a remote-first browser workspace and terminal agent: real shell, files, MCP, subagents and approvals.",
+  "description": "Open-source, model-agnostic agent platform and runtime: collaborating agents that plan, act and verify across software, research, analysis, writing, automation and computer use — from the terminal, browser, desktop, editors and chat.",
   "type": "module",
   "main": "./src/sdk.mjs",
   "exports": {
@@ -60,26 +60,26 @@
     "url": "https://github.com/FAHTHIZ/oasis.git"
   },
   "keywords": [
-    "ai-coding-agent",
-    "coding-agent",
     "agent-runtime",
+    "agent-platform",
+    "general-purpose-agent",
+    "ai-agents",
+    "multi-agent",
     "model-agnostic",
     "agentic-workflows",
-    "multi-agent",
+    "computer-use",
+    "browser-automation",
+    "research-agent",
+    "automation",
     "llm",
     "mcp",
     "model-context-protocol",
+    "a2a",
+    "agent-client-protocol",
     "agent-skills",
-    "developer-tools",
     "cli",
-    "terminal",
-    "vscode",
-    "vscode-extension",
     "ollama",
-    "nodejs",
-    "open-source",
-    "web-workspace",
-    "remote-development"
+    "open-source"
   ],
   "dependencies": {
     "@agentclientprotocol/sdk": "^2.5.0",
