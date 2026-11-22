@@ -6,6 +6,27 @@
 
 export const PLUGINS = [
   {
+    id: 'research', name: 'Researcher', icon: 'search', skills: [],
+    prompt: 'For research, search the web and open the pages you rely on; cite only pages you actually fetched, prefer primary sources, give dates, and say plainly where sources disagree or evidence is thin.',
+    description: 'Searches the web, reads the sources and writes a cited brief, flagging anything it could not confirm.',
+    keywords: ['research', 'sources', 'cite', 'citation', 'look up', 'find out', 'compare', 'news', 'market', 'competitor', 'literature', 'fact check', 'brief'],
+    starters: ['Research this topic and write a cited brief in brief.md:', 'Compare the top three options for this and cite your sources:']
+  },
+  {
+    id: 'analysis', name: 'Data analyst', icon: 'activity', skills: [],
+    prompt: 'For data work, compute every number by running code on the data, never in your head; show the code you ran, save charts as files, and state the size and gaps of the data.',
+    description: 'Analyses CSV and spreadsheet data with code, saves charts and explains what the numbers show.',
+    keywords: ['csv', 'spreadsheet', 'excel', 'xlsx', 'dataset', 'chart', 'graph', 'plot', 'statistic', 'average', 'trend', 'analyse', 'analyze', 'analysis', 'pandas', 'metrics'],
+    starters: ['Summarise the data files here and chart the key numbers', 'Find the biggest changes over time in this data and explain them']
+  },
+  {
+    id: 'writing', name: 'Writer', icon: 'file-text', skills: [],
+    prompt: 'For writing, ask who the reader is if it is unclear, keep the structure short with headings, use plain words, save the result as a file and list anything from the source material you left out.',
+    description: 'Drafts and edits reports, posts, emails and summaries, saved as files you can review and undo.',
+    keywords: ['draft', 'rewrite', 'proofread', 'summary', 'summarise', 'summarize', 'report', 'blog', 'email', 'essay', 'article', 'letter', 'tone'],
+    starters: ['Draft a one-page summary of the notes in this folder', 'Proofread this document and tighten the wording:']
+  },
+  {
     id: 'debug', name: 'Debugger', icon: 'bug', skills: ['debugging', 'diagnose'],
     description: 'Finds the root cause of a bug, fixes it, and proves the fix with a test.',
     keywords: ['bug', 'error', 'fix', 'crash', 'broken', 'fails', 'failing', 'exception', 'stack trace', 'traceback', 'not working', "doesn't work", 'does not work', 'undefined', 'null', 'wrong output', 'regression'],

@@ -207,6 +207,8 @@ try {
   // answer below it; inside, prose updates and execution groups alternate,
   // like a person narrating the work.
   const kinds = (selector) => page.evaluate((sel) => [...document.querySelectorAll(sel)].map((el) => el.classList.contains('work-fold') ? 'fold' : el.classList.contains('steps') ? 'steps' : el.classList.contains('assistant') ? 'text' : el.classList.contains('user') ? 'user' : 'other').filter((kind) => kind !== 'other'), selector);
+  // The fold is applied just after the answer settles; wait for it rather than racing it.
+  await page.waitForFunction(() => document.querySelector('#transcript > .work-fold'), null, { timeout: timeoutMs }).catch(() => {});
   const flow = await kinds('#transcript > *');
   assert.deepEqual(flow, ['user', 'fold', 'text'], 'timeline order: ' + flow.join(' '));
   await openFolds(page);
