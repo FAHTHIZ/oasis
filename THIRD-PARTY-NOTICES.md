@@ -21,6 +21,7 @@ listed here.
 | `src/data/*.json` | models.dev, Gitleaks, npm-high-impact, top-pypi-packages, crates.io | MIT or factual data, per file | `src/data/NOTICE.md` lists each source and license |
 | `src/computer-use.mjs` (design) | [Anthropic claude-quickstarts](https://github.com/anthropics/claude-quickstarts) computer-use-demo | MIT, Copyright (c) 2023 Anthropic | Written for OASIS in JavaScript; the action set, screenshot scaling targets and zoom follow the reference tool. No files copied |
 | `src/computer-use.mjs` (safety rules) | [Nous Research hermes-agent](https://github.com/NousResearch/hermes-agent) computer_use tool | MIT, Copyright (c) 2025 Nous Research | Refused key chords and typed shell patterns, approval once per session and repeated-screenshot suppression follow Hermes. No files copied |
+| Optional external tool, not bundled | [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) | Apache-2.0 | Installed by the user; `find_text` runs the `tesseract` command |
 | Optional external tool, not bundled | [trycua/cua](https://github.com/trycua/cua) `cua-driver` | MIT, Copyright (c) 2025 Cua AI, Inc. | Installed by the user with its own installer; `src/computer-use.mjs` starts `cua-driver mcp` and calls its MCP tools |
 
 The MIT and ISC licenses require that the copyright notice and permission

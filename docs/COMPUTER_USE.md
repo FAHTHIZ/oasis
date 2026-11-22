@@ -18,6 +18,7 @@ The tool is called `computer`. Its actions:
 | --- | --- |
 | `screenshot` | Capture the screen (scaled to fit 1280x800) |
 | `zoom` | Capture one region at full resolution, for small text |
+| `find_text` | Read the screen with OCR: where some text is, with a click point, or every line it can read. Needs Tesseract |
 | `click`, `double_click`, `triple_click`, `right_click`, `middle_click` | Click at a point |
 | `move`, `drag`, `mouse_down`, `mouse_up` | Move the pointer, drag, or hold a button |
 | `scroll` | Scroll up, down, left or right at a point |
@@ -56,6 +57,10 @@ OASIS finds it on `PATH`, in `~/.local/bin` or in `~/.cua-driver/packages/curren
 | `native` | The built-in backend only |
 
 The OASIS safety rules below apply to both drivers, because they run before any action reaches a backend. cua-driver collects anonymous usage telemetry by default; `cua-driver telemetry disable` turns it off.
+
+## Finding text with OCR
+
+`find_text {text: "Save as"}` captures the screen, reads it with [Tesseract](https://github.com/tesseract-ocr/tesseract) (Apache-2.0) and returns each match with its box and a click point in screenshot pixels. Without `text` it returns every line it can read, top to bottom. It helps models that read a screenshot well but click a little off. The capture is enlarged 2x in greyscale first, because screen fonts are small for OCR. Install Tesseract with `apt install tesseract-ocr`, `brew install tesseract` or `winget install UB-Mannheim.TesseractOCR`. `OASIS_TESSERACT` sets its path, and `OASIS_OCR_LANG` sets the languages (default `eng`, for example `eng+deu`). Text read off the screen is content, not instructions.
 
 ## A virtual screen of its own
 
@@ -115,6 +120,8 @@ The agent is driving your real desktop. Keep an eye on it, or point it at a virt
 | `OASIS_COMPUTER_DISPLAY` | `$DISPLAY` | X display to capture and drive (Linux), or `virtual` for a private screen |
 | `OASIS_COMPUTER_VIRTUAL_SIZE` | `1280x800` | Size of the virtual screen |
 | `OASIS_COMPUTER_VNC` | on | `0` skips the VNC server on the virtual screen |
+| `OASIS_TESSERACT` | `tesseract` | Tesseract binary for `find_text` |
+| `OASIS_OCR_LANG` | `eng` | Tesseract languages, e.g. `eng+fra` |
 | `OASIS_COMPUTER_MAX_WIDTH` | 1280 | Largest screenshot width sent to the model |
 | `OASIS_COMPUTER_SETTLE_MS` | 600 | Pause after an input action before capturing |
 
