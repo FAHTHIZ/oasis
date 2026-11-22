@@ -2490,6 +2490,14 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
             if (toolName === 'read_file' && message && message.result && !message.result.error && input && input.path) {
               try { markFileSeen({ session, env: executionContext && executionContext.env }, (await resolveWorkspacePath(path.resolve(executionContext && executionContext.root || session.root), input.path)).absolute); } catch {}
             }
+            // Outside text a nested call brings in is guarded as it would be
+            // as a direct call: a flagged result puts the session under the
+            // injection hold and reaches the script with the guard's notice.
+            if (message && untrustedGuardEnabled(session, executionContext && executionContext.env || process.env)) {
+              const raw = typeof message.content === 'string' ? message.content : serializableResult(message.result);
+              const guarded = guardExternalContent(session, toolName, raw, { external: commandFetchesExternal(toolName, input) });
+              if (guarded !== raw) return guarded;
+            }
             return message && message.result !== undefined ? message.result : message && message.content;
           }
         });
