@@ -216,3 +216,12 @@ test('encoded secrets are masked too: base64, wrapped base64 and hex', async () 
     assert.equal(maskSecrets({}, benign).count, 0, benign.slice(0, 30));
   }
 });
+
+test('the commit scan finds tokens committed as base64 or hex, not hashes', async () => {
+  const { findSecretsInDiff } = await import('../src/secret-shield.mjs');
+  const key = 'ghp_' + 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8';
+  const diff = '+++ b/config.js\n@@ -0,0 +1,3 @@\n+const a = "' + Buffer.from('token=' + key).toString('base64') + '";\n+const h = "' + Buffer.from(key).toString('hex') + '";\n+const sha = "3f786850e387550fdab836ed7e6dc881de23001b";\n';
+  const hits = findSecretsInDiff(diff);
+  assert.deepEqual(hits.map((hit) => [hit.line, hit.kind]), [[1, 'encoded token'], [2, 'encoded token']]);
+  assert.equal(JSON.stringify(hits).includes(key), false, 'the report never repeats the secret');
+});

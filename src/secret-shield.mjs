@@ -139,7 +139,7 @@ function decodeRun(run) {
   return decoded.filter((text) => text.length >= 12 && (text.match(/[\x20-\x7e\t\r\n]/g) || []).length / text.length > 0.9).join('\n');
 }
 
-function encodedSecretSpans(text) {
+function encodedSecretSpans(text, depth = 0) {
   const spans = [];
   if (text.length > 4 * 1024 * 1024) return spans;
   for (const match of text.matchAll(ENCODED_RUN)) {
@@ -147,7 +147,7 @@ function encodedSecretSpans(text) {
     // Plain identifiers, paths and words are not encodings worth decoding.
     if (!/[0-9]/.test(match[0]) || !/[A-Z]/.test(match[0]) && !/^[0-9a-f\s]+$/i.test(match[0])) continue;
     const decoded = decodeRun(match[0]);
-    if (decoded && findSecretsInText(decoded).length) spans.push({ start: match.index, end: match.index + match[0].length });
+    if (decoded && findSecretsInText(decoded, depth + 1).length) spans.push({ start: match.index, end: match.index + match[0].length });
   }
   return spans;
 }
@@ -225,7 +225,7 @@ export const SECRET_SHIELD_NOTE = 'Values shown as «secret:ID» are credentials
 // [{ kind, preview }] with values masked; obvious samples ("EXAMPLE", xxxx) are skipped.
 const SAMPLE_VALUE = /example|sample|dummy|placeholder|fake|x{5,}|\*{4,}|0{8,}|1234567890|abcdef(?:ghij)?$|your[_-]?(?:api|key|token)|«secret:/i;
 const maskPreview = (value) => { const text = String(value); return text.length <= 8 ? '****' : text.slice(0, 4) + '…' + text.slice(-2) + ' (' + text.length + ' chars)'; };
-export function findSecretsInText(text) {
+export function findSecretsInText(text, depth = 0) {
   const found = [];
   const value = String(text || '');
   for (const span of tokenSpans(value)) {
@@ -242,6 +242,11 @@ export function findSecretsInText(text) {
   for (const match of value.matchAll(new RegExp(URL_CREDENTIAL.source, URL_CREDENTIAL.flags))) {
     if (SAMPLE_VALUE.test(match[2]) || /^\$|^\{/.test(match[2])) continue;
     found.push({ kind: 'URL credential', preview: match[1] + '****@' });
+  }
+  // A token committed as base64 or hex is still a leaked token (one level of
+  // nesting is decoded; deeper is not worth the time on every diff line).
+  if (depth < 2 && !found.length) {
+    for (const span of encodedSecretSpans(value, depth)) found.push({ kind: 'encoded token', preview: maskPreview(value.slice(span.start, span.end)) });
   }
   return found;
 }
