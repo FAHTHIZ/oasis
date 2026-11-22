@@ -32,6 +32,11 @@ User-facing change history grouped by package version. A version heading does no
 - A crashed stdio MCP server restarts on its next call (up to 3 times per session).
 - When a completion gate sends the model back to work, the app and CLI say why ("Not finished yet: ...").
 
+### Fixes
+
+- Terminal: a Mermaid sequence diagram too wide for the window now prints one line per message, as intended. A missing variable made that fallback throw, and the error was swallowed, so the diagram showed nothing.
+- The agent loop no longer reads `.env` of a null call context when a tool result arrives without an authorization step (nested project instructions and the post-edit syntax check).
+
 ### Harness reliability (found running qwen2.5-coder:3b on Ollama, CPU only)
 
 - A reply stuck repeating the same text is cut off as it streams, instead of running to max_tokens (one such reply held a step for 16 minutes). The model gets one copy back with a note saying why, and the turn stops with a clear error after three looping replies in a row.

@@ -2617,7 +2617,7 @@ async function executeOneCallRaw(session, call, context, options) {
     if (NESTED_MEMORY_TOOLS.has(name) && result && typeof result === 'object' && !result.error) {
       const target = args && (args.path || args.file_path || args.notebook_path);
       if (!session.nestedMemoryLoaded) session.nestedMemoryLoaded = new Set();
-      const nested = await nestedMemoryFor(session.root, target, session.nestedMemoryLoaded, { env: callContext.env || process.env, excludes: session.settings && session.settings.claudeMdExcludes }).catch(() => []);
+      const nested = await nestedMemoryFor(session.root, target, session.nestedMemoryLoaded, { env: (callContext || context || {}).env || process.env, excludes: session.settings && session.settings.claudeMdExcludes }).catch(() => []);
       if (nested.length) result.directoryInstructions = 'Project instructions for this folder (follow them for files here):\n' + nested.map((item) => '--- ' + item.path + ' ---\n' + item.text).join('\n\n');
     }
     if (fileMutationResult && lspVerificationPath) {
@@ -2628,7 +2628,7 @@ async function executeOneCallRaw(session, call, context, options) {
       if (result && typeof result === 'object') result = { ...result, lspVerification };
       else result = { output: String(result ?? ''), lspVerification };
       if (lspVerification && (lspVerification.status === 'unavailable' || lspVerification.status === 'not_applicable')) {
-        const syntaxCheck = await nodeSyntaxCheck(session.root, fileMutationResult.path || lspVerificationPath, { env: callContext.env || options.env || process.env }).catch(() => null);
+        const syntaxCheck = await nodeSyntaxCheck(session.root, fileMutationResult.path || lspVerificationPath, { env: (callContext || context || {}).env || options.env || process.env }).catch(() => null);
         if (syntaxCheck) result = { ...result, syntaxCheck, warning: [result.warning, 'The file was written but does not parse: ' + syntaxCheck.output.split('\n').find((line) => /SyntaxError/.test(line)) + ' Fix it before running anything.'].filter(Boolean).join(' ') };
       }
     }
