@@ -473,6 +473,14 @@
             ],
             "description": "Work in its own git worktree and branch"
           },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "shared",
+              "desktop"
+            ],
+            "description": "desktop: its own private virtual screen (Linux, Xvfb) with the computer tool and a visible browser on it, for GUI or web work in parallel without touching the user's screen"
+          },
           "team_id": {
             "type": "string",
             "description": "Team ID from team_create"
