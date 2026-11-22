@@ -74,6 +74,7 @@ export function helpText() {
     '  oasis setup                   Configure a model provider (paste first; Enter for the step-by-step menu)',
     '  oasis setup --auto            Detect this computer (CPU, memory, GPU) and running model servers, then configure the best fit',
     '  oasis models [filter] [--json] List the models your provider serves, with context, price and tool support',
+    '  oasis models free [--apply]    Find free models that can drive an agent now (OpenRouter, local Ollama); --apply adds the best to the fallback chain',
     '  oasis doctor [--test-provider] Check the environment; optionally verify live tool calling',
     '  oasis doctor --network        Check that the provider, MCP servers and GitHub are reachable (proxy, DNS, TLS)',
     '  oasis computer-use doctor     Check what desktop control needs on this machine (display, xdotool, permissions)',

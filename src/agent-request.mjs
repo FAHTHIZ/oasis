@@ -259,7 +259,7 @@ export function summarizeFallbackFailure(error, attempts) {
   const lines = attempts.map((attempt) => '  ' + attempt.model + ': ' + attempt.reason);
   const allQuota = attempts.every((attempt) => /quota|rate limit/.test(attempt.reason));
   const allPaid = attempts.every((attempt) => attempt.kind === 'paid');
-  const hint = allPaid ? '\nZero-budget mode found no model proven free, so nothing was sent. Add a local model or an OpenRouter :free model to fallbackModel, or declare a route free with OASIS_FREE_MODELS.' : allQuota ? '\nEvery model is out of quota. Wait for the limit to reset, add billing, or connect another key with `oasis connect`.' : '\nRun `oasis connect` to pick models that work, or set fallbackModel in config.';
+  const hint = allPaid ? '\nZero-budget mode found no model proven free, so nothing was sent. `oasis models free --apply` adds free models (OpenRouter :free, local Ollama) to fallbackModel; or declare a route free with OASIS_FREE_MODELS.' : allQuota ? '\nEvery model is out of quota. Wait for the limit to reset, add billing, or connect another key with `oasis connect`.' : '\nRun `oasis connect` to pick models that work, or set fallbackModel in config.';
   try {
     error.message = 'All ' + attempts.length + ' models in the fallback chain failed:\n' + lines.join('\n') + hint + '\nLast error (' + lastModel + '): ' + error.message;
   } catch {}

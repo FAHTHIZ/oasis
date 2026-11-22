@@ -47,6 +47,30 @@ Zero-budget mode also covers the other services that can bill:
   backends (Tavily, Brave, Exa, Firecrawl) run on credit-based plans, so they
   are hidden unless declared, for example `OASIS_FREE_MODELS=search:tavily`.
 
+### Finding free models
+
+Free cloud models change every few weeks, so OASIS looks them up when you ask
+instead of shipping a list:
+
+```
+oasis models free            # what can drive an agent for free right now
+oasis models free --apply    # add the best three to your fallback chain
+oasis models free --apply 5 --cloud-only
+```
+
+It reads OpenRouter's public model list (no key needed to read it) and keeps
+models whose every listed price is zero, that accept tool calls, output text,
+have at least a 32k context and do not expire within a week. If Ollama runs on
+this computer, its installed models are added, minus those whose server says
+they cannot call tools. Models are ranked for agent work: larger and newer
+models and longer context first, models under 4B parameters and the
+`openrouter/free` router last. `--apply` appends entries such as
+`openrouter:google/gemma-4-31b-it:free` to settings `fallbackModel` and keeps
+the last slot for a local model when you have one, since cloud free tiers run
+out each day and a local model does not. Using OpenRouter's free models still
+needs a free account key in `OPENROUTER_API_KEY`. `--json` gives the full list
+with scores.
+
 ## Request and token budgets
 
 ```
@@ -155,7 +179,7 @@ meeting its expectation.
   for accounts that bought credit; Oasis never buys it for you.
 - "HTTP 404: This model is unavailable for free": OpenRouter withdrew that
   `:free` model. It suggests a paid slug; Oasis does not follow it. Pick a
-  current free model (`oasis models`) or configure a fallback.
+  current free model (`oasis models free`) or configure a fallback.
 - Some gateways answer failures with HTTP 200 and an error body. Oasis treats
   the status in the body as the real one, so fallback and quota tracking work
   the same as for a normal HTTP error.
