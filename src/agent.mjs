@@ -1543,6 +1543,18 @@ function fitToolResultToWindow(session, content, env = process.env) {
   return content.slice(0, head) + note + content.slice(content.length - (room - head));
 }
 
+// The paths a call may show the contents of: read/search paths, and every
+// word of a shell command (`cat issue.txt`, `head -n 50 page.html`).
+function toolPathWords(name, args) {
+  if (!args || typeof args !== 'object') return [];
+  const words = [args.path, args.file_path].filter((value) => typeof value === 'string' && value);
+  if (['run_command', 'run_shell', 'powershell', 'monitor'].includes(name)) {
+    const line = [args.command, ...(Array.isArray(args.args) ? args.args : [])].filter((part) => typeof part === 'string').join(' ');
+    for (const word of line.match(/"[^"]*"|'[^']*'|[^\s;&|<>()]+/g) || []) words.push(word.replace(/^(["'])(.*)\1$/, '$2'));
+  }
+  return words.slice(0, 200);
+}
+
 function serializableResult(value, max = MAX_REPLY_CHARS) {
   let text;
   try { text = JSON.stringify(value); } catch { text = String(value); }
@@ -3214,7 +3226,7 @@ async function applyToolResults(session, options, turn) {
     if (typeof item.content === 'string' && untrustedGuardEnabled(session, options.env || process.env)) {
       const callArgs = safeToolArguments(call.function && call.function.arguments);
       const readPath = name === 'read_file' ? normalizeReviewPath(callArgs.path || '') : '';
-      const fetchedFile = Boolean(readPath && session.fetchedPaths && session.fetchedPaths.has(path.resolve(session.root || '.', readPath)));
+      const fetchedFile = Boolean(session.fetchedPaths && session.fetchedPaths.size) && toolPathWords(name, callArgs).some((word) => session.fetchedPaths.has(path.resolve(session.root || '.', String(callArgs.cwd || ''), word)));
       item.content = guardExternalContent(session, item.name || name, item.content, { external: fetchedFile || commandFetchesExternal(name, callArgs) });
       for (const file of fetchedOutputPaths(name, callArgs)) (session.fetchedPaths ||= new Set()).add(path.resolve(session.root || '.', String(callArgs.cwd || ''), file));
       if (name === 'read_file' && session.judgedPaths) item.content = guardJudgedRead(session, name, readPath, item.content);
