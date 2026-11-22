@@ -9,6 +9,7 @@ import wrapAnsi from 'wrap-ansi';
 import stripAnsi from 'strip-ansi';
 import { stringWidth } from './line-editor.mjs';
 import { renderMermaid } from './mermaid-ascii.mjs';
+import { terminalSafe } from './terminal-guard.mjs';
 
 export { wordHighlights };
 
@@ -325,6 +326,8 @@ export class MarkdownStream {
   }
 
   push(text) {
+    // Model text: no escape sequences reach the terminal from it.
+    text = terminalSafe(text);
     // Reasoning models often open a reply with blank lines; dropping them
     // keeps the first words next to the reply bullet instead of below it.
     if (!this.started && text) text = text.replace(/^(?:[ \t]*\r?\n)+/, '');
