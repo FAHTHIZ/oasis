@@ -118,3 +118,10 @@ test('a command that may change files after a passing check makes the check stal
   assert.equal(gate.met, false);
   assert.match(gate.reason, /`sed -i 's\/\+\/-\/' add.mjs` can change files and ran after/);
 });
+
+test('a different check is named when the condition\'s own command has not run', () => {
+  const other = { kind: 'check', command: 'node --test math.test.mjs', passed: true, exitCode: 0, seq: 1 };
+  const gate = goalEvidenceGate('npm test passes', [other]);
+  assert.equal(gate.met, false);
+  assert.match(gate.reason, /`node --test math\.test\.mjs` ran, but it is not `npm test`.*run `npm test` itself/);
+});
