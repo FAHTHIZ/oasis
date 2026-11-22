@@ -65,6 +65,14 @@ function fakesExitStatus(text) {
   if (/(^|[;&|(\s])(?:exit|trap|alias|unalias|hash|enable)(?=\s|;|$)/.test(value)) return true;
   if (/\w\s*\(\s*\)\s*\{|(^|[;&|\s])function\s+[\w.-]+/.test(value)) return true;
   if (/(^|[;&|\s])(?:export\s+)?PATH=/.test(value)) return true;
+  // Settings that replace what the check runs: npm_config_script_shell=true
+  // (or --script-shell true) makes `npm test` run `true`; preloads can patch
+  // the exit code (NODE_OPTIONS=--require, LD_PRELOAD, BASH_ENV).
+  if (/(^|[;&|\s])(?:export\s+)?(?:npm_config_\w+|NPM_CONFIG_\w+|LD_PRELOAD|DYLD_INSERT_LIBRARIES|BASH_ENV|ENV)=/.test(value)) return true;
+  if (/(^|\s)--script-shell(?:[=\s]|$)/.test(value)) return true;
+  for (const match of value.matchAll(/(?:^|[;&|\s])(?:export\s+)?NODE_OPTIONS=("[^"]*"|'[^']*'|\S+)/g)) {
+    if (/(?:^|[\s"'])(?:-r|--require|--import|--loader|--experimental-loader)(?:[=\s"']|$)/.test(match[1])) return true;
+  }
   return false;
 }
 
@@ -106,9 +114,14 @@ function runsOutside(segments, tokens, root) {
   return false;
 }
 
-/** For run_command: whether `npm test --prefix /tmp/x` runs outside `root`. */
+/**
+ * For run_command: whether the check does not test `root` as written:
+ * `npm test --prefix /tmp/x` runs elsewhere, `--script-shell true` runs `true`.
+ */
 export function runsOutsideRoot(command, args, root) {
-  return Boolean(root) && runsOutside([], [String(command || '')].concat(Array.isArray(args) ? args.map(String) : []), root);
+  const list = Array.isArray(args) ? args.map(String) : [];
+  if (list.some((arg) => arg === '--script-shell' || arg.startsWith('--script-shell='))) return true;
+  return Boolean(root) && runsOutside([], [String(command || '')].concat(list), root);
 }
 
 export function shellExitTarget(command, { root = '' } = {}) {
