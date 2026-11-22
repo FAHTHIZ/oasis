@@ -17,6 +17,7 @@ oasis control-room --hours 72 --json
 | Screens and browsers | Virtual screens (with the VNC address to watch them) and browser tabs held by the main agent or by subagents with [their own environment](COMPUTER_USE.md#agent-environments). Idle ones are marked before they close |
 | History | Agents starting, finishing, failing and being stopped, newest first |
 | Sessions | Sessions that ran agents in the window, with their agent count and spend |
+| Track record | For each agent type and model over the last 30 days: runs, how many succeeded, were verified by evidence, failed or had claims rejected, and average tokens and cost. Read from the [agent experience store](SUBAGENTS.md#experience); counts only, never task text |
 | This computer | CPUs, load average, memory, and the OASIS server's own memory use |
 
 ## Where the data comes from

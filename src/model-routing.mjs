@@ -233,6 +233,10 @@ export function sanitizeModelRouting(value) {
     ...(value.mode === 'cascade' || value.mode === 'capability' ? { mode: value.mode } : {}),
     ...(Object.keys(sanitizeRoutes(value.routes)).length ? { routes: sanitizeRoutes(value.routes) } : {}),
     easyModel: normalize(value.easyModel),
-    strongModel: normalize(value.strongModel)
+    strongModel: normalize(value.strongModel),
+    // Subagent model choice from the agent experience track record (src/agent-experience.mjs).
+    ...(value.subagents === 'experience' ? { subagents: 'experience' } : {}),
+    ...(Array.isArray(value.subagentModels) && value.subagentModels.some((item) => normalize(item)) ? { subagentModels: [...new Set(value.subagentModels.map(normalize).filter(Boolean))].slice(0, 20) } : {}),
+    ...(Number.isInteger(value.subagentMinRuns) && value.subagentMinRuns >= 2 && value.subagentMinRuns <= 1000 ? { subagentMinRuns: value.subagentMinRuns } : {})
   };
 }

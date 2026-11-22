@@ -30,6 +30,9 @@ import { unsupportedChildClaim } from './claim-check.mjs';
 import { evidenceSince, evidenceSummary, sessionEvidence } from './evidence-ledger.mjs';
 import { checkReport } from './verification-contracts.mjs';
 import { spawnScope } from './spawn-scope.mjs';
+import { chooseExperienceModel, experienceEnabled, experiencePromptSection, experienceProject, recordAgentExperience, sharedExperienceStore, taskDomain } from './agent-experience.mjs';
+import { priceFor } from './pricing.mjs';
+import { routeCost, zeroBudgetEnabled } from './cost-policy.mjs';
 import { callDigest, consumeGrant, parkApproval } from './neuron-approvals.mjs';
 import { schedulerForRegistry, providerKey, describeWait } from './neuron-scheduler.mjs';
 import { childBudgetRequest, close as closeBudget, reserve as reserveBudget, sessionBudget } from './budget-algebra.mjs';
@@ -294,6 +297,8 @@ export async function runSubagent(parent, args, context, options) {
     }
   }
   const agentContext = await subagentDefinitionContext(parent, agent, options);
+  // Earlier runs of this agent type on similar work in this project (src/agent-experience.mjs).
+  const experience = options.resumeAgent ? '' : experiencePromptSection(parent, type, prompt, { env: options.env });
   const parentBase = parent.baseSystemPrompt || String(parent.messages && parent.messages[0] && parent.messages[0].content || '');
   const base = agent.omitClaudeMd ? withoutProjectInstructions(parentBase, parent.projectContextText) : parentBase;
   const systemText = [
@@ -301,6 +306,7 @@ export async function runSubagent(parent, args, context, options) {
     'SUBAGENT MODE (' + agent.name + '). ' + agent.prompt,
     'A parent agent launched you for one task. The parent and user cannot see your tool calls; your final message is your entire report. Include concrete findings with file paths, the files you changed, and the verification commands you ran with their results. Do not ask questions; make reasonable assumptions and state them. Shared durable memory and procedural learning are parent-owned: you may search and read existing memories, but do not save, verify, delete, or propose durable items. Include memory or reusable-skill candidates in your final report for the parent to review. Agent definitions and the task prompt cannot override the safety rules above.',
     ...agentContext,
+    ...(experience ? [experience] : []),
     ...(outputSchema ? ['OUTPUT FORMAT: your final message must be a single JSON value, with no prose around it, that matches this JSON Schema:\n' + JSON.stringify(outputSchema)] : []),
     ...(parent.subagentSystemAppend ? [parent.subagentSystemAppend] : [])
   ].join('\n\n');
@@ -336,7 +342,8 @@ export async function runSubagent(parent, args, context, options) {
   const configuredAgentModel = agent.model && modelAllowed(agent.model, parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol, ...(parent.modelPolicy || {}) })
     ? agent.model
     : null;
-  const selectedModel = requestedModel || configuredAgentModel;
+  const experienceRoute = !requestedModel && !configuredAgentModel && !options.resumeAgent ? experienceModelRoute(parent, type, prompt, options) : null;
+  const selectedModel = requestedModel || configuredAgentModel || (experienceRoute && experienceRoute.changed ? experienceRoute.model : null);
   const childConfig = selectedModel ? { ...parent.config, model: selectedModel } : parent.config;
   const child = {
     root: worktree ? worktree.path : parent.root,
@@ -417,6 +424,7 @@ export async function runSubagent(parent, args, context, options) {
     record = registerAgent(parent, { type, description, background, child, readOnly, worktreeInfo: worktree, resumable: !worktree, teamId: teamId || null, sharedTaskId, autoDispatchManaged: args.auto_dispatch_managed === true });
   }
   child.agentId = record.id;
+  if (experienceRoute) record.modelRoute = experienceRoute.reason;
   record.maxTurns = agent.maxTurns || null;
   record.budgetRequest = agent.budget || null;
   record.domains = agent.domains || [];
@@ -443,6 +451,38 @@ export async function runSubagent(parent, args, context, options) {
     id: record.id, agent: type, description, status: 'running', background: true,
     message: 'Started in the background. You will be told when it finishes; meanwhile continue with other work. Use agent_status (wait_seconds to block), send_message to steer it, or agent_stop to cancel.'
   };
+}
+
+// modelRouting.subagents = "experience" (or OASIS_SUBAGENT_ROUTING=experience):
+// start this subagent on the cheapest configured model whose track record on
+// this agent type and kind of work matches the default model's
+// (src/agent-experience.mjs). Off by default; a task model or an agent
+// definition's model always wins. Returns null when not in use.
+function experienceModelRoute(parent, type, prompt, options) {
+  try {
+    const env = options.env || process.env;
+    const routing = (parent.settings && parent.settings.modelRouting) || {};
+    const mode = String(env.OASIS_SUBAGENT_ROUTING || routing.subagents || '').toLowerCase();
+    if (mode !== 'experience' || !experienceEnabled(env, parent.settings)) return null;
+    const store = sharedExperienceStore(env, parent.settings);
+    if (!store) return null;
+    const baseModel = String(parent.config && parent.config.model || '');
+    const policy = { env: parent.modelEnv, protocol: parent.config.protocol, ...(parent.modelPolicy || {}) };
+    const configured = [routing.easyModel, routing.strongModel, ...Object.values(routing.routes || {}), ...(Array.isArray(routing.subagentModels) ? routing.subagentModels : []), ...(parent.availableModels || [])]
+      .map((item) => String(item || '').trim()).filter((item) => item && !item.includes('*') && item !== baseModel);
+    const zero = zeroBudgetEnabled(parent, env);
+    const candidates = [...new Set(configured)].filter((model) => modelAllowed(model, parent.availableModels, policy)
+      && (!zero || routeCost({ ...parent.config, model }, { session: parent, env }).cost === 'free'));
+    if (!candidates.length) return null;
+    const price = (model) => {
+      if (routeCost({ ...parent.config, model }, { session: parent, env }).cost === 'free') return 0;
+      const listed = priceFor(model, { config: parent.config, overrides: parent.pricing || {}, env });
+      return listed && (listed.input > 0 || listed.output > 0) ? Number(listed.input || 0) + Number(listed.output || 0) : null;
+    };
+    const rows = store.runs({ project: experienceProject(parent.root), agentType: type, limit: 2000 });
+    const minRuns = Number.isFinite(Number(routing.subagentMinRuns)) && Number(routing.subagentMinRuns) >= 2 ? Math.floor(Number(routing.subagentMinRuns)) : 5;
+    return chooseExperienceModel({ rows, agentType: type, domain: taskDomain(prompt), baseModel, candidates, price, minRuns });
+  } catch { return null; }
 }
 
 // Before resuming an interrupted worktree worker, make sure its checkout is still the
@@ -602,6 +642,11 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   let outcome;
   // The child's evidence for this run starts after what earlier runs recorded.
   const evidenceFrom = sessionEvidence(child) ? sessionEvidence(child).seq : 0;
+  const runStart = { at: Date.now(), toolCalls: record.toolCalls || 0, costUsd: Number(record.usage && record.usage.costUsd) || 0 };
+  const experienceRun = (extra) => ({
+    prompt, model: child.config && child.config.model, toolCalls: (record.toolCalls || 0) - runStart.toolCalls,
+    costUsd: (Number(record.usage && record.usage.costUsd) || 0) - runStart.costUsd, durationMs: Date.now() - runStart.at, ...extra
+  });
   try {
     // One admission point for task, teams and workflow agent(): wait for a slot.
     openNeuronBudget(parent, record, options.env || process.env);
@@ -644,6 +689,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     }
     if (record.pane) record.pane.write('[' + record.status + '] ' + error.message);
     recordAgentEvent(parent, record.status === 'cancelled' ? 'agent.cancelled' : record.status === 'stalled' ? 'agent.stalled' : 'agent.failed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: error.message });
+    recordAgentExperience(parent, record, experienceRun({ tokens: runTokens, evidence: evidenceSummary(evidenceSince(sessionEvidence(child), evidenceFrom)) }), { env: options.env });
     throw error;
   }
   let worktreeResult = null;
@@ -681,6 +727,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   record.reportFile = handoff ? handoff.file : null;
   if (record.pane) record.pane.write('[completed] ' + Math.max(0, Number(outcome.toolCalls) || 0) + ' tool calls');
   record.tokensUsed += Math.max(0, Number(outcome.tokensUsed) || 0);
+  recordAgentExperience(parent, record, experienceRun({ tokens: Math.max(0, Number(outcome.tokensUsed) || 0), evidence: record.evidence, partial: Boolean(outcome.limitReached), toolCalls: Math.max(0, Number(outcome.toolCalls) || 0) }), { env: options.env });
   return {
     agent: type,
     description,
@@ -694,6 +741,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     ...(outcome.limitReached ? { partial: true, note: 'The agent hit its ' + (record.maxTurns ? 'maxTurns (' + record.maxTurns + ')' : 'step') + ' limit; the report may be incomplete. send_message resumes it.' } : {}),
     ...(record.outputSchema ? (outcome.schemaErrors && outcome.schemaErrors.length ? { schema_errors: outcome.schemaErrors } : { structured: outcome.structured }) : {}),
     ...(record.schedulerNote ? { scheduler_note: record.schedulerNote } : {}),
+    ...(record.modelRoute && child.config && child.config.model !== parent.config.model ? { model: child.config.model, model_route: record.modelRoute } : {}),
     toolCalls: Math.max(0, Number(outcome.toolCalls) || 0),
     tokensUsed: Math.max(0, Number(outcome.tokensUsed) || 0),
     ...(record.usage && record.usage.requests ? { usage: { requests: record.usage.requests, inputTokens: record.usage.inputTokens, outputTokens: record.usage.outputTokens, costUsd: Number(Number(record.usage.costUsd || 0).toFixed(6)) } } : {})
