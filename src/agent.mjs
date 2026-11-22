@@ -11,7 +11,7 @@ import { resolveToolAlias, normalizeRunCommandCall, cleanToolCallName } from './
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { runsOutsideRoot, shellExitTarget } from './pipe-status.mjs';
 import { loadPins, savePins } from './mcp-trust.mjs';
-import { applyInjectionTaint, commandFetchesExternal, fetchedOutputPaths, guardExternalContent, guardJudgedOutput, guardJudgedRead, clearInjectionTurnFlag, injectionHoldReason, untrustedGuardEnabled } from './untrusted-content.mjs';
+import { applyInjectionTaint, commandFetchesExternal, fetchedOutputPaths, guardExternalContent, guardJudgedOutput, guardJudgedRead, clearInjectionTurnFlag, injectionHoldReason, showHiddenCharacters, untrustedGuardEnabled } from './untrusted-content.mjs';
 import { maskSecrets, unmaskSecretsForTool, secretShieldEnabled, redactSecretText, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
@@ -1750,6 +1750,10 @@ async function authorizeCall(session, name, args, context, options) {
     const rawArgsText = JSON.stringify(args);
     const safeArgsText = JSON.stringify(safeArgs);
     let safeMessage = redactSecretText(String(message || '')).replace(rawArgsText, safeArgsText);
+    // Hidden or direction-changing characters are shown, and such a request
+    // always reaches a person: auto mode's classifier does not decide it.
+    const shown = showHiddenCharacters(safeMessage);
+    if (shown.count || showHiddenCharacters(rawArgsText).count) { safeMessage = shown.count ? shown.text : safeMessage; force = true; }
     const suggestion = suggestRule(name, safeArgs);
     // PermissionRequest hooks answer before the user is asked (this also works for
     // background agents, which cannot show a prompt).

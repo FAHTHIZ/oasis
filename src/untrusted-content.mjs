@@ -88,6 +88,21 @@ export function stripInvisible(text) {
   return { text: out, removed };
 }
 
+// Characters that change how text looks without being visible themselves:
+// direction overrides, zero-width characters, Unicode tags, and C0/C1
+// controls other than tab and newline (an escape sequence can redraw the
+// line). In an approval prompt they are shown as <U+XXXX> so the person sees
+// the command that will run, not the one it pretends to be.
+// Zero-width joiners (emoji, Indic scripts), soft hyphens and \r stay as they are.
+const HIDDEN_IN_PROMPT = /[\u202A-\u202E\u2066-\u2069\u200B\u200E\u200F\u061C\u2060\uFEFF]|[\u{E0000}-\u{E007F}]|[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu;
+
+export function showHiddenCharacters(text) {
+  if (typeof text !== 'string' || !text) return { text, count: 0 };
+  let count = 0;
+  const out = text.replace(HIDDEN_IN_PROMPT, (ch) => { count++; return '<U+' + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0') + '>'; });
+  return { text: count ? 'Warning: this request contains ' + count + ' hidden or display-changing character' + (count === 1 ? '' : 's') + ', shown as <U+XXXX>. What runs is the text with them in place, which may not be what it looks like.\n' + out : out, count };
+}
+
 export function detectInjection(text) {
   if (typeof text !== 'string' || !text) return [];
   // A single zero-width or soft-hyphen character inside a word (ig\u200Bnore)
