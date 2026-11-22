@@ -20,7 +20,7 @@ test('hard quota 429s are classified as billing, plain rate limits are not', () 
 
 test('a quota error is not retried and stops a /loop instead of firing again', { skip: process.platform !== 'linux' }, async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-halt-'));
-  t.after(() => rm(home, { recursive: true, force: true }));
+  t.after(() => rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   let requests = 0;
   const server = createServer(async (req, res) => {
     for await (const _ of req) { /* drain */ }
