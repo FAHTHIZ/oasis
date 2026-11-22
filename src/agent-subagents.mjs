@@ -3,8 +3,10 @@
 // imports runAgentTurn and a few helpers back from there, which is safe
 // because they are only used when a child turn runs, never at module load.
 import { TOOL_DEFINITIONS } from './tools.mjs';
+import { COMPUTER_TOOL_DEFINITION } from './computer-use.mjs';
+import { BROWSER_TOOL_DEFINITION } from './browser-tool.mjs';
 import { BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS } from './subagents.mjs';
-import { stopAgent, notifyParent, getAgentTeam, AGENT_TOOL_NAMES, agentRegistry, runningBackgroundCount, MAX_BACKGROUND_AGENTS, registerAgent, addAgentUsage, stopDescendants, recordAgentEvent, agentStatus, neuronNetworkSnapshot, agentEvents, createAgentTeam, agentTeamStatus, shutdownAgentTeam, sendTeamMessage, getAgent } from './agent-tasks.mjs';
+import { stopAgent, notifyParent, getAgentTeam, AGENT_TOOL_NAMES, agentRegistry, runningBackgroundCount, MAX_BACKGROUND_AGENTS, registerAgent, addAgentUsage, stopDescendants, releaseAgentEnvironment, recordAgentEvent, agentStatus, neuronNetworkSnapshot, agentEvents, createAgentTeam, agentTeamStatus, shutdownAgentTeam, sendTeamMessage, getAgent } from './agent-tasks.mjs';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { atomicWriteFile } from './atomic-write.mjs';
@@ -278,6 +280,19 @@ export async function runSubagent(parent, args, context, options) {
     if (disallowed.has(name)) return false;
     return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name) || name === 'team_send_message';
   });
+  // Agent environments: "desktop" gives the child its own virtual screen, with the
+  // computer tool and a browser that opens visibly on that screen.
+  const environment = String(args.environment || agent.environment || 'shared').toLowerCase();
+  if (environment !== 'shared' && environment !== 'desktop') throw new Error('environment must be "shared" or "desktop".');
+  if (environment === 'desktop') {
+    if (parent.restricted) throw new Error('A desktop environment is not available in --restricted mode.');
+    if ((options.platform || process.platform) !== 'linux') throw new Error('A desktop environment needs Linux with Xvfb for its private virtual screen. On macOS and Windows, use the computer tool on your own screen (--computer-use).');
+    for (const definition of [COMPUTER_TOOL_DEFINITION, BROWSER_TOOL_DEFINITION]) {
+      const name = definition.function.name;
+      if (disallowed.has(name) || (allowed && !allowed.has(name))) continue;
+      if (!definitions.some((item) => item.function.name === name)) definitions.push(definition);
+    }
+  }
   const agentContext = await subagentDefinitionContext(parent, agent, options);
   const parentBase = parent.baseSystemPrompt || String(parent.messages && parent.messages[0] && parent.messages[0].content || '');
   const base = agent.omitClaudeMd ? withoutProjectInstructions(parentBase, parent.projectContextText) : parentBase;
@@ -312,7 +327,8 @@ export async function runSubagent(parent, args, context, options) {
     worktree = await createWorktree(parent.root, description, { env: options.env || process.env, hookOptions: hookOptions(parent, options.env), sessionId: parent.sessionId });
   }
   const isolationNote = worktree && worktree.hook ? '\n\nISOLATED WORKTREE: you are working in a separate copy of the project at ' + worktree.path + ', created by a WorktreeCreate hook. Every path is relative to it; the user\'s main checkout is untouched.' : worktree ? '\n\nISOLATED WORKTREE: you are working in a separate git worktree on branch ' + worktree.branch + '. Every path is relative to it; the user\'s main checkout is untouched. Do not commit, merge, or switch branches yourself; Oasis commits your changes on this branch when you finish.' : '';
-  const setupNote = worktree && worktree.setup ? '\n' + worktreeSetupSummary(worktree.setup) : '';
+  const setupNote = (worktree && worktree.setup ? '\n' + worktreeSetupSummary(worktree.setup) : '')
+    + (environment === 'desktop' ? '\n\nPRIVATE DESKTOP: you have your own virtual screen. The computer tool acts on it (launch_app opens programs there), and the browser tool opens a visible Chrome on it. The user\'s screen is untouched; other agents have their own screens. Take a screenshot before acting.' : '');
   const requestedModel = String(args.model || '').trim();
   if (requestedModel && !modelAllowed(requestedModel, parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol, ...(parent.modelPolicy || {}) })) {
     throw new Error(modelRestrictionMessage(requestedModel, parent.availableModels || [], { env: parent.modelEnv, ...(parent.modelPolicy || {}) }));
@@ -339,6 +355,7 @@ export async function runSubagent(parent, args, context, options) {
     sharedTasks: parent.sharedTasks,
     agentTasks: agentRegistry(parent),
     settings: parent.settings,
+    ...(parent.a2aAgents ? { a2aAgents: parent.a2aAgents } : {}),
     permissions: parent.permissions,
     sandbox: parent.sandbox,
     hooks: agentScopedHooks(parent, agent),
@@ -361,6 +378,10 @@ export async function runSubagent(parent, args, context, options) {
     budgetLedger: parent.budgetLedger ||= { spentUsd: Math.max(0, Number(parent.costUsd) || 0), unknownRequests: 0 },
     agents: nested ? parent.agents || BUILTIN_AGENTS : {},
     subagentDepth: depth + 1,
+    // A child never moves from a private screen to the user's real one: with a desktop
+    // environment, or a parent on a virtual screen, it starts its own virtual screen.
+    ...(environment === 'desktop' || parent.computerDisplay === 'virtual' ? { computerDisplay: 'virtual' } : {}),
+    agentEnvironment: environment,
     projectContextText: parent.projectContextText || '',
     subagentMaxDepth: parent.subagentMaxDepth,
     subagentMaxParallel: parent.subagentMaxParallel,
@@ -494,6 +515,8 @@ function closeNeuronBudget(record) {
 // The agent's own MCP servers are connected for each turn and closed after it.
 async function runChildTurn(parent, record, prompt, options, flags) {
   const child = record.child;
+  // A follow-up message reuses a desktop child's screen; the idle close waits again after.
+  if (child && child.environmentIdleTimer) { clearTimeout(child.environmentIdleTimer); child.environmentIdleTimer = null; }
   if (child && child.agentMcpSpec) {
     const connected = await connectAgentMcp(child, options.env || process.env).catch((error) => ({ definitions: [], failures: [{ name: 'mcpServers', error: error.message }] }));
     for (const definition of connected.definitions) {
@@ -512,6 +535,7 @@ async function runChildTurn(parent, record, prompt, options, flags) {
   } finally {
     closeNeuronBudget(record);
     closeAgentMcp(record.child);
+    releaseAgentEnvironment(record.child, options.env || process.env);
     if (admission.ticket) { neuronSlots.delete(record); admission.ticket.release(); }
     if (admission.parentTicket) await admission.parentTicket.unpark({ signal: options.signal });
   }

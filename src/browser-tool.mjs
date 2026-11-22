@@ -7,6 +7,7 @@
 import { Browser } from './cdp.mjs';
 import { RECORDED_ACTIONS, addFrame, capturePage, newRecording, recordingEnabled, saveRecording, stepCaption } from './browser-recording.mjs';
 import { isNonPublicIpAddress } from './network-safety.mjs';
+import { agentDisplayEnv, wantsVirtualDisplay } from './computer-use.mjs';
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
 
@@ -335,7 +336,11 @@ export async function executeBrowserTool(args, context = {}) {
 }
 
 async function runBrowserAction(args, context, session, action) {
-  const env = context.env || process.env;
+  let env = context.env || process.env;
+  // An agent with its own virtual screen gets its browser on that screen (agent environments).
+  if (wantsVirtualDisplay(session, env) && !(session.browserState && session.browserState.attached)) {
+    env = await agentDisplayEnv(session, env) || env;
+  }
   const state = await ensureBrowser(session, env, context);
   let tab = state.tabs[state.active];
   const page = tab.page;
@@ -357,7 +362,9 @@ async function runBrowserAction(args, context, session, action) {
         const blockedNavigations = tab.blockedNavigations.splice(0);
         return { url: await evaluate(page, 'location.href').catch(() => url), title: await evaluate(page, 'document.title').catch(() => ''), blockedNavigations, hint: 'A page-initiated navigation was blocked pending approval.' };
       }
-      await Promise.race([loaded, settle(20000)]);
+      // once() gives up after 20 s by itself; a separate 20 s sleep in a race would
+      // outlive the call and hold the process open after the browser closed.
+      await loaded;
       await waitForLoad(page);
       await waitForNavigationApprovals(tab);
       const blockedNavigations = tab.blockedNavigations.splice(0);

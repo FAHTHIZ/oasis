@@ -162,6 +162,8 @@ export function normalizeAgentDefinition(raw, body, { name, source, plugin = fal
     // Antigravity's model tiers (flash, pro) name no concrete model, so they inherit.
     model: data.model && !['inherit', 'flash', 'pro'].includes(lower(data.model)) ? String(data.model) : null,
     isolation: lower(data.isolation) === 'worktree' ? 'worktree' : null,
+    // desktop: its own private virtual screen, with the computer tool and a browser on it.
+    environment: lower(data.environment) === 'desktop' ? 'desktop' : null,
     effort: EFFORTS.includes(lower(data.effort)) ? lower(data.effort) : null,
     maxTurns: Number.isInteger(maxTurns) && maxTurns > 0 ? Math.min(maxTurns, 400) : null,
     // What its reports are checked against on return: code, research, analysis (roadmap 1.6).
@@ -564,6 +566,7 @@ export function taskToolDefinition(agents) {
       subagent_type: { type: 'string', enum: Object.keys(agents), description: 'Default general-purpose' },
       run_in_background: { type: 'boolean', description: 'Return the id now, report later. It cannot ask for approval; unallowed actions are denied.' },
       isolation: { type: 'string', enum: ['worktree'], description: 'Work in its own git worktree and branch' },
+      environment: { type: 'string', enum: ['shared', 'desktop'], description: 'desktop: its own private virtual screen (Linux, Xvfb) with the computer tool and a visible browser on it, for GUI or web work in parallel without touching the user\'s screen' },
       team_id: { type: 'string', description: 'Team ID from team_create' },
       model: { type: 'string', description: 'Model ID; omit to inherit' },
       fork_context: { type: 'boolean', description: 'Give it a bounded copy of this conversation, only if it needs earlier discussion' },

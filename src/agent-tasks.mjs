@@ -1,4 +1,6 @@
 import { restoreApprovals } from './neuron-approvals.mjs';
+import { closeBrowser } from './browser-tool.mjs';
+import { closeComputerUse } from './computer-use.mjs';
 import { attachNeuronLineage, buildNeuronNetworkSnapshot, descendantRecords, formatBudget, projectBudget } from './neuron-network.mjs';
 import { ledgerAgentEvent, ledgerCharge, recoverLedgerNeurons } from './neuron-ledger.mjs';
 
@@ -341,6 +343,7 @@ export function registerAgent(session, fields) {
   // (its own worktree, read-only), then the model.
   const details = [
     record.worktreeInfo || record.worktree ? 'own worktree' : '',
+    child.agentEnvironment === 'desktop' ? 'own desktop' : '',
     record.readOnly ? 'read-only' : '',
     model
   ].filter(Boolean).join(' · ').slice(0, 450);
@@ -474,6 +477,8 @@ export function summarizeAgent(record, { full = false } = {}) {
     backgroundProcesses,
     interactiveTerminals
   };
+  const environment = agentEnvironmentStatus(child);
+  if (environment) out.environment = environment;
   const model = child.config && child.config.model;
   if (typeof model === 'string' && model.trim()) out.model = model.slice(0, 200);
   const toolCount = child.allowedToolNames instanceof Set ? child.allowedToolNames.size : 0;
@@ -551,10 +556,58 @@ export function sendTeamMessage(session, args = {}) {
   return { delivered: 'queued', from: senderId, to: targetId, status: record.status, message: 'Message queued for ' + targetId + '; it will be delivered at the recipient\'s next model step.' };
 }
 
+// Closes what a child session opened for itself: its browser, its computer-use
+// backend and, for a desktop environment, its private virtual screen and the apps on
+// it. Returns how many of those were open. Safe to call more than once.
+// What a child's own environment holds right now, for agent_status and the control room.
+export function agentEnvironmentStatus(child) {
+  if (!child) return null;
+  const virtual = child.computerState && child.computerState.virtual;
+  const browserTabs = child.browserState && Array.isArray(child.browserState.tabs) ? child.browserState.tabs.length : 0;
+  if (child.agentEnvironment !== 'desktop' && !virtual && !browserTabs) return null;
+  return {
+    kind: child.agentEnvironment === 'desktop' ? 'desktop' : 'shared',
+    screen: virtual ? virtual.display : child.agentEnvironment === 'desktop' ? 'starts on first use' : 'shared',
+    ...(virtual && virtual.vnc ? { watch: 'VNC ' + virtual.vnc.address } : {}),
+    ...(browserTabs ? { browserTabs } : {}),
+    ...(child.environmentIdleTimer ? { idle: true } : {})
+  };
+}
+
+export function closeAgentEnvironment(child) {
+  if (!child) return 0;
+  if (child.environmentIdleTimer) { clearTimeout(child.environmentIdleTimer); child.environmentIdleTimer = null; }
+  let closed = 0;
+  if (child.browserState) {
+    closed += 1;
+    child.environmentClosing = closeBrowser(child).catch(() => '');
+  }
+  if (child.computerState) {
+    closed += 1;
+    closeComputerUse(child);
+  }
+  return closed;
+}
+
+// After a turn: a shared-environment child closes its browser and computer backend at
+// once; a desktop child keeps its screen for a follow-up message until it sits idle for
+// OASIS_AGENT_ENVIRONMENT_IDLE_MS (default 10 minutes; 0 closes it at turn end).
+export function releaseAgentEnvironment(child, env = process.env) {
+  if (!child) return;
+  if (child.agentEnvironment !== 'desktop') { closeAgentEnvironment(child); return; }
+  const raw = env.OASIS_AGENT_ENVIRONMENT_IDLE_MS;
+  const idle = raw === undefined || raw === '' ? 600_000 : Math.max(0, Number(raw) || 0);
+  if (!idle) { closeAgentEnvironment(child); return; }
+  if (child.environmentIdleTimer) clearTimeout(child.environmentIdleTimer);
+  child.environmentIdleTimer = setTimeout(() => { child.environmentIdleTimer = null; closeAgentEnvironment(child); }, idle);
+  if (typeof child.environmentIdleTimer.unref === 'function') child.environmentIdleTimer.unref();
+}
+
 function stopAgentProcesses(record) {
-  const result = { background: 0, terminals: 0 };
+  const result = { background: 0, terminals: 0, environments: 0 };
   const child = record && record.child;
   if (!child) return result;
+  result.environments = closeAgentEnvironment(child);
   if (typeof child.stopBackgroundProcesses === 'function') {
     try {
       const stopped = Number(child.stopBackgroundProcesses());
@@ -599,6 +652,7 @@ export function stopAgent(session, args = {}) {
   const record = getAgent(session, args.id);
   const cleaned = stopAgentProcesses(record);
   const processesStopped = cleaned.background + cleaned.terminals;
+  const environmentNote = cleaned.environments ? ' Closed its browser and screen.' : '';
   const descendants = stopDescendants(session, record);
   const descendantNote = descendants.length ? ' Also stopped ' + descendants.length + ' agent(s) it had started: ' + descendants.join(', ') + '.' : '';
   if (record.status !== 'running') {
@@ -607,10 +661,11 @@ export function stopAgent(session, args = {}) {
       status: record.status,
       backgroundProcessesStopped: cleaned.background,
       terminalsStopped: cleaned.terminals,
+      ...(cleaned.environments ? { environmentsClosed: cleaned.environments } : {}),
       ...(descendants.length ? { descendantsStopped: descendants } : {}),
       message: (processesStopped
         ? 'The agent is not running; stopped ' + cleaned.background + ' background process(es) and ' + cleaned.terminals + ' interactive terminal session(s) it left in its private environment.'
-        : 'The agent is not running.') + descendantNote
+        : 'The agent is not running.') + environmentNote + descendantNote
     };
   }
   record.cancelRequested = true;
@@ -626,8 +681,9 @@ export function stopAgent(session, args = {}) {
     status: 'stopping',
     backgroundProcessesStopped: cleaned.background,
     terminalsStopped: cleaned.terminals,
+    ...(cleaned.environments ? { environmentsClosed: cleaned.environments } : {}),
     ...(descendants.length ? { descendantsStopped: descendants } : {}),
-    message: 'Stop requested; the agent will end at its next step.' + (processesStopped ? ' Stopped ' + cleaned.background + ' background process(es) and ' + cleaned.terminals + ' interactive terminal session(s).' : '') + descendantNote
+    message: 'Stop requested; the agent will end at its next step.' + (processesStopped ? ' Stopped ' + cleaned.background + ' background process(es) and ' + cleaned.terminals + ' interactive terminal session(s).' : '') + environmentNote + descendantNote
   };
 }
 

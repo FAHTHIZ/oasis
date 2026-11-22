@@ -715,6 +715,18 @@ async function stateFor(session, env, options) {
   return session.computerState;
 }
 
+/**
+ * The environment a session's own programs (its browser) should use: with a private
+ * virtual screen the browser opens on that screen, visibly, instead of headless or on
+ * the user's desktop. Starts the screen if needed. Returns null for the shared display.
+ */
+export async function agentDisplayEnv(session, env = process.env, options = {}) {
+  if (!session || !wantsVirtualDisplay(session, env) || session.computerBackend) return null;
+  const state = await stateFor(session, env, options);
+  if (!state.virtual) return null;
+  return { ...env, DISPLAY: state.virtual.display, OASIS_CHROME_HEADLESS: '0' };
+}
+
 function virtualInfo(state) {
   if (!state.virtual) return {};
   return { virtual_display: state.virtual.display, ...(state.virtual.vnc ? { watch: 'VNC ' + state.virtual.vnc.address } : {}) };

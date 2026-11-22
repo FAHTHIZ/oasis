@@ -75,6 +75,21 @@ With the first computer action, OASIS starts Xvfb on a free display (`:100` and 
 
 `OASIS_COMPUTER_DISPLAY=virtual` or the setting `"computerUse": "virtual"` does the same. `OASIS_COMPUTER_VIRTUAL_SIZE` sets the size (default `1280x800`), and `OASIS_COMPUTER_VNC=0` skips VNC.
 
+With a virtual screen, the `browser` tool (`--chrome`) opens a visible Chrome on that screen instead of a headless one, so you can watch the agent browse over the same VNC connection. A Chrome you attached with `OASIS_CHROME_PORT` stays where it is.
+
+## Agent environments
+
+A subagent can get a whole environment of its own. With `environment: "desktop"` on the `task` call, or `environment: desktop` in an [agent file](SUBAGENTS.md#front-matter-reference), the subagent gets:
+
+- its own virtual screen, with the `computer` tool, even when the main session has computer use off;
+- its own browser, shown on that screen, with its own temporary profile (cookies and logins are not shared);
+- its own terminals and background processes, as every subagent has;
+- its own workspace when you add `isolation: "worktree"`.
+
+Several desktop agents can work in parallel, each on its own screen, while your screen stays untouched. `agent_status` shows each one's `environment` (screen, VNC address, open tabs). A subagent of a session that is already on a virtual screen never falls back to your real screen; it gets a private one too.
+
+When a desktop agent finishes its turn, its screen stays open for a follow-up `send_message` for 10 minutes, then closes. `OASIS_AGENT_ENVIRONMENT_IDLE_MS` changes that (`0` closes it when the turn ends). `agent_stop` and the end of the session close it at once. Other subagents close their browser and computer backend as soon as their turn ends. Desktop environments need Linux with Xvfb, and are refused in `--restricted` mode.
+
 ## Setup
 
 ### Linux (X11)
@@ -120,6 +135,7 @@ The agent is driving your real desktop. Keep an eye on it, or point it at a virt
 | `OASIS_COMPUTER_DISPLAY` | `$DISPLAY` | X display to capture and drive (Linux), or `virtual` for a private screen |
 | `OASIS_COMPUTER_VIRTUAL_SIZE` | `1280x800` | Size of the virtual screen |
 | `OASIS_COMPUTER_VNC` | on | `0` skips the VNC server on the virtual screen |
+| `OASIS_AGENT_ENVIRONMENT_IDLE_MS` | 600000 | How long a desktop subagent's screen stays open after its turn |
 | `OASIS_TESSERACT` | `tesseract` | Tesseract binary for `find_text` |
 | `OASIS_OCR_LANG` | `eng` | Tesseract languages, e.g. `eng+fra` |
 | `OASIS_COMPUTER_MAX_WIDTH` | 1280 | Largest screenshot width sent to the model |
