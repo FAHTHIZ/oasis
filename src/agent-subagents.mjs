@@ -412,6 +412,10 @@ export async function runSubagent(parent, args, context, options) {
   // Not enumerable: keeps session saves and copies from walking the parent.
   Object.defineProperty(child, 'parentSessionRef', { value: parent, enumerable: false, writable: true, configurable: true });
   shareSecretVault(parent, child);
+  // Taint flows down as well as up: a parent held after reading an injection
+  // must not get the held action done by starting (or resuming) a child with
+  // the injected instructions as its task.
+  applyInjectionTaint(child, injectionTaint(parent, 'the agent that started it'));
 
   child.stopBackgroundProcesses = () => killAllBackground(child.background);
   const backgroundArg = args.run_in_background;
@@ -1189,7 +1193,8 @@ export async function runAgentTool(session, name, args, context, options) {
   if (!message) throw new Error('send_message needs a message.');
   if (message.length > 20000) throw new Error('Messages must be 20,000 characters or fewer.');
   if (record.status === 'running') {
-    (record.child.inbox || (record.child.inbox = [])).push({ text: 'New message from the parent agent:\n' + message });
+    const taint = injectionTaint(session, 'the parent agent');
+    (record.child.inbox || (record.child.inbox = [])).push({ text: 'New message from the parent agent:\n' + message, ...(taint ? { taint } : {}) });
     recordAgentEvent(session, 'agent.message_queued', { agentId: record.id, teamId: record.teamId || undefined, description: 'main → ' + record.id, detail: message });
     return { id: record.id, status: 'running', delivered: 'queued', message: 'The agent will see this at its next step.' };
   }
@@ -1198,6 +1203,7 @@ export async function runAgentTool(session, name, args, context, options) {
   if (runningBackgroundCount(session) >= MAX_BACKGROUND_AGENTS) throw new Error('Too many background agents are running; wait for one to finish first.');
   record.runs++;
   recordAgentEvent(session, 'agent.resume_requested', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: message });
+  applyInjectionTaint(record.child, injectionTaint(session, 'the parent agent'));
   startBackgroundRun(session, record, message, options);
   return { id: record.id, status: 'running', delivered: 'resumed', message: 'The agent resumed in the background with its previous context. You will be told when it finishes.' };
 }
