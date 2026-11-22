@@ -1,6 +1,6 @@
 # Real-world runs
 
-These runs used OASIS the way a person would: type a request, approve steps, read the answer. They used real providers with no scripted model, and were recorded 5–15 November 2026. The model-free harness numbers are in [Benchmarks](BENCHMARKS.md).
+These runs used OASIS the way a person would: type a request, approve steps, read the answer. They used real providers with no scripted model, and were recorded 5–22 November 2026. The model-free harness numbers are in [Benchmarks](BENCHMARKS.md).
 
 ## Tasks
 
@@ -29,6 +29,7 @@ These runs used OASIS the way a person would: type a request, approve steps, rea
 | Call an MCP tool in auto mode | Terminal | gpt-oss-20b | Passed |
 | Delegate to an `explore` subagent in a worktree | Terminal | gpt-oss-20b | Passed; worktree removed afterwards |
 | Continue a terminal session in the browser | Web app | gpt-oss-20b | Passed |
+| "Which region grew fastest from January to June in sales.csv? Compute it with code and save a short summary to summary.md" (24-row CSV, four regions) | Terminal (TUI), default mode, `main` | qwen3-vl-30b-a3b on OVH AI Endpoints (free) with 3 backups | Not finished, 22 Nov. It read `sales.csv` and tried `execute_code` with an `import`, which the tool refuses ("scripts cannot import modules"). Before it could switch to the shell, every model in the fallback chain returned HTTP 429. OASIS stopped after 58 s with "Every model is out of quota", the reset time and `oasis quota`, and paused scheduled work; no file was written. Recorded as a provider-limit failure, not a result |
 
 Lesson from the 15 November runs: a model's own tests passing is not proof that a page works. Ask for a test that drives the page, or check it in a browser.
 
