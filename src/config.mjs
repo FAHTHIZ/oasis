@@ -1,6 +1,6 @@
 import { atomicWriteFile } from './atomic-write.mjs';
 import { BUILTIN_PROVIDERS, providerForEndpoint, providerApiKey } from './provider-registry.mjs';
-import { DEFAULT_TURN_STEPS, MAX_TURN_STEPS, DEFAULT_TURN_TOOL_CALLS, MAX_TURN_TOOL_CALLS } from './model-budgets.mjs';
+import { DEFAULT_TURN_STEPS, MAX_TURN_STEPS, DEFAULT_TURN_TOOL_CALLS, MAX_TURN_TOOL_CALLS } from './turn-limits.mjs';
 import { mkdir, readFile, chmod, copyFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { CLOUD_PROTOCOLS, cloudProtocolFromEnv, defaultCloudBaseURL, defaultCloudModel, cloudCredentialsPresent } from './cloud-providers.mjs';

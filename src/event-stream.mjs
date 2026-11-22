@@ -6,7 +6,7 @@
 // crash or restart never loses the audit trail.
 import { appendFile, readFile, unlink, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { getSessionDirectory } from './sessions.mjs';
+import { getSessionDirectory } from './session-paths.mjs';
 import { redactSecrets } from './auto-memory.mjs';
 import { redactAuditValue } from './tool-kernel.mjs';
 
