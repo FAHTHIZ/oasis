@@ -146,6 +146,7 @@ export function helpText() {
     '  oasis gateway all             Every configured platform at once, in one process with one routine scheduler',
     '  oasis gateway pair CODE       Approve somebody who messaged the bot (also: gateway paired, gateway unpair PLATFORM:ID)',
     '  oasis acp [--permission-mode MODE] [--editor-terminal]  Run as an Agent Client Protocol agent for Zed, JetBrains, Neovim and other ACP editors',
+    '  oasis control-room [--watch] [--hours N] [--json]  Every agent on this computer: status, spend, history and load',
     '  oasis a2a serve [--port N] [--host HOST] [--permission-mode MODE]  Serve OASIS to other agents over the A2A protocol',
     '  oasis a2a card URL | oasis a2a send URL MESSAGE  Read a remote A2A agent\'s card, or send it a task',
     '  oasis app-server [--listen stdio://|unix://[PATH]|ws://IP:PORT] [--ws-auth capability-token --ws-token-file PATH | --ws-auth signed-bearer-token --ws-shared-secret-file PATH] [--permission-mode MODE]  Speak the Codex App Server protocol (JSONL on stdio, or one message per WebSocket text frame) so Codex app-server clients can drive OASIS',

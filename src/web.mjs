@@ -36,6 +36,8 @@ import { listWorkspaceFiles } from './workspace-files.mjs';
 import { createPreviewHandler } from './web-preview.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { connectFromPaste } from './provider-connect.mjs';
+import { controlRoomSnapshot } from './control-room.mjs';
+import { stopAgent } from './agent-tasks.mjs';
 import { basicAuthToken, createCursorAgentsApi, cursorError } from './cursor-agents-api.mjs';
 import { actionNudgeNote } from './turn-guards.mjs';
 
@@ -649,6 +651,31 @@ export function createOasisWebServer(options = {}) {
   // connection or HTTPS, so keys never cross a network in plain text.
   const canManage = (req) => isLoopbackClient(req) || requestIsSecure(req, { trustProxy });
   const activeSessions = new Map();
+  async function agentMonitorRuns() {
+    const stored = await taskStore.list({ limit: 100 });
+    const summaries = new Map(stored.map((item) => [item.id, item]));
+    for (const job of jobs.values()) {
+      const lastEvent = job.events.at(-1);
+      summaries.set(job.id, {
+        id: job.id, type: job.type || 'agent',
+        title: String(job.title || job.type || 'Coding task').slice(0, 160),
+        status: job.status, createdAt: job.createdAt,
+        updatedAt: lastEvent && lastEvent.at || job.createdAt,
+        sessionId: job.sessionId || null,
+        workspaceName: job.workspaceName || path.basename(job.workspaceRoot || activeRoot),
+        eventCount: job.events.length, error: job.error || null
+      });
+    }
+    const allAgentRuns = [...summaries.values()]
+      .filter((item) => item.type === 'agent')
+      .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0));
+    const recent = allAgentRuns.slice(0, 50);
+    const runs = await Promise.all(recent.map(async (summary) => {
+      const task = jobs.get(summary.id) || await taskStore.get(summary.id);
+      return summarizeAgentRun(task || summary);
+    }));
+    return { runs: runs.filter(Boolean), total: allAgentRuns.length };
+  }
   const ptyManager = options.ptyManager || new PtySessionManager();
   const ptySession = { ptyManager, background: new Map() };
   const jobs = options.jobs instanceof Map ? options.jobs : new Map();
@@ -2861,29 +2888,38 @@ export function createOasisWebServer(options = {}) {
 
 
     if (req.method === 'GET' && pathname === '/api/agent-monitor') {
-      const stored = await taskStore.list({ limit: 100 });
-      const summaries = new Map(stored.map((item) => [item.id, item]));
-      for (const job of jobs.values()) {
-        const lastEvent = job.events.at(-1);
-        summaries.set(job.id, {
-          id: job.id, type: job.type || 'agent',
-          title: String(job.title || job.type || 'Coding task').slice(0, 160),
-          status: job.status, createdAt: job.createdAt,
-          updatedAt: lastEvent && lastEvent.at || job.createdAt,
-          sessionId: job.sessionId || null,
-          workspaceName: job.workspaceName || path.basename(job.workspaceRoot || activeRoot),
-          eventCount: job.events.length, error: job.error || null
-        });
+      const { runs, total } = await agentMonitorRuns();
+      json(res, 200, { runs, total, updatedAt: new Date().toISOString() });
+      return;
+    }
+
+    // The control room: every agent on this computer (the ledger all OASIS
+    // processes write, plus this server's live sessions), their screens and
+    // browsers, history, spend and the machine's load. Lifecycle facts only.
+    if (req.method === 'GET' && pathname === '/api/control-room') {
+      const { runs } = await agentMonitorRuns();
+      const runningSessions = new Set([...jobs.values()].filter((job) => ['queued', 'running', 'waiting_approval'].includes(job.status)).map((job) => job.sessionId));
+      const titles = new Map([...jobs.values()].sort((a, b) => Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0)).map((job) => [job.sessionId, job.title]));
+      const seen = new Set();
+      const sessions = [];
+      for (const [id, session] of activeSessions) {
+        if (seen.has(session)) continue;
+        seen.add(session);
+        sessions.push({ id: session.sessionId || id, title: titles.get(id) || titles.get(session.sessionId) || '', session, running: runningSessions.has(id) || runningSessions.has(session.sessionId) });
       }
-      const allAgentRuns = [...summaries.values()]
-        .filter((item) => item.type === 'agent')
-        .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0));
-      const recent = allAgentRuns.slice(0, 50);
-      const runs = await Promise.all(recent.map(async (summary) => {
-        const task = jobs.get(summary.id) || await taskStore.get(summary.id);
-        return summarizeAgentRun(task || summary);
-      }));
-      json(res, 200, { runs: runs.filter(Boolean), total: allAgentRuns.length, updatedAt: new Date().toISOString() });
+      const hours = Number(parsedUrl.searchParams.get('hours')) || undefined;
+      json(res, 200, controlRoomSnapshot({ sessions, runs, env, hours }));
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/control-room/stop') {
+      const body = await readJsonBody(req);
+      const target = [...new Set(activeSessions.values())].find((session) => session.sessionId === String(body.sessionId || ''));
+      if (!target) { json(res, 404, { error: 'That session is not open in this OASIS server. Stop agents from the terminal that started them.' }); return; }
+      try {
+        const result = stopAgent(target, { id: String(body.agentId || '') });
+        json(res, 200, { ok: true, result });
+      } catch (error) { json(res, 400, { error: String(error && error.message || error) }); }
       return;
     }
 
