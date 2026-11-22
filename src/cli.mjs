@@ -1534,6 +1534,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       autoApprove,
       ...(modeOptions.images ? { images: modeOptions.images } : {}),
       ...(modeOptions.expansion ? { expansion: modeOptions.expansion } : {}),
+      // Goal continuations are written by OASIS, not typed: keep an injection hold.
+      ...(modeOptions.keepInjectionHold ? { keepInjectionHold: true } : {}),
       onThinkingBudget: (budget) => stdout.write('[thinking] Extended thinking on for this task (budget ' + budget + ' tokens).\n'),
       onReasoningEffort: (effort) => stdout.write('[thinking] Reasoning effort ' + effort + ' for this task.\n'),
       onMemoryRecall: (ids) => stdout.write('[memory] Recalled ' + ids.join(', ') + '\n'),
@@ -2151,7 +2153,7 @@ async function runGoal(goal, root, autoApprove, session, persistence) {
     while (!stopped && state.active && state.turns < limit) {
       state.turns += 1;
       stdout.write('[goal] Turn ' + (state.turns - startTurns) + ' of up to ' + goal.maxTurns + (startTurns ? ' (' + state.turns + ' in total)' : '') + '\n');
-      session = await runPrompt(prompt, root, autoApprove, session, persistence);
+      session = await runPrompt(prompt, root, autoApprove, session, persistence, state.turns > startTurns + 1 ? { keepInjectionHold: true } : {});
       persistence.resumeId = null;
       if (!session) break;
       if (session.goal && session.goal !== state && !session.goal.active) break;
