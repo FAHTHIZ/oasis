@@ -11,7 +11,7 @@ import { resolveToolAlias, normalizeRunCommandCall, cleanToolCallName } from './
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { runsOutsideRoot, shellExitTarget } from './pipe-status.mjs';
 import { loadPins, savePins } from './mcp-trust.mjs';
-import { guardExternalContent, guardJudgedRead, clearInjectionTurnFlag, injectionHoldReason, untrustedGuardEnabled } from './untrusted-content.mjs';
+import { guardExternalContent, guardJudgedOutput, guardJudgedRead, clearInjectionTurnFlag, injectionHoldReason, untrustedGuardEnabled } from './untrusted-content.mjs';
 import { maskSecrets, unmaskSecretsForTool, secretShieldEnabled, redactSecretText, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
@@ -3206,6 +3206,7 @@ async function applyToolResults(session, options, turn) {
     if (typeof item.content === 'string' && untrustedGuardEnabled(session, options.env || process.env)) {
       item.content = guardExternalContent(session, item.name || name, item.content);
       if (name === 'read_file' && session.judgedPaths) item.content = guardJudgedRead(session, name, normalizeReviewPath(safeToolArguments(call.function && call.function.arguments).path || ''), item.content);
+      else if (session.judgedPaths) item.content = guardJudgedOutput(session, name, item.content);
     }
     if (typeof item.content === 'string') item.content = fitToolResultToWindow(session, leanToolContent(session, item.content, options.env || process.env), options.env || process.env);
     let toolImages = null;

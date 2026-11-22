@@ -730,7 +730,9 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   recordAgentEvent(parent, 'agent.completed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: 'tool_calls=' + Math.max(0, Number(outcome.toolCalls) || 0) });
   record.report = boundSubagentReport(outcome.text);
   record.injectionTaint = injectionTaint(child, 'agent ' + record.id);
-  if (record.injectionTaint && foreground) applyInjectionTaint(parent, record.injectionTaint);
+  // A review-guard hit voids the verifier's PASS; the text came from the
+  // parent's own work, so the parent is not held as if a page had injected it.
+  if (record.injectionTaint && foreground && !record.injectionTaint.review) applyInjectionTaint(parent, record.injectionTaint);
   // Return-time gate (roadmap 1.7). The parent sees only this report, so its
   // claims are checked against the evidence the child's own tool results left
   // in this run (src/verification-contracts.mjs): passing checks for code,
