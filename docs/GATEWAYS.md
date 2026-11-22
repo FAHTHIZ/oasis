@@ -35,7 +35,9 @@ Set `OASIS_GATEWAY_PAIRING=0` to turn pairing off: strangers then only see their
 
 ## Chat commands
 
-`/new` (or `/reset`) starts a fresh session, `/stop` cancels the running task, `/status` shows the session, `/mode default|acceptEdits|plan|auto` changes how approvals work, `/resume` [continues a saved session](#continue-anywhere), `/sethome` makes the chat your [home channel](#home-channel), `/home` shows which chat that is, `/personality NAME` changes the agent's [voice](CONFIGURATION.md#personalities) for that chat, and `/help` lists these.
+`/new` (or `/reset`) starts a fresh session, `/stop` cancels the running task, `/status` shows the session, `/mode default|acceptEdits|plan|auto` changes how approvals work (up to the gateway's ceiling, see below), `/resume` [continues a saved session](#continue-anywhere), `/sethome` makes the chat your [home channel](#home-channel), `/home` shows which chat that is, `/personality NAME` changes the agent's [voice](CONFIGURATION.md#personalities) for that chat, and `/help` lists these.
+
+A chat can loosen approvals only up to a ceiling set by whoever runs the gateway: `OASIS_GATEWAY_MAX_MODE` (`plan`, `manual`, `accept-edits` or `auto`), else the mode the gateway was started in (`oasis gateway --permission-mode auto ...`), else `accept-edits`. So `/mode auto` from a chat is refused unless you allowed it, and a leaked or shared chat account cannot turn off command approvals.
 
 The session commands from the terminal work in chats too: `/model [NAME]` shows or switches the model, `/effort LEVEL` sets reasoning effort, `/compress` (or `/compact`) shrinks the context at once, `/usage` shows that chat's tokens and cost, `/context` shows what fills the context, `/insights [DAYS]` summarizes recent sessions, `/undo` removes the last turn and its file edits, and `/retry` runs your last request again (its edits stay; send `/undo` first to drop them). `/skills` lists skills, and `/SKILL-NAME [request]` runs one, as in the terminal. Every command also works with `!` instead of `/` (Slack reserves `/`).
 
