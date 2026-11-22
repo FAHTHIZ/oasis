@@ -9,7 +9,7 @@ import { readOnlyArgv, readOnlyShellLine } from './read-only-commands.mjs';
 import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordClaimEdit, recordEditFailure, recordEditSuccess } from './claim-check.mjs';
 import { resolveToolAlias, normalizeRunCommandCall, cleanToolCallName } from './tool-aliases.mjs';
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
-import { shellExitTarget } from './pipe-status.mjs';
+import { runsOutsideRoot, shellExitTarget } from './pipe-status.mjs';
 import { loadPins, savePins } from './mcp-trust.mjs';
 import { guardExternalContent, clearInjectionTurnFlag, untrustedGuardEnabled } from './untrusted-content.mjs';
 import { maskSecrets, unmaskSecretsForTool, secretShieldEnabled, redactSecretText, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
@@ -3069,7 +3069,7 @@ async function applyToolResults(session, options, turn) {
       if (result.approved !== false && !result.timedOut) markRanSources(verification, args.command, args.args, result.exitCode);
       // An interactive terminal that is still running has no exit code yet: it is
       // neither a passed nor a failed check.
-      if (isVerificationCommand(args.command, args.args) && result.approved !== false && typeof result.exitCode === 'number') {
+      if (isVerificationCommand(args.command, args.args) && !runsOutsideRoot(args.command, args.args, session.root) && result.approved !== false && typeof result.exitCode === 'number') {
         recordClaimCheck(claimState, { command: [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '), exitCode: result.exitCode });
         verification.lastVerificationExitCode = result.exitCode;
         verification.lastVerificationKind = verificationCommandKind(args.command, args.args);
@@ -3077,12 +3077,12 @@ async function applyToolResults(session, options, turn) {
       }
     }
     if (name === 'run_shell' && result && result.approved === false) {
-      const deniedTarget = shellExitTarget(safeToolArguments(call.function && call.function.arguments).command);
+      const deniedTarget = shellExitTarget(safeToolArguments(call.function && call.function.arguments).command, { root: session.root });
       if (deniedTarget && isVerificationCommand(deniedTarget.command, deniedTarget.args)) verification.deniedCheck = String(safeToolArguments(call.function && call.function.arguments).command || '').slice(0, 200);
     }
     if (name === 'run_shell' && result && result.approved !== false && (typeof result.exitCode === 'number' || result.timedOut || result.cancelled)) {
       const shellCommand = safeToolArguments(call.function && call.function.arguments).command;
-      const target = shellExitTarget(shellCommand);
+      const target = shellExitTarget(shellCommand, { root: session.root });
       if (target && !target.piped && !result.exitCodeWarning) markLoadedModules(verification, shellCommand, result.exitCode);
       if (target && !target.piped && !result.exitCodeWarning && !result.timedOut) markRanSources(verification, target.command, target.args, result.exitCode);
       if (target && isVerificationCommand(target.command, target.args)) recordClaimCheck(claimState, { command: shellCommand, exitCode: result.exitCode, masked: Boolean(target.piped || result.exitCodeWarning) });
@@ -3136,10 +3136,10 @@ async function applyToolResults(session, options, turn) {
         const evidenceArgs = safeToolArguments(call.function && call.function.arguments);
         const context = {};
         if (name === 'run_command') {
-          context.isCheck = isVerificationCommand(evidenceArgs.command, evidenceArgs.args);
+          context.isCheck = isVerificationCommand(evidenceArgs.command, evidenceArgs.args) && !runsOutsideRoot(evidenceArgs.command, evidenceArgs.args, session.root);
           if (context.isCheck) context.checkKind = verificationCommandKind(evidenceArgs.command, evidenceArgs.args);
         } else if (name === 'run_shell') {
-          const target = shellExitTarget(evidenceArgs.command);
+          const target = shellExitTarget(evidenceArgs.command, { root: session.root });
           context.isCheck = Boolean(target && isVerificationCommand(target.command, target.args));
           if (context.isCheck) context.checkKind = verificationCommandKind(target.command, target.args);
           context.masked = Boolean(target && (target.piped || result.exitCodeWarning));

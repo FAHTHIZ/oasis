@@ -47,3 +47,17 @@ test('run_shell attaches exitCodeWarning when a failing test is piped through ta
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('a check that may not have run, or ran in another directory, is not a check of the workspace', async () => {
+  const { runsOutsideRoot } = await import('../src/pipe-status.mjs');
+  const root = path.resolve('/w/repo');
+  for (const line of ['true || npm test', 'cd /tmp/fake && npm test', 'cd .. && npm test', 'cd ~ && npm test', 'cd sub; cd ../.. && npm test', 'npm test --prefix /tmp/x', 'pnpm -C ../other test', 'popd && npm test']) {
+    assert.equal(shellExitTarget(line, { root }), null, line);
+  }
+  for (const line of ['npm test', 'cd packages/a && npm test', 'make -C sub test', 'npm test --prefix=sub', 'pytest -p no:cacheprovider']) {
+    assert.ok(shellExitTarget(line, { root }), line);
+  }
+  assert.ok(shellExitTarget('cd /tmp/fake && npm test'), 'without a root the old behaviour is kept');
+  assert.equal(runsOutsideRoot('npm', ['test', '--prefix', '/tmp/x'], root), true);
+  assert.equal(runsOutsideRoot('npm', ['test'], root), false);
+});
