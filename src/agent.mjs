@@ -11,7 +11,7 @@ import { resolveToolAlias, normalizeRunCommandCall, cleanToolCallName } from './
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { runsOutsideRoot, shellExitTarget } from './pipe-status.mjs';
 import { loadPins, savePins } from './mcp-trust.mjs';
-import { commandFetchesExternal, guardExternalContent, guardJudgedOutput, guardJudgedRead, clearInjectionTurnFlag, injectionHoldReason, untrustedGuardEnabled } from './untrusted-content.mjs';
+import { commandFetchesExternal, fetchedOutputPaths, guardExternalContent, guardJudgedOutput, guardJudgedRead, clearInjectionTurnFlag, injectionHoldReason, untrustedGuardEnabled } from './untrusted-content.mjs';
 import { maskSecrets, unmaskSecretsForTool, secretShieldEnabled, redactSecretText, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
@@ -3212,8 +3212,12 @@ async function applyToolResults(session, options, turn) {
       }
     }
     if (typeof item.content === 'string' && untrustedGuardEnabled(session, options.env || process.env)) {
-      item.content = guardExternalContent(session, item.name || name, item.content, { external: commandFetchesExternal(name, safeToolArguments(call.function && call.function.arguments)) });
-      if (name === 'read_file' && session.judgedPaths) item.content = guardJudgedRead(session, name, normalizeReviewPath(safeToolArguments(call.function && call.function.arguments).path || ''), item.content);
+      const callArgs = safeToolArguments(call.function && call.function.arguments);
+      const readPath = name === 'read_file' ? normalizeReviewPath(callArgs.path || '') : '';
+      const fetchedFile = Boolean(readPath && session.fetchedPaths && session.fetchedPaths.has(path.resolve(session.root || '.', readPath)));
+      item.content = guardExternalContent(session, item.name || name, item.content, { external: fetchedFile || commandFetchesExternal(name, callArgs) });
+      for (const file of fetchedOutputPaths(name, callArgs)) (session.fetchedPaths ||= new Set()).add(path.resolve(session.root || '.', String(callArgs.cwd || ''), file));
+      if (name === 'read_file' && session.judgedPaths) item.content = guardJudgedRead(session, name, readPath, item.content);
       else if (session.judgedPaths) item.content = guardJudgedOutput(session, name, item.content);
     }
     if (typeof item.content === 'string') item.content = fitToolResultToWindow(session, leanToolContent(session, item.content, options.env || process.env), options.env || process.env);
