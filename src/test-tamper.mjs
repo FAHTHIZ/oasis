@@ -51,6 +51,34 @@ const STRICT_CHECK = /===?|!==?|\b(?:toBe|toEqual|toStrictEqual|toMatch\w*|toHav
 const WEAK_CHECK = /\bis not None\b|\bis not null\b|\b(?:toBeDefined|toBeTruthy|not\.toBeNull|not\.toBeUndefined|assertIsNotNone|assertTrue|NotNil|NotEmpty|ok)\s*\(|!= nil\b|^\s*assert\s+\w+\s*$|assert\.ok\s*\(|\bassert\s*\(\s*\w+\s*\)/;
 const ASSERTION = /\b(?:assert\w*|expect|should|t\.(?:Error|Fatal)f?|require\.\w+)\s*[(.]|^\s*assert\b/;
 
+// package.json "test" scripts and pytest addopts. Replacing `node --test`
+// with `echo ok`, or adding `-k fast`, makes the suite "pass" without
+// running the failing tests, and no test file changes.
+const SCRIPT_LINE = /^\s*"(test(?::[\w:.-]+)?)"\s*:\s*"((?:[^"\\]|\\.)*)"/;
+const ADDOPTS_LINE = /^\s*addopts\s*=\s*(.*)$/;
+const CANNOT_FAIL = /^\s*(?:true|:|exit\s+0|echo\b[^&|;]*|printf\b[^&|;]*|node\s+-e\s+(?:["']?(?:0|""|''|process\.exit\(0\))["']?)?)\s*;?\s*$/;
+const NARROWING = /(?:^|\s)(?:-k|--grep|-g|--fgrep|--test-name-pattern|--testNamePattern|-t|--test-only|--test-skip-pattern|--deselect|--ignore|--ignore-glob|--testPathIgnorePatterns|--skip|--exclude|-run)(?:[=\s]|$)/;
+function testScriptChanges(entry) {
+  const findings = [];
+  const scripts = (lines) => new Map(lines.map((line) => line.match(SCRIPT_LINE)).filter(Boolean).map((match) => [match[1], match[2]]));
+  const before = scripts(entry.removed);
+  const after = scripts(entry.added);
+  for (const [key, value] of before) {
+    if (CANNOT_FAIL.test(value)) continue;
+    const next = after.get(key);
+    if (next === undefined) {
+      // -U0 shows a moved line as removed and added; only a key gone from the added side is a removal.
+      if (!entry.added.some((line) => line.includes('"' + key + '"'))) findings.push({ file: entry.file, reason: 'removed the "' + key + '" script' });
+    } else if (CANNOT_FAIL.test(next)) findings.push({ file: entry.file, reason: 'replaced the test command with one that cannot fail', line: ('"' + key + '": "' + next + '"').slice(0, 160) });
+    else if (NARROWING.test(next) && !NARROWING.test(value)) findings.push({ file: entry.file, reason: 'narrowed the test command to some tests', line: ('"' + key + '": "' + next + '"').slice(0, 160) });
+  }
+  const addopts = (lines) => lines.map((line) => line.match(ADDOPTS_LINE)).filter(Boolean).map((match) => match[1]);
+  const optsBefore = addopts(entry.removed).join(' ');
+  const narrowed = addopts(entry.added).find((value) => NARROWING.test(value) || /(?:^|\s)-m\s/.test(value));
+  if (narrowed && !NARROWING.test(optsBefore) && !/(?:^|\s)-m\s/.test(optsBefore)) findings.push({ file: entry.file, reason: 'narrowed the test command to some tests', line: ('addopts = ' + narrowed).slice(0, 160) });
+  return findings;
+}
+
 /** Analyze unified diff text (from `git diff -U0`). Returns [{ file, reason, line? }]. */
 export function analyzeTestDiff(diffText) {
   const findings = [];
@@ -80,6 +108,7 @@ export function analyzeTestDiff(diffText) {
       const touchesTests = [...entry.added, ...entry.removed].some((line) => TEST_RUNNER.test(line));
       const hit = entry.added.find((line) => NEUTERED_RUN.test(line) && (TEST_RUNNER.test(line) || (touchesTests && /continue-on-error|allow_failure/.test(line))));
       if (hit && !entry.removed.some((line) => NEUTERED_RUN.test(line))) findings.push({ file: entry.file, reason: 'made the test command succeed even when tests fail', line: hit.trim().slice(0, 160) });
+      else findings.push(...testScriptChanges(entry));
       if (!isTestPath(entry.file)) continue;
     }
     // Inline test modules (Rust #[cfg(test)], doctest-style files) live outside

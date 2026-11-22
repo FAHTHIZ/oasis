@@ -181,3 +181,14 @@ test('skipping a test is reported once, not also as a removed case', async (t) =
   await writeFile(path.join(root, 'math.test.js'), jsSuite.replace("test('adds'", "test.skip('adds'"));
   assert.deepEqual((await detectTestTampering(root, ['math.test.js'])).map((item) => item.reason), ['skipped a test']);
 });
+
+test('a test script replaced, removed or narrowed in package.json or pytest addopts is flagged', () => {
+  const diff = (file, before, after) => ['diff --git a/' + file + ' b/' + file, '--- a/' + file, '+++ b/' + file, '@@ -3 +3 @@', ...before.map((line) => '-' + line), ...after.map((line) => '+' + line)].join('\n');
+  const script = (before, after) => analyzeTestDiff(diff('package.json', ['    "test": "' + before + '",'], after === null ? ['    "lint": "eslint ."'] : ['    "test": "' + after + '",'])).map((item) => item.reason);
+  for (const value of ['echo ok', 'true', 'exit 0', 'node -e 0']) assert.deepEqual(script('node --test', value), ['replaced the test command with one that cannot fail'], value);
+  assert.deepEqual(script('pytest', 'pytest -k fast'), ['narrowed the test command to some tests']);
+  assert.deepEqual(script('node --test', null), ['removed the "test" script']);
+  for (const [before, after] of [['node --test', 'node --test --experimental-vm-modules'], ['echo "no tests"', 'node --test'], ['vitest run', 'vitest run --bail 1']]) assert.deepEqual(script(before, after), [], after);
+  assert.deepEqual(analyzeTestDiff(diff('pytest.ini', ['addopts = -q'], ['addopts = -q -k "not add"'])).map((item) => item.reason), ['narrowed the test command to some tests']);
+  assert.deepEqual(analyzeTestDiff(diff('pytest.ini', ['addopts = -q'], ['addopts = -q --strict-markers'])), []);
+});
