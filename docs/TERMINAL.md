@@ -89,6 +89,7 @@ prompt and exits. Useful flags:
 | `--output-format text\|json\|stream-json` | Output shape; `stream-json` emits one event per line |
 | `--permission-mode dont-ask` | Never wait for approval |
 | `--goal "npm test passes"` | Keep going until the check holds; exit 1 if it never does |
+| `--goal-verify` | With `--goal`: confirm a met goal with the `verify` agent, which runs the result |
 | `--require-verified` | Exit 1 if OASIS could not verify its changes |
 | `--json-schema SCHEMA` | Return JSON matching a schema |
 | `--max-turns N`, `--max-budget-usd N`, `--max-requests N` | Hard limits |

@@ -37,3 +37,26 @@ test('a goal about tests is not met from the transcript alone, and no judge is a
   assert.match(requests[0].messages.at(-1).content, /check `npm test`: exit 0/);
   closeSession(session);
 });
+
+test('with the goal verifier on, a MET from the judge needs the verify agent to pass it', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-goal-verify-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  let verdictLine = 'FAIL handles empty input: `node cli.mjs ""` threw TypeError\nVERDICT: FAIL';
+  const childPrompts = [];
+  const { config } = await scriptedModel(t, [(payload) => {
+    if (payload.messages[0].content.includes('SUBAGENT MODE')) { childPrompts.push(payload.messages.at(-1).content); return { content: verdictLine }; }
+    return { content: 'MET\nThe CLI was written.' };
+  }]);
+  const env = { ...process.env, OASIS_AGENT_EXPERIENCE: '0', OASIS_NEURON_LEDGER: '0' };
+  const session = await createSession({ root, env, config, settings: { permissions: { allow: [], ask: [], deny: [] } }, bare: true });
+  t.after(() => closeSession(session));
+  session.messages.push({ role: 'user', content: 'write the cli' }, { role: 'assistant', content: 'done' });
+  const failed = await evaluateGoal(session, 'the CLI handles empty input', { env, verifier: true });
+  assert.equal(failed.met, false);
+  assert.match(failed.reason, /threw TypeError/);
+  assert.match(childPrompts[0], /the CLI handles empty input/);
+  verdictLine = 'PASS handles empty input: printed usage, exit 2\nVERDICT: PASS';
+  assert.equal((await evaluateGoal(session, 'the CLI handles empty input', { env, verifier: true })).met, true);
+  assert.equal((await evaluateGoal(session, 'the CLI handles empty input', { env })).met, true, 'off by default: the judge alone decides');
+  assert.equal(childPrompts.length, 2);
+});
