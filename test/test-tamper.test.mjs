@@ -160,3 +160,24 @@ test('the gate asks for a separate case when tests were requested and only asser
   assert.ok(verificationIssues(state).some((issue) => /asked for a new test, but the change only added assertions inside existing test cases \(test\/pad\.test\.mjs\)/.test(issue)));
   assert.ok(!verificationIssues({ ...state, testsRequested: false }).some((issue) => /asked for a new test/.test(issue)));
 });
+
+test('a snapshot of changed test files shows what a shell command touched', async (t) => {
+  const { testFileSnapshot, snapshotChanges } = await import('../src/test-tamper.mjs');
+  const root = await repo(t, { 'math.test.js': jsSuite, 'src/app.js': 'x\n' });
+  const before = await testFileSnapshot(root);
+  assert.equal(before.size, 0);
+  await writeFile(path.join(root, 'math.test.js'), jsSuite.replace("test('adds'", "test.skip('adds'"));
+  await writeFile(path.join(root, 'src/app.js'), 'y\n');
+  const after = await testFileSnapshot(root);
+  assert.deepEqual(snapshotChanges(before, after), ['math.test.js'], 'only test files');
+  await writeFile(path.join(root, 'math.test.js'), jsSuite);
+  assert.deepEqual(snapshotChanges(after, await testFileSnapshot(root)), ['math.test.js'], 'restoring it is a change too');
+  assert.deepEqual(await detectTestTampering(root, ['math.test.js']), []);
+  assert.equal((await testFileSnapshot(os.tmpdir())).size, 0, 'outside Git');
+});
+
+test('skipping a test is reported once, not also as a removed case', async (t) => {
+  const root = await repo(t, { 'math.test.js': jsSuite });
+  await writeFile(path.join(root, 'math.test.js'), jsSuite.replace("test('adds'", "test.skip('adds'"));
+  assert.deepEqual((await detectTestTampering(root, ['math.test.js'])).map((item) => item.reason), ['skipped a test']);
+});

@@ -3,6 +3,7 @@
 // `git diff HEAD` for the files the agent changed, so pre-existing user edits
 // in other files are not attributed to the agent.
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -42,7 +43,7 @@ const SKIP_PATTERNS = [
   [/^\s*(?:skip|pending)(?:\s+['"]|\s*\(\s*['"]|\s*$)/, 'skipped a test'],
   [/\bexcept\s*\(?[^:]*\bAssertionError\b|\bcatch\s*\(\s*\w*\s*(?::\s*AssertionError)?\s*\)\s*\{\s*\}|\.catch\s*\(\s*\(\s*\w*\s*\)\s*=>\s*(?:\{\s*\}|undefined|null)\s*\)|\brescue\s+(?:Minitest::Assertion|RSpec::Expectations::ExpectationNotMetError)\b|catch\s*\(\s*(?:AssertionError|AssertionFailedError)\b/, 'catches and ignores assertion failures']
 ];
-const TEST_DECL = /^\s*(?:(?:it|test|specify)\s*\(|def\s+test_\w*\s*\(|func\s+Test\w*\s*\(|#\[test\]|@Test\b|fn\s+test_\w*\s*\()/;
+const TEST_DECL = /^\s*(?:(?:it|test|specify)(?:\.(?:skip|only|todo|fixme))?\s*\(|def\s+test_\w*\s*\(|func\s+Test\w*\s*\(|#\[test\]|@Test\b|fn\s+test_\w*\s*\()/;
 // An exact check (equality, deep equality, match) versus one that only checks
 // that a value exists or is truthy. Swapping the first for the second makes a
 // failing test pass without fixing anything.
@@ -141,6 +142,35 @@ function gitTestDiff(root, paths, timeoutMs) {
   return new Promise((resolve) => {
     execFile('git', ['diff', '--no-color', '--no-ext-diff', '-U0', 'HEAD', '--', ...tests], { cwd: root, timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (error, stdout) => resolve(error ? '' : stdout));
   });
+}
+
+/**
+ * Tracked test files and test configs that differ from HEAD, with a hash of
+ * their current contents. Shell commands (sed -i, git rm, echo >) change files
+ * without the edit tools seeing it; comparing a snapshot from the start of the
+ * turn with one at the end finds the test files a command touched, so they
+ * get the same tamper check as edits. Resolves an empty map outside Git.
+ */
+export function testFileSnapshot(root, { timeoutMs = 10000 } = {}) {
+  return new Promise((resolve) => {
+    execFile('git', ['diff', '--name-only', '--no-renames', 'HEAD'], { cwd: root, timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, async (error, stdout) => {
+      const snapshot = new Map();
+      if (error) { resolve(snapshot); return; }
+      for (const file of String(stdout).split('\n').map((line) => line.trim()).filter(Boolean)) {
+        if (!isTestPath(file) && !isTestConfigPath(file)) continue;
+        try { snapshot.set(file, createHash('sha1').update(await readFile(path.resolve(root, file))).digest('hex')); } catch { snapshot.set(file, 'deleted'); }
+      }
+      resolve(snapshot);
+    });
+  });
+}
+
+/** Paths whose snapshot entry changed between `before` and `after`. */
+export function snapshotChanges(before, after) {
+  const changed = [];
+  for (const [file, hash] of after) if (!before || before.get(file) !== hash) changed.push(file);
+  if (before) for (const file of before.keys()) if (!after.has(file)) changed.push(file);
+  return changed;
 }
 
 /** Check the given changed paths against HEAD. Resolves [] outside Git or when nothing is weakened. */

@@ -137,10 +137,21 @@ export async function runCompletionGates(turn, host) {
       }
     }
   }
-  if (verification.tamperCheckPending && verification.changedPaths.size) {
+  // Test files a shell command changed (sed -i, git rm) since the turn began.
+  let shellTouched = [];
+  if (verification.shellRan && verification.testBaseline instanceof Map) {
+    verification.shellRan = false;
+    const { testFileSnapshot, snapshotChanges } = await import('./test-tamper.mjs');
+    const now = await testFileSnapshot(session.root);
+    shellTouched = snapshotChanges(verification.testBaseline, now).filter((file) => !verification.changedPaths.has(file));
+    verification.testBaseline = now;
+    if (shellTouched.length) { verification.tamperCheckPending = true; (verification.shellTestPaths ||= new Set()); for (const file of shellTouched) verification.shellTestPaths.add(file); }
+  }
+  const tamperPaths = [...verification.changedPaths, ...(verification.shellTestPaths || [])];
+  if (verification.tamperCheckPending && tamperPaths.length) {
     verification.tamperCheckPending = false;
     const { inspectTestChanges, isTestPath } = await import('./test-tamper.mjs');
-    const changes = await inspectTestChanges(session.root, [...verification.changedPaths]);
+    const changes = await inspectTestChanges(session.root, [...new Set(tamperPaths)]);
     verification.testTampering = changes.tampering;
     // Goal checks read the session record, not this turn's state: note when
     // tests are weakened and when they are no longer, so "npm test passes"
