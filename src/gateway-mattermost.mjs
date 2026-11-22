@@ -60,6 +60,10 @@ export function createMattermostGateway(options = {}) {
   const log = options.log || ((text) => process.stderr.write('[oasis gateway] ' + text + '\n'));
   const toldUnknown = new Set();
   const usernames = new Map();
+  // Allowlisted usernames resolved to user IDs at startup. Usernames can be
+  // renamed and then claimed by someone else; once pinned, a name only
+  // matches the account that held it when the gateway started.
+  const pinned = new Map();
   let me = options.me || null;
   let stopped = false;
   let socket = null;
@@ -104,6 +108,31 @@ export function createMattermostGateway(options = {}) {
     return name;
   }
 
+  function usernameAllowed(username, userId) {
+    if (!username) return false;
+    const entry = allowedUsers.has(username) ? username : allowedUsers.has('@' + username) ? '@' + username : '';
+    if (!entry) return false;
+    const key = username.toLowerCase();
+    return !pinned.has(key) || pinned.get(key) === userId;
+  }
+
+  /** Resolve allowlisted usernames to user IDs so a later rename cannot hand access to someone else. */
+  async function pinUsernames() {
+    const names = [...new Set([...allowedUsers].map((entry) => String(entry)).filter((entry) => !ID_RE.test(entry)).map((entry) => entry.replace(/^@/, '')).filter(Boolean))];
+    if (!names.length) return pinned;
+    let found = [];
+    try { found = await api('POST', '/users/usernames', names); } catch (error) {
+      log('could not look up allowlisted usernames (' + error.message + '); matching them by name. Prefer user IDs in OASIS_MATTERMOST_ALLOWED_USERS.');
+      return pinned;
+    }
+    for (const user of Array.isArray(found) ? found : []) if (user && user.username && user.id) pinned.set(String(user.username).toLowerCase(), String(user.id));
+    const missing = names.filter((name) => !pinned.has(name.toLowerCase()));
+    for (const name of missing) pinned.set(name.toLowerCase(), '');
+    if (missing.length) log('no Mattermost user named ' + missing.map((name) => '@' + name).join(', ') + '; those allowlist entries are ignored.');
+    if (pinned.size) log('allowlisted usernames pinned to user IDs: ' + [...pinned].filter(([, id]) => id).map(([name, id]) => '@' + name + '=' + id).join(', '));
+    return pinned;
+  }
+
   async function handleEvent(event) {
     const post = parsePostedEvent(event);
     if (!post || !me || post.userId === me.id || post.fromBot) return;
@@ -112,7 +141,7 @@ export function createMattermostGateway(options = {}) {
     if (!direct && !mentioned && !listenChannels.has(post.channelId)) return;
     const chatKey = direct ? post.channelId : post.channelId + ':' + (post.rootId || post.id);
     const username = await usernameOf(post.userId);
-    if (!allowedUsers.has(post.userId) && !(username && (allowedUsers.has(username) || allowedUsers.has('@' + username)))) {
+    if (!allowedUsers.has(post.userId) && !usernameAllowed(username, post.userId)) {
       if (!toldUnknown.has(post.userId)) {
         toldUnknown.add(post.userId);
         await send(chatKey, strangerMessage({ pairing, id: post.userId, label: username ? '@' + username : '', idName: 'Mattermost user ID', envName: 'OASIS_MATTERMOST_ALLOWED_USERS' })).catch(() => {});
@@ -153,6 +182,7 @@ export function createMattermostGateway(options = {}) {
 
   async function run() {
     try { me = await api('GET', '/users/me'); } catch (error) { throw new Error('Cannot sign in to Mattermost at ' + baseUrl + ': ' + error.message); }
+    await pinUsernames();
     let backoff = 1000;
     while (!stopped) {
       const started = Date.now();
@@ -171,7 +201,7 @@ export function createMattermostGateway(options = {}) {
     try { if (socket) socket.close(1000); } catch {}
   }
 
-  return { run, stop, connect, handleEvent, core, setMe: (value) => { me = value; } };
+  return { run, stop, connect, handleEvent, pinUsernames, core, setMe: (value) => { me = value; } };
 }
 
 /** Routine delivery: post one message to a channel ID. */

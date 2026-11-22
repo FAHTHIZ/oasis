@@ -6,6 +6,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Security
 
+- Mattermost gateway: usernames in `OASIS_MATTERMOST_ALLOWED_USERS` are resolved to user IDs at startup and only match that account afterwards. Before, an allowlisted name was checked on every message, so an account renamed to that name gained access.
 - Chat gateways: `/mode` can only loosen approvals up to the gateway's ceiling (`OASIS_GATEWAY_MAX_MODE`, else the `--permission-mode` the gateway started with, else accept-edits). Before, anyone allowed to message the bot could send `/mode auto`. Two messages arriving together for a new chat now share one session instead of creating two.
 - Email gateway: only the receiving server's own `Authentication-Results` header counts toward the sender check. Before, any header in the message could vouch for it, so a sender who forged an allowlisted From address and added `Authentication-Results: x; dmarc=pass` was let in even when the real server said `dmarc=fail`. `dmarc=pass` now also needs a matching `header.from` in the same result, a DKIM signer must be a real domain (never a bare `com`), and `OASIS_EMAIL_AUTHSERV_ID` (for Gmail `mx.google.com`) restricts the check to your server's headers.
 
