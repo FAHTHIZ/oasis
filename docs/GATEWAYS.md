@@ -134,7 +134,7 @@ The subject and body of a new email become the task. In a reply, only your new t
 
 Safety:
 
-- From addresses are easy to forge. A message only counts when your mail provider's `Authentication-Results` header shows `dmarc=pass`, or `dkim=pass` for the sender's own domain. Gmail, Outlook, Fastmail and most hosted providers add this header. For a private server that adds none, set `OASIS_EMAIL_REQUIRE_AUTH=0` and make sure only trusted senders can reach the mailbox.
+- From addresses are easy to forge. A message only counts when your mail provider's `Authentication-Results` header shows `dmarc=pass`, or `dkim=pass` for the sender's own domain. Gmail, Outlook, Fastmail and most hosted providers add this header. Only the receiving server's own header counts (the topmost one), so a sender cannot pass by adding a forged `Authentication-Results` line. Set `OASIS_EMAIL_AUTHSERV_ID` to your server's id (the text before the first `;` in that header, `mx.google.com` for Gmail; several ids comma-separated) to read only headers with that id. For a private server that adds none, set `OASIS_EMAIL_REQUIRE_AUTH=0` and make sure only trusted senders can reach the mailbox.
 - Auto-replies, mailing lists, bulk mail and bounces are ignored, and the agent's own mail carries `Auto-Submitted: auto-replied`, so it never loops with another robot.
 
 ## WhatsApp
