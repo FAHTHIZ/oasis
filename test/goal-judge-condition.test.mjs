@@ -33,7 +33,10 @@ test('a goal about tests is not met from the transcript alone, and no judge is a
   assert.equal(requests.length, 0);
   session.evidenceLedger.events.push({ seq: 1, kind: 'check', command: 'npm test', exitCode: 0, passed: true, masked: false });
   const second = await evaluateGoal(session, 'npm test passes');
-  assert.equal(second.met, true);
+  assert.equal(second.met, true, 'the record alone decides a condition that is one check passing');
+  assert.equal(requests.length, 0);
+  const third = await evaluateGoal(session, 'npm test passes and the fix is explained in CHANGELOG.md');
+  assert.equal(third.met, true);
   assert.match(requests[0].messages.at(-1).content, /check `npm test`: exit 0/);
   closeSession(session);
 });

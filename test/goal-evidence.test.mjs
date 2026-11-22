@@ -18,9 +18,10 @@ test('a check condition is not met without a passing, current run', () => {
   assert.match(goalEvidenceGate('npm test passes', [check('npm test', 0), edit()]).reason, /edited after/);
   assert.match(goalEvidenceGate('npm test passes', [check('npm test | tail', 0, { masked: true, passed: null })]).reason, /pipe/);
   assert.match(goalEvidenceGate('npm test passes', [check('npm run lint', 0)]).reason, /has not seen `npm test`/);
-  assert.equal(goalEvidenceGate('npm test passes', [edit(), check('npm test', 0)]), null);
+  assert.equal(goalEvidenceGate('npm test passes', [edit(), check('npm test', 0)]).met, true);
+  assert.equal(goalEvidenceGate('npm test passes and the CLI prints help', [edit(), check('npm test', 0)]), null);
   assert.equal(goalEvidenceGate('all tests pass', [check('pytest -q', 0)]), null);
-  assert.equal(goalEvidenceGate('`npm run test` passes', [check('npm test -- --runInBand', 0)]), null);
+  assert.equal(goalEvidenceGate('`npm run test` passes', [check('npm test -- --runInBand', 0)]).met, true);
   assert.match(goalEvidenceGate('all tests pass', []).reason, /a test or build check/);
 });
 
@@ -64,7 +65,7 @@ test('a passing run that ran no tests, or only some, does not meet a goal about 
   const full = shell('npm test', '# tests 12\n# pass 12\n# fail 0\n');
   assert.equal(full.noTests, undefined);
   assert.equal(full.filtered, undefined);
-  assert.equal(goalEvidenceGate('npm test passes', [{ ...full, seq: 1 }]), null);
+  assert.equal(goalEvidenceGate('npm test passes', [{ ...full, seq: 1 }]).met, true);
   assert.equal(shell('cargo test', 'running 0 tests\n\nrunning 0 tests\n').noTests, true);
   assert.equal(shell('cargo test', 'running 0 tests\n\nrunning 4 tests\n').noTests, undefined);
   assert.equal(shell('go test ./...', 'ok  \texample.com/a\t0.1s [no tests to run]\n').noTests, true);
@@ -79,4 +80,12 @@ test('a PASS from a verifier that read an injection does not count', async () =>
   const tainted = parseVerifierResult({ report: '- PASS: ok\nVERDICT: PASS', untrusted_input: 'agent agent_2 read content from fetch_url that looked like a prompt-injection attempt' });
   assert.equal(tainted.met, false);
   assert.match(tainted.reason, /prompt-injection/);
+});
+
+test('a condition that is only one check passing is met from the record, without a judge', () => {
+  const pass = { kind: 'check', command: 'npm test', passed: true, exitCode: 0, finished: true, seq: 1 };
+  assert.equal(goalEvidenceGate('npm test passes', [pass]).met, true);
+  assert.equal(goalEvidenceGate('`npm run test` passes.', [pass]).met, true);
+  assert.equal(goalEvidenceGate('npm test passes and the README documents the flag', [pass]), null, 'a compound condition still needs judgement');
+  assert.equal(goalEvidenceGate('npm test passes', [pass, { kind: 'edit', path: 'a.js', seq: 2 }]).met, false);
 });
