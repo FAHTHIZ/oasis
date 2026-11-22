@@ -2297,6 +2297,10 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       const { executeComputerTool } = await import('./computer-use.mjs');
       return await executeComputerTool(args, { ...context, session: context.session || context });
     }
+    case 'remote_agent': {
+      const { executeRemoteAgentTool } = await import('./a2a.mjs');
+      return await executeRemoteAgentTool(args, { ...context, session: context.session || context });
+    }
     default:
       if (POWER_TOOL_NAMES.has(name)) return await executePowerTool(name, args, context, root);
       throw new Error('Unknown or unavailable tool: ' + name);

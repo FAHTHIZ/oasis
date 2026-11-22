@@ -29,6 +29,7 @@ Find the right guide without knowing the repository. The root
 - [Configuration](CONFIGURATION.md): providers, gateways, fallback models, routing, output, search, MCP options, telemetry.
 - [Inference](INFERENCE.md): zero-budget mode, request and token budgets, the quota ledger.
 - [Extending OASIS](EXTENDING.md): project instructions, skills, MCP, connected apps, plugins, commands, hooks, settings files.
+- [A2A](A2A.md): serve OASIS to other agents over the Agent2Agent protocol, and call remote A2A agents.
 - [Subagents](SUBAGENTS.md): built-in and custom agents, background agents, teams and worktrees.
 - [Troubleshooting](TROUBLESHOOTING.md): diagnostics and fixes for install, providers, the web app, the sandbox.
 - [FAQ](FAQ.md): short answers on models, cost, data, safety and compatibility.
