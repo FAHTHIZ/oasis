@@ -31,6 +31,7 @@ import { unsupportedChildClaim } from './claim-check.mjs';
 import { evidenceSince, evidenceSummary, sessionEvidence } from './evidence-ledger.mjs';
 import { checkReport } from './verification-contracts.mjs';
 import { recoveryPlan, waitForRecovery } from './agent-recovery.mjs';
+import { defineSessionAgent } from './session-agents.mjs';
 import { spawnScope } from './spawn-scope.mjs';
 import { chooseExperienceModel, experienceEnabled, experiencePromptSection, experienceProject, recordAgentExperience, sharedExperienceStore, taskDomain } from './agent-experience.mjs';
 import { priceFor } from './pricing.mjs';
@@ -1153,6 +1154,7 @@ export async function runAgentTool(session, name, args, context, options) {
   if (name === 'team_shutdown') return shutdownAgentTeam(session, args);
   if (name === 'team_send_message') return sendTeamMessage(session, args);
   if (name === 'agent_stop') return stopAgent(session, args);
+  if (name === 'agent_define') return defineSessionAgent(session, args, { modelAllowed: (model) => modelAllowed(model, session.availableModels, { env: session.modelEnv, protocol: session.config && session.config.protocol, ...(session.modelPolicy || {}) }) });
   // send_message
   const record = getAgent(session, args.id);
   if (!record.child && record.restoredTranscript && record.status !== 'running') {

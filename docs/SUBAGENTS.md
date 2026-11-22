@@ -75,6 +75,24 @@ and report the commands you ran with their results.
 
 Not read: `experimental` (its only option, `cacheTtl`, is specific to Anthropic's prompt cache). Unknown fields are ignored, as in Claude Code.
 
+Definition files are read when the session starts. When `task` names an agent the session does not know, OASIS reads them again first, so a file written during the session (by you or by the agent) works without a restart.
+
+## Agents defined during a session
+
+The main agent can create a specialist for the job at hand with `agent_define`, then launch it with `task` like any other agent, as often as needed and in parallel. It is meant for work where several tasks need the same expertise or rules (a reviewer with a checklist, a researcher held to primary sources, a tester for one framework), so the instructions are written once instead of in every task prompt.
+
+| Field | Meaning |
+| --- | --- |
+| `name` | Lowercase id, 2-41 characters. Names of built-in agents and of agents from files, plugins or `--agents` cannot be reused |
+| `description` | When to use it; shown in the `task` tool |
+| `instructions` | Its system instructions, up to 20,000 characters |
+| `tools`, `disallowed_tools` | Tool names it may or may not use. Unknown names are refused, `task` cannot be given, and it never gets a tool its parent does not have |
+| `model`, `effort`, `max_turns` | As in the front matter; the model must pass `availableModels` and `deniedModels` |
+| `domains` | `code`, `research`, `analysis`: what its reports are [checked](#checked-reports) against |
+| `remove` | Delete the session agent with this name |
+
+A definition has no hooks, MCP servers or permission mode, whatever is passed. Definitions are saved with the session and come back when it is resumed; to keep one for future sessions, save it as `.oasis/agents/NAME.md`. Subagents cannot define agents. At most 20 per session.
+
 ## Structured output
 
 Pass `output_schema` (a JSON Schema object) to `task` when the parent needs machine-readable results. The child is told to reply with matching JSON. If its report does not validate, it gets exactly one correction turn. The result then carries either `structured` (the parsed value) or `schema_errors`.

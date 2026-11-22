@@ -70,6 +70,7 @@ import { loadProjectMcpServers, mcpOutputLimitChars, mcpToolTimeoutMs } from './
 import { access, readdir, realpath } from 'node:fs/promises';
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
 import { serverForFile, verifyEditedFileWithLsp, nodeSyntaxCheck, stopLspClients } from './lsp.mjs';
+import { sanitizeDefinedAgents, applyDefinedAgents, reloadAgentFiles } from './session-agents.mjs';
 import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, agentRegistry, restoreAgentHistory, takeQueuedText, drainInbox, recordAgentEvent, stopAllAgents } from './agent-tasks.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames, normalizeAgentDefinition } from './subagents.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES } from './shared-tasks.mjs';
@@ -700,6 +701,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     todos: Array.isArray(restore && restore.todos) ? restore.todos : [],
     sharedTasks: createSharedTaskStore(restore && restore.sharedTasks),
     knowledgeBoard: createKnowledgeBoard(restore && restore.knowledgeBoard),
+    definedAgents: sanitizeDefinedAgents(restore && restore.definedAgents),
     mustPreserve: Array.isArray(restore && restore.mustPreserve) ? restore.mustPreserve.slice(0, 20) : [],
     ...(restore && restore.goal && typeof restore.goal.condition === 'string' ? { goal: { ...restore.goal, active: false } } : {}),
     settings: loadedSettings,
@@ -733,6 +735,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     }
   }
   session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents), ...AGENT_TOOL_DEFINITIONS, EXIT_PLAN_TOOL_DEFINITION, ASK_USER_TOOL_DEFINITION, CONNECT_SERVICE_TOOL_DEFINITION, ...SESSION_TOOL_DEFINITIONS]);
+  applyDefinedAgents(session);
   session.modelEnv = env;
   if (compactPromptSwap) session.compactPromptSwap = compactPromptSwap;
   if (env.OASIS_DEBUG && env.OASIS_DEBUG !== '0' && !debugEnabled()) {
@@ -1044,6 +1047,7 @@ export function sessionRestoreSnapshot(session) {
     todos: session.todos,
     sharedTasks: session.sharedTasks,
     knowledgeBoard: session.knowledgeBoard,
+    definedAgents: session.definedAgents,
     pendingSteering: foldSteering(session.pendingSteering)
   };
 }
@@ -2501,6 +2505,12 @@ async function executeOneCallRaw(session, call, context, options) {
     let args = unmaskSecretsForTool(session, name, safeToolArguments(call.function && call.function.arguments));
     if (session.allowedToolNames && !session.allowedToolNames.has(name)) {
       throw new Error('The tool ' + name + ' is not available to this agent.');
+    }
+    // task names an agent the session does not know: a definition file may have
+    // been written since it started. Read them again before the schema check.
+    if (name === 'task' && args && typeof args.subagent_type === 'string' && session.agents
+      && !Object.keys(session.agents).some((key) => key.toLowerCase() === args.subagent_type.toLowerCase())) {
+      await reloadAgentFiles(session, args.subagent_type, { env: session.modelEnv || process.env });
     }
     // Validate model input before permission hooks. The Tool Kernel validates
     // again at execution because PreToolUse may rewrite the final arguments.
