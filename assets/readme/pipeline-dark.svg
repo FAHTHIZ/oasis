@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="300" viewBox="0 0 1280 300" role="img" aria-labelledby="t d">
 <title id="t">How an OASIS task runs</title>
-<desc id="d">Five steps: ask in plain words, read the repository, edit with checkpointed diffs, verify with tests and a diff review at the verification gate, and finish only with what it saw pass. A dashed arrow from Verify back to Edit shows that a failed check sends the agent back.</desc>
+<desc id="d">Five steps: ask in plain words with any model, plan the steps and any agents, act with tools such as the shell, the web and connected apps, verify at the gate with tests, the sources that were opened and numbers computed by code, and finish only with what it could check. A dashed arrow from Verify back to Act shows that a failed or skipped check sends the agent back.</desc>
 <defs><linearGradient id="trk" x1="0" x2="1"><stop offset="0" stop-color="#32E07A" stop-opacity=".15"/><stop offset=".5" stop-color="#7CFF5E"/><stop offset="1" stop-color="#0ED168" stop-opacity=".15"/></linearGradient>
 <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#7CFF5E"/></marker>
 <filter id="g" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="4"/></filter></defs>
@@ -41,20 +41,20 @@
   <text x="60" y="176" font-size="14" fill="#8FA597">plain words, any model</text></g>
   <g><rect class="c1" x="288" y="70" width="208" height="132" rx="16" fill="#0E1510" stroke="#1F2E23" stroke-width="1.5"/>
   <text class="n1" x="308" y="102" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#8FA597">02</text>
-  <text x="308" y="148" font-size="26" font-weight="800" fill="#E6F5EA">Read</text>
-  <text x="308" y="176" font-size="14" fill="#8FA597">repo map, search, files</text></g>
+  <text x="308" y="148" font-size="26" font-weight="800" fill="#E6F5EA">Plan</text>
+  <text x="308" y="176" font-size="14" fill="#8FA597">steps, agents, budgets</text></g>
   <g><rect class="c2" x="536" y="70" width="208" height="132" rx="16" fill="#0E1510" stroke="#1F2E23" stroke-width="1.5"/>
   <text class="n2" x="556" y="102" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#8FA597">03</text>
-  <text x="556" y="148" font-size="26" font-weight="800" fill="#E6F5EA">Edit</text>
-  <text x="556" y="176" font-size="14" fill="#8FA597">checkpointed diffs</text></g>
+  <text x="556" y="148" font-size="26" font-weight="800" fill="#E6F5EA">Act</text>
+  <text x="556" y="176" font-size="14" fill="#8FA597">tools, shell, web, apps</text></g>
   <g><rect class="c3" x="784" y="70" width="208" height="132" rx="16" fill="#0E1510" stroke="#1F2E23" stroke-width="1.5"/>
   <text class="n3" x="804" y="102" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#8FA597">04</text><rect x="918" y="86" width="58" height="20" rx="10" fill="#123A1F"/><text x="947" y="100" text-anchor="middle" font-size="11" font-weight="700" fill="#7CFF5E">GATE</text>
   <text x="804" y="148" font-size="26" font-weight="800" fill="#E6F5EA">Verify</text>
-  <text x="804" y="176" font-size="14" fill="#8FA597">tests, diff review</text></g>
+  <text x="804" y="176" font-size="14" fill="#8FA597">tests, sources, numbers</text></g>
   <g><rect class="c4" x="1032" y="70" width="208" height="132" rx="16" fill="#0E1510" stroke="#1F2E23" stroke-width="1.5"/>
   <text class="n4" x="1052" y="102" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#8FA597">05</text>
   <text x="1052" y="148" font-size="26" font-weight="800" fill="#E6F5EA">Done</text>
-  <text x="1052" y="176" font-size="14" fill="#8FA597">only what it saw pass</text></g>
+  <text x="1052" y="176" font-size="14" fill="#8FA597">only what it could check</text></g>
   <path d="M144 236 H1136" stroke="#1F2E23" stroke-width="2" fill="none"/>
   <path d="M144 236 H1136" stroke="url(#trk)" stroke-width="2" fill="none" opacity=".7"/>
   <circle cx="144" cy="236" r="5" fill="#0E1510" stroke="#32E07A" stroke-width="2"/><circle cx="392" cy="236" r="5" fill="#0E1510" stroke="#32E07A" stroke-width="2"/><circle cx="640" cy="236" r="5" fill="#0E1510" stroke="#32E07A" stroke-width="2"/><circle cx="888" cy="236" r="5" fill="#0E1510" stroke="#32E07A" stroke-width="2"/><circle cx="1136" cy="236" r="5" fill="#0E1510" stroke="#32E07A" stroke-width="2"/>
