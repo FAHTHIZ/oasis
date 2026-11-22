@@ -38,6 +38,24 @@ function checkpointItems(value, label) {
   return value.map((item) => checkpointText(item, label + ' item', MAX_CHECKPOINT_ITEM_TEXT)).filter(Boolean);
 }
 
+// A checkpoint is what the next worker trusts. A tests_run entry that says a
+// check passed is marked when this worker's own tool results show no passing
+// run of it, so "npm test: all pass" is not taken on the writer's word.
+const CLAIMS_PASS = /\b(?:pass(?:es|ed|ing)?|green|ok|succeed(?:s|ed)?|clean|exit(?:ed)?\s*(?:code\s*)?0)\b|✓|✔/i;
+const UNSEEN = ' [OASIS saw no passing run of this in the worker\'s own tool results]';
+function markUnseenPasses(session, items) {
+  const events = session && session.evidenceLedger && Array.isArray(session.evidenceLedger.events) ? session.evidenceLedger.events : null;
+  if (!events) return items;
+  const squash = (text) => String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const passed = events.filter((event) => (event.kind === 'check' || event.kind === 'command' || event.kind === 'execution') && event.exitCode === 0 && event.command).map((event) => squash(event.command));
+  return items.map((item) => {
+    if (!CLAIMS_PASS.test(item) || /\[OASIS saw no passing run/.test(item)) return item;
+    const text = squash(item);
+    const seen = passed.some((command) => text.includes(command) || (command.includes(' ') && text.includes(command.split(' ').slice(0, 2).join(' '))));
+    return seen ? item : item.slice(0, MAX_CHECKPOINT_ITEM_TEXT - UNSEEN.length) + UNSEEN;
+  });
+}
+
 function normalizeCheckpoint(value, timestamp) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const summary = typeof value.summary === 'string' ? redactCheckpointText(value.summary.trim().slice(0, MAX_CHECKPOINT_TEXT)) : '';
@@ -342,7 +360,7 @@ export function runSharedTaskTool(session, name, args = {}) {
       completedSteps: checkpointItems(args.completed_steps, 'completed_steps'),
       nextSteps: checkpointItems(args.next_steps, 'next_steps'),
       touchedFiles: checkpointItems(args.touched_files, 'touched_files'),
-      testsRun: checkpointItems(args.tests_run, 'tests_run'),
+      testsRun: markUnseenPasses(session, checkpointItems(args.tests_run, 'tests_run')),
       updatedAt: now()
     };
     task.checkpoint = checkpoint;

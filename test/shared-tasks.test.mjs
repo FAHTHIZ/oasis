@@ -147,3 +147,15 @@ test('task checkpoints require the active claimant and enforce bounds', () => {
     task_id: created.task.id, summary: 'A different agent should not overwrite this'
   }), /Only the active claimant may checkpoint/);
 });
+
+test('a checkpoint that says a check passed is marked when the worker never ran it', () => {
+  const session = { sharedTasks: createSharedTaskStore(), agentId: 'agent_3', evidenceLedger: { events: [{ kind: 'check', command: 'node --test test/a.test.mjs', exitCode: 0 }, { kind: 'command', command: 'ls', exitCode: 0 }, { kind: 'check', command: 'npm run lint', exitCode: 1 }], seq: 3, epoch: 0 } };
+  const created = runSharedTaskTool(session, 'task_create', { subject: 'Fix parser' });
+  runSharedTaskTool(session, 'task_claim', { task_id: created.task.id, lease_seconds: 60 });
+  const saved = runSharedTaskTool(session, 'task_checkpoint', { task_id: created.task.id, summary: 'Parser fixed.', tests_run: ['node --test test/a.test.mjs: 5 passed', 'npm test: all pass', 'npm run lint passes', 'npm run lint: 2 errors left'] });
+  const [ran, invented, failed, honest] = saved.task.checkpoint.tests_run;
+  assert.equal(ran, 'node --test test/a.test.mjs: 5 passed');
+  assert.match(invented, /OASIS saw no passing run/, 'ls passing does not vouch for "all pass"');
+  assert.match(failed, /OASIS saw no passing run/, 'the lint run exited 1');
+  assert.equal(honest, 'npm run lint: 2 errors left', 'a reported failure needs no mark');
+});
