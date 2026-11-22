@@ -364,7 +364,7 @@ export async function runHeadless(options) {
     let partialSoFar = '';
     let currentTurn = null;
     if (inputStream && typeof inputStream.onInterrupt === 'function') inputStream.onInterrupt(() => { if (currentTurn) currentTurn.abort(); });
-    const runOneTurn = async (text) => {
+    const runOneTurn = async (text, extra = {}) => {
       partialSoFar = '';
       if (inputStream && typeof inputStream.onInterrupt === 'function') {
         currentTurn = new AbortController();
@@ -380,7 +380,7 @@ export async function runHeadless(options) {
           } catch {}
         }
         try {
-          return await runner(session, prepared.text + schemaInstruction, { ...turnOptions, signal: turnSignal, ...(prepared.images && prepared.images.length ? { images: prepared.images } : {}) });
+          return await runner(session, prepared.text + schemaInstruction, { ...turnOptions, ...extra, signal: turnSignal, ...(prepared.images && prepared.images.length ? { images: prepared.images } : {}) });
         } catch (caught) {
           if (turnSignal.aborted) { emit({ type: 'system', subtype: 'interrupted' }); return { text: '[interrupted]', finished: true, toolCalls: 0, interrupted: true }; }
           throw caught;
@@ -388,11 +388,14 @@ export async function runHeadless(options) {
       }
       if (replayUser && !text.startsWith(WAKE_PREFIX)) emit({ type: 'user', message: { role: 'user', content: text } });
       const prepared = text === rawPrompt ? expanded : await expandFileMentions(root, text, { images: visionEnabled(config, env) }).catch(() => ({ text, files: [] }));
-      return runner(session, prepared.text + schemaInstruction, { ...turnOptions, ...(prepared.images && prepared.images.length ? { images: prepared.images } : {}) });
+      return runner(session, prepared.text + schemaInstruction, { ...turnOptions, ...extra, ...(prepared.images && prepared.images.length ? { images: prepared.images } : {}) });
     };
     // Opt-in auto-commit (OASIS_AUTO_COMMIT=1 or "autoCommit": true) commits each turn's changed files.
-    const runOne = async (text) => {
-      const turn = await runOneTurn(text);
+    // Goal, review and schema follow-ups start without a person in between, so
+    // a prompt-injection hold from the turn before carries into them.
+    const CONTINUATION = { keepInjectionHold: true };
+    const runOne = async (text, extra) => {
+      const turn = await runOneTurn(text, extra);
       const changed = turn && turn.verification && Array.isArray(turn.verification.changedPaths) ? turn.verification.changedPaths : [];
       if (changed.length && !turn.interrupted) {
         const { autoCommitEnabled, autoCommitTurn } = await import('./auto-commit.mjs');
@@ -513,7 +516,7 @@ export async function runHeadless(options) {
         if (outputFormat === 'text' && env.OASIS_PROGRESS !== '0') { try { process.stderr.write('[goal] ' + (verdict.met ? 'Met' : 'Not met yet') + ': ' + verdict.reason + '\n'); } catch {} }
         if (verdict.met || goalState.turns >= goalMaxTurns) break;
         goalState.turns += 1;
-        result = await runOne('The goal is not met yet. A reviewer said: ' + verdict.reason + '\nContinue working toward the goal: ' + goalState.condition + '\nVerify results by running checks, not by assumption.');
+        result = await runOne('The goal is not met yet. A reviewer said: ' + verdict.reason + '\nContinue working toward the goal: ' + goalState.condition + '\nVerify results by running checks, not by assumption.', CONTINUATION);
       }
     }
     const rounds = session && result && !inputStream ? reviewRounds(session, env, review) : 0;
@@ -530,7 +533,7 @@ export async function runHeadless(options) {
           emit({ type: 'system', subtype: 'review', passed: reviewState.passed, reason: reviewState.reason.slice(0, 500), round });
           if (outputFormat === 'text' && env.OASIS_PROGRESS !== '0') { try { process.stderr.write('[review] ' + (verdict.met ? 'Passed' : 'Did not pass') + ': ' + verdict.reason + '\n'); } catch {} }
           if (verdict.met || round > rounds || (signal && signal.aborted)) break;
-          result = await runOne('An independent reviewer checked your work against the request and it did not pass:\n' + reviewState.reason + '\nFix this, verify by running checks, and then finish. The request was:\n' + String(rawPrompt).slice(0, 4000));
+          result = await runOne('An independent reviewer checked your work against the request and it did not pass:\n' + reviewState.reason + '\nFix this, verify by running checks, and then finish. The request was:\n' + String(rawPrompt).slice(0, 4000), CONTINUATION);
           if (!result || result.limitReached) break;
         }
       }
@@ -542,7 +545,7 @@ export async function runHeadless(options) {
       if (!schemaErrors.length) { structured = parsed.value; schemaErrors = null; break; }
       if (attempt >= 2) break;
       emit({ type: 'system', subtype: 'structured_output_retry', errors: schemaErrors.slice(0, 10) });
-      result = await runAgentTurn(session, 'Your final answer did not match the required JSON Schema:\n- ' + schemaErrors.slice(0, 10).join('\n- ') + '\nReply again with only the corrected JSON value.', turnOptions);
+      result = await runAgentTurn(session, 'Your final answer did not match the required JSON Schema:\n- ' + schemaErrors.slice(0, 10).join('\n- ') + '\nReply again with only the corrected JSON value.', { ...turnOptions, ...CONTINUATION });
     }
   } catch (caught) {
     error = caught;
