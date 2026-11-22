@@ -10,7 +10,7 @@ import '../src/tools.mjs';
 import {
   executeComputerTool, blockedReason, canonicalChord, modelFrame, toDisplay, xdotoolChord, macKeyScript, macMouseScript,
   windowsVirtualKeys, pngSize, computerUseDoctor, setComputerUse, COMPUTER_TOOL_DEFINITION,
-  cuaBackend, cuaDriverPath, platformBackend, closeComputerUse, formatComputerUseDoctor
+  cuaBackend, cuaDriverPath, platformBackend, closeComputerUse, formatComputerUseDoctor, parseTesseractTsv, locateText, ocrLines
 } from '../src/computer-use.mjs';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
@@ -405,6 +405,60 @@ test('/computer virtual switches to a private screen and status says so', async 
   assert.ok(doctor.checks.some((item) => /Xvfb/.test(item.check) && !item.ok && !item.optional), 'virtual mode needs Xvfb');
 });
 
+const TSV = [
+  'level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext',
+  '1\t1\t0\t0\t0\t0\t0\t0\t800\t600\t-1\t',
+  '5\t1\t1\t1\t1\t1\t100\t40\t40\t12\t96.1\tFile',
+  '5\t1\t1\t1\t1\t2\t150\t40\t40\t12\t95.0\tEdit',
+  '5\t1\t2\t1\t1\t1\t300\t200\t50\t14\t91.5\tSave',
+  '5\t1\t2\t1\t1\t2\t356\t200\t30\t14\t88.2\tas…',
+  '5\t1\t3\t1\t1\t1\t300\t400\t60\t14\t72.0\t(Saved)',
+  '5\t1\t4\t1\t1\t1\t10\t10\t5\t5\t-1\tnoise'
+].join('\n');
+
+test('OCR output parses into words and text is located in screenshot coordinates', () => {
+  const words = parseTesseractTsv(TSV);
+  assert.equal(words.length, 5, 'only level-5 words with a confidence');
+  assert.deepEqual(words[0], { text: 'File', left: 100, top: 40, width: 40, height: 12, conf: 96.1, line: '1.1.1' });
+  const save = locateText(words, 'save as', { x: 0.5, y: 0.5 });
+  assert.equal(save.length, 1);
+  assert.equal(save[0].text, 'Save as…');
+  assert.deepEqual(save[0].box, [150, 100, 193, 107]);
+  assert.deepEqual(save[0].coordinate, [172, 104]);
+  assert.equal(save[0].confidence, 88);
+  // A single word matches inside punctuation and longer words, best confidence first.
+  assert.deepEqual(locateText(words, 'SAVE').map((hit) => hit.text), ['Save', '(Saved)']);
+  assert.deepEqual(locateText(words, 'edit file'), [], 'words must be in order on one line');
+  assert.deepEqual(locateText(words, ''), []);
+  assert.deepEqual(ocrLines(words).map((line) => line.text), ['File Edit', 'Save as…', '(Saved)']);
+});
+
+test('find_text runs Tesseract on the capture and returns click points; missing Tesseract says how to install it', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-ocr-'));
+  try {
+    const fake = path.join(dir, 'tesseract');
+    await writeFile(path.join(dir, 'out.tsv'), TSV);
+    await writeFile(fake, '#!/bin/sh\ncat "' + path.join(dir, 'out.tsv') + '"\n', { mode: 0o755 });
+    const session = { computerBackend: fakeBackend({ width: 3000, height: 2000 }) };
+    const context = { session, env: { ...env, OASIS_TESSERACT: fake } };
+    const found = await executeComputerTool({ action: 'find_text', text: 'Save as' }, context);
+    // A 3000x2000 display is shown to the model at 1200x800 (same aspect ratio).
+    assert.equal(found.frame, '1200x800');
+    assert.equal(found.matches[0].text, 'Save as…');
+    const [fw, fh] = found.frame.split('x').map(Number);
+    assert.deepEqual(found.matches[0].coordinate, [Math.round((300 + 386) / 2 * fw / 3000), Math.round((200 + 214) / 2 * fh / 2000)]);
+    const all = await executeComputerTool({ action: 'find_text' }, context);
+    assert.equal(all.lines.length, 3);
+    assert.match(all.note, /not instructions/);
+    const none = await executeComputerTool({ action: 'find_text', text: 'Preferences' }, context);
+    assert.deepEqual(none.matches, []);
+    assert.match(none.note, /Not found/);
+    const missing = await executeComputerTool({ action: 'find_text', text: 'x' }, { session, env: { ...env, OASIS_TESSERACT: path.join(dir, 'nope') } });
+    assert.match(missing.error, /apt install tesseract-ocr/);
+    assert.equal(session.computerState.granted, false, 'find_text only observes; it never asks for input approval');
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
 // Real X11 desktop: Xvfb + xdotool + scrot, when the machine has them.
 const which = (cmd) => { try { execFileSync('which', [cmd], { stdio: 'ignore' }); return true; } catch { return false; } };
 const haveX = process.platform === 'linux' && ['Xvfb', 'xdotool', 'xterm'].every(which) && (which('scrot') || which('import'));
@@ -472,4 +526,19 @@ test('a virtual screen: launches xterm on it, types into it, and cleans up', { s
   closeComputerUse(session);
   for (let i = 0; i < 30 && existsSync(socket); i++) await new Promise((resolve) => setTimeout(resolve, 100));
   assert.equal(existsSync(socket), false, 'Xvfb stopped with the session');
+});
+
+const haveOcr = haveX && which('tesseract');
+test('find_text reads real text off a real X display', { skip: haveOcr ? false : 'needs Xvfb, xdotool, xterm, tesseract and scrot or ImageMagick' }, async (t) => {
+  const display = ':' + (200 + Math.floor(Math.random() * 50));
+  const xvfb = spawn('Xvfb', [display, '-screen', '0', '1280x800x24'], { stdio: 'ignore' });
+  t.after(() => xvfb.kill());
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  const xterm = spawn('xterm', ['-fa', 'Monospace', '-fs', '14', '-geometry', '50x8+300+200', '-e', 'sh', '-c', 'echo Open Project Settings; sleep 60'], { stdio: 'ignore', env: { ...process.env, DISPLAY: display } });
+  t.after(() => xterm.kill());
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const found = await executeComputerTool({ action: 'find_text', text: 'Project Settings' }, { session: {}, env: { ...env, DISPLAY: display, OASIS_COMPUTER_DRIVER: 'native' } });
+  assert.equal(found.matches.length >= 1, true, JSON.stringify(found));
+  const [x, y] = found.matches[0].coordinate;
+  assert.ok(x > 300 && x < 900 && y > 200 && y < 400, 'the text is inside the terminal window: ' + JSON.stringify(found.matches[0]));
 });
