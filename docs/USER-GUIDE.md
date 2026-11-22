@@ -1,6 +1,6 @@
 # OASIS user guide
 
-OASIS is an open-source coding agent you run on a computer or server you control and use from any modern browser. The runtime owns the project, the shell and your model keys; the browser is only the screen. This guide walks through installing it, signing in, connecting a model, running a task and reviewing the result.
+OASIS is an open-source, general-purpose agent you run on a computer or server you control and use from the terminal or any modern browser. It works on software, research, data, documents and automation with whichever model you connect. The runtime owns the project, the shell and your model keys; the browser is only the screen. This guide walks through installing it, signing in, connecting a model, running a task and reviewing the result. For examples beyond code, see [Workflows](WORKFLOWS.md).
 
 <p align="center"><img src="../assets/screenshots/web-task-dark.png" alt="OASIS web app after a finished task: the request, a steering note sent while it worked, folded steps for the edit and the test run, a summary table, and the Changes panel with the two changed files" width="860"></p>
 
@@ -221,7 +221,7 @@ Pick a bounded first task with a visible outcome, such as explaining a function,
 4. Check the tests OASIS ran, their exit status and output.
 5. Commit only after you understand and accept the diff.
 
-`/export review.html` writes a standalone review page; `/export notes.md` writes Markdown. A model saying "done" is not a test result; see [Benchmark methodology](BENCHMARKS.md).
+`/export review.html` writes a standalone review page; `/export notes.md` writes Markdown. A model saying "done" is not a test result; see [Benchmark methodology](development/BENCHMARKS.md).
 
 Saved sessions keep an audit trail next to the conversation: every tool call and its result, each approval decision (yours, a hook's or auto mode's), the checks that ran, and automatic model fallbacks. `oasis sessions events ID` prints it (`--type approval` filters, `--json` for scripts). Secrets are redacted before writing, and `oasis sessions clear ID` deletes the trail with the session.
 

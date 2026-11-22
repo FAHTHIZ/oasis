@@ -8,9 +8,13 @@ The public-facing product name is OASIS. Write it in uppercase in the wordmark, 
 
 The npm package identifier oasis-oss is a technical namespace. It is not the product name and must not be copied into logos, app titles, screenshots or promotional artwork.
 
-**Tagline:** Code. Automate. Flourish.
+**Tagline:** Plan. Act. Verify.
 
-**One-line description:** An open-source, model-agnostic coding-agent runtime and development workspace.
+**Headline:** The open agent runtime for any model.
+
+**One-line description:** An open-source, model-agnostic agent platform and runtime for software, research, analysis, writing, automation and computer use.
+
+Describe OASIS as a general-purpose agent system. Software development is one of its workloads, not its whole identity. Do not position it as an alternative to a named product; describe compatibility (for example, "reads Claude Code configuration") as compatibility.
 
 OASIS is the runtime and application layer around a configured model. Avoid implying that the harness replaces the model, guarantees a task outcome, or makes every model equivalent.
 

@@ -7,10 +7,14 @@ messages and fixes, see [Troubleshooting](TROUBLESHOOTING.md).
 
 ### What is OASIS?
 
-An open-source (Apache-2.0) agent runtime for software work. One npm package,
+An open-source (Apache-2.0), model-agnostic agent platform and runtime. It
+plans, acts with real tools and verifies its work across software development,
+research, data analysis, writing, automation and browser or desktop use, with
+any model you connect. One npm package,
 `oasis-oss`, gives you the terminal agent (`oasis`), the browser workspace
 (`oasis web`) and an SDK. A desktop app wraps the same runtime in an Electron
-window. See the [User guide](USER-GUIDE.md) and [Interfaces](INTERFACES.md).
+window. See the [User guide](USER-GUIDE.md), [Workflows](WORKFLOWS.md) and
+[Capabilities and status](CAPABILITIES.md).
 
 ### Which models does it work with?
 
@@ -82,11 +86,13 @@ verified, a `-p` run ends with a "Not verified" note, and
 
 ## Working with other tools
 
-### I already use Claude Code. Do I lose my setup?
+### I already use another agent tool. Do I lose my setup?
 
 No. OASIS reads `CLAUDE.md`, `.claude/skills`, `.claude/commands`, Claude
 Code hooks and Claude Code plugins, and `AGENTS.md` and other agents' rule
-files. See [Extending OASIS](EXTENDING.md).
+files from Cursor, Codex, Gemini CLI, OpenCode, Goose and others where they
+are. `oasis import` copies settings, memories and skills across. See
+[Compatibility](COMPATIBILITY.md) and [Extending OASIS](EXTENDING.md).
 
 ### Does it work in my editor?
 

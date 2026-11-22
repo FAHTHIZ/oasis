@@ -1,6 +1,6 @@
 # OASIS architecture
 
-OASIS is a model-agnostic coding-agent runtime. Its interfaces present the experience; the runtime coordinates model requests, tool execution, permissions, agent work and verification.
+OASIS is an open-source, model-agnostic agent platform and runtime. The same runtime serves software work, research, analysis, writing, automation and computer use. Its interfaces present the experience; the runtime coordinates model requests, tool execution, permissions, agent work and verification.
 
 This document describes the current source layout at a component level. It is an orientation guide, not a guarantee that every interface exposes every capability.
 

@@ -10,7 +10,7 @@ For quantitative comparisons, use the controlled live-evaluation protocol below:
 
 ## Runtime performance
 
-`npm run bench:perf -- --runs 7 --json FILE` measures the runtime without a model. Recorded 14 November 2026 on Linux x64, 2 CPUs, 8 GB RAM, Node 22.21, light load ([raw JSON](../bench/results/perf-2026-11-14.json)):
+`npm run bench:perf -- --runs 7 --json FILE` measures the runtime without a model. Recorded 14 November 2026 on Linux x64, 2 CPUs, 8 GB RAM, Node 22.21, light load ([raw JSON](../../bench/results/perf-2026-11-14.json)):
 
 | Measurement | Median | Notes |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ About 45 MB of the session's RSS appears on the first token count, which loads t
 
 ### CLI launch against other agent CLIs
 
-`npm run bench:perf -- --compare` (Linux only) runs `--version` and `--help` for each agent CLI on PATH. Every CLI is measured the same way: the same machine, a scratch HOME, no provider keys, and no model calls. It samples peak RSS (`VmHWM`) for every process in the CLI's process tree every 2 ms. Recorded 14 November 2026, 5 runs each ([raw JSON](../bench/results/perf-compare-2026-11-14.json)):
+`npm run bench:perf -- --compare` (Linux only) runs `--version` and `--help` for each agent CLI on PATH. Every CLI is measured the same way: the same machine, a scratch HOME, no provider keys, and no model calls. It samples peak RSS (`VmHWM`) for every process in the CLI's process tree every 2 ms. Recorded 14 November 2026, 5 runs each ([raw JSON](../../bench/results/perf-compare-2026-11-14.json)):
 
 | CLI (version) | `--version` | `--help` | Peak RSS, largest process / tree sum |
 | --- | --- | --- | --- |
@@ -46,9 +46,9 @@ These numbers measure launch cost only. They say nothing about how well an agent
 
 `npm run bench:routers -- --route name=baseUrl,model[,KEY_ENV] ...` sends the same requests to one model reached directly and through local gateways, and checks what an agent depends on: tool calls arriving with valid arguments, complete streams, usage reporting, a clear error for an unknown model, and the model appearing in `/models`. Keys are read from the named environment variables and never written out.
 
-Run on 14 November 2026 with OVH's anonymous `gpt-oss-20b`, direct, through FreeLLMAPI and through OmniRoute, over 3 rounds ([details and raw rows](../bench/results/routers-2026-11-14/README.md)). Both routers passed every tool-call, streaming, usage and unknown-model check. OmniRoute's streams were slower in all three rounds (median first token 6.4 s against 0.5 s direct and 2.0 s through FreeLLMAPI), and OmniRoute does not list `ovh/…` models in `/models`. Three rounds are an indication, not a measured router overhead.
+Run on 14 November 2026 with OVH's anonymous `gpt-oss-20b`, direct, through FreeLLMAPI and through OmniRoute, over 3 rounds ([details and raw rows](../../bench/results/routers-2026-11-14/README.md)). Both routers passed every tool-call, streaming, usage and unknown-model check. OmniRoute's streams were slower in all three rounds (median first token 6.4 s against 0.5 s direct and 2.0 s through FreeLLMAPI), and OmniRoute does not list `ovh/…` models in `/models`. Three rounds are an indication, not a measured router overhead.
 
-Oasis was then run end to end on two eval tasks over each route ([write-up and raw records](../bench/results/routers-2026-11-14/e2e/README.md)). Direct: 2/2. FreeLLMAPI: 1/1 scored (one task excluded after OVH 429s). OmniRoute: 0/2 at first. Two OmniRoute stream quirks caused this: the tail of a tool call's arguments arrived as a separate nameless call, and keepalive chunks were mistaken for the served model. After Oasis handled both (commit `98b411d0`), OmniRoute scored 1/2, and the remaining failure was the model ignoring a required error wording. One trial per task: this shows the routes work for agent traffic. It does not rank them.
+Oasis was then run end to end on two eval tasks over each route ([write-up and raw records](../../bench/results/routers-2026-11-14/e2e/README.md)). Direct: 2/2. FreeLLMAPI: 1/1 scored (one task excluded after OVH 429s). OmniRoute: 0/2 at first. Two OmniRoute stream quirks caused this: the tail of a tool call's arguments arrived as a separate nameless call, and keepalive chunks were mistaken for the served model. After Oasis handled both (commit `98b411d0`), OmniRoute scored 1/2, and the remaining failure was the model ignoring a required error wording. One trial per task: this shows the routes work for agent traffic. It does not rank them.
 
 ## Model-free harness benchmark
 
@@ -90,11 +90,11 @@ node bench/tokens/run.mjs --json ./token-results.json
 node bench/tokens/run.mjs --check
 ```
 
-Counts use one vocabulary for every model, so they track but do not equal each provider's own tokenizer (Anthropic, Gemini and Qwen tokenize differently). `--check` refuses a baseline counted with a different counter instead of comparing incompatible numbers. Host facts in the prompt (kernel release, Node version, date, temp path) and per-run ids and test timings are replaced with fixed stand-ins before counting ([bench/tokens/normalize.mjs](../bench/tokens/normalize.mjs)), so a laptop and CI measure the same code identically; `--check` also refuses a baseline measured under different counting rules. The benchmark can compare prompt growth, tool-schema overhead and reusable request prefixes under its fixture assumptions; it does not establish real-world billing or model quality.
+Counts use one vocabulary for every model, so they track but do not equal each provider's own tokenizer (Anthropic, Gemini and Qwen tokenize differently). `--check` refuses a baseline counted with a different counter instead of comparing incompatible numbers. Host facts in the prompt (kernel release, Node version, date, temp path) and per-run ids and test timings are replaced with fixed stand-ins before counting ([bench/tokens/normalize.mjs](../../bench/tokens/normalize.mjs)), so a laptop and CI measure the same code identically; `--check` also refuses a baseline measured under different counting rules. The benchmark can compare prompt growth, tool-schema overhead and reusable request prefixes under its fixture assumptions; it does not establish real-world billing or model quality.
 
 ## Memory retrieval benchmark
 
-`npm run bench:memory` scores memory search (`rankMemories`: MiniSearch BM25+ with Porter2 stemming) on 30 realistic project memories in [evals/memory-retrieval](../evals/memory-retrieval). It uses 15 dev questions, which may be used while tuning, and 25 held-out paraphrased questions, which are the number to report. Each question has exactly one right memory.
+`npm run bench:memory` scores memory search (`rankMemories`: MiniSearch BM25+ with Porter2 stemming) on 30 realistic project memories in [evals/memory-retrieval](../../evals/memory-retrieval). It uses 15 dev questions, which may be used while tuning, and 25 held-out paraphrased questions, which are the number to report. Each question has exactly one right memory.
 
 | Split | Questions | Recall@1 | Recall@3 | MRR |
 |---|---:|---:|---:|---:|
@@ -126,11 +126,11 @@ Compare systems using the same model, task set, provider settings and environmen
 
 ## Latest results (12 November 2026)
 
-Measured on commit `c1396e7b`, Node 22, a 2-core Linux machine. Raw files are in [bench/results](../bench/results).
+Measured on commit `c1396e7b`, Node 22, a 2-core Linux machine. Raw files are in [bench/results](../../bench/results).
 
 ### Harness (model-free)
 
-`npm run bench:harness`, file [harness-2026-11-12.json](../bench/results/harness-2026-11-12.json). Baseline is the same input without the OASIS guard.
+`npm run bench:harness`, file [harness-2026-11-12.json](../../bench/results/harness-2026-11-12.json). Baseline is the same input without the OASIS guard.
 
 | Track | Development set | Held-out v1 | Held-out v3 |
 | --- | --- | --- | --- |
@@ -145,7 +145,7 @@ Held-out v2 still misses one secret pattern (4/5); it is kept as measured. First
 
 ### Tokens (scripted provider)
 
-`npm run bench:tokens`, file [tokens-2026-11-12.json](../bench/results/tokens-2026-11-12.json). Both fixed tasks pass their verifiers; usage accounting matches.
+`npm run bench:tokens`, file [tokens-2026-11-12.json](../../bench/results/tokens-2026-11-12.json). Both fixed tasks pass their verifiers; usage accounting matches.
 
 | Task | Requests | Input tokens | Uncached | First / last request |
 | --- | ---: | ---: | ---: | --- |
@@ -154,13 +154,13 @@ Held-out v2 still misses one secret pattern (4/5); it is kept as measured. First
 
 ### Live, local model on CPU
 
-`npm run bench:live -- --agents oasis --model qwen2.5-coder:3b-oasis --router http://localhost:11434/v1 --task clamp-integer --timeout-seconds 1800`, files in [live-2026-11-12-ollama](../bench/results/live-2026-11-12-ollama/SUMMARY.md). Ollama on 2 CPU cores, no GPU.
+`npm run bench:live -- --agents oasis --model qwen2.5-coder:3b-oasis --router http://localhost:11434/v1 --task clamp-integer --timeout-seconds 1800`, files in [live-2026-11-12-ollama](../../bench/results/live-2026-11-12-ollama/SUMMARY.md). Ollama on 2 CPU cores, no GPU.
 
 | Task | Model | Result |
 | --- | --- | --- |
 | `clamp-integer` (small) | qwen2.5-coder 3B, 32K window | Timed out at 1,800 s after 17,210 tokens, before verification |
 
-Second local run, 15 November 2026: `npm run bench:live -- --agents oasis --model qwen3:1.7b-oasis --router http://127.0.0.1:11434/v1 --task clamp-integer,dedupe-names,slice-lines --timeout-seconds 1500`, files in [live-2026-11-15-ollama](../bench/results/live-2026-11-15-ollama/SUMMARY.md). Ollama 0.40.16, qwen3 1.7B with a 16,384-token window, same 2 CPU cores, OASIS 1.3.0 at `e0179321`, one trial per task. No API charge; hardware and power not counted.
+Second local run, 15 November 2026: `npm run bench:live -- --agents oasis --model qwen3:1.7b-oasis --router http://127.0.0.1:11434/v1 --task clamp-integer,dedupe-names,slice-lines --timeout-seconds 1500`, files in [live-2026-11-15-ollama](../../bench/results/live-2026-11-15-ollama/SUMMARY.md). Ollama 0.40.16, qwen3 1.7B with a 16,384-token window, same 2 CPU cores, OASIS 1.3.0 at `e0179321`, one trial per task. No API charge; hardware and power not counted.
 
 | Task | Result | Time | Tokens | Why |
 | --- | --- | ---: | ---: | --- |
@@ -170,21 +170,21 @@ Second local run, 15 November 2026: `npm run bench:live -- --agents oasis --mode
 
 Pass rate 1/3. One trial per task is a smoke test, not a score. The `slice-lines` failure led to a change: an edit to a `.js`, `.mjs` or `.cjs` file with no language server running is now checked with `node --check` (parse only), so the write result itself says the file does not parse.
 
-This shows the hardware, not the harness: a 3B model on two CPU cores generates a few tokens per second, so one small task does not fit in 30 minutes. The earlier same-gateway run against Claude Code is in [live-2026-11-08-omniroute](../bench/results/live-2026-11-08-omniroute/README.md). SWE-bench and Terminal-Bench scores (the adapter is in `bench/harbor`) need a capable hosted model and a paid budget, so none are published yet.
+This shows the hardware, not the harness: a 3B model on two CPU cores generates a few tokens per second, so one small task does not fit in 30 minutes. The earlier same-gateway run against Claude Code is in [live-2026-11-08-omniroute](../../bench/results/live-2026-11-08-omniroute/README.md). SWE-bench and Terminal-Bench scores (the adapter is in `bench/harbor`) need a capable hosted model and a paid budget, so none are published yet.
 
 ### Recorded same-model gateway (14 November 2026)
 
 `npm run bench:live -- --upstream URL --model ID` starts a local gateway, routes every agent through its own tagged path (`/a/<agent>/v1`), relays chat completions, Anthropic Messages and OpenAI Responses calls, forces the one model on all of them, and writes `gateway.jsonl` with the model and provider the upstream reports for each call. The summary calls a run "same model verified" only when every scored agent was served one identical model; otherwise it says so in the interpretation limits.
 
-First run, files in [live-2026-11-14-openrouter-gateway](../bench/results/live-2026-11-14-openrouter-gateway/README.md): OASIS passed `clamp-integer` in 190.9 s (22 calls, all served by `nvidia/nemotron-3-ultra-550b-a55b:free` via Nvidia). Codex CLI ran 20 calls on the same served model before OpenRouter's free-tier daily limit (50 requests) stopped it; Claude Code sent nothing because it routed loopback calls through `HTTPS_PROXY` (fixed). A scored head-to-head needs a key with credits: OpenRouter raises the free-model limit to 1,000 requests a day once 10 credits are added.
+First run, files in [live-2026-11-14-openrouter-gateway](../../bench/results/live-2026-11-14-openrouter-gateway/README.md): OASIS passed `clamp-integer` in 190.9 s (22 calls, all served by `nvidia/nemotron-3-ultra-550b-a55b:free` via Nvidia). Codex CLI ran 20 calls on the same served model before OpenRouter's free-tier daily limit (50 requests) stopped it; Claude Code sent nothing because it routed loopback calls through `HTTPS_PROXY` (fixed). A scored head-to-head needs a key with credits: OpenRouter raises the free-model limit to 1,000 requests a day once 10 credits are added.
 
-Second run, five agents on Kilo Gateway's keyless route, files in [live-2026-11-14-kilo-h2h-partial](../bench/results/live-2026-11-14-kilo-h2h-partial/README.md). It planned 12 tasks. It stopped after the first because Kilo's anonymous quota ran out (HTTP 429 `PROMOTION_MODEL_LIMIT_REACHED`, not retryable) after 70 requests. On `clamp-integer` all five agents passed: OASIS, Claude Code 2.1.325, Codex CLI 0.169.0, OpenCode 1.19.5 and Aider. All were served `nvidia/nemotron-3-ultra-550b-a55b:free`. By the gateway's count, OASIS sent the most prompt tokens: 242,932 in 15 requests, against Codex's 157,994 in 14, OpenCode's 111,139 in 11 and Aider's 739 in 1. Claude Code's 35,492 is likely uncached input only. This is one task and one trial, so it is a smoke test, not a ranking. Agent-reported token counts disagree with the gateway (OpenCode reported 37,253), so compare gateway counts. Since this run the relay stops on a non-retryable quota 429, drops tasks failed under rate limiting from the scores, saves `progress.json` after each unit, and records message sizes (not contents).
+Second run, five agents on Kilo Gateway's keyless route, files in [live-2026-11-14-kilo-h2h-partial](../../bench/results/live-2026-11-14-kilo-h2h-partial/README.md). It planned 12 tasks. It stopped after the first because Kilo's anonymous quota ran out (HTTP 429 `PROMOTION_MODEL_LIMIT_REACHED`, not retryable) after 70 requests. On `clamp-integer` all five agents passed: OASIS, Claude Code 2.1.325, Codex CLI 0.169.0, OpenCode 1.19.5 and Aider. All were served `nvidia/nemotron-3-ultra-550b-a55b:free`. By the gateway's count, OASIS sent the most prompt tokens: 242,932 in 15 requests, against Codex's 157,994 in 14, OpenCode's 111,139 in 11 and Aider's 739 in 1. Claude Code's 35,492 is likely uncached input only. This is one task and one trial, so it is a smoke test, not a ranking. Agent-reported token counts disagree with the gateway (OpenCode reported 37,253), so compare gateway counts. Since this run the relay stops on a non-retryable quota 429, drops tasks failed under rate limiting from the scores, saves `progress.json` after each unit, and records message sizes (not contents).
 
-Third run (batch 1), four agents on the same Kilo route, files in [live-2026-11-14-h2h-b1](../bench/results/live-2026-11-14-h2h-b1/README.md). It planned four tasks and ran out of Kilo's quota after 96 calls in 36 minutes. On `taskflow-priority-sort` all four agents fixed the bug, then all failed the verifier's "at least 20 passing tests" check with 19. The task's starting tests already failed, so the check could not be met; the task was fixed in `9e763b83`, and this result is not comparable with later runs. On `safe-relative-path` OASIS (437 s, 17 tool calls) and Claude Code passed, Codex failed after the upstream returned 429, and OpenCode was not reached. OASIS ran from an unpinned working tree that changed during the run (the summary records both revisions). Later runs use a pinned worktree.
+Third run (batch 1), four agents on the same Kilo route, files in [live-2026-11-14-h2h-b1](../../bench/results/live-2026-11-14-h2h-b1/README.md). It planned four tasks and ran out of Kilo's quota after 96 calls in 36 minutes. On `taskflow-priority-sort` all four agents fixed the bug, then all failed the verifier's "at least 20 passing tests" check with 19. The task's starting tests already failed, so the check could not be met; the task was fixed in `9e763b83`, and this result is not comparable with later runs. On `safe-relative-path` OASIS (437 s, 17 tool calls) and Claude Code passed, Codex failed after the upstream returned 429, and OpenCode was not reached. OASIS ran from an unpinned working tree that changed during the run (the summary records both revisions). Later runs use a pinned worktree.
 
-Fourth run (batch 2), five agents on OVHcloud AI Endpoints' keyless `gpt-oss-20b` (about 2 requests per minute), harness pinned at `ce21f013`, files in [live-2026-11-14-h2h-b2](../bench/results/live-2026-11-14-h2h-b2/README.md). OASIS passed all three tasks: `taskflow-priority-sort` (492 s, 10 tool calls), `safe-relative-path` (1,005 s, 21) and `taskflow-search` (1,390 s, 28). OpenCode and Aider each passed `safe-relative-path` only, both faster than OASIS (664 s and 50 s). OpenCode's other two trials ended when it crashed on OVH's stream (`Expected 'id' to be a string`), a real robustness failure on this provider. Aider's two failures were a harness flaw: the workspace was not a git repository, so Aider saw no files. Since `6e9f13b6` every agent starts in a repository with a baseline commit, and those trials need a re-run. Claude Code (HTTP 404 on `/v1/messages`) and Codex CLI (HTTP 422 on `/v1/responses`) never reached the model: OVH serves only chat completions, so they are endpoint mismatches, not results. OASIS also sent the most tokens (672k input over 67 calls, against OpenCode's 214k over 29). One trial per task: read it as evidence, not a ranking.
+Fourth run (batch 2), five agents on OVHcloud AI Endpoints' keyless `gpt-oss-20b` (about 2 requests per minute), harness pinned at `ce21f013`, files in [live-2026-11-14-h2h-b2](../../bench/results/live-2026-11-14-h2h-b2/README.md). OASIS passed all three tasks: `taskflow-priority-sort` (492 s, 10 tool calls), `safe-relative-path` (1,005 s, 21) and `taskflow-search` (1,390 s, 28). OpenCode and Aider each passed `safe-relative-path` only, both faster than OASIS (664 s and 50 s). OpenCode's other two trials ended when it crashed on OVH's stream (`Expected 'id' to be a string`), a real robustness failure on this provider. Aider's two failures were a harness flaw: the workspace was not a git repository, so Aider saw no files. Since `6e9f13b6` every agent starts in a repository with a baseline commit, and those trials need a re-run. Claude Code (HTTP 404 on `/v1/messages`) and Codex CLI (HTTP 422 on `/v1/responses`) never reached the model: OVH serves only chat completions, so they are endpoint mismatches, not results. OASIS also sent the most tokens (672k input over 67 calls, against OpenCode's 214k over 29). One trial per task: read it as evidence, not a ranking.
 
-Fifth run (batch 3), Aider and Codex CLI on the same OVH endpoint with the harness at `0b86899f`, files in [live-2026-11-14-b3-aider-codex](../bench/results/live-2026-11-14-b3-aider-codex/README.md). With the git-baseline workspace Aider saw the project and passed `safe-relative-path` again (108 s). Its two failures are now its own: on `taskflow-priority-sort` it asked the user to add the file to the chat, which ends a one-shot run, and on `taskflow-search` it put its new test in `src/__tests__/`, outside the project's `npm test` suite. Codex CLI got past the earlier error but OVH then rejected `include: ["reasoning.encrypted_content"]`, another OpenAI-only field, on all 18 calls; the harness reported it as an endpoint mismatch, not a score.
+Fifth run (batch 3), Aider and Codex CLI on the same OVH endpoint with the harness at `0b86899f`, files in [live-2026-11-14-b3-aider-codex](../../bench/results/live-2026-11-14-b3-aider-codex/README.md). With the git-baseline workspace Aider saw the project and passed `safe-relative-path` again (108 s). Its two failures are now its own: on `taskflow-priority-sort` it asked the user to add the file to the chat, which ends a one-shot run, and on `taskflow-search` it put its new test in `src/__tests__/`, outside the project's `npm test` suite. Codex CLI got past the earlier error but OVH then rejected `include: ["reasoning.encrypted_content"]`, another OpenAI-only field, on all 18 calls; the harness reported it as an endpoint mismatch, not a score.
 
 ## Normal-user runs
 
@@ -198,7 +198,7 @@ Separate from scored benchmarks, OASIS is used the way a person would: type a re
 | 7 Nov 2026 | Build a to-do web app in `index.html` | Web app | gpt-oss-20b | Working app in about 6 minutes. |
 | 7 Nov 2026 | Install and use 16 plugins from `anthropics/claude-plugins-official` | Web app and terminal | gpt-oss-20b | All installed; hooks, skills and MCP servers ran. Found: 46 tools and 36.5k characters of schemas per request. Large MCP servers now load on demand (21 tools, 16.5k characters). |
 
-Times are dominated by the free endpoint (35–140 s per request, one request at a time). Each problem found became a fix with a regression test; see the [Changelog](../CHANGELOG.md).
+Times are dominated by the free endpoint (35–140 s per request, one request at a time). Each problem found became a fix with a regression test; see the [Changelog](../../CHANGELOG.md).
 
 ## Interpreting results
 

@@ -50,7 +50,7 @@ For the first run, avoid granting broad permissions just to reduce prompts. Revi
 4. Ask for corrections when a test fails or the result is incomplete.
 5. Commit only after you understand and accept the final diff.
 
-A model saying “done” is not a test result. See [benchmark methodology](BENCHMARKS.md) for the difference between test coverage, deterministic harness checks and live task evaluations.
+A model saying “done” is not a test result. See [benchmark methodology](development/BENCHMARKS.md) for the difference between test coverage, deterministic harness checks and live task evaluations.
 
 ## 6. Understand security boundaries
 

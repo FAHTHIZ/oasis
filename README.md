@@ -171,7 +171,7 @@ You ask in plain words. OASIS reads the code, makes the edit, then has to pass t
 
 <p align="center">
   <img src="assets/readme/architecture.svg" alt="Animated diagram: six ways in (terminal, web app, desktop app, editors over ACP, Codex App Server clients, and the SDK, CI and GitHub Action) all drive one OASIS runtime with a turn loop, permissions and sandbox, subagents and teams, a verification gate, and checkpoints and memory. The runtime talks to any model provider, to tools such as MCP servers and Claude Code plugins, and to your project on your own machine." width="100%">
-  <br><sub>The model proposes replies and tool calls. OASIS decides which tools exist, which calls need approval and what counts as verified. See <a href="docs/ARCHITECTURE.md">Architecture</a> and the <a href="docs/OASIS-NEURON-NETWORK.md">Agent network</a> for multi-agent work.</sub>
+  <br><sub>The model proposes replies and tool calls. OASIS decides which tools exist, which calls need approval and what counts as verified. See <a href="docs/ARCHITECTURE.md">Architecture</a> and the <a href="docs/AGENT-NETWORK.md">Agent network</a> for multi-agent work.</sub>
 </p>
 
 ## Why OASIS
@@ -232,7 +232,7 @@ The same loop that checks a code change checks any other deliverable. The harnes
 
 ## Plugins, MCP and models
 
-**Claude Code plugins.** Open **Plugins** in the web app and install with one click, or use the terminal. Commands, agents, skills, hooks, MCP servers and language servers load the way they do in Claude Code. [Plugins checked in OASIS](docs/REAL-WORLD-RUNS.md#plugins-checked-in-oasis).
+**Claude Code plugins.** Open **Plugins** in the web app and install with one click, or use the terminal. Commands, agents, skills, hooks, MCP servers and language servers load the way they do in Claude Code. [Plugins checked in OASIS](docs/development/REAL-WORLD-RUNS.md#plugins-checked-in-oasis).
 
 ```sh
 oasis plugin marketplace add anthropics/claude-plugins-official
@@ -287,7 +287,7 @@ OASIS is checked the way a person uses it: real providers, no scripted model, ap
 | Read an uploaded PDF | Web app, gpt-oss-20b | Passed in 49 s |
 | Install 16 Claude Code plugins and use them | Web app and terminal | All installed; hooks, skills and MCP servers ran |
 
-Every run, plugin check and rough edge is in [Real-world runs](docs/REAL-WORLD-RUNS.md). The model-free harness recovers 26/26 malformed tool calls (3/26 without OASIS), applies 14/14 edits (4/14), stops 49/49 risky commands under auto-approve and catches 10/10 secrets before commit: see [Benchmarks](docs/BENCHMARKS.md#latest-results-12-november-2026). Head-to-head runs against Claude Code, Codex, OpenCode and Aider, all on the same free model through one recording relay, are in [Benchmarks](docs/BENCHMARKS.md#recorded-same-model-gateway-14-november-2026); Gemini CLI has had a smoke run only so far. So far: on `clamp-integer` all five agents passed. In a second batch on OVH's free `gpt-oss-20b`, OASIS passed all three tasks, more slowly and with more tokens than the competitors on the task they also passed. OpenCode and Aider each passed one: OpenCode crashed on the provider's stream, and Aider was blinded by a harness flaw since fixed. Claude Code and Codex could not use that endpoint's API, so they are still unmeasured on it. These are one-trial samples on a free tier that ran out of quota part-way, so read them as evidence, not a ranking. OASIS does not guarantee that every model will solve every task: on a given task the model matters more than the harness.
+Every run, plugin check and rough edge is in [Real-world runs](docs/development/REAL-WORLD-RUNS.md). The model-free harness recovers 26/26 malformed tool calls (3/26 without OASIS), applies 14/14 edits (4/14), stops 49/49 risky commands under auto-approve and catches 10/10 secrets before commit: see [Benchmarks](docs/development/BENCHMARKS.md#latest-results-12-november-2026). Head-to-head runs against Claude Code, Codex, OpenCode and Aider, all on the same free model through one recording relay, are in [Benchmarks](docs/development/BENCHMARKS.md#recorded-same-model-gateway-14-november-2026); Gemini CLI has had a smoke run only so far. So far: on `clamp-integer` all five agents passed. In a second batch on OVH's free `gpt-oss-20b`, OASIS passed all three tasks, more slowly and with more tokens than the competitors on the task they also passed. OpenCode and Aider each passed one: OpenCode crashed on the provider's stream, and Aider was blinded by a harness flaw since fixed. Claude Code and Codex could not use that endpoint's API, so they are still unmeasured on it. These are one-trial samples on a free tier that ran out of quota part-way, so read them as evidence, not a ranking. OASIS does not guarantee that every model will solve every task: on a given task the model matters more than the harness.
 
 ## How it compares
 
@@ -302,7 +302,7 @@ Harness features from public documentation, not results.
 | Claude Code plugins | Yes, plus Codex plugins and Gemini extensions | Yes | Imports settings and skills | No (own format) | No (own extensions) | No (own plugins) | No |
 | Subagents | Parallel, background, resumable, teams, worktrees | Yes | Yes | Agent command center | Yes | `general` subagent | No |
 
-OASIS trails in model-specific tuning, a hosted zero-setup cloud, community size and real-world hours. The full comparison, with sources and dates, is in [Comparison](docs/COMPARISON.md).
+OASIS trails in model-specific tuning, a hosted zero-setup cloud, community size and real-world hours. The full comparison, with sources and dates, is in [Compatibility](docs/COMPATIBILITY.md).
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
@@ -349,8 +349,8 @@ CI also runs platform security tests, a live Docker sandbox test, native PTY tes
 | [Terminal guide](docs/TERMINAL.md) | [Skills, hooks, MCP and plugins](docs/EXTENDING.md) | [Security](SECURITY.md) |
 | [Interfaces](docs/INTERFACES.md) | [Subagents](docs/SUBAGENTS.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) · [FAQ](docs/FAQ.md) |
 | [Desktop app](docs/DESKTOP.md) | [Remote access](docs/REMOTE-ACCESS.md) | [Support](SUPPORT.md) |
-| [Downloads and releases](docs/RELEASES.md) | [Real-world runs](docs/REAL-WORLD-RUNS.md) | [Brand guidelines](docs/BRAND.md) |
-| | [Benchmarks](docs/BENCHMARKS.md) · [Comparison](docs/COMPARISON.md) | [All docs](docs/README.md) |
+| [Downloads and releases](docs/RELEASES.md) | [Real-world runs](docs/development/REAL-WORLD-RUNS.md) | [Brand guidelines](docs/BRAND.md) |
+| | [Benchmarks](docs/development/BENCHMARKS.md) · [Compatibility](docs/COMPATIBILITY.md) | [All docs](docs/README.md) |
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
