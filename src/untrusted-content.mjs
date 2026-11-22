@@ -41,7 +41,9 @@ const SIGNALS = [
 ];
 
 // read_mcp_resource returns MCP server content just like mcp_* tool calls.
-const EXTERNAL_TOOLS = new Set(['fetch_url', 'web_search', 'browser', 'computer', 'read_mcp_resource']);
+// remote_agent returns another party's A2A agent's reply, which is no more
+// trusted than a web page.
+const EXTERNAL_TOOLS = new Set(['fetch_url', 'web_search', 'browser', 'computer', 'read_mcp_resource', 'remote_agent']);
 
 export function isExternalContentTool(name) {
   const n = String(name || '');
