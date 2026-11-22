@@ -78,7 +78,7 @@ test('replacing an exact assertion with an existence check is flagged', () => {
   const d = (f, r, a) => ['diff --git a/' + f + ' b/' + f, '--- a/' + f, '+++ b/' + f, '@@ -1 +1 @@', ...r.map((l) => '-' + l), ...a.map((l) => '+' + l)].join('\n');
   assert.match(analyzeTestDiff(d('tests/test_parse.py', ['    assert parse("1") == 1'], ['    assert parse("1") is not None']))[0]?.reason || '', /existence or truthiness/);
   assert.match(analyzeTestDiff(d('test/a.test.js', ['  expect(x).toBe(1);'], ['  expect(x).toBeDefined();']))[0]?.reason || '', /existence or truthiness/);
-  assert.deepEqual(analyzeTestDiff(d('test/a.test.js', ['  expect(x).toBe(1);'], ['  expect(x).toBe(2);'])), []);
+  assert.deepEqual(analyzeTestDiff(d('test/a.test.js', ['  expect(x).toBe(1);'], ['  expect(x).toBe(2);']), { codeChanged: true }), [], 'a new expected value alongside a code change');
   assert.deepEqual(analyzeTestDiff(d('test/a.test.js', ['  assert.ok(x);'], ['  assert.equal(x, 1);'])), []);
 });
 
@@ -202,4 +202,21 @@ test('rewired assertions, forced exits and pytest outcome hooks are flagged', ()
   assert.deepEqual(reasons('jest.setup.js', 'expect.toBe = () => {}'), ['replaced the assertion functions']);
   assert.deepEqual(reasons('test/a.test.mjs', 'process.exit(0);'), ['forces a zero exit code from the tests']);
   for (const line of ['const x = expect(a).toBe(1);', 'let assertCount = 0;', 'const expected = 3;', 'expect.extend({ toBeX });', 'def pytest_collection_modifyitems(config, items):']) assert.deepEqual(reasons(line.startsWith('def') ? 'conftest.py' : 'test/a.test.mjs', line), [], line);
+});
+
+test('rewriting expected values counts only when no code outside the tests changed', () => {
+  const testOnly = [
+    'diff --git a/math.test.mjs b/math.test.mjs', '--- a/math.test.mjs', '+++ b/math.test.mjs',
+    '@@ -5 +5 @@', "-  assert.equal(median([10, 9, 1]), 9);", "+  assert.equal(median([10, 9, 1]), 10);",
+    '@@ -9 +9 @@', "-  assert.deepEqual(parse('a=1'), { a: 1 });", "+  assert.deepEqual(parse('a=1'), { a: '1' });"
+  ].join('\n');
+  const findings = analyzeTestDiff(testOnly);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].reason, /changed the expected values in 2 assertion\(s\)/);
+  assert.equal(findings[0].expectation, true);
+  assert.deepEqual(analyzeTestDiff(testOnly, { codeChanged: true }), [], 'a behaviour change updates its tests');
+  const withCode = testOnly + '\n' + ['diff --git a/math.mjs b/math.mjs', '--- a/math.mjs', '+++ b/math.mjs', '@@ -1 +1 @@', '-export const median = (v) => v.sort()[1];', '+export const median = (v) => [...v].sort((a, b) => a - b)[1];'].join('\n');
+  assert.deepEqual(analyzeTestDiff(withCode), [], 'read from the diff: the code changed too');
+  const renamed = ['diff --git a/a.test.mjs b/a.test.mjs', '--- a/a.test.mjs', '+++ b/a.test.mjs', '@@ -2 +2 @@', "-  assert.equal(total(items), 3);", "+  assert.equal(sum(items), 3);"].join('\n');
+  assert.deepEqual(analyzeTestDiff(renamed), [], 'a renamed call is not a changed expectation');
 });

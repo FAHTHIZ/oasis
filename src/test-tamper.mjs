@@ -86,8 +86,19 @@ function testScriptChanges(entry) {
   return findings;
 }
 
-/** Analyze unified diff text (from `git diff -U0`). Returns [{ file, reason, line? }]. */
-export function analyzeTestDiff(diffText) {
+// An assertion with its literals blanked: `assert.equal(median([3, 1, 2]), 2)`
+// and the same line ending in `3)` have one shape.
+function assertionShape(line) {
+  return String(line).replace(/(["'`])(?:\\.|(?!\1).)*\1/g, 'L').replace(/-?\b\d+(?:\.\d+)?(?:e[+-]?\d+)?\b/gi, 'L').replace(/\b(?:true|false|True|False|null|None|nil|undefined)\b/g, 'L').replace(/\s+/g, '');
+}
+
+/**
+ * Analyze unified diff text (from `git diff -U0`). Returns [{ file, reason, line? }].
+ * `codeChanged` says whether anything outside the tests changed; by default it
+ * is read from the diff. When nothing did, an assertion whose expected values
+ * were rewritten was made to agree with the code instead of the code fixed.
+ */
+export function analyzeTestDiff(diffText, { codeChanged } = {}) {
   const findings = [];
   const files = new Map();
   let current = null;
@@ -110,6 +121,7 @@ export function analyzeTestDiff(diffText) {
     if (line.startsWith('+') && !line.startsWith('+++')) { current.deleted = false; current.added.push(line.slice(1)); }
     else if (line.startsWith('-') && !line.startsWith('---')) current.removed.push(line.slice(1));
   }
+  const outsideTests = codeChanged !== undefined ? Boolean(codeChanged) : [...files.values()].some((entry) => !isTestPath(entry.file) && !isTestConfigPath(entry.file) && (entry.added.length || entry.removed.length));
   for (const entry of files.values()) {
     if (isTestConfigPath(entry.file)) {
       const touchesTests = [...entry.added, ...entry.removed].some((line) => TEST_RUNNER.test(line));
@@ -139,6 +151,12 @@ export function analyzeTestDiff(diffText) {
       const weak = (lines) => lines.filter((line) => ASSERTION.test(line) && WEAK_CHECK.test(line)).length;
       const loosened = strict(entry.removed) - strict(entry.added);
       if (loosened > 0 && weak(entry.added) > weak(entry.removed)) findings.push({ file: entry.file, reason: 'replaced ' + loosened + ' exact assertion(s) with existence or truthiness checks' });
+    }
+    if (!outsideTests && assertDelta <= 0 && declDelta <= 0) {
+      const removedShapes = new Map();
+      for (const line of entry.removed) if (ASSERTION.test(line)) removedShapes.set(assertionShape(line), line.trim());
+      const rewritten = entry.added.filter((line) => ASSERTION.test(line) && removedShapes.has(assertionShape(line)) && removedShapes.get(assertionShape(line)) !== line.trim());
+      if (rewritten.length) findings.push({ file: entry.file, reason: 'changed the expected values in ' + rewritten.length + ' assertion(s) while no code outside the tests changed', line: rewritten[0].trim().slice(0, 160), expectation: true });
     }
   }
   return findings;
@@ -210,17 +228,17 @@ export function snapshotChanges(before, after) {
 }
 
 /** Check the given changed paths against HEAD. Resolves [] outside Git or when nothing is weakened. */
-export async function detectTestTampering(root, paths, { timeoutMs = 15000 } = {}) {
-  return analyzeTestDiff(await gitTestDiff(root, paths, timeoutMs));
+export async function detectTestTampering(root, paths, { timeoutMs = 15000, codeChanged = true } = {}) {
+  return analyzeTestDiff(await gitTestDiff(root, paths, timeoutMs), { codeChanged });
 }
 
 /** One git diff for both checks: weakened tests and tests extended without a new case. */
-export async function inspectTestChanges(root, paths, { timeoutMs = 15000 } = {}) {
+export async function inspectTestChanges(root, paths, { timeoutMs = 15000, codeChanged = true } = {}) {
   const diff = await gitTestDiff(root, paths, timeoutMs);
   // A plain assertion script (test.mjs with bare asserts) has no cases to add.
   const extendedOnly = [];
   for (const file of testFilesExtendedWithoutNewCase(diff)) {
     try { if (String(await readFile(path.resolve(root, file), 'utf8')).split('\n').some((line) => TEST_DECL.test(line))) extendedOnly.push(file); } catch {}
   }
-  return { tampering: analyzeTestDiff(diff), extendedOnly };
+  return { tampering: analyzeTestDiff(diff, { codeChanged }), extendedOnly };
 }
