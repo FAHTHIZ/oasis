@@ -1652,7 +1652,10 @@ async function validateRepairingNulls(schema, args) {
 }
 
 // Applies permission rules and PreToolUse hooks. Returns { context, deniedReason, args }.
-const HELD_OUTBOUND_TOOLS = new Set(['git_push', 'create_pull_request', 'remote_agent', 'install_package', 'install_plugin', 'install_extension', 'install_external_skill', 'add_extension', 'configure_mcp_server', 'configure_provider', 'home_assistant_control', 'computer']);
+const HELD_OUTBOUND_TOOLS = new Set(['git_push', 'create_pull_request', 'remote_agent', 'install_package', 'install_plugin', 'install_extension', 'install_external_skill', 'add_extension', 'configure_mcp_server', 'configure_provider', 'home_assistant_control', 'computer', 'notify',
+  // Saved for later sessions to act on: an injected page must not plant a
+  // memory, skill, profile fact or scheduled job that outlives this turn.
+  'memory_save', 'memory_delete', 'skill_propose', 'honcho_conclude', 'honcho_profile', 'cron_create', 'routine_manage']);
 // A URL can carry data out in its query (https://x.example/?q=<secret>); a
 // plain page address cannot carry much, so reading on stays possible.
 function heldOutboundCall(session, name, args) {
@@ -1860,7 +1863,7 @@ async function authorizeCall(session, name, args, context, options) {
   // these tools would otherwise run on auto-approval.
   const hold = heldOutboundCall(session, name, args) ? injectionHoldReason(session) : '';
   if (hold) {
-    const ok = await overlay.approval('Allow ' + (CLAUDE_TOOL_NAMES[name] || name) + '? It sends data out or changes remote state, and ' + hold + '.\n  ' + JSON.stringify(redactAuditValue(args)).slice(0, 1500), true);
+    const ok = await overlay.approval('Allow ' + (CLAUDE_TOOL_NAMES[name] || name) + '? It sends data out, changes remote state or saves something later sessions act on, and ' + hold + '.\n  ' + JSON.stringify(redactAuditValue(args)).slice(0, 1500), true);
     if (!ok) return { deniedReason: overlay.permissionHookDenial || 'Not run: ' + hold + ', so ' + name + ' needs the user until this turn ends. Finish without it and tell the user what you would have done.' };
   }
   if (decision === 'ask') {
