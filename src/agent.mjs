@@ -37,7 +37,7 @@ import { startHookWatchers, needsHookWatchers } from './file-watch.mjs';
 import { externalChangesReminder, markFileSeen, restoreFilesAfterCompaction } from './file-state.mjs';
 import { realpathSync } from 'node:fs';
 import { BROWSER_TOOL_DEFINITION, closeBrowser } from './browser-tool.mjs';
-import { setComputerUse } from './computer-use.mjs';
+import { setComputerUse, closeComputerUse } from './computer-use.mjs';
 import { WORKFLOW_TOOL_DEFINITION } from './workflows.mjs';
 import { debugLog, debugEnabled } from './debug-log.mjs';
 import path from 'node:path';
@@ -1075,6 +1075,7 @@ export function closeSession(session) {
     if (session.ptyManager) { try { session.ptyManager.closeAll(); } catch {} }
     const cleanup = [];
     if (session.browserState) cleanup.push(Promise.resolve().then(() => closeBrowser(session)));
+    if (session.computerState) closeComputerUse(session);
     if (session.lspClients) cleanup.push(Promise.resolve().then(() => stopLspClients(session)));
     if (session.agentTasks) cleanup.push(Promise.resolve().then(() => stopAllAgents(session)));
     if (session.teammatePanes) closeTeammatePanes(session);

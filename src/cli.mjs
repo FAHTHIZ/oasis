@@ -3546,10 +3546,10 @@ async function main() {
   if (command === 'computer-use') {
     const sub = rest[0] || 'doctor';
     if (sub !== 'doctor' && sub !== 'status') { stderr.write('Usage: oasis computer-use doctor [--json]\n'); process.exitCode = 2; return; }
-    const { computerUseDoctor } = await import('./computer-use.mjs');
+    const { computerUseDoctor, formatComputerUseDoctor } = await import('./computer-use.mjs');
     const report = await computerUseDoctor(process.env);
     if (rest.includes('--json')) stdout.write(JSON.stringify(report, null, 2) + '\n');
-    else stdout.write(['Computer use on ' + report.platform + ': ' + (report.ok ? 'ready' : 'missing pieces'), ...report.checks.map((item) => '  ' + (item.ok ? 'ok   ' : 'MISS ') + item.check + ' - ' + item.detail), report.ok ? 'Start with: oasis --computer-use' : ''].filter(Boolean).join('\n') + '\n');
+    else stdout.write(formatComputerUseDoctor(report) + (report.ok ? '\nStart with: oasis --computer-use' : '') + '\n');
     process.exitCode = report.ok ? 0 : 1;
     return;
   }

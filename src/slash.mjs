@@ -1212,11 +1212,11 @@ export async function runBuiltinCommand(name, argument, state) {
       return { output: 'Chrome tool on (' + exe + '). The agent can now open pages, click, type, take screenshots and read the console.' };
     }
     case 'computer': {
-      const { setComputerUse, computerUseDoctor } = await import('./computer-use.mjs');
+      const { setComputerUse, computerUseDoctor, formatComputerUseDoctor } = await import('./computer-use.mjs');
       const wanted = String(argument || '').trim().toLowerCase();
       if (wanted === 'doctor') {
         const report = await computerUseDoctor(env);
-        return { output: ['Computer use on ' + report.platform + ': ' + (report.ok ? 'ready' : 'missing pieces'), ...report.checks.map((item) => '  ' + (item.ok ? 'ok   ' : 'MISS ') + item.check + ' - ' + item.detail)].join('\n') };
+        return { output: formatComputerUseDoctor(report) };
       }
       if (!session) return { output: 'Start a conversation first, or launch with oasis --computer-use.' };
       if (!wanted || wanted === 'status') return { output: 'Computer use: ' + (session.computerUseEnabled ? 'on' : 'off') + (session.computerState && session.computerState.granted ? ' (mouse and keyboard allowed for this session)' : '') + '. /computer doctor checks what this machine needs.' };
