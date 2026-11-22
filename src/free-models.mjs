@@ -109,13 +109,17 @@ async function ollamaModels(fetchImpl, timeoutMs) {
     if (/embed|rerank|whisper|tts/i.test(name)) continue;
     let tools = null;
     let context = 0;
+    let parameters = 0;
     try {
       const show = await fetchJson(fetchImpl, OLLAMA + '/api/show', { method: 'POST', body: { model: name }, timeoutMs });
       if (Array.isArray(show.capabilities)) tools = show.capabilities.includes('tools');
-      for (const [key, value] of Object.entries(show.model_info || {})) if (/\.context_length$/.test(key) && Number(value) > 0) context = Number(value);
+      for (const [key, value] of Object.entries(show.model_info || {})) {
+        if (/\.context_length$/.test(key) && Number(value) > 0) context = Number(value);
+        if (key === 'general.parameter_count' && Number(value) > 0) parameters = Math.round(Number(value) / 1e8) / 10;
+      }
     } catch {}
     if (tools === false) continue;
-    models.push({ id: name, spec: 'ollama:' + name, source: 'ollama', name, context, maxOutput: 0, tools: tools !== false, toolsReported: tools === true, structured: false, vision: false, reasoning: false, billions: parameterBillions(name.replace(/:/g, '-')), created: 0, router: false });
+    models.push({ id: name, spec: 'ollama:' + name, source: 'ollama', name, context, maxOutput: 0, tools: tools !== false, toolsReported: tools === true, structured: false, vision: false, reasoning: false, billions: parameters || parameterBillions(name.replace(/:/g, '-')), created: 0, router: false });
   }
   return { models, available: true };
 }
@@ -137,6 +141,48 @@ export async function discoverFreeModels({ fetchImpl = globalThis.fetch, timeout
     catch (error) { errors.push('Ollama: ' + String(error && error.message || error).slice(0, 160)); }
   }
   return { models: rankFreeModels(found, { now }), errors, ollama, checkedAt: new Date(now).toISOString() };
+}
+
+// Same rule as pickInstalledModel in src/hardware.mjs: about 0.62 GB per
+// billion parameters at 4-bit, plus 1 GB for context and runtime.
+function localNeedGB(billions) { return billions ? Number((billions * 0.62 + 1).toFixed(1)) : null; }
+
+/**
+ * Adds what this computer knows to the ranked list, without any request:
+ *  - cooldown: from the quota ledger (src/quota-ledger.mjs), a model that ran
+ *    out of free quota recently and when it is expected back, plus today's
+ *    request count. Such models move behind the ones that are available now.
+ *  - fits: for local models, whether it fits the memory budget of this
+ *    computer (modelMemoryBudget). One that does not is kept in the list but
+ *    never added by --apply: it would swap or fail to load.
+ * routes: listRoutes() records. budgetGB: null when unknown.
+ */
+export function annotateFreeModels(models, { routes = [], budgetGB = null, now = Date.now() } = {}) {
+  const byModel = new Map();
+  for (const route of routes) {
+    if (!route || !route.model) continue;
+    const list = byModel.get(route.model) || [];
+    list.push(route);
+    byModel.set(route.model, list);
+  }
+  const annotated = models.map((model) => {
+    const provider = model.source === 'ollama' ? /ollama|127\.0\.0\.1:11434|localhost:11434/i : /openrouter/i;
+    const records = (byModel.get(model.name) || []).filter((route) => provider.test(String(route.provider || '')));
+    const next = { ...model };
+    const today = new Date(now).toISOString().slice(0, 10);
+    const requestsToday = records.filter((route) => route.day === today).reduce((sum, route) => sum + (Number(route.requests) || 0), 0);
+    if (requestsToday) next.requestsToday = requestsToday;
+    const cooling = records.map((route) => route.cooldown).filter((cooldown) => cooldown && cooldown.until > now).sort((a, b) => b.until - a.until)[0];
+    if (cooling) next.cooldown = { until: new Date(cooling.until).toISOString(), source: cooling.source === 'provider' ? 'provider' : 'guess' };
+    if (model.source === 'ollama' && budgetGB !== null && model.billions) {
+      next.needGB = localNeedGB(model.billions);
+      next.fits = next.needGB <= Math.max(budgetGB, 2.5);
+      if (!next.fits) next.score = Math.min(next.score, -60);
+    }
+    return next;
+  });
+  // Stable: available models keep their order, cooling ones follow.
+  return [...annotated.filter((model) => !model.cooldown), ...annotated.filter((model) => model.cooldown)];
 }
 
 /**
