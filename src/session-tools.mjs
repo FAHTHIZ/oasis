@@ -471,7 +471,7 @@ const RARE_BUILTIN_TOOLS = Object.freeze([
 // Built-in tools that wait until they are needed, grouped for the prompt. The
 // rest (read, edit, shell, todo, task, web, git status/diff) is the lean core every
 // coding task uses; harnesses with small prompts do as well and cost less
-// (docs/BENCHMARKS.md, "Context overhead"). OASIS_LEAN_TOOLS=0 or "leanTools":
+// (docs/development/BENCHMARKS.md, "Context overhead"). OASIS_LEAN_TOOLS=0 or "leanTools":
 // false sends every tool up front.
 const DEFERRED_TOOL_GROUPS = Object.freeze({
   'Git and GitHub': ['git_commit', 'git_branch', 'git_log', 'git_push', 'create_pull_request', 'enter_worktree', 'exit_worktree', 'worktree_inspect', 'worktree_merge'],

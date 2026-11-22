@@ -2,7 +2,7 @@
 //
 // Each case is a model reply that a harness has to turn into tool calls.
 // The shapes come from replies logged during the small-model field runs
-// (docs/BENCHMARKS.md) and from formats that open-weight chat templates emit.
+// (docs/development/BENCHMARKS.md) and from formats that open-weight chat templates emit.
 //
 // kind: 'args'  -> `raw` is the native tool-call `arguments` string.
 //                  `expect` is the argument object a correct harness recovers,

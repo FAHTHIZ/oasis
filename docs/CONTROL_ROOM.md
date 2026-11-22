@@ -22,7 +22,7 @@ oasis control-room --hours 72 --json
 
 ## Where the data comes from
 
-Every OASIS process (the terminal, the web app, chat gateways, `oasis a2a serve`) writes each agent's start, state changes and token charges to the [agent ledger](OASIS-NEURON-NETWORK.md#network-ledger), a small SQLite file in the OASIS config folder (`~/.config/oasis/sessions/neuron-ledger.sqlite` on Linux and macOS, `%APPDATA%\oasis\sessions` on Windows). The control room reads that file, so it sees agents started from a terminal while you look at the web app, and agents of processes that have exited. Screens, browsers, approvals and Stop are only known for sessions open in the web server you are looking at.
+Every OASIS process (the terminal, the web app, chat gateways, `oasis a2a serve`) writes each agent's start, state changes and token charges to the [agent ledger](AGENT-NETWORK.md#network-ledger), a small SQLite file in the OASIS config folder (`~/.config/oasis/sessions/neuron-ledger.sqlite` on Linux and macOS, `%APPDATA%\oasis\sessions` on Windows). The control room reads that file, so it sees agents started from a terminal while you look at the web app, and agents of processes that have exited. Screens, browsers, approvals and Stop are only known for sessions open in the web server you are looking at.
 
 The ledger has no heartbeat. An agent still marked running in another process with no activity for 30 minutes is shown as "No recent activity": usually that process was killed. When it restarts the session, OASIS marks the agent interrupted.
 

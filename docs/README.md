@@ -1,13 +1,16 @@
 # OASIS documentation
 
-Find the right guide without knowing the repository. The root
-[README](../README.md) is the project overview and install entry point.
+OASIS is an open-source, model-agnostic agent platform and runtime. The root
+[README](../README.md) is the overview and install entry point; this page maps
+every guide.
 
 ## Start here
 
 | If you want to… | Read |
 | --- | --- |
 | Install OASIS and finish a first task | [User guide](USER-GUIDE.md) · [First run](FIRST-RUN.md) |
+| See what OASIS can do beyond code | [Workflows](WORKFLOWS.md) |
+| Know what is stable, unreleased or experimental | [Capabilities and status](CAPABILITIES.md) |
 | Use the terminal agent day to day | [Terminal guide](TERMINAL.md) |
 | Choose between the terminal, web app, desktop app and editors | [Interfaces](INTERFACES.md) |
 | Connect a model, add backups, cap spend | [Configuration](CONFIGURATION.md) · [Inference](INFERENCE.md) |
@@ -17,6 +20,8 @@ Find the right guide without knowing the repository. The root
 ## Guides
 
 - [User guide](USER-GUIDE.md): install, connect a provider, use each interface, review results.
+- [Workflows](WORKFLOWS.md): research, data analysis, writing, automation, chat, browser and desktop use, multi-agent work and software tasks.
+- [Capabilities and status](CAPABILITIES.md): what is stable, released but lightly tested, unreleased, experimental or pending, and the known limitations.
 - [First run](FIRST-RUN.md): provider setup, workspace trust, permissions and verification.
 - [Terminal guide](TERMINAL.md): input prefixes, keys, permission modes, commands, scripts and CI.
 - [Interfaces](INTERFACES.md): web app, ACP editors, VS Code family, Codex App Server, Cursor Cloud Agents API, SDK, CI, chat gateways.
@@ -40,13 +45,16 @@ Find the right guide without knowing the repository. The root
 - [Architecture](ARCHITECTURE.md): runtime components, a typical turn, persistence and trust boundaries.
 - [Security model](SECURITY.md): what OASIS enforces, what is outside its controls, recommended setup.
 - [Provider transport](architecture/provider-transport.md): protocol-specific requests and streaming.
-- [Agent network](OASIS-NEURON-NETWORK.md): how subagents are scheduled, budgeted, cancelled and checked.
+- [Agent network](AGENT-NETWORK.md): how subagents are scheduled, budgeted, cancelled and checked.
+- [Compatibility](COMPATIBILITY.md): the Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Goose and other agent files and protocols OASIS reads or speaks.
 
-## Evidence
+## Development evidence
 
-- [Benchmarks](BENCHMARKS.md): model-free harness results, same-model head-to-head runs and their limits.
-- [Real-world runs](REAL-WORLD-RUNS.md): unscripted tasks with real providers, plugins checked, what went wrong.
-- [Comparison](COMPARISON.md): features against Claude Code, Codex, Gemini CLI, OpenCode, Goose and others, with sources.
+For contributors and anyone checking the engineering claims. These pages are
+historical records with dates and limits, not product rankings.
+
+- [Benchmarks](development/BENCHMARKS.md): model-free harness results, token and memory measurements, same-model gateway runs and their limits. Raw data is in `bench/results/`.
+- [Real-world runs](development/REAL-WORLD-RUNS.md): unscripted tasks with real providers, plugins checked, what went wrong.
 
 ## Project records
 

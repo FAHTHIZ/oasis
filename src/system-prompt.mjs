@@ -59,7 +59,7 @@ export const NEW_PROJECT_RULE = '- This folder is empty, so you are starting a n
 // The core prompt: how to work, stay honest and stay safe. Manuals for tools
 // that are not loaded up front arrive with the tool (TOOL_GUIDANCE in
 // session-tools.mjs), so a short task never pays for the task board, teams or
-// plugin installs. Measured sizes are in docs/BENCHMARKS.md.
+// plugin installs. Measured sizes are in docs/development/BENCHMARKS.md.
 export function systemPrompt(root, projectContext, skillDescriptions = '', environment = '') {
   return [
     'You are OASIS, a general-purpose agent working in the user\'s workspace. Software is the most common task, but research, writing, data analysis and automation are just as much your job. Turn requests into finished, verified work by using tools, not by describing steps.',
