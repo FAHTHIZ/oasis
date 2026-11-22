@@ -92,6 +92,10 @@ async function waitFor(page, expression, { timeout = 60000, label = expression }
   const seen = await evaluate(page, `JSON.stringify({ transcript: document.getElementById('transcript').textContent.slice(-600), toasts: document.getElementById('toasts').textContent, log: document.getElementById('connectLog').textContent, suggest: document.getElementById('pluginSuggest').outerHTML.slice(0, 400), msgs: window.__msgs, input: document.getElementById('input').value.slice(0, 80), chip: (document.getElementById('modelChip') || {}).textContent, ready: document.documentElement.dataset.ready, stale: !!window.__stale, sheets: [...document.querySelectorAll('.sheet')].filter((el) => !el.hidden).map((el) => el.id), adds: (window.__adds || []).slice(0, 4), nav: (performance.getEntriesByType('navigation')[0] || {}).type, age: Math.round(performance.now()), busy: document.body.classList.contains('busy') })`).catch(() => '');
   throw new Error('Timed out waiting for: ' + label + ' (last: ' + JSON.stringify(last) + ') page: ' + seen);
 }
+// Click once the element exists and is shown. Under a loaded machine the page
+// can still be settling (a reload after sign-in) when the previous wait passed;
+// a bare getElementById(...).click() then threw on null.
+const click = (page, id, options = {}) => waitFor(page, `(() => { const el = document.getElementById(${JSON.stringify(id)}); if (!el || el.hidden || el.disabled) return false; el.click(); return true; })()`, { label: 'click #' + id, timeout: 20000, ...options });
 const paste = (selector, value) => `(() => { const el = document.querySelector(${JSON.stringify(selector)}); el.focus(); const dt = new DataTransfer(); dt.setData('text/plain', ${JSON.stringify(value)}); el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); return true; })()`;
 const type = (value) => `(() => { const el = document.getElementById('input'); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`;
 const submit = `(() => { document.getElementById('composer').requestSubmit(); return true; })()`;
@@ -152,7 +156,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   // A newer release shows one slim bar; "Not now" hides it for this session.
   await waitFor(page, `!document.getElementById('updateBar').hidden && document.getElementById('updateTitle').textContent === 'OASIS 99.0.0 is out.' && /oasis update/.test(document.getElementById('updateAction').textContent)`, { label: 'update bar for a newer release', timeout: 15000 });
   await shot('1-update');
-  await evaluate(page, `document.getElementById('updateLater').click(); true`);
+  await click(page, 'updateLater');
   assert.equal(await evaluate(page, `document.getElementById('updateBar').hidden && sessionStorage.getItem('oasis.update.later') === '99.0.0'`), true);
 
   await shot('2-key');
@@ -184,7 +188,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await waitFor(page, `/^Waiting for you/.test(${clockText})`, { label: 'run clock shows waiting', timeout: 5000 });
   const frozen = await evaluate(page, clockText);
   await waitFor(page, `${clockText} !== ${JSON.stringify(frozen)}`, { label: 'the clock keeps counting while waiting', timeout: 4000 });
-  await evaluate(page, `document.getElementById('allowButton').click(); true`);
+  await click(page, 'allowButton');
   await waitFor(page, `!${busy} && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'runtime task finished', timeout: 40000 });
   assert.match(await readFile(path.join(root, 'index.html'), 'utf8'), /Counter/, 'the file was written on disk');
   assert.equal(await evaluate(page, `document.querySelectorAll('.tool').length`), 4, 'one card per tool call');
@@ -224,7 +228,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   const docked = await evaluate(page, `document.getElementById('approvalSheet').classList.contains('docked')`);
   if (docked) {
     assert.equal(await evaluate(page, `Boolean(document.querySelector('.step-ask'))`), false, 'no second Allow/Deny pair while the sheet is docked');
-    await evaluate(page, `document.getElementById('allowButton').click(); true`);
+    await click(page, 'allowButton');
   } else {
     await waitFor(page, `document.querySelector('.tool.waiting .step-ask .step-allow')`, { label: 'inline Allow in the waiting step' });
     await evaluate(page, `document.querySelector('.tool.waiting .step-ask .step-allow').click(); true`);
@@ -244,15 +248,15 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await shot('7-image-sent');
 
   // 8. New chat starts fresh; the earlier chat is one tap away in Chats.
-  await evaluate(page, `document.getElementById('chatsButton').click(); true`);
+  await click(page, 'chatsButton');
   await waitFor(page, `!document.getElementById('chatsSheet').hidden && document.querySelectorAll('#chatList .project-item').length === 1 && /Build a counter/.test(document.getElementById('chatList').textContent)`, { label: 'chats list shows the current chat' });
   await evaluate(page, `(() => { window.__adds = []; const t = document.getElementById('transcript'); const add = t.appendChild.bind(t); t.appendChild = (node) => { window.__adds.push((node.className || '') + ' @ ' + new Error().stack.split('\\n').slice(2, 6).join(' | ')); return add(node); }; return true; })()`);
-  await evaluate(page, `document.getElementById('newChatButton').click(); true`);
+  await click(page, 'newChatButton');
   await waitFor(page, `document.getElementById('chatsSheet').hidden && !document.querySelector('#transcript .msg') && !document.getElementById('welcome').hidden`, { label: 'new chat is empty' });
   await evaluate(page, type('Say hi'));
   await evaluate(page, submit);
   await waitFor(page, `!${busy} && /Answer from acme\\/coder-pro/.test(document.getElementById('transcript').textContent)`, { label: 'second chat answered' });
-  await evaluate(page, `document.getElementById('chatsButton').click(); true`);
+  await click(page, 'chatsButton');
   await waitFor(page, `document.querySelectorAll('#chatList .project-item').length === 2`, { label: 'two chats listed' });
   await shot('7-chats');
   await waitFor(page, `(() => { const open = [...document.querySelectorAll('#chatList .project-item .open')].find((b) => /Build a counter/.test(b.textContent)); if (!open) return false; open.click(); return true; })()`, { label: 'earlier chat listed and opened' });
@@ -265,9 +269,9 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   // 9. Dictation writes into the message box and sends nothing by itself.
   await waitFor(page, `Boolean(document.getElementById('input')) && !${busy} && !document.getElementById('dictateButton').hidden`, { label: 'app ready after reload, with a microphone button' });
   await evaluate(page, type('Please'));
-  await evaluate(page, `document.getElementById('dictateButton').click(); true`);
+  await click(page, 'dictateButton');
   await waitFor(page, `document.getElementById('dictateButton').classList.contains('listening') && document.getElementById('input').value === 'Please add a reset button'`, { label: 'dictated words appear after what was typed' });
-  await evaluate(page, `document.getElementById('dictateButton').click(); true`);
+  await click(page, 'dictateButton');
   await waitFor(page, `!document.getElementById('dictateButton').classList.contains('listening') && document.getElementById('dictateButton').getAttribute('aria-pressed') === 'false'`, { label: 'dictation stopped' });
   assert.equal(await evaluate(page, `document.querySelectorAll('.msg.user').length > 0 && !/reset button/.test(document.getElementById('transcript').textContent)`), true, 'nothing was sent');
   await evaluate(page, type(''));
@@ -279,7 +283,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, submit);
   await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval for the ! command', timeout: 30000 });
   assert.match(await evaluate(page, `document.querySelector('#approvalSummary').textContent`), /node/);
-  await evaluate(page, `document.getElementById('allowButton').click(); true`);
+  await click(page, 'allowButton');
   await waitFor(page, `!${busy} && [...document.querySelectorAll('.tool')].at(-1).className === 'tool ok' && /42/.test([...document.querySelectorAll('.tool')].at(-1).textContent)`, { label: 'the ! command ran and its output is shown', timeout: 30000 });
   await shot('8-shell');
   await evaluate(page, type('What did that print?'));
@@ -293,14 +297,14 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, `document.getElementById('approvalInstead').value = 'stale'; document.getElementById('denyButton').textContent = 'Deny and send'; true`);
   await evaluate(page, `document.querySelector('[data-panel-tab="terminal"], #terminalTab, [aria-controls="terminalView"]')?.click(); true`);
   await waitFor(page, `Boolean(document.getElementById('terminalStart')) && !document.getElementById('terminalView').hidden`, { label: 'terminal panel open', timeout: 15000 });
-  await evaluate(page, `document.getElementById('terminalStart').click(); true`);
+  await click(page, 'terminalStart');
   await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval to open the terminal', timeout: 30000 });
   assert.match(await evaluate(page, `document.getElementById('approvalSummary').textContent`), /interactive terminal/);
   assert.deepEqual(await evaluate(page, `[document.getElementById('approvalInstead').hidden, document.getElementById('approvalInstead').value, document.getElementById('denyButton').textContent, document.activeElement && document.activeElement.id]`).then((v) => v.slice(0, 3)), [true, '', 'Deny']);
   assert.notEqual(await evaluate(page, `document.activeElement && document.activeElement.id`), 'approvalInstead');
-  await evaluate(page, `document.getElementById('allowButton').click(); true`);
+  await click(page, 'allowButton');
   await waitFor(page, `/running/.test(document.getElementById('terminalStatus').textContent)`, { label: 'terminal running after Allow', timeout: 30000 });
-  await evaluate(page, `document.getElementById('terminalStop').click(); true`);
+  await click(page, 'terminalStop');
 
   assert.deepEqual(errors, [], 'no uncaught errors in the app');
 });
