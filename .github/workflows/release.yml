@@ -118,7 +118,7 @@ jobs:
         working-directory: desktop
         shell: bash
         env:
-          # Optional signing secrets (docs/RELEASING.md). Without them macOS
+          # Optional signing secrets (docs/RELEASES.md, "Turning on npm and code signing"). Without them macOS
           # builds are signed ad hoc and Windows builds are unsigned.
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
