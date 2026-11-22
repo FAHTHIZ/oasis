@@ -334,3 +334,37 @@ test('a declined request is not asked about again until the next user message', 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('the session log says who started each turn, and an automatic turn does not reset a decline', async () => {
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const { readEvents } = await import('../src/event-stream.mjs');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-turn-origin-'));
+  try {
+    const { config } = await scriptedModel({ after: (fn) => { cleanup.push(fn); } }, [(payload) => {
+      const lastUser = payload.messages.map((message) => message.role).lastIndexOf('user');
+      return payload.messages.slice(lastUser).some((message) => message.role === 'tool') ? { content: 'done' } : toolCall('d' + lastUser, 'run_shell', { command: 'rm -rf dist' });
+    }]);
+    const env = { ...process.env, HOME: root, OASIS_AGENT_EXPERIENCE: '0', OASIS_NEURON_LEDGER: '0' };
+    delete env.NODE_TEST_CONTEXT; delete env.OASIS_SCHEDULED_RUN; delete env.OASIS_EVENT_ID; delete env.OASIS_ROUTINE_ID;
+    const session = await createSession({ root, env, config });
+    session.sessionId = '0123abcd-0000-4000-8000-00000000beef';
+    const prompts = [];
+    const approval = async (text) => { prompts.push(text); return false; };
+    await runAgentTurn(session, 'clean dist', { env, approval });
+    await runAgentTurn(session, 'loop run 2', { env, approval, keepInjectionHold: true });
+    assert.equal(prompts.length, 1, 'a follow-up nobody typed keeps the decline');
+    await runAgentTurn(session, 'scheduled', { env: { ...env, OASIS_SCHEDULED_RUN: '1', OASIS_ROUTINE_ID: 'nightly' }, approval, keepInjectionHold: true });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const turns = (await readEvents(root, session.sessionId, { env })).filter((event) => event.type === 'turn_start');
+    assert.deepEqual(turns.map((event) => event.origin), ['person', 'automatic', 'routine']);
+    assert.equal(turns[2].routine, 'nightly');
+    await closeSession(session);
+  } finally {
+    for (const fn of cleanup.splice(0)) await fn();
+    await rm(root, { recursive: true, force: true });
+  }
+});

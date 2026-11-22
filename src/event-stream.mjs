@@ -10,7 +10,7 @@ import { getSessionDirectory } from './session-paths.mjs';
 import { redactSecrets } from './auto-memory.mjs';
 import { redactAuditValue } from './tool-kernel.mjs';
 
-const EVENT_TYPES = new Set(['tool_call', 'tool_result', 'approval', 'recovery', 'verification', 'session_saved']);
+const EVENT_TYPES = new Set(['tool_call', 'tool_result', 'approval', 'recovery', 'verification', 'session_saved', 'turn_start']);
 
 const eventQueues = new Map();
 

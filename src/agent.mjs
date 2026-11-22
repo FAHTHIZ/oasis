@@ -2785,7 +2785,14 @@ export async function runAgentTurn(session, prompt, options = {}) {
   // A new turn from a person clears the hold; an automatic follow-up (goal,
   // review, schema retry) keeps it, since nobody looked in between.
   if (session && !options.isSubagent && !options.keepInjectionHold) clearInjectionTurnFlag(session);
-  if (session && !options.isSubagent && session.turnDeclined instanceof Set) session.turnDeclined.clear();
+  // Declined requests stay declined until a person types again, too.
+  if (session && !options.isSubagent && !options.keepInjectionHold && session.turnDeclined instanceof Set) session.turnDeclined.clear();
+  // Audit trail: who started this turn. Scheduled, webhook and follow-up
+  // turns run with nobody watching; the log says so.
+  if (session && !options.isSubagent) {
+    const origin = env.OASIS_EVENT_ID ? 'webhook' : env.OASIS_SCHEDULED_RUN === '1' ? 'routine' : options.keepInjectionHold ? 'automatic' : 'person';
+    recordSessionEvent(session, { type: 'turn_start', origin, ...(env.OASIS_ROUTINE_ID ? { routine: String(env.OASIS_ROUTINE_ID).slice(0, 100) } : {}), ...(env.OASIS_EVENT_ID ? { event: String(env.OASIS_EVENT_ID).slice(0, 100) } : {}) }, env);
+  }
   // A run started by untrusted input (a webhook payload that read like an
   // injection) is held from its first turn; see src/routines.mjs.
   if (session && !options.isSubagent && env.OASIS_UNTRUSTED_START) {
