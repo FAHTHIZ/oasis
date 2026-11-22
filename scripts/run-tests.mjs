@@ -48,9 +48,15 @@ if (!realHome && !process.env.PLAYWRIGHT_BROWSERS_PATH) {
       : path.join(os.homedir(), '.cache', 'ms-playwright');
   if (existsSync(realCache)) isolated.PLAYWRIGHT_BROWSERS_PATH = realCache;
 }
+// Git variables from the developer's shell (GIT_AUTHOR_NAME, GIT_DIR,
+// GIT_CONFIG_COUNT/KEY_n/VALUE_n, ...) override what a test sets inside its own
+// repository: a test that commits as "Test" read back the developer's name.
+// The scratch ~/.gitconfig above already carries the fallback identity.
+const GIT_LEAKS = /^GIT_(?:AUTHOR_|COMMITTER_|CONFIG_(?:COUNT|KEY_\d+|VALUE_\d+|PARAMETERS|GLOBAL|SYSTEM|NOSYSTEM)$|DIR$|WORK_TREE$|INDEX_FILE$|OBJECT_DIRECTORY$|ALTERNATE_OBJECT_DIRECTORIES$|NAMESPACE$|CEILING_DIRECTORIES$|DISCOVERY_ACROSS_FILESYSTEM$|COMMON_DIR$)/;
+const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => realHome || !GIT_LEAKS.test(key)));
 const child = spawn(process.execPath, ['--test', ...args, ...files], {
   stdio: 'inherit',
-  env: { ...process.env, ...isolated, TMPDIR: scratch, TMP: scratch, TEMP: scratch }
+  env: { ...baseEnv, ...isolated, TMPDIR: scratch, TMP: scratch, TEMP: scratch }
 });
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
 child.on('exit', (code, signal) => {
