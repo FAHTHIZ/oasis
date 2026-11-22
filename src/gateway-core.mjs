@@ -12,6 +12,23 @@ import { CHAT_COMMAND_HELP, chatUsageRecorder } from './gateway-commands.mjs';
 
 const APPROVAL_TIMEOUT_MS = 10 * 60000;
 const MODES = ['default', 'acceptEdits', 'plan', 'auto'];
+// From the most to the least careful. A chat can pick any mode up to the
+// gateway's ceiling: OASIS_GATEWAY_MAX_MODE, else the mode the gateway was
+// started in (--permission-mode), else acceptEdits. Auto mode from a phone is a
+// choice for whoever runs the gateway, not for anyone who can message it.
+const MODE_ORDER = ['plan', 'default', 'acceptEdits', 'auto'];
+
+export function chatModeCeiling({ env = process.env, permissionMode = null, maxMode = null } = {}) {
+  const pick = (value) => {
+    const raw = String(value || '').trim();
+    const named = { manual: 'default', 'accept-edits': 'acceptEdits', accept_edits: 'acceptEdits' }[raw.toLowerCase()] || raw;
+    return MODE_ORDER.includes(named) ? named : null;
+  };
+  const explicit = pick(maxMode) || pick(env.OASIS_GATEWAY_MAX_MODE);
+  if (explicit) return explicit;
+  const started = pick(permissionMode);
+  return started && MODE_ORDER.indexOf(started) > MODE_ORDER.indexOf('acceptEdits') ? started : 'acceptEdits';
+}
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 const MAX_ATTACHMENTS = 5;
@@ -165,9 +182,20 @@ export function createChatCore(options = {}) {
   const approvals = new Map();
   let approvalCounter = 0;
   const transcribe = options.transcribe !== undefined ? options.transcribe : gatewayTranscriber(env, options.settings || null, root);
+  const modeCeiling = chatModeCeiling({ env, permissionMode: options.permissionMode, maxMode: options.maxMode });
+  // Two messages that arrive together share one session being created, instead
+  // of each creating its own and the second silently replacing the first.
+  const pendingStates = new Map();
 
-  async function chatState(chatKey) {
-    if (chats.has(chatKey)) return chats.get(chatKey);
+  function chatState(chatKey) {
+    if (chats.has(chatKey)) return Promise.resolve(chats.get(chatKey));
+    if (pendingStates.has(chatKey)) return pendingStates.get(chatKey);
+    const created = createChatState(chatKey).finally(() => pendingStates.delete(chatKey));
+    pendingStates.set(chatKey, created);
+    return created;
+  }
+
+  async function createChatState(chatKey) {
     const { createSession } = deps.agent || await import('./agent.mjs');
     const { loadConfig } = deps.config || await import('./config.mjs');
     const config = options.config || await loadConfig({ env });
@@ -266,6 +294,10 @@ export function createChatCore(options = {}) {
     if (cmd === '/mode') {
       const mode = args[0];
       if (!MODES.includes(mode)) { await send(chatKey, 'Usage: /mode default|acceptEdits|plan|auto'); return true; }
+      if (MODE_ORDER.indexOf(mode) > MODE_ORDER.indexOf(modeCeiling)) {
+        await send(chatKey, 'Mode ' + mode + ' is not allowed from chat; this gateway allows up to ' + modeCeiling + '. Whoever runs it can raise that with OASIS_GATEWAY_MAX_MODE=' + mode + '.');
+        return true;
+      }
       const state = await chatState(chatKey);
       if (typeof state.session.permissions.setMode === 'function') state.session.permissions.setMode(mode); else state.session.permissions.mode = mode;
       await send(chatKey, 'Mode set to ' + mode + '.');
