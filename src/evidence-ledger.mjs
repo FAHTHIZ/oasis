@@ -141,13 +141,18 @@ function ranNoTests(text) {
 
 // Selecting tests by name or file: fine while iterating, but a goal about the
 // whole suite ("npm test passes") needs a run without it.
-const TEST_FILTER = /(?:^|\s)(?:--grep|-g|--fgrep|-t|--testNamePattern|--test-name-pattern|--test-only|-k|--filter|--only|-run|--match)(?:[=\s]|$)/;
+const TEST_FILTER = /(?:^|\s)(?:--grep|-g|--fgrep|-t|--testNamePattern|--test-name-pattern|--test-only|-k|--filter|--only|-run|--match|--test-skip-pattern|--deselect|--ignore|--ignore-glob|--testPathIgnorePatterns|--skip|--exclude|--exact)(?:[=\s]|$)/;
+// The same filters set through the environment: PYTEST_ADDOPTS="-k fast",
+// GOFLAGS=-run=TestX, NODE_OPTIONS=--test-name-pattern=x.
+const ENV_FILTER_VAR = /\b(?:PYTEST_ADDOPTS|GOFLAGS|NODE_OPTIONS|JEST_\w+|MOCHA_\w+|VITEST_\w+|CARGO_\w+|NODE_TEST_\w+)=("[^"]*"|'[^']*'|\S+)/g;
+const ENV_FILTER_FLAG = /(?:^|\s)(?:-k|-m|-run|--run|--grep|-g|--test-name-pattern|--test-skip-pattern|--test-only|--testNamePattern|-t|--deselect|--skip)(?:[=\s]|$)/;
+const envFiltered = (text) => [...text.matchAll(ENV_FILTER_VAR)].some((match) => ENV_FILTER_FLAG.test(match[1].replace(/^["']|["']$/g, '')));
 
 function filteredRun(command) {
   const text = String(command || '');
   const split = text.indexOf(' -- ');
   const tail = split >= 0 ? text.slice(split + 4) : text.replace(/^\S+/, '');
-  return TEST_FILTER.test(' ' + tail);
+  return TEST_FILTER.test(' ' + tail) || envFiltered(text);
 }
 
 export function evidenceFromToolResult(name, args = {}, result = {}, context = {}) {
