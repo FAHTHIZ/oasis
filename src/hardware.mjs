@@ -181,13 +181,17 @@ const TOOL_CAPABLE = /qwen3|qwen2\.5|coder|gpt-oss|devstral|llama3\.[1-9]|llama-
 
 // Pick the best already-installed model that fits in memory: prefer families that
 // handle tool calls well, then the largest that fits.
-export function pickInstalledModel(models, budgetGB, { loaded = false } = {}) {
+// `details` (Ollama's /api/tags) gives each model's file size and parameter
+// count: a name like "my-tune:latest" says neither, and "qwen3:32b-q8_0" needs
+// about 1.1 GB per billion, not the 0.62 of a 4-bit file.
+export function pickInstalledModel(models, budgetGB, { loaded = false, details = {} } = {}) {
   const scored = [];
   for (const name of Array.isArray(models) ? models : []) {
     const lower = String(name).toLowerCase();
     if (/embed|bge|nomic|minilm|rerank|whisper|clip|llava|vision-only/.test(lower)) continue;
-    const params = modelParamsB(lower);
-    const needGB = params ? params * 0.62 + 1 : null;
+    const info = (details && details[name]) || {};
+    const params = modelParamsB(lower) || (Number(info.paramsB) > 0 ? Number(info.paramsB) : null);
+    const needGB = Number(info.sizeBytes) > 0 ? info.sizeBytes / 1e9 + 1 : params ? params * 0.62 + 1 : null;
     // A model a server has already loaded evidently fits; installed-only models must.
     const fits = loaded || needGB === null ? true : needGB <= Math.max(budgetGB, 2.5);
     if (!fits) continue;
@@ -215,7 +219,16 @@ export async function discoverLocalServers({ fetchImpl = fetch, timeoutMs = PROB
       const list = server.kind === 'ollama'
         ? (payload && Array.isArray(payload.models) ? payload.models.map((m) => m && (m.name || m.model)) : [])
         : (payload && Array.isArray(payload.data) ? payload.data.map((m) => m && m.id) : []);
-      return { ...server, running: true, models: [...new Set(list.map((v) => String(v || '').trim()).filter(Boolean))].slice(0, 100) };
+      const details = {};
+      if (server.kind === 'ollama' && payload && Array.isArray(payload.models)) {
+        for (const m of payload.models) {
+          const name = m && String(m.name || m.model || '').trim();
+          if (!name || details[name]) continue;
+          const paramsB = Number.parseFloat(String((m.details && m.details.parameter_size) || '').replace(/[^\d.].*$/, '')) * (/m$/i.test(String((m.details && m.details.parameter_size) || '').trim()) ? 0.001 : 1);
+          details[name] = { ...(Number(m.size) > 0 ? { sizeBytes: Number(m.size) } : {}), ...(paramsB > 0 ? { paramsB } : {}) };
+        }
+      }
+      return { ...server, running: true, models: [...new Set(list.map((v) => String(v || '').trim()).filter(Boolean))].slice(0, 100), ...(Object.keys(details).length ? { details } : {}) };
     } catch { return null; }
   }));
   return results.filter(Boolean).map(({ probe, kind, ...rest }) => rest);
@@ -232,7 +245,7 @@ export function recommendSetup(hw, servers = [], { configured = false } = {}) {
 
   const withModels = servers.filter((s) => s.running && s.models && s.models.length);
   const ranked = withModels
-    .map((server) => ({ server, pick: pickInstalledModel(server.models, budgetGB, { loaded: server.id !== 'ollama' }) }))
+    .map((server) => ({ server, pick: pickInstalledModel(server.models, budgetGB, { loaded: server.id !== 'ollama', details: server.details }) }))
     .filter((entry) => entry.pick)
     .sort((a, b) => b.pick.score - a.pick.score);
 

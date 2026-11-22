@@ -67,6 +67,16 @@ test('installed-model choice prefers tool-capable families and skips what will n
   assert.equal(pickInstalledModel(['nomic-embed-text'], 8), null);
 });
 
+test('Ollama file sizes decide the fit when the name hides the size or quantization', () => {
+  // 32B at 8-bit is ~35 GB on disk; the 4-bit rule would say ~21 GB.
+  assert.equal(pickInstalledModel(['qwen3:32b-q8_0'], 24, { details: { 'qwen3:32b-q8_0': { sizeBytes: 34.8e9 } } }), null);
+  assert.equal(pickInstalledModel(['qwen3:32b-q8_0'], 24).name, 'qwen3:32b-q8_0', 'without details the name rule applies');
+  const tuned = pickInstalledModel(['my-tune:latest', 'llama2:7b'], 8, { details: { 'my-tune:latest': { sizeBytes: 5.2e9, paramsB: 8.2 } } });
+  assert.equal(tuned.name, 'my-tune:latest');
+  assert.equal(tuned.params, 8.2);
+  assert.equal(pickInstalledModel(['big-tune:latest'], 8, { details: { 'big-tune:latest': { sizeBytes: 40e9 } } }), null);
+});
+
 test('a running server with a fitting model is recommended first', () => {
   const hw = { os: 'darwin', arch: 'arm64', appleSilicon: true, memoryGB: 32, cores: 10, accelerator: 'metal' };
   const rec = recommendSetup(hw, [{ id: 'ollama', name: 'Ollama', baseURL: 'http://127.0.0.1:11434/v1', running: true, models: ['qwen3:8b', 'nomic-embed-text'] }]);
@@ -97,7 +107,7 @@ test('local server discovery probes fixed loopback ports and reads both API shap
   const seen = [];
   const fetchImpl = async (url) => {
     seen.push(url);
-    if (url === 'http://127.0.0.1:11434/api/tags') return { ok: true, status: 200, json: async () => ({ models: [{ name: 'qwen3:8b' }, { name: 'qwen3:8b' }] }) };
+    if (url === 'http://127.0.0.1:11434/api/tags') return { ok: true, status: 200, json: async () => ({ models: [{ name: 'qwen3:8b', size: 5225376047, details: { parameter_size: '8.2B' } }, { name: 'qwen3:8b' }, { name: 'tiny:latest', details: { parameter_size: '494.03M' } }] }) };
     if (url === 'http://127.0.0.1:1234/v1/models') return { ok: true, status: 200, json: async () => ({ data: [{ id: 'qwen/qwen3-14b' }] }) };
     if (url === 'http://127.0.0.1:8000/v1/models') return { ok: false, status: 401, json: async () => ({}) };
     throw new Error('ECONNREFUSED');
@@ -105,7 +115,9 @@ test('local server discovery probes fixed loopback ports and reads both API shap
   const servers = await discoverLocalServers({ fetchImpl });
   assert.ok(seen.every((url) => url.startsWith('http://127.0.0.1:')), 'only loopback is probed');
   assert.deepEqual(servers.map((s) => s.id), ['ollama', 'lmstudio', 'vllm']);
-  assert.deepEqual(servers[0].models, ['qwen3:8b']);
+  assert.deepEqual(servers[0].models, ['qwen3:8b', 'tiny:latest']);
+  assert.deepEqual(servers[0].details['qwen3:8b'], { sizeBytes: 5225376047, paramsB: 8.2 });
+  assert.ok(Math.abs(servers[0].details['tiny:latest'].paramsB - 0.494) < 0.001);
   assert.equal(servers[2].needsKey, true);
   assert.ok(!('probe' in servers[0]));
 });
