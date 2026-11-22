@@ -40,6 +40,7 @@ performance claim.
 | `mixture_of_agents`: ask several models the same question and merge the answers | Unreleased | [Changelog](../CHANGELOG.md#unreleased) |
 | Subagents with their own virtual desktop (`environment: "desktop"`) | Unreleased, experimental | [Computer use](COMPUTER_USE.md) |
 | Control room: every agent on this computer, its screen, history and spend | Unreleased | [Control room](CONTROL_ROOM.md) |
+| Agent experience: evidence-decided outcomes per run, recall of earlier runs, `oasis agents experience`, optional experience-based model routing | Unreleased | [Subagents](SUBAGENTS.md#experience) |
 
 ## Interfaces
 

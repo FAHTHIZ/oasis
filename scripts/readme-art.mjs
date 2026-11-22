@@ -80,13 +80,13 @@ function hero() {
   // Typing cover, spinner and the input caret, inside the window clip.
   const extra = `
     <g class="typing"><rect x="662" y="152" width="400" height="24" fill="#101712"/><rect class="caret1" x="662" y="155" width="8" height="18" fill="${LIME}"/></g>
-    <text class="spin" x="662" y="362" font-family="${MONO}" font-size="14.5" xml:space="preserve"><tspan fill="#5E7064">⎿ </tspan><tspan class="dot" fill="#FBBF24">●</tspan><tspan fill="#9FB3A6"> running npm test…</tspan></text>
+    <text class="spin" x="662" y="362" font-family="${MONO}" font-size="14.5" xml:space="preserve"><tspan fill="#5E7064">⎿ </tspan><tspan class="dot" fill="#FBBF24">●</tspan><tspan fill="#9FB3A6"> running python chart.py…</tspan></text>
     <rect class="caret2" x="664" y="505" width="8" height="17" fill="${LIME}" opacity=".85"/>`;
   svg = svg.replace('<rect x="644" y="503" width="0" height="0"/>', extra.trim());
   svg = svg.replace('<text x="644" y="518"', '<text x="676" y="518"').replace('<tspan fill="#7CFF5E" font-weight="700">❯ </tspan><tspan fill="#5E7064">ask for anything', '<tspan fill="#5E7064">ask for anything');
   svg = svg.replace('ask for anything · / commands · @ files</tspan></text>', 'ask for anything · / commands · @ files</tspan></text><text x="644" y="518" font-family="' + MONO + '" font-size="14.5" fill="#7CFF5E" font-weight="700">❯</text>');
   svg = svg.replace('</defs>', '</defs>\n  <style>\n' + motion(css.join('\n')) + '\n  </style>');
-  svg = svg.replace('<title id="title">OASIS: the open-source agent for any model</title>', '<title id="title">OASIS: the open-source agent for any model (animated)</title>');
+  svg = svg.replace('<title id="title">OASIS: the open agent runtime for any model</title>', '<title id="title">OASIS: the open agent runtime for any model (animated)</title>');
   return svg;
 }
 
@@ -100,10 +100,10 @@ function pipeline(theme) {
   const W = 1280, H = 300, T = 10;
   const steps = [
     ['01', 'Ask', 'plain words, any model'],
-    ['02', 'Read', 'repo map, search, files'],
-    ['03', 'Edit', 'checkpointed diffs'],
-    ['04', 'Verify', 'tests, diff review'],
-    ['05', 'Done', 'only what it saw pass']
+    ['02', 'Plan', 'steps, agents, budgets'],
+    ['03', 'Act', 'tools, shell, web, apps'],
+    ['04', 'Verify', 'tests, sources, numbers'],
+    ['05', 'Done', 'only what it could check']
   ];
   const cw = 208, gap = (W - 80 - cw * steps.length) / (steps.length - 1), y = 70, ch = 132;
   const xs = steps.map((_, i) => 40 + i * (cw + gap));
@@ -130,7 +130,7 @@ function pipeline(theme) {
   const ticks = xs.map((x) => `<circle cx="${x + cw / 2}" cy="${y + ch + 34}" r="5" fill="${c.card}" stroke="${GREEN}" stroke-width="2"/>`).join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="t d">
 <title id="t">How an OASIS task runs</title>
-<desc id="d">Five steps: ask in plain words, read the repository, edit with checkpointed diffs, verify with tests and a diff review at the verification gate, and finish only with what it saw pass. A dashed arrow from Verify back to Edit shows that a failed check sends the agent back.</desc>
+<desc id="d">Five steps: ask in plain words with any model, plan the steps and any agents, act with tools such as the shell, the web and connected apps, verify at the gate with tests, the sources that were opened and numbers computed by code, and finish only with what it could check. A dashed arrow from Verify back to Act shows that a failed or skipped check sends the agent back.</desc>
 <defs><linearGradient id="trk" x1="0" x2="1"><stop offset="0" stop-color="${GREEN}" stop-opacity=".15"/><stop offset=".5" stop-color="${LIME}"/><stop offset="1" stop-color="${EMERALD}" stop-opacity=".15"/></linearGradient>
 <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="${hot}"/></marker>
 <filter id="g" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="4"/></filter></defs>
