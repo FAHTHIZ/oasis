@@ -196,3 +196,23 @@ test('web search provider keys (Tavily, Firecrawl) are redacted', () => {
   }
   assert.equal(redact('tvly-short'), 'tvly-short');
 });
+
+test('encoded secrets are masked too: base64, wrapped base64 and hex', async () => {
+  // Regression: `base64 .env` or `xxd -p .env` showed the model every secret
+  // the plain-text rules hide.
+  const { maskSecrets, unmaskSecrets, redactSecretText } = await import('../src/secret-shield.mjs');
+  const key = 'sk-proj-' + 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0U1v2W3x4';
+  const env = 'OPENAI_API_KEY=' + key + '\nDB_PASSWORD=hunter2hunter2\n';
+  const b64 = Buffer.from(env).toString('base64');
+  const session = {};
+  for (const encoded of [b64, b64.match(/.{1,76}/g).join('\n'), Buffer.from(env).toString('hex'), Buffer.from(env).toString('base64url')]) {
+    const out = maskSecrets(session, '$ base64 .env\n' + encoded + '\n$ ');
+    assert.equal(out.count, 1, encoded.slice(0, 20));
+    assert.doesNotMatch(out.text, /[A-Za-z0-9+/]{40}/);
+    assert.equal(unmaskSecrets(session, out.text), '$ base64 .env\n' + encoded + '\n$ ', 'the placeholder restores the encoded text');
+    assert.doesNotMatch(redactSecretText(encoded), /[A-Za-z0-9+/]{40}/);
+  }
+  for (const benign of ['commit 3f786850e387550fdab836ed7e6dc881de23001b', Buffer.from('hello world, just some text').toString('base64'), 'integrity sha512-' + Buffer.from('x'.repeat(64)).toString('base64'), 'data:image/png;base64,' + Buffer.alloc(300, 7).toString('base64')]) {
+    assert.equal(maskSecrets({}, benign).count, 0, benign.slice(0, 30));
+  }
+});
