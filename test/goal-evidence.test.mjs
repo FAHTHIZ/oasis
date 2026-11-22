@@ -106,3 +106,15 @@ test('a passing run does not meet the goal while tests are weakened', () => {
   assert.match(gate.reason, /weakened/);
   assert.equal(goalEvidenceGate('npm test passes', [weakened, { kind: 'tamper', files: [], seq: 3 }, { ...pass, seq: 4 }]).met, true, 'restored tests clear it');
 });
+
+test('a command that may change files after a passing check makes the check stale', async () => {
+  const { evidenceFromToolResult, createEvidenceLedger, recordEvidence } = await import('../src/evidence-ledger.mjs');
+  const ledger = createEvidenceLedger();
+  recordEvidence(ledger, evidenceFromToolResult('run_command', { command: 'npm', args: ['test'] }, { exitCode: 0, stdout: '# tests 2\n# pass 2\n' }, { isCheck: true, checkKind: 'test' }));
+  recordEvidence(ledger, evidenceFromToolResult('run_command', { command: 'git', args: ['status'] }, { exitCode: 0, stdout: '' }, { mayEdit: false }));
+  assert.equal(goalEvidenceGate('npm test passes', ledger.events).met, true, 'a read-only command does not');
+  recordEvidence(ledger, evidenceFromToolResult('run_shell', { command: "sed -i 's/+/-/' add.mjs" }, { exitCode: 0, stdout: '' }, { mayEdit: true }));
+  const gate = goalEvidenceGate('npm test passes', ledger.events);
+  assert.equal(gate.met, false);
+  assert.match(gate.reason, /`sed -i 's\/\+\/-\/' add.mjs` can change files and ran after/);
+});

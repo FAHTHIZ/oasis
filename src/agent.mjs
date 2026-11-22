@@ -3139,11 +3139,15 @@ async function applyToolResults(session, options, turn) {
         if (name === 'run_command') {
           context.isCheck = isVerificationCommand(evidenceArgs.command, evidenceArgs.args) && !runsOutsideRoot(evidenceArgs.command, evidenceArgs.args, session.root);
           if (context.isCheck) context.checkKind = verificationCommandKind(evidenceArgs.command, evidenceArgs.args);
+          // A command that may write files makes an earlier passing check stale
+          // (npm test, then sed -i on the source: the pass no longer holds).
+          else context.mayEdit = !readOnlyArgv(evidenceArgs.command, evidenceArgs.args, { root: session.root });
         } else if (name === 'run_shell') {
           const target = shellExitTarget(evidenceArgs.command, { root: session.root });
           context.isCheck = Boolean(target && isVerificationCommand(target.command, target.args));
           if (context.isCheck) context.checkKind = verificationCommandKind(target.command, target.args);
           context.masked = Boolean(target && (target.piped || result.exitCodeWarning));
+          if (!context.isCheck) context.mayEdit = !readOnlyShellLine(String(evidenceArgs.command || ''), { root: session.root });
         } else if (result.path && !isScratchPath(normalizeReviewPath(result.path)) && (
           (name === 'edit_file' || name === 'multi_edit' || name === 'notebook_edit') && result.changed === true ||
           name === 'write_file' && typeof result.writtenBytes === 'number' ||
