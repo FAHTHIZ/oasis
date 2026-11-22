@@ -13,6 +13,7 @@ Oasis reads the same agent definition format as Claude Code, so existing `.claud
 | `plan` | Read-only | A numbered implementation plan with files, order of work, tests, and risks |
 | `code-review` | Read-only | Independent review of a diff for bugs, regressions, and missing tests |
 | `security-review` | Read-only | Trust boundaries, permissions, secrets, filesystem and network access |
+| `verify` | Read-only plus commands, code and browser | A skeptical tester separate from the agent that did the work: it runs the result against the acceptance criteria and returns PASS or FAIL per criterion with the command or observation behind it. Anything it cannot demonstrate is FAIL. It never edits project files |
 
 Names are matched case-insensitively, so `Explore` and `Plan` work too.
 
