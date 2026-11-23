@@ -2165,10 +2165,22 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       const install = await guardInstallCommand(args.command, args.args || [], { env, fetchImpl: context.fetchImpl || globalThis.fetch });
       if (install.blocked) return { command: args.command, ...install.blocked };
       const approval = install.approvalNote && context.approval ? (text, ...rest) => context.approval(install.approvalNote + '\n' + text, ...rest) : context.approval;
-      const snapshot = discard ? await gitSafety.snapshotWorkingTree(root, discard) : null;
+      let snapshot = discard ? await gitSafety.snapshotWorkingTree(root, discard) : null;
       const { snapshotScriptedEdit, noOpEditWarning } = await import('./inplace-edit-check.mjs');
-      const editSnapshot = args.run_in_background === true || args.interactive === true ? null
-        : await snapshotScriptedEdit(root, [args.command].concat(Array.isArray(args.args) ? args.args.map((arg) => /\s/.test(arg) ? JSON.stringify(arg) : arg) : []).join(' '), env).catch(() => null);
+      const editLine = [args.command].concat(Array.isArray(args.args) ? args.args.map((arg) => /\s/.test(arg) ? JSON.stringify(arg) : arg) : []).join(' ');
+      let editSnapshot = args.run_in_background === true || args.interactive === true ? null
+        : await snapshotScriptedEdit(root, editLine, env).catch(() => null);
+      // Both snapshots are taken before the approval prompt. Whatever a person changes while
+      // it is open must be in them too: the safety snapshot is the only copy of edits a
+      // discarding command (git checkout -- ., git reset --hard) throws away.
+      const onApproved = async () => {
+        if (typeof context.onApproved === 'function') await context.onApproved();
+        if (discard) {
+          const fresh = await gitSafety.snapshotWorkingTree(root, discard);
+          if (fresh) { await gitSafety.dropSnapshot(snapshot); snapshot = fresh; }
+        }
+        if (editSnapshot) editSnapshot = await snapshotScriptedEdit(root, editLine, env).catch(() => editSnapshot);
+      };
       const rehearsalSink = {};
       const commandResult = await runWorkspaceCommand(root, args.command, args.args || [], {
         approval,
@@ -2182,7 +2194,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         readOnlyCommands: readOnlyCommandsEnabled(env, (context.session && context.session.settings) || {}),
         settings: (context.session && context.session.settings) || {},
         rehearsalSink,
-        onApproved: typeof context.onApproved === 'function' ? context.onApproved : undefined,
+        onApproved,
         background: args.run_in_background === true,
         interactive: args.interactive === true,
         ptyManager: context.session && (context.session.ptyManager ||= new PtySessionManager()),
