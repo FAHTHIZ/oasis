@@ -119,6 +119,20 @@ test('agent turn executes tool calls a model wrote as text', async (t) => {
   assert.match(requests[1].messages.find((m) => m.role === 'tool').content, /REPAIRED-READ/);
 });
 
+test('a call ID an earlier turn already used gets a fresh one', async (t) => {
+  const root = await workspace(t);
+  const textCall = { content: '<tool_call>\n{"name": "read_file", "arguments": {"path": "a.txt"}}\n</tool_call>' };
+  const { config } = await scriptedModel(t, [textCall, { content: 'one' }, textCall, { content: 'two' }, readCall('{"path":"a.txt"}'), { content: 'three' }, readCall('{"path":"a.txt"}'), { content: 'four' }]);
+  const session = await createSession({ root, config, permissionMode: 'bypassPermissions' });
+  t.after(() => closeSession(session));
+  for (const prompt of ['first', 'second', 'third', 'fourth']) await runAgentTurn(session, prompt, { approval: async () => true });
+  const ids = session.messages.filter((m) => m.role === 'assistant' && m.tool_calls).flatMap((m) => m.tool_calls.map((call) => call.id));
+  assert.equal(ids.length, 4);
+  assert.equal(new Set(ids).size, 4, 'per-turn text-call numbering and a reused native ID do not repeat: ' + ids.join(', '));
+  const results = session.messages.filter((m) => m.role === 'tool').map((m) => m.tool_call_id);
+  assert.deepEqual(results, ids, 'each result answers its own call');
+});
+
 test('call syntax that is shown or quoted is never executed', () => {
   const names = new Set(['read_file', 'run_command']);
   // An example inside an explanation.

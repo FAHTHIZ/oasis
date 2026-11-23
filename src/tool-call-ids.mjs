@@ -1,9 +1,9 @@
 // Tool-call IDs as sent to the provider.
 //
 // A conversation can hold IDs that the next provider rejects:
-// - a stream without IDs gets OASIS placeholders (stream-tool-0) and text tool
-//   calls get oasis_text_call_<step>_<n>; both repeat on later steps, and
-//   Anthropic rejects a request whose tool_use IDs are not unique;
+// - transcripts saved before OASIS renamed repeated IDs on receipt hold
+//   repeats (stream placeholders like stream-tool-0, text calls numbered per
+//   step), and Anthropic rejects a request whose tool_use IDs are not unique;
 // - switching model mid-session carries the old provider's IDs: Kimi uses
 //   "functions.bash:0" (Anthropic allows only [A-Za-z0-9_-]), some gateways
 //   send IDs longer than the 40 characters OpenAI Chat Completions accepts,
