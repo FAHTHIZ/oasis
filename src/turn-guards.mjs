@@ -200,7 +200,18 @@ export const GATE_FOLLOWUP_NUDGE = '<system-reminder>You named the next verifica
 export function givesUpEarly(text) {
   const reply = String(text || '').trim();
   if (!reply || reply.length > 1500) return false;
-  return /\b(?:i (?:cannot|can't|can’t|am unable to|'m unable to|’m unable to) (?:proceed|continue|complete|do (?:this|that)|make (?:this|the) change)|unable to (?:proceed|complete)|i apologi[sz]e, but)\b/i.test(reply);
+  return /\b(?:i (?:cannot|can't|can’t|am unable to|'m unable to|’m unable to) (?:proceed|continue|complete|do (?:this|that)|make (?:this|the) change)|unable to (?:proceed|complete)|i apologi[sz]e, but)\b/i.test(reply)
+    || asksUserForToolInput(reply);
+}
+
+// "Please provide the correct command and argument list for run_command so I
+// can complete the task." (qwen2.5 1.5B, live eval): the model asks the user
+// for what its own tools take. Only commands, arguments and tool calls count;
+// asking for a key, a file or a decision is a real question.
+export function asksUserForToolInput(text) {
+  const reply = String(text || '');
+  return /\b(?:provide|give|tell|send|share)\s+(?:me\s+)?(?:with\s+)?(?:the\s+)?(?:(?:correct|exact|right|proper|full|valid)\s+)?(?:command(?:s| line)?|arguments?|argument list|args|parameters|tool call|function call)\b/i.test(reply)
+    && /\b(?:run_command|run_shell|read_file|write_file|edit_file|list_files|tools?|so (?:that )?i can (?:complete|proceed|continue|run|finish))\b/i.test(reply);
 }
 
 export const GIVE_UP_NUDGE = '<system-reminder>Do not give up yet: nothing has been changed and the user asked for this change. A tool error is information, not a dead end. Read the error, change your approach (for example, use write_file to create a new file, or read_file first to copy the exact text for edit_file), and try again. Only stop if the task is truly impossible, and then explain exactly why.</system-reminder>';
