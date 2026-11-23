@@ -118,3 +118,22 @@ test('VS Code / Copilot custom agents and chat modes become OASIS agents', async
   assert.ok(!agents.standup);
   assert.doesNotMatch(taskToolDefinition(agents).function.description, /- fixer:/);
 });
+
+test('Factory droids (.factory/droids, ~/.factory/droids) become OASIS agents with their tool limits', async (t) => {
+  const { root, env } = await fixture(t, {
+    '.factory/droids/code-reviewer.md': '---\nname: code-reviewer\ndescription: Reviews diffs\nmodel: custom:my-byok\ntools: read-only\n---\nReview the diff.',
+    '.factory/droids/runner.md': '---\nname: runner\ntools: [Read, Execute]\nmodel: inherit\n---\nRun tests.',
+    '~/.factory/droids/helper.md': '---\nname: helper\ndescription: User droid\n---\nHelp.'
+  });
+  const agents = await loadAgentDefinitions(root, { env });
+  const reviewer = agents['code-reviewer'];
+  assert.equal(reviewer.origin, 'Factory Droid');
+  assert.ok(reviewer.tools.includes('read_file'));
+  assert.ok(!reviewer.tools.some((tool) => /run_|write|edit/.test(tool)));
+  assert.equal(reviewer.model, null);
+  assert.ok(agents.runner.tools.some((tool) => /run_/.test(tool)));
+  assert.ok(!agents.runner.tools.some((tool) => /write|edit/.test(tool)));
+  assert.equal(agents.helper.tools, null);
+  const off = await loadAgentDefinitions(root, { env: { ...env, OASIS_OTHER_AGENT_RULES: '0' } });
+  assert.equal(off['code-reviewer'], undefined);
+});

@@ -34,6 +34,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { vscodeUserPromptDirs } from './vscode-paths.mjs';
+import { droidToolNames } from './droid-tools.mjs';
 
 // Claude Code reads agent files of any size; 64 KiB dropped larger ones silently.
 const MAX_AGENT_FILE = 1024 * 1024;
@@ -285,6 +286,13 @@ function foreignAgentFrontMatter(flavor, raw = {}) {
     const maxTurns = Number.parseInt(data.max_turns ?? '', 10);
     return { name: data.name, description: data.description, tools: tools || undefined, maxTurns: Number.isInteger(maxTurns) && maxTurns > 0 ? maxTurns : undefined, mcpServers: data.mcpServers };
   }
+  if (flavor === 'factory') {
+    // Droid tools: a category (read-only, edit, execute, web) or Droid tool IDs
+    // (Execute, Create, ApplyPatch). custom: models are Droid BYOK entries.
+    const tools = droidToolNames(data.tools);
+    const model = typeof data.model === 'string' && !/^custom:/i.test(data.model.trim()) ? data.model : undefined;
+    return { name: data.name, description: data.description || 'Factory droid', ...(tools ? { tools } : {}), ...(model ? { model } : {}) };
+  }
   if (flavor === 'vscode') {
     // tools: [search, edit, 'github/*'] — names may carry a tool-set prefix
     // (search/codebase); MCP server entries have no OASIS counterpart.
@@ -441,6 +449,7 @@ function agentDirectories(root, env) {
   return [
     ...(foreign ? [
       { dir: path.join(home, '.gemini', 'agents'), source: 'user', flavor: 'gemini' },
+      { dir: path.join(home, '.factory', 'droids'), source: 'user', flavor: 'factory', label: 'Factory Droid' },
       { dir: path.join(opencodeHome, 'agent'), source: 'user', flavor: 'opencode' },
       { dir: path.join(opencodeHome, 'agents'), source: 'user', flavor: 'opencode' },
       // Kilo Code's current agents use OpenCode's format.
@@ -458,6 +467,7 @@ function agentDirectories(root, env) {
     { dir: path.join(getConfigDirectory(env), 'agents'), source: 'user' },
     ...(foreign ? [
       { dir: path.join(root, '.gemini', 'agents'), source: 'project', flavor: 'gemini' },
+      { dir: path.join(root, '.factory', 'droids'), source: 'project', flavor: 'factory', label: 'Factory Droid' },
       { dir: path.join(root, '.github', 'chatmodes'), source: 'project', flavor: 'vscode', suffix: '.chatmode.md' },
       { dir: path.join(root, '.github', 'agents'), source: 'project', flavor: 'vscode', suffix: '.agent.md' },
       { dir: path.join(root, '.opencode', 'agent'), source: 'project', flavor: 'opencode' },
