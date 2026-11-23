@@ -27,6 +27,17 @@ test('giving up after a tool error is recognized', async () => {
   assert.ok(!givesUpEarly('Created src/lib.mjs and npm test passed.'));
 });
 
+test('asking the user for the arguments of its own tools counts as giving up', async () => {
+  const { givesUpEarly } = await import('../src/agent.mjs');
+  // qwen2.5 1.5B in a live eval of archive-old-logs.
+  assert.ok(givesUpEarly("I apologize for the oversight. Let's proceed with creating the script `archive-logs.mjs` and running it on the provided date. Please provide the correct command and argument list for `run_command` so I can complete the task."));
+  assert.ok(givesUpEarly('Please give me the exact arguments so I can proceed.'));
+  // Real questions for the user are not giving up.
+  assert.ok(!givesUpEarly('Please provide the API key for the staging server so I can deploy.'));
+  assert.ok(!givesUpEarly('The command `npm run build` takes the arguments listed in package.json.'));
+  assert.ok(!givesUpEarly('Which date should the archive cut off at? Please tell me the date.'));
+});
+
 test('claims of changes that did not happen are recognized', async () => {
   const { claimsUnmadeChange } = await import('../src/agent.mjs');
   assert.ok(claimsUnmadeChange('I have created the `clampInteger` function in `src/lib.mjs`.'));
