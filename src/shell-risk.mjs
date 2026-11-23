@@ -19,6 +19,7 @@
 
 import { loadShellParser, parseShellCommands } from './shell-ast.mjs';
 import { containerHostAccess } from './container-risk.mjs';
+import { gitSubcommandIndex } from './git-safety.mjs';
 
 // Start loading the bash grammar now; analysis uses it once it is ready and
 // the legacy splitter until then. run_shell awaits shellAnalyzerReady().
@@ -332,8 +333,9 @@ function analyzeSimple(cmd, ctx = {}) {
 
   if (name === 'git') {
     // Skip global options (-C dir, -c key=value, --git-dir=...) before the subcommand.
-    let g = 0;
-    while (g < args.length && args[g].startsWith('-')) g += (args[g] === '-C' || args[g] === '-c') ? 2 : 1;
+    // --git-dir, --work-tree and --namespace take a value too: skipping only
+    // -C/-c let `git --git-dir .git push --force` through unblocked.
+    const g = Math.min(gitSubcommandIndex(args), args.length);
     // `git -c alias.x='!cmd' x` runs cmd through the shell, hidden behind git.
     const globals = args.slice(0, g);
     for (let i = 0; i < globals.length; i++) {
@@ -600,7 +602,14 @@ function inlineCode(cmd) {
   const { name, args } = programOf(cmd.tokens);
   const flagsFor = CODE_FLAGS[name.replace(/[\d.]+$/, '')] || CODE_FLAGS[name];
   if (!flagsFor) return null;
-  const at = args.findIndex((a) => flagsFor.includes(a));
+  // `node --eval=CODE` carries the code in the same word.
+  for (const a of args) {
+    const eq = a.indexOf('=');
+    if (eq > 0 && a.startsWith('--') && flagsFor.includes(a.slice(0, eq))) return a.slice(eq + 1);
+  }
+  // Short flags combine: `node -pe CODE`, `perl -le CODE`, `python3 -Ic CODE`.
+  const letters = flagsFor.filter((flag) => /^-[a-zA-Z]$/.test(flag)).map((flag) => flag[1]);
+  const at = args.findIndex((a) => flagsFor.includes(a) || (/^-[a-zA-Z]{2,}$/.test(a) && [...a.slice(1)].some((letter) => letters.includes(letter))));
   return at !== -1 && args[at + 1] !== undefined ? args[at + 1] : null;
 }
 
