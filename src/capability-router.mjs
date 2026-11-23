@@ -10,11 +10,17 @@
 // "overall" route (the same rule over the whole suite); tasks pinned by the
 // safety rules in src/model-routing.mjs keep the strong model.
 import { createHash } from 'node:crypto';
+import { classifyDomains, classifyIntent } from './task-model.mjs';
 
 export const TASK_CLASSES = [
   'agent-operations', 'configuration-integration', 'context-and-cost', 'data-structures',
-  'input-validation', 'network-safety', 'secret-handling', 'security-boundaries', 'utility-logic'
+  'input-validation', 'network-safety', 'secret-handling', 'security-boundaries', 'utility-logic',
+  'data-analysis', 'writing', 'research-synthesis', 'planning', 'operations'
 ];
+
+// Work that is not code is classed by the task model's domain, the same
+// reading planning and verification use, rather than by a second keyword list.
+const DOMAIN_CLASSES = { analysis: 'data-analysis', writing: 'writing', research: 'research-synthesis', planning: 'planning', operations: 'operations' };
 
 // Ordered: the first class with the most hits wins, so the more specific
 // (security and secrets) come first.
@@ -37,6 +43,16 @@ const CLASS_SIGNALS = {
  */
 export function classifyTaskClass(prompt, { detail = false } = {}) {
   const text = String(prompt || '').slice(0, 8000);
+  const domains = classifyDomains(text, { intent: classifyIntent(text) });
+  const domainClass = DOMAIN_CLASSES[domains.primary];
+  if (domainClass) {
+    const lead = domains.scores[domains.primary] || 0;
+    const code = Math.max(domains.scores.software || 0, domains.scores.security || 0);
+    // Named only when code is absent or far behind: "write a function" is code.
+    if ((lead >= 2 && code * 2 <= lead) || (lead >= 1 && code === 0)) {
+      return detail ? { name: domainClass, best: domainClass, score: lead, margin: lead - code, via: 'domain' } : domainClass;
+    }
+  }
   const scores = Object.entries(CLASS_SIGNALS).map(([name, patterns]) => {
     let score = 0;
     for (const pattern of patterns) score += (text.match(new RegExp(pattern.source, pattern.flags + 'g')) || []).length;

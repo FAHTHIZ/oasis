@@ -76,6 +76,9 @@ const DOMAIN_SIGNALS = {
     [/\b\w+\.(?:m?js|cjs|tsx?|jsx|py|go|rs|java|kt|swift|rb|php|cs|cpp|cc|c|h|hpp|vue|svelte|scala|sql|sh)\b/gi, 2],
     [/\b(?:bug|refactor\w*|unit tests?|test suite|failing tests?|compile[sdr]?|stack trace|regression|lint\w*|type-?check\w*|function|class|method|module|endpoint|api|repo(?:sitory)?|codebase|pull request|commit|merge conflict|dependency|npm|pip|cargo|typescript|javascript|python|golang|rust)\b/gi, 1],
     [/\b(?:implement|debug|fix|patch)\b/gi, 1],
+    // A named function call (`loadMcpServers()`) or a request for tests is code work.
+    [/\b[A-Za-z_$][\w$]*\(\)/g, 2],
+    [/\b(?:add|write|update|extend)\s+(?:\w+\s+){0,2}tests?\b/gi, 1],
     [/\b(?:(?:run|rerun|re-run) (?:the |all |my |our )?(?:tests?|specs?|build|linter|type ?checks?|test suite)|tests? (?:pass|fail)\w*)\b/gi, 2]
   ],
   research: [
