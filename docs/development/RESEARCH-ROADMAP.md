@@ -92,6 +92,11 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - Commit: see `git log -- src/reliability-lab.mjs` ("Grade rehearsal in the reliability lab").
 - Three scenarios with a stand-in person (yes, apply, edit-then-apply). The third failed on first run: the effect snapshot was taken before the approval prompt, so an edit made during the prompt was credited to the command and the refused apply was reported as "probably ran". Fixed by re-taking the snapshot on approval; `test/rehearsal.test.mjs` fails without the fix. Lab: 18 of 18.
 
+### Safety snapshots taken at approval
+
+- Commit: see `git log -- test/git-safety.test.mjs` ("Take the git safety snapshot after approval").
+- Found by auditing every snapshot taken before an approval prompt, after the lab's effect-snapshot finding. The git safety snapshot (the only copy of what a discarding git command destroys) missed edits made while the prompt was open; `test/git-safety.test.mjs` shows the prompt-time edit missing from the snapshot without the fix and present with it. `run_shell` already took it after approval.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |
@@ -107,7 +112,6 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### Immediate improvements
 
-- Re-take the other pre-approval snapshots on approval too (the git-safety snapshot and the scripted-edit snapshot in `run_command`), for the same reason as the effect snapshot.
 - World drift for subagent transcripts and gateway sessions, which resume through other paths.
 
 ### Ready for implementation
