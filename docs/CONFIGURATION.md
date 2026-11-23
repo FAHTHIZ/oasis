@@ -749,3 +749,18 @@ Retries and recoveries are recorded too. Each one sends an `oasis.recovery` even
 | `OASIS_OTEL_NO_BRANCH=1` | Leave the git branch out of event attributes. |
 
 Spans always carry the GenAI attributes (`gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.response.finish_reasons` as a string array, `gen_ai.usage.*` including cache and reasoning tokens, `server.address`/`server.port`, `error.type` on failure). Alongside the `oasis.*` metrics, OASIS records the standard `gen_ai.client.inference.duration` (seconds), `gen_ai.client.inference.operation.input_tokens` / `output_tokens` histograms with the recommended bucket boundaries, and `gen_ai.execute_tool.duration`. These GenAI metrics carry no session id so they stay low-cardinality.
+
+### Trace context across processes
+
+With telemetry on, one trace follows the work across process and protocol boundaries, in [W3C Trace Context](https://www.w3.org/TR/trace-context/) form:
+
+| Boundary | What OASIS does |
+| --- | --- |
+| Started by something that traces (CI, a script, another agent) | `TRACEPARENT` and `TRACESTATE` in OASIS's environment, the [OpenTelemetry environment carrier](https://opentelemetry.io/docs/specs/otel/context/env-carriers/), make each turn a child of the caller's span. |
+| Commands it runs (`run_command`, `run_shell`, background commands) | The child process gets `TRACEPARENT`/`TRACESTATE` naming the tool span that started it, so a nested `oasis -p` or any OpenTelemetry-instrumented program lands under that tool call. |
+| MCP tool calls | `params._meta.traceparent` (and `tracestate`), as in [MCP SEP-414](https://modelcontextprotocol.io/seps/414-request-meta). `oasis mcp serve` reads it back: each call becomes a SERVER span under the client's `execute_tool` span, and commands it runs inherit that trace. |
+| Model API requests | A `traceparent` header naming the model-call span, so a tracing gateway or proxy (LiteLLM, Envoy, a provider's own tracing) joins the trace. A `traceparent` set by custom headers wins. |
+
+Nothing is added while telemetry is off: requests are byte-for-byte what they were, and an inherited `TRACEPARENT` passes through to commands unchanged. Invalid values (all-zero ids, version `ff`, upper-case hex) are ignored.
+
+`OASIS_OTEL_ENV_CONTEXT` chooses how an inherited `TRACEPARENT` is used: `parent` (default), `link` (each turn starts a new trace that links to the caller's span, for long-running processes such as `oasis web` where one inherited parent would make a single endless trace) or `off`. The choice mirrors the open [parent-or-link question](https://github.com/open-telemetry/opentelemetry-specification/issues/5398) in the OpenTelemetry specification.

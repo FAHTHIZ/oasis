@@ -13,6 +13,7 @@ import { TOOL_DEFINITIONS, executeTool } from './tools.mjs';
 import { stopLspClients } from './lsp.mjs';
 import { webSearchEnabled } from './web-search.mjs';
 import { protectedConfigTarget, protectedEditsAllowed } from './protected-paths.mjs';
+import { getTelemetry, shutdownTelemetry } from './telemetry.mjs';
 
 const SERVE_READ_ONLY = ['read_file', 'list_files', 'glob_files', 'repo_map', 'grep', 'ast_grep', 'search_files', 'git_status', 'git_diff', 'git_log', 'lsp', 'diagnostics', 'fetch_url', 'web_search'];
 const SERVE_EDITS = ['edit_file', 'multi_edit', 'write_file', 'notebook_edit'];
@@ -46,8 +47,16 @@ function createMcpServer({ root, allowEdits = false, allowCommands = false, env 
       const hit = await protectedConfigTarget(root, args.path || args.notebook_path || args.file_path).catch(() => null);
       if (hit) return text('Error: ' + hit.path + ' is a protected configuration file (' + hit.reason + '). oasis mcp serve does not change it; ask the user to edit it or set OASIS_ALLOW_CONFIG_EDITS=1.', true);
     }
+    // With telemetry on, each call is a server span under the client's
+    // execute_tool span when the request carries params._meta.traceparent
+    // (MCP SEP-414); commands it runs inherit that trace in TRACEPARENT.
+    const meta = request.params && request.params._meta || {};
+    const tel = getTelemetry(env);
+    const run = () => executeTool(name, args, { root, env, session, autoApprove: true, ruleAllowed: true, approval: async () => true });
     try {
-      const result = await executeTool(name, args, { root, env, session, autoApprove: true, ruleAllowed: true, approval: async () => true });
+      const result = tel
+        ? await tel.span('tools/call ' + name, { 'mcp.method.name': 'tools/call', 'gen_ai.tool.name': name, 'gen_ai.operation.name': 'execute_tool' }, run, { kind: 2, traceparent: typeof meta.traceparent === 'string' ? meta.traceparent : '', tracestate: typeof meta.tracestate === 'string' ? meta.tracestate : '' })
+        : await run();
       const body = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
       return text(body.slice(0, 200000), Boolean(result && typeof result === 'object' && (result.error || result.ok === false)));
     } catch (error) {
@@ -65,7 +74,12 @@ export async function serveMcp({ root, args = [], env = process.env, input = pro
   log.write('Oasis MCP server on stdio for ' + path.resolve(root) + ' (' + ['read-only tools', allowEdits && 'edits', allowCommands && 'commands'].filter(Boolean).join(', ') + ')\n');
   const transport = new StdioServerTransport(input, output);
   const closed = new Promise((resolve) => { transport.onclose = resolve; input.once('end', resolve); input.once('close', resolve); });
+  // Clients usually stop a stdio server with SIGTERM and SIGKILL it 1-2 s
+  // later; with telemetry on, the last spans are exported first.
+  const onTerm = getTelemetry(env) ? () => { shutdownTelemetry(1000).finally(() => process.exit(0)); } : null;
+  if (onTerm) process.once('SIGTERM', onTerm);
   await server.connect(transport);
   await closed;
   await close();
+  if (onTerm) { process.removeListener('SIGTERM', onTerm); await shutdownTelemetry(1000); }
 }

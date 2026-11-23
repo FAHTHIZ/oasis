@@ -12,6 +12,7 @@
 // "${VAR}" and "${VAR:-default}" expand from the host environment when the session
 // starts; expanded values are never written back to disk.
 import { StringDecoder } from 'node:string_decoder';
+import { withTraceMeta } from './telemetry.mjs';
 import { debugLog } from './debug-log.mjs';
 import { readFile } from 'node:fs/promises';
 import { oasisVersion } from './version.mjs';
@@ -274,6 +275,14 @@ export function mcpTaskBackgroundMs(env = process.env) {
   if (/^(0|false|off|no)$/i.test(String(env.OASIS_MCP_TASK_BACKGROUND || '')) || /^(1|true)$/i.test(String(env.CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND || ''))) return -1;
   const raw = Number(env.OASIS_MCP_TASK_BACKGROUND_MS);
   return Number.isFinite(raw) && raw >= 0 ? Math.min(raw, 600000) : 5000;
+}
+
+// MCP SEP-414: W3C trace context in params._meta lets a traced server put its
+// work under the execute_tool span that called it. Added only while a span is
+// open, so untraced runs send the exact request they always did.
+function traceParams(params) {
+  const meta = withTraceMeta(params._meta);
+  return meta ? { ...params, _meta: meta } : params;
 }
 
 export class McpHttpClient {
@@ -589,7 +598,7 @@ export class McpHttpClient {
       : 120000;
     const result = useMcpTask(this, registeredTool)
       ? await this._callToolAsTask(registeredTool, args, options)
-      : await this._request('tools/call', { name, arguments: args }, timeoutMs, options.signal);
+      : await this._request('tools/call', traceParams({ name, arguments: args }), timeoutMs, options.signal);
     // MCP output schemas apply to structuredContent rather than display text.
     // Validate it when present; preserve text-only legacy responses.
     const outputSchema = registeredTool.outputSchema || options.outputSchema;

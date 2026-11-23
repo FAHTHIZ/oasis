@@ -13,6 +13,18 @@
 //   OTEL_LOGS_EXPORT_INTERVAL (ms). Payloads are OTLP/HTTP JSON.
 // Prompt text is never exported unless OTEL_LOG_USER_PROMPTS=1; tool arguments only
 // with OTEL_LOG_TOOL_DETAILS=1.
+//
+// Trace context crosses process and protocol boundaries in W3C Trace Context
+// form (https://www.w3.org/TR/trace-context/):
+//   in   TRACEPARENT / TRACESTATE in the environment OASIS started with (the
+//        OpenTelemetry environment-carrier convention), so `oasis -p` run by CI,
+//        a script or another agent continues the caller's trace.
+//        OASIS_OTEL_ENV_CONTEXT=parent (default) | link | off.
+//   out  TRACEPARENT / TRACESTATE in the environment of every command it runs,
+//        `traceparent` in params._meta of MCP requests (MCP SEP-414) and a
+//        `traceparent` header on model API requests, each naming the span
+//        that made the call. A nested `oasis -p` inside run_command therefore
+//        shows up under the tool span that started it.
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import os from 'node:os';
@@ -44,6 +56,81 @@ const VERSION = (() => {
   try { return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version || '0'; } catch { return '0'; }
 })();
 const spanContext = new AsyncLocalStorage();
+
+// W3C traceparent: version-traceid-parentid-flags, lower-case hex. Version ff
+// is invalid; an all-zero trace or parent id is invalid. A later version may
+// append fields after the four this parser reads.
+const TRACEPARENT = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})(-.*)?$/;
+export function parseTraceparent(value) {
+  const match = TRACEPARENT.exec(String(value || '').trim());
+  if (!match) return null;
+  const [, version, traceId, spanId, flags, rest] = match;
+  if (version === 'ff' || (version === '00' && rest) || /^0+$/.test(traceId) || /^0+$/.test(spanId)) return null;
+  return { traceId, spanId, traceFlags: parseInt(flags, 16), sampled: (parseInt(flags, 16) & 1) === 1 };
+}
+
+export function formatTraceparent({ traceId, spanId, traceFlags = 1 } = {}) {
+  if (!/^[0-9a-f]{32}$/.test(String(traceId)) || !/^[0-9a-f]{16}$/.test(String(spanId))) return '';
+  return '00-' + traceId + '-' + spanId + '-' + (Number(traceFlags) & 0xff).toString(16).padStart(2, '0');
+}
+
+// tracestate: at most 32 comma-separated key=value members, 512 chars kept.
+function cleanTracestate(value) {
+  const text = String(value || '').trim();
+  if (!text || text.length > 512 || /[^\x20-\x7e]/.test(text)) return '';
+  return text.split(',').slice(0, 32).join(',');
+}
+
+function remoteSpan(api, found, link) {
+  return {
+    link,
+    spanContext: { traceId: found.traceId, spanId: found.spanId, traceFlags: found.traceFlags, isRemote: true, ...(found.tracestate && api.createTraceState ? { traceState: api.createTraceState(found.tracestate) } : {}) }
+  };
+}
+
+/** The remote parent this process was started under, from TRACEPARENT. */
+export function environmentTraceContext(env = process.env) {
+  const mode = String(env.OASIS_OTEL_ENV_CONTEXT || 'parent').toLowerCase();
+  if (mode === 'off' || mode === '0' || mode === 'false') return null;
+  const parsed = parseTraceparent(env.TRACEPARENT);
+  if (!parsed) return null;
+  return { ...parsed, tracestate: cleanTracestate(env.TRACESTATE), mode: mode === 'link' ? 'link' : 'parent' };
+}
+
+/**
+ * W3C trace context of the span running now: { traceparent, tracestate? },
+ * or {} outside a span (telemetry off, or no span open).
+ */
+export function currentTraceContext() {
+  const span = spanContext.getStore();
+  if (!span || !span.otel) return {};
+  const context = span.otel.spanContext();
+  const traceparent = formatTraceparent(context);
+  if (!traceparent) return {};
+  const state = context.traceState && typeof context.traceState.serialize === 'function' ? context.traceState.serialize() : '';
+  return { traceparent, ...(state ? { tracestate: state } : {}) };
+}
+
+/**
+ * The environment for a child process: a copy of env whose TRACEPARENT and
+ * TRACESTATE name the current span. env itself is returned when no span is
+ * open, so an inherited TRACEPARENT passes through unchanged.
+ */
+export function withTraceEnv(env) {
+  const context = currentTraceContext();
+  if (!context.traceparent) return env;
+  const next = { ...(env || process.env), TRACEPARENT: context.traceparent };
+  if (context.tracestate) next.TRACESTATE = context.tracestate;
+  else delete next.TRACESTATE;
+  return next;
+}
+
+/** params._meta for an MCP request (SEP-414), merged over existing meta. */
+export function withTraceMeta(meta) {
+  const context = currentTraceContext();
+  if (!context.traceparent) return meta;
+  return { ...(meta && typeof meta === 'object' ? meta : {}), ...context };
+}
 let active = null;
 let activeKey = '';
 
@@ -229,7 +316,13 @@ export class Telemetry {
     const { api } = this.sdk;
     const kind = [1, 2, 3, 4, 5].includes(options.kind) ? options.kind - 1 : api.SpanKind.INTERNAL;
     const parent = spanContext.getStore();
-    const otel = this.tracer.startSpan(name, { kind }, parent ? api.trace.setSpan(api.ROOT_CONTEXT, parent.otel) : api.ROOT_CONTEXT);
+    // A root span continues the caller's trace: options.traceparent (an
+    // inbound request's carrier) or else the TRACEPARENT OASIS started under,
+    // as its child or, with OASIS_OTEL_ENV_CONTEXT=link, as a link.
+    const remote = parent ? null : (options.traceparent ? this.carrierParent(api, options.traceparent, options.tracestate) : null) || this.remoteParent(api);
+    const startOptions = { kind, ...(remote && remote.link ? { links: [{ context: remote.spanContext }] } : {}) };
+    const parentContext = parent ? api.trace.setSpan(api.ROOT_CONTEXT, parent.otel) : remote && !remote.link ? api.trace.setSpanContext(api.ROOT_CONTEXT, remote.spanContext) : api.ROOT_CONTEXT;
+    const otel = this.tracer.startSpan(name, startOptions, parentContext);
     const { traceId, spanId } = otel.spanContext();
     const span = { traceId, spanId, otel, attrs: { ...this.baseAttributes(), ...attrs } };
     let status = { code: api.SpanStatusCode.OK };
@@ -244,6 +337,19 @@ export class Telemetry {
       otel.setStatus(status);
       otel.end();
     }
+  }
+
+  remoteParent(api) {
+    if (this.remote === undefined) {
+      const found = environmentTraceContext(this.env);
+      this.remote = found ? remoteSpan(api, found, found.mode === 'link') : null;
+    }
+    return this.remote;
+  }
+
+  carrierParent(api, traceparent, tracestate) {
+    const found = parseTraceparent(traceparent);
+    return found ? remoteSpan(api, { ...found, tracestate: cleanTracestate(tracestate) }, false) : null;
   }
 
   async flush() {

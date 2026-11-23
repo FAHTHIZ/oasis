@@ -1,5 +1,6 @@
 import { readOnlyShellLine, readOnlyCommandsEnabled, readOnlyGitEnv } from './read-only-commands.mjs';
 import { readTextFile, encodeText } from './text-encoding.mjs';
+import { withTraceEnv } from './telemetry.mjs';
 import { securityWarning } from './security-patterns.mjs';
 // Additional OASIS tools for deeper repository work and interactive process control:
 //   grep           regex search (bundled ripgrep, JS fallback) with globs, context, and modes
@@ -481,7 +482,7 @@ export function startBackgroundProcess(registry, launch, options) {
     registry.delete(oldest.id);
   }
 
-  const child = options.adopt ? options.adopt.child : spawn(launch.command, launch.args, { cwd: options.cwd, env: options.env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
+  const child = options.adopt ? options.adopt.child : spawn(launch.command, launch.args, { cwd: options.cwd, env: withTraceEnv(options.env), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
   // Sandbox placeholders (read-only mount points for missing protected files) go once it exits.
   if (launch && typeof launch.release === 'function') { child.once('close', launch.release); child.once('error', launch.release); }
   const id = 'bg_' + randomUUID().slice(0, 8);
@@ -713,7 +714,7 @@ async function runShell(root, args, context, flavor = 'sh') {
     let timedOut = false;
     let cancelled = false;
     let settled = false;
-    const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
+    const child = spawn(launch.command, launch.args, { cwd: root, env: withTraceEnv(env), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
     if (typeof launch.release === 'function') { child.once('close', launch.release); child.once('error', launch.release); }
     const cleanup = () => {
       clearTimeout(timer);
