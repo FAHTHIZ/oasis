@@ -130,6 +130,11 @@ these tools use: `OASIS_PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `PLUGIN_ROOT`;
 
 ### Exporting a plugin for other agents
 
+Run `oasis plugin inspect [PATH]` first to see, without writing anything,
+what OASIS reads from the plugin, what will not run here, and for each
+other agent whether the export is full or which parts it leaves out
+(`--json` for scripts).
+
 `oasis plugin export [PATH] --out DIR` writes the plugin at PATH (an OASIS or
 Claude Code plugin, or anything in the table above) into one folder that
 OASIS, Claude Code, Codex, Gemini CLI, Cursor and Copilot CLI can each
