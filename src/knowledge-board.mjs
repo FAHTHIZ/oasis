@@ -41,7 +41,8 @@
 // confidence next to what it has historically meant for that model, and
 // search ranks by the calibrated value.
 // Durable memory stays parent-owned: the main agent can save a finding with
-// memory_save once it has checked it.
+// memory_save once it has checked it (from_finding: "k_N" carries the
+// finding and its provenance; src/auto-memory.mjs).
 
 import MiniSearch from 'minisearch';
 import { tokenize, redactSecrets } from './auto-memory.mjs';

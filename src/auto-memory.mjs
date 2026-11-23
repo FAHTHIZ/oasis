@@ -24,6 +24,7 @@ import { getConfigDirectory } from './config.mjs';
 import MiniSearch from 'minisearch';
 import stemmer from 'wink-porter2-stemmer';
 import { replaceFileDurably } from './atomic-write.mjs';
+import { beliefConflict } from './claim-conflict.mjs';
 
 const MEMORY_CATEGORIES = ['preferences', 'project', 'decisions', 'lessons', 'people', 'reference'];
 const MAX_MEMORIES = 500;
@@ -31,6 +32,19 @@ function memoryLimit(env = process.env) { return Math.min(MAX_MEMORIES, Math.max
 const MAX_BODY = 8000;
 const INDEX_BUDGET_CHARS = 8000; // about 2000 tokens, the agentmemory default budget
 const RECALL_BUDGET_CHARS = 4000;
+const MAX_REVISIONS = 12;
+const MAX_CONFLICTS = 5;
+
+function parseRevisions(value) {
+  if (!value) return [];
+  try {
+    const list = JSON.parse(String(value));
+    return Array.isArray(list) ? list.filter((item) => item && typeof item === 'object' && typeof item.was === 'string').slice(-MAX_REVISIONS).map((item) => ({
+      at: String(item.at || ''), was: String(item.was).slice(0, 400), now: String(item.now || '').slice(0, 400), reason: String(item.reason || '').slice(0, 200),
+      ...(item.source ? { source: String(item.source).slice(0, 120) } : {}), ...(item.evidence ? { evidence: String(item.evidence).slice(0, 300) } : {})
+    })) : [];
+  } catch { return []; }
+}
 
 export function autoMemoryEnabled(settings = {}, env = process.env) {
   if (/^(0|false|off|no)$/i.test(String(env.OASIS_AUTO_MEMORY || ''))) return false;
@@ -128,7 +142,11 @@ function serialize(memory) {
     ...(memory.source ? { source: memory.source } : {}),
     ...(memory.verifiedAt ? { verifiedAt: memory.verifiedAt } : {}),
     ...(memory.verificationStatus ? { verificationStatus: memory.verificationStatus } : {}),
-    ...(memory.verificationNote ? { verificationNote: memory.verificationNote } : {})
+    ...(memory.verificationNote ? { verificationNote: memory.verificationNote } : {}),
+    ...(memory.evidence ? { evidence: memory.evidence } : {}),
+    ...(memory.supersedes && memory.supersedes.length ? { supersedes: memory.supersedes.join(' ') } : {}),
+    ...(memory.supersededBy ? { supersededBy: memory.supersededBy } : {}),
+    ...(memory.revisions && memory.revisions.length ? { revisions: JSON.stringify(memory.revisions.slice(-MAX_REVISIONS)) } : {})
   };
   const header = Object.entries(meta).map(([key, value]) => key + ': ' + (typeof value === 'number' ? value : JSON.stringify(String(value)))).join('\n');
   return '---\n' + header + '\n---\n' + String(memory.content || '').trim() + '\n';
@@ -155,6 +173,10 @@ function parse(source, file, scope) {
     verifiedAt: meta.verifiedAt || null,
     verificationStatus: ['current', 'outdated', 'uncertain', 'unverified'].includes(meta.verificationStatus) ? meta.verificationStatus : 'unverified',
     verificationNote: meta.verificationNote || null,
+    evidence: meta.evidence || null,
+    supersedes: meta.supersedes ? String(meta.supersedes).split(/\s+/).filter(Boolean).slice(0, 10) : [],
+    supersededBy: meta.supersededBy || null,
+    revisions: parseRevisions(meta.revisions),
     content,
     scope,
     file,
@@ -284,55 +306,159 @@ export async function verifyMemory(root, id, { status, evidence, env = process.e
   };
 }
 
+// ---------- belief revision ----------
+// A note that contradicts what a memory says is a revision, not an addition.
+// Appending it would leave both beliefs in one note ("the test command is npm
+// test ... the test command is pnpm vitest"), and saving it under another name
+// would leave the old one recalled next to the new. Instead:
+//
+//   same memory     the contradicted statements are replaced and kept in the
+//                   memory's revision history (what it was, what it is now,
+//                   why, from which session, on what evidence)
+//   other memory    the old one is marked outdated and superseded by the new
+//                   one, so it leaves the index and recall says what replaced it
+//   entrenched      a memory verified current with memory_verify is not
+//                   overturned by a bare assertion: without evidence (or
+//                   replace=true) the save is refused, or the new memory is
+//                   kept as uncertain next to it, and the agent is told to check
+//   flip-flop       a revision back to a belief that was itself revised away is
+//                   marked uncertain: the evidence keeps changing, verify it
+//
+// Conflicts are found sentence by sentence with src/claim-conflict.mjs:
+// different figures or versions, negation, opposite words, and the same slot
+// ("X is", "uses", "prefers") given a different value.
+
+function statements(text) {
+  return String(text || '').split(/(?<=[.!?])\s+|\n+/)
+    .map((line) => line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').trim())
+    .filter((line) => line.length >= 6 && !line.startsWith('#')).slice(0, 60);
+}
+
+/** Statements of a saved note that a new note contradicts: [{ was, now, reason, kind }]. */
+export function beliefConflicts(oldText, newText) {
+  const out = [];
+  const fresh = statements(newText);
+  for (const was of statements(oldText)) {
+    if (fresh.includes(was)) continue;
+    for (const now of fresh) {
+      const conflict = beliefConflict(was, now);
+      if (conflict) { out.push({ was, now, reason: conflict.reason, kind: conflict.kind }); break; }
+    }
+    if (out.length >= MAX_CONFLICTS) break;
+  }
+  return out;
+}
+
+/** Verified current (memory_verify) and not changed since: it takes evidence to overturn. */
+function entrenched(memory) {
+  if (!memory || memory.verificationStatus !== 'current') return false;
+  const verified = Date.parse(memory.verifiedAt || '');
+  const updated = Date.parse(memory.updated || '');
+  return Number.isFinite(verified) && (!Number.isFinite(updated) || verified >= updated);
+}
+
+function removeStatement(content, statement) {
+  const out = [];
+  for (const line of String(content || '').split('\n')) {
+    if (!line.includes(statement)) { out.push(line); continue; }
+    const rest = line.replace(statement, '').replace(/\s{2,}/g, ' ');
+    if (rest.replace(/^\s*(?:[-*+]|\d+[.)])\s*/, '').trim()) out.push(rest.trimEnd());
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+const sameStatement = (a, b) => String(a || '').toLowerCase().replace(/\W+/g, ' ').trim() === String(b || '').toLowerCase().replace(/\W+/g, ' ').trim();
+
+function verifiedOn(memory) {
+  return String(memory.verifiedAt || '').slice(0, 10) || 'an earlier session';
+}
+
 export async function saveMemory(root, input = {}, { env = process.env, source = null } = {}) {
   const scope = input.scope === 'user' ? 'user' : 'project';
   const category = MEMORY_CATEGORIES.includes(input.category) ? input.category : (scope === 'user' ? 'preferences' : 'project');
   const name = oneLine(redactSecrets(input.name).text, 80);
   const description = oneLine(redactSecrets(input.description || input.content).text, 200);
   const cleaned = redactSecrets(String(input.content || input.description || '').slice(0, MAX_BODY));
+  const evidence = oneLine(redactSecrets(input.evidence).text, 300) || null;
   if (!name) throw new Error('A memory needs a short name.');
   if (!cleaned.text.trim()) throw new Error('A memory needs content.');
   const existing = await listMemories(root, { env, scope });
   const now = new Date().toISOString();
   const slug = slugify(name);
+  const text = cleaned.text.trim();
   // Merge into an existing memory with the same name, or one that says nearly the same thing.
   let target = existing.find((memory) => path.basename(memory.file, '.md') === slug && memory.category === category)
     || existing.find((memory) => slugify(memory.name) === slug)
     || existing.find((memory) => similarity(memory.name + ' ' + memory.description, name + ' ' + description) >= 0.75);
   if (target) {
-    const body = target.content.includes(cleaned.text.trim()) ? target.content
-      : input.replace ? cleaned.text.trim()
-      : similarity(target.content, cleaned.text) >= 0.85 ? cleaned.text.trim()
-      : (target.content + '\n\n' + cleaned.text.trim()).slice(-MAX_BODY);
-    if (body === target.content && (!input.description || description === target.description)) return { action: 'unchanged', id: target.id, file: target.file, redacted: cleaned.redacted };
+    const conflicts = input.replace ? [] : beliefConflicts(target.content, text);
+    if (conflicts.length && entrenched(target) && !evidence) {
+      return { action: 'conflict', id: target.id, file: target.file, redacted: cleaned.redacted, conflicts, entrenched: { verified: verifiedOn(target), evidence: target.verificationNote || null } };
+    }
+    let body;
+    if (conflicts.length) {
+      let kept = target.content;
+      for (const conflict of conflicts) kept = removeStatement(kept, conflict.was);
+      body = !kept ? text : kept.includes(text) ? kept : (kept + '\n\n' + text).slice(-MAX_BODY);
+    } else {
+      body = target.content.includes(text) ? target.content
+        : input.replace ? text
+        : similarity(target.content, cleaned.text) >= 0.85 ? text
+        : (target.content + '\n\n' + text).slice(-MAX_BODY);
+    }
+    if (body === target.content && (!input.description || description === target.description) && (!evidence || evidence === target.evidence)) return { action: 'unchanged', id: target.id, file: target.file, redacted: cleaned.redacted };
     const contentChanged = body !== target.content;
+    const revisions = [...(target.revisions || [])];
+    const flipped = conflicts.filter((conflict) => revisions.some((revision) => sameStatement(revision.was, conflict.now)));
+    for (const conflict of conflicts) revisions.push({ at: now, was: conflict.was.slice(0, 400), now: conflict.now.slice(0, 400), reason: conflict.reason, ...(source ? { source } : {}), ...(evidence ? { evidence } : {}) });
+    if (input.replace && contentChanged) revisions.push({ at: now, was: oneLine(target.content, 400), now: oneLine(body, 400), reason: 'replaced', ...(source ? { source } : {}), ...(evidence ? { evidence } : {}) });
     const merged = {
       ...target,
-      description: input.description ? description : target.description,
+      description: input.description ? description : conflicts.length && conflicts.some((conflict) => target.description.includes(conflict.was.replace(/[.!?]$/, ''))) ? description : target.description,
       content: body,
       updated: now,
       source: source || target.source,
-      ...(contentChanged ? { verifiedAt: null, verificationStatus: 'unverified', verificationNote: null } : {})
+      evidence: evidence || (contentChanged ? null : target.evidence),
+      revisions: revisions.slice(-MAX_REVISIONS),
+      ...(contentChanged ? { verifiedAt: null, verificationStatus: 'unverified', verificationNote: null } : {}),
+      ...(flipped.length ? { verificationStatus: 'uncertain', verificationNote: oneLine('This belief has gone back and forth: "' + flipped[0].now + '" was revised away before and is now back. Verify it against current evidence.', 500) } : {})
     };
     await atomicWrite(target.file, serialize(merged));
     await writeIndex(root, scope, env);
-    return { action: 'updated', id: target.id, file: target.file, redacted: cleaned.redacted };
+    return { action: 'updated', id: target.id, file: target.file, redacted: cleaned.redacted, ...(conflicts.length ? { revised: conflicts.map(({ was, now: is, reason }) => ({ was, now: is, reason })) } : {}), ...(flipped.length ? { flipflop: true } : {}) };
   }
+  // A new memory that contradicts others: supersede them, unless they are
+  // entrenched and this one comes without evidence.
+  const rivals = rankMemories(existing.filter((memory) => memoryFreshness(memory) !== 'outdated'), name + ' ' + description + ' ' + text, { limit: 8 })
+    .map(({ memory }) => ({ memory, conflicts: beliefConflicts(memory.content, text) }))
+    .filter((item) => item.conflicts.length);
+  const held = rivals.filter((item) => entrenched(item.memory) && !evidence);
+  const superseded = rivals.filter((item) => !held.includes(item));
   // Bounded memory (as in Hermes): a full store consolidates instead of
   // refusing. The least valuable note (outdated first, then stale and never
   // recalled) moves to .archive/, where it stays readable and restorable.
   let archived = null;
   if (existing.length >= memoryLimit(env)) {
-    const victim = leastValuableMemory(existing);
+    const victim = leastValuableMemory(existing.filter((memory) => !superseded.some((item) => item.memory === memory)));
     if (!victim) throw new Error('This memory store has ' + memoryLimit(env) + ' memories. Delete outdated ones first (oasis memory forget).');
     archived = await archiveMemory(root, victim, env);
   }
   const dir = path.join(memoryRoots(root, env)[scope], category);
   let file = path.join(dir, slug + '.md');
   for (let n = 2; await stat(file).then(() => true, () => false); n += 1) file = path.join(dir, slug + '-' + n + '.md');
-  await atomicWrite(file, serialize({ name, description, category, created: now, updated: now, recalls: 0, source, verificationStatus: 'unverified', content: cleaned.text }));
+  const id = scope + ':' + category + '/' + path.basename(file, '.md');
+  const heldNote = held.length ? oneLine('Contradicts ' + held.map((item) => item.memory.id + ' (verified current on ' + verifiedOn(item.memory) + ': ' + item.conflicts[0].reason + ')').join('; ') + '. Check which is right and mark the wrong one outdated with memory_verify.', 500) : null;
+  await atomicWrite(file, serialize({ name, description, category, created: now, updated: now, recalls: 0, source, evidence, verificationStatus: held.length ? 'uncertain' : 'unverified', verificationNote: heldNote, supersedes: superseded.map((item) => item.memory.id), content: cleaned.text }));
+  for (const { memory, conflicts } of superseded) {
+    const note = oneLine('Superseded by ' + id + ' on ' + now.slice(0, 10) + ': "' + conflicts[0].was + '" is now "' + conflicts[0].now + '" (' + conflicts[0].reason + ')' + (evidence ? '; evidence: ' + evidence : '') + '.', 500);
+    try { await atomicWrite(memory.file, serialize({ ...memory, verificationStatus: 'outdated', verifiedAt: now, verificationNote: note, supersededBy: id })); } catch {}
+  }
   await writeIndex(root, scope, env);
-  return { action: 'created', id: scope + ':' + category + '/' + path.basename(file, '.md'), file, redacted: cleaned.redacted, ...(archived ? { archived } : {}) };
+  return {
+    action: 'created', id, file, redacted: cleaned.redacted, ...(archived ? { archived } : {}),
+    ...(superseded.length ? { superseded: superseded.map(({ memory, conflicts }) => ({ id: memory.id, was: conflicts[0].was, now: conflicts[0].now, reason: conflicts[0].reason })) } : {}),
+    ...(held.length ? { contested: held.map(({ memory, conflicts }) => ({ id: memory.id, verified: verifiedOn(memory), was: conflicts[0].was, reason: conflicts[0].reason })) } : {})
+  };
 }
 
 // How much a memory is worth keeping in a bounded store and in the prompt
@@ -435,7 +561,8 @@ export async function recallForPrompt(root, prompt, { env = process.env, limit =
   const blocks = chosen.map(({ memory }) => {
     const freshness = memoryFreshness(memory);
     const verification = memory.verifiedAt ? ' verified="' + String(memory.verifiedAt).slice(0, 10) + '"' : '';
-    const note = memory.verificationNote ? '\nVerification evidence: ' + memory.verificationNote : '';
+    const note = (memory.verificationNote ? '\nVerification evidence: ' + memory.verificationNote : '') + (memory.evidence ? '\nEvidence when saved: ' + memory.evidence : '')
+      + (memory.revisions && memory.revisions.length ? '\nRevised ' + memory.revisions.slice(-2).map((item) => String(item.at).slice(0, 10) + ': was "' + item.was.slice(0, 160) + '" (' + item.reason + ')').join('; ') : '');
     const staleWarning = ['stale', 'outdated', 'uncertain', 'unverified'].includes(freshness)
       ? '\nFreshness: ' + freshness + '. Verify against current evidence before relying on this note.'
       : '';
@@ -453,7 +580,7 @@ export const MEMORY_TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'memory_save',
-      description: 'Save or update a durable memory that later sessions will see (a preference, decision, project fact, or lesson). Near-duplicates are merged automatically; secrets are redacted. Use replace=true to rewrite a memory that is wrong.',
+      description: 'Save or update a durable memory that later sessions will see (a preference, decision, project fact, or lesson). Near-duplicates are merged automatically; secrets are redacted. A note that contradicts a saved memory revises it: the old statement is replaced and kept in its history, or the other memory is marked superseded. A memory verified current is not overturned without evidence. Use replace=true to rewrite a memory that is wrong. from_finding saves a checked finding from the shared knowledge board with its provenance.',
       parameters: {
         type: 'object',
         properties: {
@@ -462,9 +589,11 @@ export const MEMORY_TOOL_DEFINITIONS = [
           content: { type: 'string', description: 'The full note: the fact, and why it matters or how to apply it' },
           category: { type: 'string', enum: MEMORY_CATEGORIES },
           scope: { type: 'string', enum: ['project', 'user'], description: 'project (default) or user for every project' },
-          replace: { type: 'boolean', description: 'Replace the body instead of appending to it' }
+          replace: { type: 'boolean', description: 'Replace the body instead of appending to it' },
+          evidence: { type: 'string', description: 'What shows this is true: a file and line, a command and its result, a URL (max 300 characters). Needed to overturn a memory that was verified current' },
+          from_finding: { type: 'string', description: 'Id (k_N) of a knowledge board finding to save; content defaults to the finding and its sources become the evidence' }
         },
-        required: ['name', 'content'],
+        required: ['name'],
         additionalProperties: false
       }
     }
@@ -585,14 +714,56 @@ async function gateMemoryWrite(op, args, { root, env, session, approval, autoApp
   return { queued: true, pending_id: id, message: 'Memory write queued for the user to review (/memory pending, /memory approve ' + id + '). Continue the task; do not assume it was saved.' };
 }
 
+function beliefFields(memory, revisions) {
+  return {
+    ...(memory.evidence ? { evidence: memory.evidence } : {}),
+    ...(memory.supersedes && memory.supersedes.length ? { supersedes: memory.supersedes } : {}),
+    ...(memory.supersededBy ? { superseded_by: memory.supersededBy } : {}),
+    ...(memory.revisions && memory.revisions.length ? { revisions: memory.revisions.slice(-revisions) } : {})
+  };
+}
+
+function saveNote(saved) {
+  const notes = [];
+  if (saved.redacted) notes.push('Secrets or <private> text were redacted before saving.');
+  if (saved.action === 'conflict') notes.push('Not saved: this contradicts ' + saved.id + ', which was verified current on ' + saved.entrenched.verified + (saved.entrenched.evidence ? ' (' + saved.entrenched.evidence + ')' : '') + ': ' + saved.conflicts.map((item) => '"' + item.was + '" vs "' + item.now + '"').join('; ') + '. Check which is right. If the memory is wrong, save again with evidence (what shows the new statement is true) or mark it outdated with memory_verify.');
+  if (saved.revised) notes.push('Revised ' + saved.id + ': ' + saved.revised.map((item) => '"' + item.was + '" became "' + item.now + '" (' + item.reason + ')').join('; ') + '. The old statement is kept in its revision history.');
+  if (saved.flipflop) notes.push('This reverses an earlier revision, so the memory is marked uncertain: verify it before relying on it.');
+  if (saved.superseded) notes.push('Superseded ' + saved.superseded.map((item) => item.id + ' ("' + item.was + '", ' + item.reason + ')').join(', ') + ': marked outdated and linked to the new memory.');
+  if (saved.contested) notes.push('Saved as uncertain: it contradicts ' + saved.contested.map((item) => item.id + ' (verified current on ' + item.verified + ', ' + item.reason + ')').join(', ') + '. Check which is right and memory_verify the wrong one as outdated; pass evidence to supersede a verified memory.');
+  return notes.length ? notes.join(' ') : undefined;
+}
+
+// memory_save from a knowledge board finding: the finding's text and, when
+// the runtime grounded it, its sources and corroboration as the evidence. A
+// retracted or still-contested finding is not memory material yet.
+async function fromFinding(args, session) {
+  const id = String(args.from_finding || '').trim();
+  const board = session && session.knowledgeBoard;
+  const entry = board && Array.isArray(board.entries) ? board.entries.find((item) => item.id === id) : null;
+  if (!entry) throw new Error('Unknown finding ' + id + ' on this session\'s knowledge board. knowledge_search lists the ids.');
+  if (entry.retracted) throw new Error(id + ' was retracted; it is not something to remember.');
+  const { contestsOf } = await import('./knowledge-board.mjs');
+  const contests = contestsOf(board, entry);
+  if (contests.length) throw new Error(id + ' is contested by ' + contests.map((item) => item.id).join(', ') + '. Resolve the dispute (retract the wrong side) before saving it.');
+  const provenance = 'knowledge board ' + id + ' by ' + entry.author + ' (' + entry.status + (entry.corroboratedBy.length ? ', corroborated by ' + entry.corroboratedBy.map((item) => item.author).join(', ') : '') + (Number.isInteger(entry.independent) ? ', ' + entry.independent + ' independent source' + (entry.independent === 1 ? '' : 's') : '') + ')' + (entry.sources.length ? ': ' + entry.sources.slice(0, 3).join(' ') : '');
+  return {
+    ...args,
+    content: String(args.content || '').trim() || entry.claim + (entry.detail ? '\n\n' + entry.detail : '') + (entry.sources.length ? '\n\nSources: ' + entry.sources.join(' ') : ''),
+    ...(entry.status === 'grounded' && !args.evidence ? { evidence: provenance } : {})
+  };
+}
+
 export async function runMemoryTool(name, args = {}, { root, env = process.env, session = null, approval = null, autoApprove = false } = {}) {
+  if (name === 'memory_save' && args.from_finding) args = await fromFinding(args, session);
+  if (name === 'memory_save' && !String(args.content || args.description || '').trim()) throw new Error('A memory needs content (or from_finding).');
   if (name === 'memory_save' || name === 'memory_delete') {
     const gated = await gateMemoryWrite(name === 'memory_save' ? 'save' : 'delete', args, { root, env, session, approval, autoApprove });
     if (gated) return gated;
   }
   if (name === 'memory_save') {
     const saved = await saveMemory(root, args, { env, source: session && session.sessionId || null });
-    return { ...saved, note: saved.redacted ? 'Secrets or <private> text were redacted before saving.' : undefined };
+    return { ...saved, note: saveNote(saved) };
   }
   if (name === 'memory_search') {
     const ranked = rankMemories(await listMemories(root, { env }), args.query, { limit: Math.min(20, Number(args.limit) || 5) });
@@ -600,7 +771,7 @@ export async function runMemoryTool(name, args = {}, { root, env = process.env, 
       id: memory.id, name: memory.name, description: memory.description, updated: memory.updated,
       freshness: memoryFreshness(memory), verified_at: memory.verifiedAt || null,
       verification_status: memory.verificationStatus || 'unverified', verification_note: memory.verificationNote || null,
-      source: memory.source || null, score: Math.round(score * 100) / 100, content: memory.content.slice(0, 3000)
+      source: memory.source || null, ...beliefFields(memory, 3), score: Math.round(score * 100) / 100, content: memory.content.slice(0, 3000)
     })) };
   }
   if (name === 'memory_read') {
@@ -610,7 +781,7 @@ export async function runMemoryTool(name, args = {}, { root, env = process.env, 
       id: memory.id, name: memory.name, description: memory.description, category: memory.category,
       updated: memory.updated, freshness: memoryFreshness(memory), verified_at: memory.verifiedAt || null,
       verification_status: memory.verificationStatus || 'unverified', verification_note: memory.verificationNote || null,
-      source: memory.source || null, content: memory.content
+      source: memory.source || null, ...beliefFields(memory, MAX_REVISIONS), content: memory.content
     };
   }
   if (name === 'memory_verify') return await verifyMemory(root, args.id, { status: args.status, evidence: args.evidence, env });

@@ -110,3 +110,45 @@ export function claimConflict(a, b, { threshold = SAME_TOPIC } = {}) {
   }
   return null;
 }
+
+// A "slot" statement: something is, uses or prefers a value. Two of them that
+// agree word for word up to the slot word and then name a different value are
+// a revision ("the test command is npm test" -> "... is pnpm vitest"). Plain
+// lists ("run lint before commit", "run tests before commit") have no slot
+// word and are never read as one replacing the other.
+const SLOT_WORDS = new Set(['is', 'are', 'was', 'were', 'equals', 'uses', 'use', 'using', 'prefers', 'prefer', 'wants', 'want', 'likes', 'like', 'default', 'defaults', 'set', 'lives', 'located', 'via', 'with', ':', '=']);
+
+const RELATION_WORDS = new Set(['a', 'an', 'the', 'in', 'at', 'on', 'of', 'for', 'to', 'from', 'by', 'into', 'not', 'no', 'also', 'very', 'more', 'less', 'about', 'like', 'as']);
+
+function slotTokens(text) {
+  return String(text || '').toLowerCase().replace(/[`"'“”‘’]/g, '').replace(/\s*([:=])\s*/g, ' $1 ').replace(/[.!?;,]+(?=\s|$)/g, ' ').split(/\s+/).filter(Boolean);
+}
+
+/**
+ * The same slot given a different value: { kind: 'substitution', reason:
+ * '"npm test" vs "pnpm vitest"' } or null. The shared prefix must end in (or
+ * contain) a slot word, cover at least half of the shorter statement, and the
+ * differing values must be short (up to five words each).
+ */
+export function slotSubstitution(a, b) {
+  const left = slotTokens(a);
+  const right = slotTokens(b);
+  if (left.length < 3 || right.length < 3 || left.join(' ') === right.join(' ')) return null;
+  let prefix = 0;
+  while (prefix < left.length && prefix < right.length && left[prefix] === right[prefix]) prefix++;
+  let suffix = 0;
+  while (suffix < left.length - prefix && suffix < right.length - prefix && left[left.length - 1 - suffix] === right[right.length - 1 - suffix]) suffix++;
+  const oldValue = left.slice(prefix, left.length - suffix);
+  const newValue = right.slice(prefix, right.length - suffix);
+  if (!oldValue.length || !newValue.length || oldValue.length > 5 || newValue.length > 5) return null;
+  if ((prefix < 2 && !(prefix && suffix)) || prefix + suffix < Math.ceil(Math.min(left.length, right.length) / 2)) return null;
+  if (!left.slice(Math.max(0, prefix - 3), prefix).some((word) => SLOT_WORDS.has(word))) return null;
+  // "is in Dhaka" and "is a builder" fill different slots.
+  if ((RELATION_WORDS.has(oldValue[0]) || RELATION_WORDS.has(newValue[0])) && oldValue[0] !== newValue[0]) return null;
+  return { kind: 'substitution', reason: '"' + oldValue.join(' ') + '" vs "' + newValue.join(' ') + '"', topic: (prefix + suffix) / Math.max(left.length, right.length) };
+}
+
+/** A conflict between a saved belief and a new statement: claimConflict, or the same slot with a new value. */
+export function beliefConflict(a, b) {
+  return claimConflict(a, b) || slotSubstitution(a, b);
+}

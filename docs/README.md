@@ -37,6 +37,7 @@ every guide.
 - [Control room](CONTROL_ROOM.md): every agent on this computer, with its screen and browser, history, spend and the machine's load, in the web app or `oasis control-room`.
 - [A2A](A2A.md): serve OASIS to other agents over the Agent2Agent protocol, and call remote A2A agents.
 - [Subagents](SUBAGENTS.md): built-in and custom agents, background agents, teams and worktrees.
+- [Memory](MEMORY.md): durable notes across sessions, recall and freshness, and belief revision when a fact changes.
 - [Troubleshooting](TROUBLESHOOTING.md): diagnostics and fixes for install, providers, the web app, the sandbox.
 - [FAQ](FAQ.md): short answers on models, cost, data, safety and compatibility.
 
