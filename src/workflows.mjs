@@ -202,9 +202,22 @@ export async function runWorkflow({ source, args, runAgent, onEvent = () => {}, 
       if (options.schema) instructions += '\n\nReply with only a JSON value matching this JSON Schema, with no prose around it:\n' + JSON.stringify(options.schema).slice(0, 8000);
       try {
         let result; let lastError = '';
-        for (let attempt = 0; attempt < (options.schema ? structuredRetries : 1); attempt++) {
+        // A report OASIS rejects (an unfetched citation, a misquote, an
+        // unbacked "tests pass") gets one more attempt with the reasons.
+        let rejection = '';
+        for (let attempt = 0; attempt < (options.schema ? structuredRetries : 2); attempt++) {
           record.attempts = attempt + 1;
-          const text = String(await runAgent({ prompt: attempt && lastError ? instructions + '\n\nYour previous reply was invalid: ' + lastError + '. Reply again with only the JSON.' : instructions, label: record.label, agentType: options.agentType || options.subagent_type || options.agent || null, model: options.model || null, isolation: options.isolation || null, signal: workflowSignal }) ?? '');
+          const retryNote = rejection ? '\n\nOASIS rejected your previous report: ' + rejection + '. Fetch every page you cite, quote only words that are on it (verify_quote), and run the check behind any pass claim; then report again.' : attempt && lastError ? '\n\nYour previous reply was invalid: ' + lastError + '. Reply again with only the JSON.' : '';
+          let text;
+          try {
+            text = String(await runAgent({ prompt: instructions + retryNote, label: record.label, agentType: options.agentType || options.subagent_type || options.agent || null, model: options.model || null, isolation: options.isolation || null, signal: workflowSignal }) ?? '');
+          } catch (error) {
+            if (!(error && error.verification) || rejection || (workflowSignal && workflowSignal.aborted)) throw error;
+            rejection = String(error.message || error).replace(/^OASIS rejected this agent's report: /, '').slice(0, 1500);
+            lastError = 'rejected by OASIS: ' + rejection;
+            continue;
+          }
+          rejection = '';
           if (!options.schema) { result = text; lastError = ''; break; }
           const parsed = extractJson(text);
           const value = parsed.ok ? parsed.value : undefined;
@@ -212,7 +225,7 @@ export async function runWorkflow({ source, args, runAgent, onEvent = () => {}, 
           if (!errors.length) { result = value; lastError = ''; break; }
           lastError = errors.slice(0, 5).join('; ');
         }
-        if (lastError) throw new Error('structured output failed validation after ' + structuredRetries + ' attempts: ' + lastError);
+        if (lastError) throw new Error(lastError.startsWith('rejected by OASIS') ? 'the report was ' + lastError + ' (twice)' : 'structured output failed validation after ' + structuredRetries + ' attempts: ' + lastError);
         record.status = 'completed'; record.result = result; record.finishedAt = Date.now();
         state.calls[index] = { key, status: 'completed', result, label: record.label };
         emit({ type: 'agent_done', agent: record });
