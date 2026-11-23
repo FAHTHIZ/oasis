@@ -59,6 +59,7 @@ export function tarballPackageJson(buffer) {
   try { tar = gunzipSync(buffer, { maxOutputLength: 1024 * 1024 * 1024 }); } catch { return null; }
   let offset = 0;
   let longName = '';
+  let found;
   while (offset + 512 <= tar.length) {
     const header = tar.subarray(offset, offset + 512);
     if (header.every((byte) => byte === 0)) break;
@@ -75,13 +76,16 @@ export function tarballPackageJson(buffer) {
       if (pathRecord) longName = pathRecord[1];
     } else if (type === 'L') {
       longName = body.toString('utf8').replace(/\0.*$/s, '');
-    } else if ((type === '0' || type === '\0') && name.replace(/^\.\//, '') === 'package/package.json') {
-      try { return JSON.parse(body.toString('utf8')); } catch { return null; }
+    } else if ((type === '0' || type === '\0') && name.replace(/^(?:\.\/)+/, '').replace(/\/{2,}/g, '/') === 'package/package.json') {
+      // npm extracts every entry and a later duplicate with a newer mtime
+      // replaces the one checked here, so an archive with two is refused.
+      if (found !== undefined) return null;
+      try { found = JSON.parse(body.toString('utf8')); } catch { return null; }
     }
     offset += 512 + Math.ceil(size / 512) * 512;
     name = '';
   }
-  return null;
+  return found === undefined ? null : found;
 }
 
 async function download(url, { fetchImpl, maxBytes, timeoutMs }) {
