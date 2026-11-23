@@ -184,6 +184,10 @@ When the team must explain something with several possible explanations (why a t
 
 The matrix is shared by the main agent and every subagent, saved with the session, and a starting subagent's prompt lists the open questions with their current posteriors. Test: `test/hypothesis-board.test.mjs`.
 
+### Dissent gate
+
+A final answer that states one side of something the session has not settled is sent back once before the turn ends. That covers an open dispute on the knowledge board, where the reply repeats what is distinctive about one finding (its figure, version or wording) and nothing of the other. It also covers an open question on the hypotheses matrix, where the reply states the top hypothesis before the matrix reaches `leading`. The agent is told which findings disagree and who posted them. Before finishing, it has to give the user both sides and its reasoning, settle the point (retract the wrong finding, add evidence, resolve the question), or say how sure it is. A reply that already hedges or names the disagreement passes. It applies to subagent reports too, so a dispute does not vanish on its way up. Turn it off with `OASIS_DISSENT_GATE=0`. Test: `test/dissent-gate.test.mjs`.
+
 ## Background agents and teams
 
 - `run_in_background: true` returns an id immediately. The parent is notified when the agent finishes.

@@ -23,6 +23,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { runHooks, hasHooks, capHookText } from './hooks.mjs';
 import { claimIssue, recordCheck as recordClaimCheck, appendUnverifiedNotice, failedEditIssue, appendFailedEditNotice } from './claim-check.mjs';
 import { correctionViolations, correctionNudge } from './standing-corrections.mjs';
+import { dissentGateEnabled, unacknowledgedDissent, dissentNudge } from './dissent-gate.mjs';
 import { extractFollowups, recordFollowups, followupsEnabled } from './followups.mjs';
 import { deliverSteering, pendingSteering } from './steering.mjs';
 import { formatLspVerificationBlocker, verificationSummary } from './verification-summary.mjs';
@@ -64,6 +65,7 @@ export function newGateState() {
     emptyReplyNudges: 0,
     emptyReply: false,
     correctionNudged: false,
+    dissentNudged: false,
     stopHookContinuations: 0,
     // Set by the tool loop when todo_write succeeds: only a checklist this
     // turn worked on may hold the answer back.
@@ -376,6 +378,18 @@ export async function runCompletionGates(turn, host) {
     if (violations.length) {
       g.correctionNudged = true;
       session.messages.push({ role: 'user', content: correctionNudge(violations) });
+      return CONTINUE;
+    }
+  }
+  // A reply that states one side of an open dispute or an unsettled question
+  // as fact goes back once (src/dissent-gate.mjs).
+  if (!g.dissentNudged && session.knowledgeBoard && dissentGateEnabled(options.env || process.env)) {
+    let dissent = [];
+    try { dissent = unacknowledgedDissent(session.knowledgeBoard, text); } catch {}
+    if (dissent.length) {
+      g.dissentNudged = true;
+      session.messages.push({ role: 'user', content: dissentNudge(dissent) });
+      recordSessionEvent(session, { type: 'dissent_gate', items: dissent.map((item) => item.kind + ' ' + item.id).join(', ').slice(0, 300) }, options.env);
       return CONTINUE;
     }
   }
