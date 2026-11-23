@@ -49,6 +49,7 @@
 // and criteria (task_contract declare), but it can never mark a criterion as
 // met: only the runtime's own evaluation does.
 
+import { multilingualRisk, multilingualIntent } from './multilingual-signals.mjs';
 import path from 'node:path';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { assessReport } from './verification-contracts.mjs';
@@ -197,7 +198,8 @@ export function classifyIntent(text) {
   }
   if (QUESTION.test(head)) return 'question';
   for (const kind of ['investigate', 'operate', 'change', 'create', 'plan']) if (INTENT_SIGNALS[kind].test(value)) return kind;
-  return 'question';
+  // No English signal: read the request in the language it was written in.
+  return multilingualIntent(value) || 'question';
 }
 
 /** Risk level, reasons and the permission kinds they need. Negated mentions ("do not delete") are ignored. */
@@ -217,6 +219,12 @@ export function assessRisk(text) {
     }
     if (!hit) continue;
     reasons.push(signal.id);
+    permissions.add(signal.permission);
+    if (RISK_RANK[signal.level] > RISK_RANK[level]) level = signal.level;
+  }
+  // The same risks stated in other languages (src/multilingual-signals.mjs).
+  for (const signal of multilingualRisk(value)) {
+    if (!reasons.includes(signal.id)) reasons.push(signal.id);
     permissions.add(signal.permission);
     if (RISK_RANK[signal.level] > RISK_RANK[level]) level = signal.level;
   }

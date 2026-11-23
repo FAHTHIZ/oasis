@@ -3,6 +3,8 @@
 // pass" right after a failing run, after editing again, or from a piped
 // command whose real exit status was hidden. One reconcile nudge per turn.
 
+import { multilingualClaimsPassing } from './multilingual-signals.mjs';
+
 const POSITIVE = [
   /\b(?:all|the|every|both)?\s*(?:unit |integration |e2e )?(?:tests?|specs?|test suite|checks?|builds?|lint(?:ing)?|type-?checks?)\s+(?:now\s+|all\s+|still\s+)?(?:pass(?:es|ed|ing)?|succeed(?:s|ed)?|(?:is|are)\s+(?:passing|green|clean))\b/i,
   /\b(?:tests?|suite|build|ci)\b[^.\n]{0,20}\b(?:green|all green)\b/i,
@@ -18,7 +20,9 @@ const NEGATION = /\b(?:fail(?:s|ed|ing|ures?)?|not (?:all )?pass|don'?t pass|doe
 export function claimsPassing(text) {
   const value = String(text || '');
   if (!value.trim()) return false;
-  if (!POSITIVE.some((pattern) => pattern.test(value))) return false;
+  const negation = NEGATION.test(value.replace(/\b(?:0|zero|no)\s+(?:tests?\s+)?fail(?:ed|ures?|ing|s)?\b/gi, ''));
+  // Replies in other languages make the same claims (src/multilingual-signals.mjs).
+  if (!POSITIVE.some((pattern) => pattern.test(value))) return !negation && multilingualClaimsPassing(value);
   return !NEGATION.test(value.replace(/\b(?:0|zero|no)\s+(?:tests?\s+)?fail(?:ed|ures?|ing|s)?\b/gi, ''));
 }
 

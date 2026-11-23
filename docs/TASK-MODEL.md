@@ -11,7 +11,7 @@ Every non-subagent turn starts by reading the request into a task spec. The same
 | `intent` | `question`, `investigate`, `change`, `create`, `plan` or `operate`, and a one-line summary |
 | `domains` | A primary domain and secondary ones: `software`, `security`, `research`, `analysis`, `writing`, `planning`, `automation`, `computer`, `operations`, `general` |
 | `complexity` | `trivial`, `simple`, `moderate` or `complex` |
-| `risk` | `low`, `medium`, `high` or `critical`, with reasons (destructive, financial, external communication, publishing, production, credentials, system change). A negated action ("do not delete anything") does not count |
+| `risk` | `low`, `medium`, `high` or `critical`, with reasons (destructive, financial, external communication, publishing, production, credentials, system change). A negated action ("do not delete anything") does not count. Read in English and 15 other languages (see [Languages](#languages)) |
 | `deliverables` | Files named in the request, a code change, a report, data, a plan, a document, a check run or an action |
 | `acceptance` | Criteria, each with a kind and parameters (below) |
 | `constraints`, `dependencies` | Constraints stated in the request; ids of tasks this one depends on |
@@ -116,6 +116,10 @@ Each subagent run gets its own spec, with the parent task's id as `parentId`, an
 ## Turning it off
 
 `OASIS_TASK_MODEL=0`, or `"taskModel": false` in settings, turns off the main-turn contract and gate. Subagent assessment and the report contracts are unaffected.
+
+## Languages
+
+Reading a request is deterministic, so it depends on the words it knows. Intent and risk, and the claim check's reading of "the tests pass", cover English and, through `src/multilingual-signals.mjs`, Bengali, Hindi, Urdu, Arabic, Spanish, Portuguese, French, German, Italian, Russian, Turkish, Indonesian, Chinese, Japanese, Korean and Vietnamese. Negation is read the way each language puts it: before the verb ("No borres", "不要删除", "मत हटाओ") or after it ("মুছবেন না", "削除しないで", "삭제하지 마", "Lösche nicht"). Where a word is ambiguous between a risky and a harmless sense, the risky reading wins. A language outside the list falls back to the English reading, and the permission checks on the actual commands and tool calls apply in every language.
 
 ## Limits
 
