@@ -344,7 +344,7 @@ export async function saveSession(session, options = {}) {
       : [],
     todos: sanitizeTodos(session.todos),
     sharedTasks: sanitizeSharedTaskStore(session.sharedTasks),
-    ...(session.knowledgeBoard && session.knowledgeBoard.entries && session.knowledgeBoard.entries.length ? { knowledgeBoard: sanitizeKnowledgeBoard(session.knowledgeBoard) } : {}),
+    ...(session.knowledgeBoard && session.knowledgeBoard.entries && (session.knowledgeBoard.entries.length || (session.knowledgeBoard.hypotheses && session.knowledgeBoard.hypotheses.questions && session.knowledgeBoard.hypotheses.questions.length)) ? { knowledgeBoard: sanitizeKnowledgeBoard(session.knowledgeBoard) } : {}),
     ...(session.definedAgents && Object.keys(session.definedAgents).length ? { definedAgents: sanitizeDefinedAgents(session.definedAgents) } : {}),
     mustPreserve: sanitizeMustPreserve(session.mustPreserve),
     ...(sanitizeGoal(session.goal) ? { goal: sanitizeGoal(session.goal) } : {}),
