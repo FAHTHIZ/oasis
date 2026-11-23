@@ -18,7 +18,6 @@ import semverParse from 'semver/functions/parse.js';
 import semverCompare from 'semver/functions/compare.js';
 
 export const RETIRED_MAJOR = 1;
-export const NEXT_MAJOR_AFTER_ZERO = 2;
 
 /** The 0.x equivalent of a retired 1.x version string, or the version unchanged. */
 export function canonicalVersion(value) {

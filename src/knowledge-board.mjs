@@ -98,8 +98,6 @@ export const KNOWLEDGE_TOOL_DEFINITIONS = [
 ];
 
 export const KNOWLEDGE_TOOL_NAMES = new Set(KNOWLEDGE_TOOL_DEFINITIONS.map((tool) => tool.function.name));
-export const KNOWLEDGE_READ_ONLY_TOOL_NAMES = new Set(['knowledge_search']);
-
 function clean(value, max) {
   if (value === undefined || value === null) return '';
   const { text } = redactSecrets(stripInvisible(String(value)).text);

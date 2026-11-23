@@ -154,10 +154,6 @@ export function recordTokenUsage(session, usage = {}) {
   return ledger.tokens;
 }
 
-export function isBudgetStop(error) {
-  return Boolean(error && (error.code === 'REQUEST_BUDGET_EXCEEDED' || error.code === 'TOKEN_BUDGET_EXCEEDED' || error.code === 'OASIS_ZERO_BUDGET_BLOCKED' || error.code === 'NEURON_BUDGET_EXCEEDED'));
-}
-
 /**
  * Zero-budget check for a non-chat service (image generation, speech,
  * transcription). `kind` prefixes the name you can declare free, for example

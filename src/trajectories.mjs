@@ -150,8 +150,6 @@ export function hermesFromRecord(record, { completed = true } = {}) {
   };
 }
 
-export const EXPORT_FORMATS = ['openai', 'sharegpt', 'hermes'];
-
 function formatRecord(data, format = 'openai', tools = []) {
   if (format === 'hermes') return hermesFromRecord(toOpenAIRecord(data, tools));
   if (format === 'sharegpt') return toShareGPTRecord(data, tools);

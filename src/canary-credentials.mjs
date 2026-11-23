@@ -44,11 +44,6 @@ export function canaryValue() {
   return processCanary;
 }
 
-/** For tests: use a fixed decoy. */
-export function setCanaryForTesting(value) {
-  processCanary = value ? String(value) : '';
-}
-
 export function canaryEnabled(settings, env = process.env) {
   if (String(env.OASIS_CANARY || '').trim() === '0') return false;
   return !(settings && settings.canaryCredentials === false);
