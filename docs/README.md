@@ -62,6 +62,7 @@ historical records with dates and limits, not product rankings.
 
 - [Benchmarks](development/BENCHMARKS.md): model-free harness results, token and memory measurements, same-model gateway runs and their limits. Raw data is in `bench/results/`.
 - [Real-world runs](development/REAL-WORLD-RUNS.md): unscripted tasks with real providers, plugins checked, what went wrong.
+- [Research and invention log](development/RESEARCH-ROADMAP.md): each new mechanism with its prior art, measurements, commit and tests; directions examined and rejected; the roadmap.
 
 ## Project records
 
