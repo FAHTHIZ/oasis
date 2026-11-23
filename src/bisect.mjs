@@ -174,11 +174,19 @@ export async function runBisect(root, args = {}, options = {}) {
     if (!state.ok) return { ok: false, steps, message: 'git bisect start failed: ' + tail(state.stderr) };
     let output = state.stdout;
     let firstBad = '';
+    let previous = '';
+    // When git has its answer it says so, but the wording differs between
+    // versions; refs/bisect/bad then names the first bad commit. BISECT_HEAD
+    // not moving after a verdict also means the search is over.
+    const finishedBad = async () => (await git(worktree, ['rev-parse', 'refs/bisect/bad'])).stdout.trim();
     for (let step = 0; step < maxSteps; step += 1) {
       firstBad = firstBadFromOutput(output);
       if (firstBad || ambiguousFromOutput(output).length) break;
+      if (/first bad commit/i.test(output)) { firstBad = await finishedBad(); break; }
       const current = (await git(worktree, ['rev-parse', 'BISECT_HEAD'])).stdout.trim();
       if (!current) break;
+      if (current === previous) { firstBad = await finishedBad(); break; }
+      previous = current;
       const outcome = await runAt(current);
       steps.push({ commit: current.slice(0, 12), ...outcome });
       if (outcome.verdict === 'cancelled' || outcome.verdict === 'denied') return { ok: false, cancelled: true, steps, message: 'Stopped before the search finished.' };
