@@ -43,6 +43,8 @@ const TOOL_ALIASES = {
   bisectregression: ['bisect_regression'],
   flaky: ['flaky_check'],
   flakycheck: ['flaky_check'],
+  minimize: ['minimize_repro'],
+  minimizerepro: ['minimize_repro'],
   lsp: ['lsp'],
   git: ['git_commit', 'git_branch', 'git_push', 'create_pull_request'],
   gitcommit: ['git_commit'],
