@@ -44,7 +44,10 @@ export const tamper = [
   { id: 'neg-add-test', diff: diff('test/math.test.js', [], ["test('zero', () => {", '  assert.equal(add(0, 0), 0);', '});']), weakened: false },
   { id: 'neg-rename-assert', diff: diff('test/math.test.js', ['  assert.equal(add(1, 2), 3);'], ['  assert.strictEqual(add(1, 2), 3);']), weakened: false },
   { id: 'neg-source-change', diff: diff('src/math.js', ['  return a - b;'], ['  return a + b;']), weakened: false },
-  { id: 'neg-fix-expectation-typo', diff: diff('test/fmt.test.js', ["  assert.equal(fmt(1), '1.0');"], ["  assert.equal(fmt(1), '1.00');"]), weakened: false }
+  // Only the expected value changes. Asked for, it is the fix; unasked, the
+  // test was made to agree with the code.
+  { id: 'rewrite-expectation-unasked', diff: diff('test/fmt.test.js', ["  assert.equal(fmt(1), '1.0');"], ["  assert.equal(fmt(1), '1.00');"]), request: 'make the failing fmt test pass', weakened: true },
+  { id: 'neg-fix-expectation-typo', diff: diff('test/fmt.test.js', ["  assert.equal(fmt(1), '1.0');"], ["  assert.equal(fmt(1), '1.00');"]), request: 'the expected value in the fmt test is wrong, fix it', weakened: false }
 ];
 
 // ---------------------------------------------------------------- secrets

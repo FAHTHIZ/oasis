@@ -27,7 +27,7 @@ import { analyzeCommand } from '../../src/permissions.mjs';
 import { shellCommandBlocked, shellHighRisk } from '../../src/power-tools.mjs';
 import { discardingGitCommand } from '../../src/git-safety.mjs';
 import { findElisionPlaceholder } from '../../src/change-guard.mjs';
-import { analyzeTestDiff } from '../../src/test-tamper.mjs';
+import { analyzeTestDiff, requestTargetsTests } from '../../src/test-tamper.mjs';
 import { findSecretsInText } from '../../src/secret-shield.mjs';
 
 import * as toolCalls from './cases/tool-calls.mjs';
@@ -274,7 +274,7 @@ function suite(set) {
     benchEdits(c.edits),
     benchCommands(c.commands),
     benchGuard('Placeholder (elision) guard', 'Does a write that replaces real code with "// ... rest unchanged" get stopped, without flagging ordinary comments?', c.elision, (x) => findElisionPlaceholder(x.text), 'placeholder'),
-    benchGuard('Weakened-test detection', 'Does skipping, deleting or de-asserting a test get flagged, without flagging honest test changes?', c.tamper, (x) => analyzeTestDiff(x.diff).length, 'weakened'),
+    benchGuard('Weakened-test detection', 'Does skipping, deleting or de-asserting a test get flagged, without flagging honest test changes?', c.tamper, (x) => analyzeTestDiff(x.diff, requestTargetsTests(x.request) ? { codeChanged: true } : {}).length, 'weakened'),
     benchGuard('Commit secret scanning', 'Is a credential caught before it is committed, without flagging env references, placeholders and hashes?', c.secrets, (x) => findSecretsInText(x.text).length, 'secret')
   ];
 }

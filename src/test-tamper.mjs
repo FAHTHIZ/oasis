@@ -86,6 +86,14 @@ function testScriptChanges(entry) {
   return findings;
 }
 
+// The user asked for the tests themselves to change ("update the tests",
+// "the expected value is wrong"); "fix the failing tests" means the code.
+const TESTS_ARE_THE_TASK = /\b(?:update|change|adjust|rewrite|edit|regenerate|correct)\b[^.\n]{0,40}\b(?:tests?|specs?)\b|\b(?:fix|update|correct|change|adjust)\b[^.\n]{0,40}\b(?:expected|expectations?|assertions?|snapshots?|fixtures?)\b|\b(?:tests?|expected values?|expectations?|assertions?)\b[^\n]{0,40}?\b(?:is|are) (?:wrong|outdated|incorrect|stale)\b/i;
+
+export function requestTargetsTests(request) {
+  return TESTS_ARE_THE_TASK.test(String(request || ''));
+}
+
 // An assertion with its literals blanked: `assert.equal(median([3, 1, 2]), 2)`
 // and the same line ending in `3)` have one shape.
 function assertionShape(line) {
