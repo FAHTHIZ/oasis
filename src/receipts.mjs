@@ -92,6 +92,14 @@ export async function receiptKey({ env = process.env, directory = '' } = {}) {
   return { privateKey, publicKey: publicDer.toString('base64'), keyId: keyIdOf(publicDer), file };
 }
 
+/** A signing key from a PEM private key held in memory (CI secrets), never written to disk. */
+export function receiptKeyFromPem(pem) {
+  const privateKey = createPrivateKey(String(pem).replace(/\\n/g, '\n').trim() + '\n');
+  if (privateKey.asymmetricKeyType !== 'ed25519') throw new Error('The receipt signing key must be an Ed25519 private key (PEM).');
+  const publicDer = createPublicKey(privateKey).export({ type: 'spki', format: 'der' });
+  return { privateKey, publicKey: publicDer.toString('base64'), keyId: keyIdOf(publicDer), file: '' };
+}
+
 export function keyIdOf(publicDer) {
   return 'ed25519:' + createHash('sha256').update(Buffer.isBuffer(publicDer) ? publicDer : Buffer.from(String(publicDer), 'base64')).digest('hex').slice(0, 32);
 }

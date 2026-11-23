@@ -196,3 +196,17 @@ test('oasis receipt verify exits 0 for a good receipt and 1 for a forged one', a
   assert.equal(await receiptCommand(['show', good], root, { write, env }), 0);
   assert.match(out, /test-model/);
 });
+
+test('oasis receipt key --new prints a usable PEM that is not saved', async (t) => {
+  const config = await mkdtemp(path.join(os.tmpdir(), 'oasis-receipt-new-'));
+  t.after(() => rm(config, { recursive: true, force: true }));
+  const { receiptKeyFromPem } = await import('../src/receipts.mjs');
+  let out = '';
+  assert.equal(await receiptCommand(['key', '--new'], config, { write: (text) => { out += text; }, env: { ...process.env, OASIS_CONFIG_DIR: config } }), 0);
+  const id = out.match(/# Key id: (ed25519:[0-9a-f]{32})/)[1];
+  assert.equal(receiptKeyFromPem(out).keyId, id);
+  assert.equal(receiptKeyFromPem(out.replace(/\n/g, '\\n')).keyId, id, 'a secret stored with escaped newlines still loads');
+  await assert.rejects(readFile(path.join(config, 'receipts', 'signing-key.pem')), { code: 'ENOENT' });
+  const { generateKeyPairSync } = await import('node:crypto');
+  assert.throws(() => receiptKeyFromPem(generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey.export({ type: 'pkcs8', format: 'pem' })), /Ed25519/);
+});

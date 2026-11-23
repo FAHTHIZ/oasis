@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import os from 'node:os';
 import { commitIdentity, stripAiAttribution } from './commit-attribution.mjs';
 
 const TRUSTED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
@@ -328,6 +329,19 @@ export async function runAction(options = {}) {
 
   const { run } = options.sdk || await import('./sdk.mjs');
   const prompt = buildPrompt(trigger, context);
+  // Every run leaves a signed receipt outside the checkout (so it is never committed).
+  const receiptFile = receiptEnabled(env) ? path.join(env.RUNNER_TEMP || os.tmpdir(), 'oasis-receipt-' + (env.GITHUB_RUN_ID || Date.now().toString(36)) + '-' + (env.GITHUB_RUN_ATTEMPT || '1') + '.json') : '';
+  // A stable signing key from a repository secret, so reviewers can pin it with
+  // --trust. It is kept in memory and removed from the environment before the
+  // agent starts, so nothing the agent runs can read it and sign a forgery.
+  let receiptSigner = null;
+  const receiptPem = env.OASIS_RECEIPT_KEY || '';
+  delete env.OASIS_RECEIPT_KEY;
+  if (process.env.OASIS_RECEIPT_KEY === receiptPem) delete process.env.OASIS_RECEIPT_KEY;
+  if (receiptFile && receiptPem) {
+    try { receiptSigner = (await import('./receipts.mjs')).receiptKeyFromPem(receiptPem); }
+    catch (error) { log('Ignoring OASIS_RECEIPT_KEY: ' + error.message); }
+  }
   let result;
   try {
     result = await run(prompt, {
@@ -343,6 +357,7 @@ export async function runAction(options = {}) {
         input(env, 'append_system_prompt'),
         'Unattended GitHub Action policy: do not use LSP or start language-server processes. Verify source changes with the repository\'s own test, lint, build, or type-check commands. Report which check kind ran and whether its exit code was zero. A disabled or unavailable language server is not a passing check; a relevant project check must pass. Never claim verification is complete unless the runtime verification gate reports complete. Report verification as incomplete whenever that gate is not complete.'
       ].filter(Boolean).join('\n\n'),
+      ...(receiptFile ? { receipt: receiptFile, ...(receiptSigner ? { receiptKey: receiptSigner } : {}) } : {}),
       ...(options.runOptions || {})
     });
   } catch (error) {
@@ -363,6 +378,8 @@ export async function runAction(options = {}) {
   else if (published.changed) details.push('Pushed ' + published.files + ' changed file(s) to "' + published.branch + '".');
   if (publishError) details.push('Could not push the changes: ' + publishError);
   if (result.permission_denials && result.permission_denials.length) details.push('<details><summary>' + result.permission_denials.length + ' action(s) were not allowed</summary>\n\n' + result.permission_denials.map((item) => '- ' + (item.tool_name || 'tool') + ': ' + item.detail).join('\n') + '\n</details>');
+  const receipt = await checkReceipt(result, root);
+  if (receipt) details.push(receipt.line);
   if (runUrl) details.push('[View the run](' + runUrl + ')');
   const status = actionStatus(result, published, summary, verification);
   const body = commentBody(status, details);
@@ -371,9 +388,31 @@ export async function runAction(options = {}) {
   else log(body);
   if (env.GITHUB_OUTPUT) {
     const { appendFile } = await import('node:fs/promises');
-    await appendFile(env.GITHUB_OUTPUT, 'result<<OASIS_EOF\n' + summary + '\nOASIS_EOF\nbranch=' + (published.branch || '') + '\npull_request=' + (published.pullRequest ? published.pullRequest.html_url : '') + '\n').catch(() => {});
+    await appendFile(env.GITHUB_OUTPUT, 'result<<OASIS_EOF\n' + summary + '\nOASIS_EOF\nbranch=' + (published.branch || '') + '\npull_request=' + (published.pullRequest ? published.pullRequest.html_url : '') + '\nreceipt=' + (receipt ? receipt.file : '') + '\nreceipt_status=' + (receipt ? receipt.status : '') + '\n').catch(() => {});
   }
-  return { responded: true, result, published, body };
+  return { responded: true, result, published, body, receipt };
+}
+
+function receiptEnabled(env) {
+  return !/^(?:0|false|no|off)$/i.test(String(input(env, 'receipt', 'true')).trim());
+}
+
+// Checks the run's receipt the way a reviewer would (signature, chain, claims,
+// files) and returns one line for the comment. Never fails the run.
+export async function checkReceipt(result, root) {
+  const file = result && typeof result.receipt === 'string' ? result.receipt : '';
+  if (!file) return result && result.receipt_error ? { file: '', status: 'error', line: 'Could not write a receipt: ' + safeVerificationText(result.receipt_error) } : null;
+  try {
+    const { readReceipt, verifyReceipt } = await import('./receipts.mjs');
+    const receipt = await readReceipt(file);
+    const verdict = await verifyReceipt(receipt, { root });
+    const counts = receipt.claims && receipt.claims.counts || {};
+    const claims = Object.entries(counts).filter(([, n]) => n).map(([kind, n]) => n + ' ' + kind).join(', ') || 'no checkable claims';
+    const line = 'Receipt: **' + verdict.status + '**: ' + receipt.evidence.count + ' evidence events, ' + (receipt.files || []).length + ' file(s), ' + claims + '. Signed by `' + safeVerificationText(receipt.signature && receipt.signature.keyId) + '`. Download the `oasis-receipt` artifact and check it with `oasis receipt verify FILE --replay`.';
+    return { file, status: verdict.status, ok: verdict.ok, line };
+  } catch (error) {
+    return { file, status: 'error', line: 'Could not check the receipt: ' + safeVerificationText(error.message) };
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

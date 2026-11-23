@@ -68,6 +68,38 @@ A valid signature only shows that the receipt has not changed since it was
 signed. To trust who signed it, pin the key: `--trust KEY_ID`, repeated for each
 key you accept. A CI runner can publish its key id once, so reviewers can pin it.
 
+## In GitHub Actions
+
+The [GitHub Action](../action.yml) writes a receipt for every run unless you set
+`receipt: false`. It writes the file to `RUNNER_TEMP`, never into the checkout, so
+the receipt is never committed. The action checks the receipt, puts the verdict in
+its comment, uploads the file as the `oasis-receipt` artifact and sets the
+`receipt` and `receipt_status` outputs.
+
+A runner is new for each job, so without a key each run signs with a new key.
+To give CI a stable identity that reviewers can pin:
+
+```sh
+oasis receipt key --new | gh secret set OASIS_RECEIPT_KEY   # prints the key id as a comment
+```
+
+```yaml
+- uses: FAHTHIZ/oasis@main
+  with:
+    api_key: ${{ secrets.OASIS_API_KEY }}
+    receipt_signing_key: ${{ secrets.OASIS_RECEIPT_KEY }}
+```
+
+The action keeps the key in memory and removes it from the environment before the
+agent starts, so no command the agent runs can read the key and sign a forged
+receipt. Anyone can then check a downloaded receipt with
+`oasis receipt verify FILE --trust KEY_ID --replay`.
+
+On your own machine the key is a file the agent could read with its shell. A
+local receipt shows that the record has not changed since it was signed and that
+its claims match its evidence. It does not protect you from an agent that you
+let read your config directory.
+
 ## Replay safety
 
 `--replay` runs commands from the receipt in your workspace, with a time limit
