@@ -21,6 +21,7 @@ import { normalizeSshSettings, detectSshRuntime, sshWrap, DEFAULT_SSH_EXCLUDES }
 import { normalizeDaytonaSettings, ensureDaytonaSync, daytonaSshSettings } from './daytona-backend.mjs';
 import { normalizeModalSettings, ensureModalSync, modalSshSettings } from './modal-backend.mjs';
 import { spawnSync } from 'node:child_process';
+import { canaryEnabled, decoyFilesFor } from './canary-credentials.mjs';
 import { realpathSync, statSync, lstatSync, rmdirSync, unlinkSync, readFileSync, writeFileSync, existsSync, mkdtempSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -636,6 +637,7 @@ export function resolveSandbox(settings = {}, root, force = false) {
     // Linux bubblewrap: path-based Unix sockets are refused unless allowAllUnixSockets is on
     // (seccomp cannot inspect paths, so allowUnixSockets is honored on macOS only, as in Claude Code).
     unixSocketFilter: probe.kind === 'bubblewrap' && !sockets.allowAllUnixSockets ? unixSocketFilterPath() : null,
+    canary: canaryEnabled(settings, process.env),
     autoAllowCommands: settings.sandbox.autoAllowCommands !== false,
     autoAllowShellCommands: settings.sandbox.autoAllowShellCommands === true,
     maskSensitivePaths: settings.sandbox.maskSensitivePaths !== false,
@@ -789,6 +791,8 @@ export function wrapCommand(command, args, sandbox, cwd, options = {}) {
       if (!visible(item)) continue;
       if (item.type === 'directory') wrapped.push('--tmpfs', item.path);
       else if (item.type === 'file') wrapped.push('--ro-bind', '/dev/null', item.path);
+      // A decoy credential inside the empty ~/.aws or ~/.ssh (src/canary-credentials.mjs).
+      if (item.type === 'directory' && sandbox.canary) for (const decoy of decoyFilesFor(item.path)) wrapped.push('--ro-bind', decoy.source, decoy.target);
     }
     // allowRead: mount the re-opened path back, then mask again what is denied inside it.
     for (const item of sandbox.reopenedPaths || []) {
