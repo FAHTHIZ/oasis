@@ -54,6 +54,7 @@ import { describeIndependence, independentSources } from './source-independence.
 import { applyInjectionTaint, detectInjection, injectionTaint, stripInvisible } from './untrusted-content.mjs';
 import { calibrate, describeCalibration, parseConfidence, sharedCalibrationLedger } from './calibration.mjs';
 import { randomBytes } from 'node:crypto';
+import { sharedHypothesisHistory } from './hypothesis-history.mjs';
 import { HYPOTHESIS_TOOL_DEFINITION, runHypothesisTool, sanitizeMatrix, hypothesisPromptLines } from './hypothesis-board.mjs';
 
 const MAX_ENTRIES = 200;
@@ -257,6 +258,11 @@ function settle(board, entry, outcome, kind, by) {
   const ledger = boardLedgers.get(board);
   if (!ledger) return;
   try { ledger.record({ id: (board.uid || 'board') + ':' + entry.id, model: entry.model || 'unknown', type: entry.authorType || '', p: entry.confidence, o: outcome, kind }); } catch {}
+}
+
+function historyOf(session) {
+  if (session && session.hypothesisHistory !== undefined) return session.hypothesisHistory;
+  try { return sharedHypothesisHistory(session && session.modelEnv || process.env); } catch { return null; }
 }
 
 function actorOf(session) {
@@ -483,7 +489,7 @@ export function runKnowledgeTool(session, name, args = {}) {
   if (name === 'hypotheses') {
     const ledger = sessionEvidence(session);
     const events = ledger ? ledger.events : [];
-    const result = runHypothesisTool(session, board, args, { actor: actorOf(session), ground: (text, sources) => groundFinding(text, sources, events), untrusted: Boolean(injectionTaint(session, 'agent ' + actorOf(session))), model: modelOf(session), type: clean(session && session.agentType, 80), ledger: boardLedgers.get(board) });
+    const result = runHypothesisTool(session, board, args, { actor: actorOf(session), ground: (text, sources) => groundFinding(text, sources, events), untrusted: Boolean(injectionTaint(session, 'agent ' + actorOf(session))), model: modelOf(session), type: clean(session && session.agentType, 80), ledger: boardLedgers.get(board), history: historyOf(session) });
     return result;
   }
   throw new Error('Unknown knowledge tool ' + name);

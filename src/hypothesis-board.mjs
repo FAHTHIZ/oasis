@@ -34,6 +34,7 @@
 
 import { siteOf } from './source-independence.mjs';
 import { normalizeUrl } from './evidence-ledger.mjs';
+import { basePriors } from './hypothesis-history.mjs';
 
 const MAX_QUESTIONS = 20;
 const MAX_HYPOTHESES = 8;
@@ -76,7 +77,7 @@ export function sanitizeMatrix(value) {
   for (const raw of Array.isArray(input.questions) ? input.questions.slice(-MAX_QUESTIONS) : []) {
     if (!raw || !Q_ID.test(String(raw.id)) || !clean(raw.text, 300)) continue;
     const hypotheses = (Array.isArray(raw.hypotheses) ? raw.hypotheses : []).filter((h) => h && H_ID.test(String(h.id)) && clean(h.text, 300)).slice(0, MAX_HYPOTHESES)
-      .map((h) => ({ id: h.id, text: clean(h.text, 300), by: clean(h.by, 100) || 'main', prior: Number.isFinite(h.prior) && h.prior > 0 ? h.prior : 1 }));
+      .map((h) => ({ id: h.id, text: clean(h.text, 300), by: clean(h.by, 100) || 'main', prior: Number.isFinite(h.prior) && h.prior > 0 ? Math.min(3, h.prior) : 1, ...(h.baseRate && typeof h.baseRate === 'object' ? { baseRate: { wins: Number(h.baseRate.wins) || 0, losses: Number(h.baseRate.losses) || 0, references: Number(h.baseRate.references) || 0 } } : {}) }));
     const ids = new Set(hypotheses.map((h) => h.id));
     const evidence = (Array.isArray(raw.evidence) ? raw.evidence : []).slice(-MAX_EVIDENCE).filter((e) => e && clean(e.text, 600)).map((e) => ({
       id: clean(e.id, 20), text: clean(e.text, 600), by: clean(e.by, 100) || 'main', grounded: e.grounded === true,
@@ -155,7 +156,7 @@ export function scoreQuestion(question) {
 function questionView(question) {
   const score = scoreQuestion(question);
   const round = (value) => Math.round(value * 1000) / 1000;
-  const hypotheses = question.hypotheses.map((h) => ({ id: h.id, text: h.text, by: h.by, posterior: round(score.posterior.get(h.id)), inconsistency: Math.round(score.inconsistency.get(h.id) * 100) / 100, tested: score.tested.has(h.id) }))
+  const hypotheses = question.hypotheses.map((h) => ({ id: h.id, text: h.text, by: h.by, posterior: round(score.posterior.get(h.id)), inconsistency: Math.round(score.inconsistency.get(h.id) * 100) / 100, tested: score.tested.has(h.id), ...(h.baseRate ? { base_rate: 'prior x' + h.prior + ': similar explanations were the answer in ' + h.baseRate.wins + ' and ruled out in ' + h.baseRate.losses + ' (similarity-weighted) of ' + h.baseRate.references + ' similar past question' + (h.baseRate.references === 1 ? '' : 's') } : {}) }))
     .sort((a, b) => b.posterior - a.posterior);
   const [first, second] = hypotheses;
   const diagnosticEvidence = question.evidence.filter((item, index) => score.diagnostic[index].diagnosticity > 1);
@@ -187,7 +188,7 @@ function questionView(question) {
  * Run the hypotheses tool. ground(text, sources) -> { issues, grounds } is the
  * knowledge board's grounding against the acting agent's own tool results.
  */
-export function runHypothesisTool(session, board, args = {}, { actor = 'main', ground = () => ({ issues: [], grounds: [] }), untrusted = false, model = '', type = '', ledger = null } = {}) {
+export function runHypothesisTool(session, board, args = {}, { actor = 'main', ground = () => ({ issues: [], grounds: [] }), untrusted = false, model = '', type = '', ledger = null, history = null } = {}) {
   const matrix = matrixOf(board);
   const action = String(args.action || 'status');
   if (action === 'open') {
@@ -197,7 +198,13 @@ export function runHypothesisTool(session, board, args = {}, { actor = 'main', g
     if (list.length < 2) throw new Error('open needs at least two competing hypotheses; a single explanation is not a comparison.');
     if (list.length > MAX_HYPOTHESES) throw new Error('At most ' + MAX_HYPOTHESES + ' hypotheses per question.');
     if (matrix.questions.filter((q) => !q.resolved).length >= MAX_QUESTIONS) throw new Error('Too many open questions; resolve some first.');
-    const question = { id: 'q_' + matrix.nextQ++, text, by: actor, hypotheses: list.map((item) => ({ id: 'h_' + matrix.nextH++, text: item, by: actor, prior: 1 })), evidence: [] };
+    // The outside view: similar questions resolved before set the priors (src/hypothesis-history.mjs).
+    let rates = [];
+    try { rates = history ? basePriors(text, list, history.cases()) : []; } catch { rates = []; }
+    const question = { id: 'q_' + matrix.nextQ++, text, by: actor, hypotheses: list.map((item, index) => {
+      const rate = rates[index];
+      return { id: 'h_' + matrix.nextH++, text: item, by: actor, prior: rate ? rate.prior : 1, ...(rate && (rate.wins || rate.losses) ? { baseRate: { wins: rate.wins, losses: rate.losses, references: rate.references } } : {}) };
+    }), evidence: [] };
     matrix.questions.push(question);
     if (matrix.questions.length > MAX_QUESTIONS) matrix.questions.splice(matrix.questions.findIndex((q) => q.resolved) >= 0 ? matrix.questions.findIndex((q) => q.resolved) : 0, 1);
     return { opened: question.id, ...questionView(question), note: 'Rate every piece of evidence against all hypotheses (action evidence, ratings {"' + question.hypotheses[0].id + '": "+", "' + question.hypotheses[1].id + '": "--", ...}). Other agents of this session see this question.' };
@@ -257,6 +264,9 @@ export function runHypothesisTool(session, board, args = {}, { actor = 'main', g
     question.resolved = { hypothesis: choice, by: actor, reason: clean(args.reason, 400) };
     // Only the coordinator's resolution scores the raters, so no agent grades its own evidence.
     const scored = actor === 'main' ? scoreRaters(question, choice, ledger, board.uid || 'board') : 0;
+    if (actor === 'main' && history && typeof history.record === 'function') {
+      try { history.record({ id: (board.uid || 'board') + ':' + question.id, question: question.text, answer: choice === 'none' ? '' : question.hypotheses.find((h) => h.id === choice).text, rejected: question.hypotheses.filter((h) => h.id !== choice).map((h) => h.text) }); } catch {}
+    }
     return { ...questionView(question), ...(scored ? { calibration: scored + ' evidence rating' + (scored === 1 ? '' : 's') + ' scored against the answer (oasis agents calibration)' } : {}), ...(top && choice !== top.id ? { warning: 'Resolved against the evidence: ' + top.id + ' had the highest posterior (' + top.posterior + '). Say why in your report.' } : {}) };
   }
   if (action === 'status') {

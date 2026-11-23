@@ -131,3 +131,28 @@ test('resolving by the coordinator scores each evidence rating as a forecast', a
   assert.deepEqual(ledger.records({ model: 'bad-model' }).map((item) => [item.o, item.kind, item.type]), [[0, 'hypothesis', 'researcher']]);
   assert.equal(ledger.records({ model: 'good-model' })[0].o, 1);
 });
+
+test('resolved questions become base rates for similar new questions', async () => {
+  const { createHypothesisHistory, basePriors } = await import('../src/hypothesis-history.mjs');
+  const history = createHypothesisHistory();
+  for (const [index, answer] of ['Missing environment variable on CI', 'Missing environment variable on CI', 'Race in session setup'].entries()) {
+    const board = { uid: 'board' + index + 'abcdef' };
+    runHypothesisTool({}, board, { action: 'open', question: 'Why does the login test fail on CI only?', hypotheses: ['Missing environment variable on CI', 'Race in session setup', 'Timezone difference on the runner'] }, { actor: 'main', history });
+    const choice = board.hypotheses.questions[0].hypotheses.find((h) => h.text === answer).id;
+    runHypothesisTool({}, board, { action: 'resolve', question: 'q_1', hypothesis: choice }, { actor: 'main', history });
+  }
+  assert.equal(history.cases().length, 3);
+  const board = {};
+  const opened = runHypothesisTool({}, board, { action: 'open', question: 'Why does the signup test fail on CI only?', hypotheses: ['Timezone difference on the runner', 'A missing environment variable on CI', 'Race in session setup'] }, { actor: 'main', history });
+  const byText = Object.fromEntries(opened.hypotheses.map((h) => [h.text, h]));
+  assert.ok(byText['A missing environment variable on CI'].posterior > byText['Race in session setup'].posterior);
+  assert.ok(byText['Race in session setup'].posterior > byText['Timezone difference on the runner'].posterior);
+  assert.match(byText['A missing environment variable on CI'].base_rate, /^prior x\d/);
+  // An unrelated question has no reference class.
+  assert.deepEqual(basePriors('Which database should the billing service use?', ['Postgres', 'MySQL'], history.cases()).map((item) => item.prior), [1, 1]);
+  // Subagents resolving do not write history.
+  const child = {};
+  runHypothesisTool({}, child, { action: 'open', question: 'Why does the login test fail on CI only?', hypotheses: ['a b c', 'd e f'] }, { actor: 'agent_1', history });
+  runHypothesisTool({}, child, { action: 'resolve', question: 'q_1', hypothesis: 'h_1' }, { actor: 'agent_1', history });
+  assert.equal(history.cases().length, 3);
+});
