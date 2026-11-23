@@ -41,8 +41,14 @@ async function fingerprint(root) {
   return hash.digest('hex');
 }
 
-test('rehearsal is off unless asked for', () => {
+test('rehearsal is off unless asked for or the bubblewrap sandbox is on', () => {
   assert.equal(rehearsalEnabled({}), false);
+  const bwrap = { available: true, kind: 'bubblewrap' };
+  assert.equal(rehearsalEnabled({}, {}, bwrap), true);
+  assert.equal(rehearsalEnabled({}, {}, { available: true, kind: 'docker' }), false);
+  assert.equal(rehearsalEnabled({}, {}, { available: false, kind: 'none' }), false);
+  assert.equal(rehearsalEnabled({}, { rehearse: false }, bwrap), false);
+  assert.equal(rehearsalEnabled({ OASIS_REHEARSE: '0' }, {}, bwrap), false);
   assert.equal(rehearsalEnabled({ OASIS_REHEARSE: '1' }), true);
   assert.equal(rehearsalEnabled({}, { rehearse: true }), true);
   assert.equal(rehearsalEnabled({ OASIS_REHEARSE: '0' }, { rehearse: true }), false);
@@ -206,4 +212,19 @@ test('a declined command says it only ran as a rehearsal', { skip }, async (t) =
   assert.deepEqual(result.rehearsal && result.rehearsal.created, ['new.txt']);
   assert.match(result.message, /only ran as a rehearsal/);
   assert.doesNotMatch(result.message, /No process was started/);
+});
+
+test('an approval rehearsal also hides the active sandbox\'s own masks (denyRead)', { skip }, async (t) => {
+  const root = await workspace();
+  // Outside /tmp: the rehearsal's fresh /tmp would hide it anyway.
+  const secrets = await mkdtemp(path.join(process.cwd(), '.rehearsal-secret-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(secrets, { recursive: true, force: true })]));
+  await writeFile(path.join(secrets, 'id'), 'hunter2');
+  const line = 'touch "s-$(cat ' + JSON.stringify(path.join(secrets, 'id')) + ' 2>/dev/null)"';
+  const open = await rehearseCommand({ root, command: '/bin/sh', args: ['-c', line] });
+  await disposeRehearsal(open);
+  assert.deepEqual(open.changes.created, ['s-hunter2'], 'control: not a default credential path');
+  const sandbox = { available: true, kind: 'bubblewrap', maskedPaths: [{ path: secrets, type: 'directory' }] };
+  const shown = await rehearseForApproval({ root, line, settings: {}, sandbox });
+  assert.deepEqual(shown.summary.created, ['s-'], 'rehearsal is on by default under bubblewrap and honors its masks');
 });

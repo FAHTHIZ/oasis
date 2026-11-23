@@ -75,6 +75,11 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - Commit: see `git log -- src/insights.mjs` ("Report effect signals in insights").
 - `/insights` now counts failed calls that had taken effect, rehearsal misses per command and drifted resumes, read from the saved tool results (truncated results still count by marker). Acceptance: `test/insights.test.mjs` effects test.
 
+### Rehearsal by default under the bubblewrap sandbox
+
+- Commit: see `git log -- src/rehearsal.mjs` ("Rehearse by default under the bubblewrap sandbox").
+- The roadmap item said "with `sandbox.autoAllowCommands`"; under that setting ordinary commands never prompt, so the useful default is the sandbox itself: the commands that still prompt there are the high-risk ones. Building it exposed that the shipped rehearsal read credential paths and the unscrubbed environment before approval (fixed concurrently in `aeb229fd`; this change adds the sandbox's own `denyRead` masks) and that `"rehearse"` in settings was dropped by the loader (fixed here). `test/settings-keys.test.mjs` shows a repository cannot turn it on.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |
@@ -90,7 +95,6 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### Immediate improvements
 
-- Rehearsal on by default where the OS sandbox is already enabled with `sandbox.autoAllowCommands`, since that setting already accepts running isolated commands without a prompt.
 - Add rehearsal and fault scenarios to the reliability lab (a command whose rehearsal and real run differ).
 
 ### Ready for implementation
