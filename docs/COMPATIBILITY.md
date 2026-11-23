@@ -128,6 +128,26 @@ these tools use: `OASIS_PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `PLUGIN_ROOT`;
 `COPILOT_PLUGIN_DATA`; and `OASIS_PROJECT_DIR` and `CLAUDE_PROJECT_DIR`.
 `${NAME}` works for each in manifests, commands and skills.
 
+### Exporting a plugin for other agents
+
+`oasis plugin export [PATH] --out DIR` writes the plugin at PATH (an OASIS or
+Claude Code plugin, or anything in the table above) into one folder that
+OASIS, Claude Code, Codex, Gemini CLI, Cursor and Copilot CLI can each
+install. `--to codex,gemini` limits the targets. Skills and MCP servers are
+shared; each target gets its own manifest:
+
+| Target | Manifest | Translated | Left out |
+| --- | --- | --- | --- |
+| OASIS / Claude Code | `.claude-plugin/plugin.json` | Nothing | Nothing |
+| Codex | `.codex-plugin/plugin.json` | Commands and agents as skills (in `codex/skills/`) | Options |
+| Gemini CLI | `gemini-extension.json` | Commands as TOML (`$ARGUMENTS` as `{{args}}`), hooks under Gemini event and tool names, options as settings, `${CLAUDE_PLUGIN_ROOT}` as `${extensionPath}` | Hook events with no Gemini counterpart |
+| Cursor | `.cursor-plugin/plugin.json`, `mcp.json` | Options as variables | Hooks |
+| Copilot CLI | `.plugin/plugin.json` | Agents as `*.agent.md` (in `copilot/agents/`) | Hooks, options |
+
+Claude Code hooks move to `hooks/claude-hooks.json` so agents that read
+`hooks/hooks.json` in their own format do not misread them. The command prints
+what each target runs as is, what it translated and what it left out.
+
 ## Cursor Cloud Agents API
 
 Scripts written for Cursor's [Cloud Agents API](https://cursor.com/docs/cloud-agent/api/endpoints) can call `oasis web` instead: it answers the v1 and v0 REST endpoints (agents, runs, follow-ups, steering, cancel, the run event stream, usage, conversation and signed `statusChange` webhooks) with the OASIS web access key as the API key, and runs the agent in the folder the server serves with any configured model. Cursor's Cloud Agents also clone repositories, create branches and open pull requests on hosted machines. OASIS does none of that: those fields return a 4xx naming the field. Details are in [Interfaces](INTERFACES.md#cursor-cloud-agents-api).
