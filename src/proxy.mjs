@@ -91,9 +91,13 @@ export function proxyForUrl(target, env = process.env) {
   return proxy;
 }
 
+// A literal "%" in a proxy password ("p%ss") is not a valid escape; use it as
+// written instead of throwing on every request (and leaking the proxy socket).
+const lenientDecode = (value) => { try { return decodeURIComponent(value); } catch { return value; } };
+
 function proxyAuthorization(proxy) {
   if (!proxy.username && !proxy.password) return null;
-  return 'Basic ' + Buffer.from(decodeURIComponent(proxy.username) + ':' + decodeURIComponent(proxy.password)).toString('base64');
+  return 'Basic ' + Buffer.from(lenientDecode(proxy.username) + ':' + lenientDecode(proxy.password)).toString('base64');
 }
 
 /** Describe a proxy without its credentials (for doctor and logs). */
