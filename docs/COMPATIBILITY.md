@@ -155,6 +155,13 @@ events and replies, so they run as they are; a matcher naming Codex's
 `apply_patch` also matches `Edit`, `Write` and `MultiEdit`, `commandWindows` is
 used on Windows, and `[features] hooks = false` turns a layer off. Codex-only
 events (`PreModelRequest`, `PostModelRequest`, `Interrupt`) are skipped.
+Factory Droid hooks (`~/.factory/hooks.json` and, in a trusted workspace,
+`.factory/hooks.json` or the legacy `.factory/hooks/hooks.json`; the `"hooks"`
+of the matching `settings.json` when there is no `hooks.json`) use Claude
+Code's events and replies too. Matchers naming Droid tools are read as the
+OASIS ones (`Execute` is `Bash`, `Create` is `Write`, `ApplyPatch` the edit
+tools, `FetchUrl` is `WebFetch`), the hook sees Droid's tool names on stdin,
+and `FACTORY_PROJECT_DIR` (and `DROID_PLUGIN_ROOT` for a plugin) is set.
 OpenCode plugins run too: JavaScript or TypeScript files (and package folders)
 in `.opencode/plugins/` or `.opencode/plugin/` (trusted workspace) and in
 `~/.config/opencode/plugins/`, plus the npm plugins listed under `"plugin"` in

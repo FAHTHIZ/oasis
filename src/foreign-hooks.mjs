@@ -10,6 +10,10 @@
 // OpenCode plugins (.opencode/plugins/*.{js,ts}, ~/.config/opencode/plugins,
 // and npm plugins listed under "plugin" in opencode.json) are JavaScript modules; each runs through opencode-plugin-host.mjs on the
 // events it handles.
+// Factory Droid hooks (~/.factory/hooks.json, .factory/hooks.json, the legacy
+// .factory/hooks/hooks.json, or the "hooks" of settings.json when there is no
+// hooks.json) use Claude Code's events; matchers are read with OASIS tool
+// names and the hook sees Droid's (Execute, Create) on stdin.
 // They are read in place and run through the protocol bridge
 // (hook-bridges.mjs): each hook is filed under the Claude Code event that
 // fires at the same moment, gets the stdin fields its own tool sends, and its
@@ -25,7 +29,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { parse as parseJsonc } from 'jsonc-parser';
 import { bridgeHookDoc } from './hook-bridges.mjs';
-import { splitHookEvents } from './plugin-convert.mjs';
+import { factoryHookGroups, splitHookEvents } from './plugin-convert.mjs';
 
 const MAX_FILE = 256 * 1024;
 
@@ -100,6 +104,21 @@ async function codexLayer(dir, scope, platform) {
   if (json && json.hooks) out.push({ scope, file: path.join(dir, 'hooks.json'), protocol: 'codex', ...codexHooks(json, platform) });
   if (config && config.hooks && typeof config.hooks === 'object') out.push({ scope, file: path.join(dir, 'config.toml'), protocol: 'codex', ...codexHooks({ hooks: config.hooks }, platform) });
   return out.filter((item) => Object.keys(item.hooks).length || item.dropped.length);
+}
+
+// One Factory folder (~/.factory or .factory): hooks.json, else the legacy
+// hooks/hooks.json, else the "hooks" key of settings.json.
+async function factoryLayer(dir, scope) {
+  for (const file of [path.join(dir, 'hooks.json'), path.join(dir, 'hooks', 'hooks.json'), path.join(dir, 'settings.json')]) {
+    if (!existsSync(file)) continue;
+    const doc = await readJson(file);
+    if (!doc) continue;
+    const settings = file.endsWith('settings.json');
+    if (settings && !doc.hooks) continue;
+    const { hooks, dropped } = factoryHookGroups(settings ? doc.hooks : doc);
+    return Object.keys(hooks).length || dropped.length ? [{ scope, file, protocol: 'factory', hooks, dropped }] : [];
+  }
+  return [];
 }
 
 // Plugin files in an OpenCode plugin folder: direct .js/.mjs/.ts files and
@@ -246,6 +265,9 @@ export async function loadForeignHooks(root, { env = process.env, home = env.HOM
   }
   const out = [...await codexLayer(codexHome, 'user', platform)];
   if (root && trusted && path.resolve(root, '.codex') !== codexHome) out.push(...await codexLayer(path.resolve(root, '.codex'), 'project', platform));
+  const factoryHome = path.join(home, '.factory');
+  out.push(...await factoryLayer(factoryHome, 'user'));
+  if (root && trusted && path.resolve(root, '.factory') !== factoryHome) out.push(...await factoryLayer(path.resolve(root, '.factory'), 'project'));
   const openCodeHome = path.join(env.XDG_CONFIG_HOME ? path.resolve(env.XDG_CONFIG_HOME) : path.join(home, '.config'), 'opencode');
   const pluginDirs = [...['plugins', 'plugin'].map((name) => ({ scope: 'user', dir: path.join(openCodeHome, name) })),
     ...(root && trusted ? ['plugins', 'plugin'].map((name) => ({ scope: 'project', dir: path.join(path.resolve(root), '.opencode', name) })) : [])];
