@@ -14,7 +14,7 @@ import { priceFor, estimateCostUsd, recordBudgetSpend } from './pricing.mjs';
 import { hasImages, toChatMessagesWithImages, imagesUnsupportedError, withoutImages } from './images.mjs';
 import { resolveModelAlias, isModelAlias, applyModelOverride, fastModeRequest } from './model-aliases.mjs';
 import { readProviderStream, uniqueToolCallIds } from './provider-stream.mjs';
-import { openAIEndpoint, responsesEndpoint, anthropicEndpoint, toResponsesRequest, toAnthropicRequest, chatCompletionTool } from './provider-requests.mjs';
+import { openAIEndpoint, responsesEndpoint, anthropicEndpoint, toResponsesRequest, toAnthropicRequest, chatCompletionTool, withChatContent } from './provider-requests.mjs';
 import { debugLog, debugEnabled } from './debug-log.mjs';
 import { TOOL_DEFINITIONS } from './tools.mjs';
 import { recordContextAnchor } from './context.mjs';
@@ -540,7 +540,7 @@ async function requestCompletionRawInner(session, options = {}) {
     if (explicitChatLimit) outputLimit = explicitChatLimit;
     // Endpoints that drop `tools` get them described in the prompt instead (see prompt-tools.mjs).
     const promptTools = availableTools.length > 0 && promptToolCalling(config, providerEnv);
-    const chatMessages = withProviderExtraContent(hasImages(sentMessages) ? toChatMessagesWithImages(sentMessages) : sentMessages, config.baseURL, config.model);
+    const chatMessages = withChatContent(withProviderExtraContent(hasImages(sentMessages) ? toChatMessagesWithImages(sentMessages) : sentMessages, config.baseURL, config.model));
     bodyObject = {
       model: config.model,
       ...(explicitChatLimit ? { max_tokens: explicitChatLimit } : {}),

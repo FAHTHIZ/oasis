@@ -171,11 +171,12 @@ export function readsLikeInstructions(text) {
 }
 
 // "I need to create this function", "Next, I'll run the tests", "Let me fix that:".
+// A file name in the step ("writing notes/actions.json") does not end the sentence.
 export function announcesNextStep(text) {
   const reply = String(text || '').trim();
   if (!reply || reply.length > 1500) return false;
   if (/\b(?:done|completed|finished|all set|passes|passed|is now|has been|have been)\b/i.test(reply.slice(-300)) && !/\b(?:i need to|next)\b/i.test(reply.slice(-300))) return false;
-  return /(?:^|[.!\n]\s*)(?:i need to|i will|i'll|i’ll|let me|next,? i|now i|i should|i am going to|i'm going to|i’m going to|i must)\b[^.!?\n]*[.:]?\s*$/i.test(reply) || /:\s*$/.test(reply);
+  return /(?:^|[.!\n]\s*)(?:i need to|i will|i'll|i’ll|let me|next,? i|now i|i should|i am going to|i'm going to|i’m going to|i must)\b(?:[^.!?\n]|\.(?=\w))*[.:]?\s*$/i.test(reply) || /:\s*$/.test(reply);
 }
 
 // gpt-oss and other terse models announce a step as a bare imperative

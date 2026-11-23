@@ -19,6 +19,25 @@ export function anthropicEndpoint(baseURL) {
   return base + '/v1/messages';
 }
 
+/**
+ * Chat Completions requires content on an assistant message that has no tool
+ * calls; Ollama answers null with HTTP 400 "invalid message content type:
+ * <nil>", and since the history is replayed every later request in the
+ * session fails the same way. An empty reply is sent as an empty string.
+ */
+export function withChatContent(messages) {
+  let changed = false;
+  const out = messages.map((message) => {
+    if (message && message.role === 'assistant' && message.content == null && !(Array.isArray(message.tool_calls) && message.tool_calls.length)) {
+      changed = true;
+      const { tool_calls: _drop, ...rest } = message;
+      return { ...rest, content: '' };
+    }
+    return message;
+  });
+  return changed ? out : messages;
+}
+
 function parseToolInput(raw) {
   try {
     const value = typeof raw === 'string' ? JSON.parse(raw) : raw;
