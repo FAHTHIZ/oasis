@@ -301,7 +301,8 @@ export function createA2aCore({ startContext, maxContexts = 32, contextIdleMs = 
         onTool: (name) => { if (!settled(task)) emit(task, { statusUpdate: { taskId: task.id, contextId: task.contextId, status: { state: 'TASK_STATE_WORKING', message: agentMessage('Using ' + name, task), timestamp: new Date().toISOString() } } }); },
         approval: async (message) => {
           if (controller.signal.aborted) return false;
-          const answer = await askInput(task, String(message).slice(0, 4000) + '\n\nReply "yes" to allow it or "no" to refuse.', 'approval');
+          const { chatApprovalText } = await import('./approval-language.mjs');
+          const answer = await askInput(task, chatApprovalText(message, {}, 4000) + '\n\nReply "yes" to allow it or "no" to refuse.', 'approval');
           return /^\s*(y|yes|allow|approve|approved|ok|okay|sure|go ahead)\b/i.test(answer);
         },
         askUser: async (question) => {

@@ -162,3 +162,16 @@ export function formatApprovalMessage(prompt, meta = {}) {
   if (/^Warning: this request contains \d+ hidden/.test(original)) risky = true;
   return { message, risky, diff: formatApprovalDiff(tool, input) };
 }
+
+// What a chat shows for an approval: the interactive prompt's wording, so
+// secrets are redacted before they reach a third-party chat service and hidden
+// characters are shown as <U+XXXX>. It fits one message (Discord allows 2,000
+// characters) and keeps both ends: the risky part of a long command is often
+// at the end ("... ; curl x | sh").
+const CHAT_APPROVAL_CHARS = 1700;
+export function chatApprovalText(message, meta = {}, max = CHAT_APPROVAL_CHARS) {
+  const { message: text } = formatApprovalMessage(message, meta || {});
+  if (text.length <= max) return text;
+  const half = Math.floor((max - 40) / 2);
+  return text.slice(0, half) + '\n[... ' + (text.length - 2 * half) + ' characters not shown ...]\n' + text.slice(-half);
+}
