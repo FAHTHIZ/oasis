@@ -30,6 +30,7 @@ performance claim.
 | Permission modes (`plan` … `dont-ask`), shell-command risk analysis, protected paths, secret scanning | Stable | [Security model](SECURITY.md) |
 | Verification gate: a reply that claims success without a reviewed diff or a passing check is sent back | Stable | [Architecture](ARCHITECTURE.md) |
 | `mutation_probe`: revert check and planted bugs on the changed lines show whether the tests catch a regression in the change | Unreleased | [User guide](USER-GUIDE.md#do-the-tests-catch-a-bug-in-the-change) |
+| `bisect_regression`: `git bisect` in an isolated worktree finds the first commit that broke a check, with endpoint checks and skip support | Unreleased | [User guide](USER-GUIDE.md#which-commit-broke-it) |
 | Evidence checks for research (cite only fetched pages) and analysis (numbers must come from code that ran) | Stable | [Agent network](AGENT-NETWORK.md#evidence-and-contracts) |
 | Sessions, resume, fork, export (`/export`, HTML and Markdown) | Stable | [Terminal guide](TERMINAL.md) |
 | Memory across sessions, `session_search`, `/learning` skill proposals | Released, lightly tested | [Extending OASIS](EXTENDING.md) |
