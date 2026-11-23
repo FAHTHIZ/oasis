@@ -121,6 +121,8 @@ export const BUILTIN_COMMANDS = {
   flaky: 'Rerun a check to tell a real failure from a flaky one (/flaky [RUNS] [check command])',
   mutate: 'Plant small bugs in the changed lines to see whether the tests catch them (/mutate [test command])',
   minimize: 'Shrink a failing input file to a minimal reproduction (/minimize FILE check command)',
+  localize: 'Rank the lines most likely to hold a bug from failing and passing tests (/localize [test runner] [-- tests...])',
+  hunt: 'Evidence-first bug hunt: confirm the failure is real, find where it came from, fix it with a regression test, and prove the test catches it (/hunt CHECK [--good REVISION])',
   map: 'Show a ranked map of files and their top-level symbols (/map [dir] [symbol|file ...] [--add])',
   web: 'Fetch a public web page as text and add it to the conversation (/web URL [--show])',
   'security-review': 'Security review of pending changes (/security-review [PR number | git ref])',
@@ -317,7 +319,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const groups = [
         { title: 'Core workflows', commands: ['init', 'plan', 'fix', 'diagnose', 'review', 'rollback'] },
         { title: 'Getting started', commands: ['help', 'setup', 'status', 'doctor', 'context', 'cost', 'undo'] },
-        { title: 'Working', commands: ['clear', 'compact', 'test', 'diagnostics', 'bisect', 'flaky', 'mutate', 'minimize', 'audit', 'tasks', 'workflows', 'learning', 'commit', 'pr', 'goal', 'recipe', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export', 'presets'] },
+        { title: 'Working', commands: ['clear', 'compact', 'test', 'diagnostics', 'hunt', 'bisect', 'flaky', 'localize', 'minimize', 'mutate', 'audit', 'tasks', 'workflows', 'learning', 'commit', 'pr', 'goal', 'recipe', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export', 'presets'] },
         { title: 'Safety', commands: ['permissions', 'mode', 'sandbox', 'security-review', 'undo', 'rewind', 'purge', 'logout', 'doctor'] },
         { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'avoid', 'comments', 'output-style', 'personality', 'honcho', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome', 'computer'] }
       ];
@@ -886,6 +888,33 @@ export async function runBuiltinCommand(name, argument, state) {
         'Call mutation_probe with it. Report whether the tests fail with the change reverted, the mutation score, and every surviving mutant with file:line and what it changed.',
         'For each survivor, name the assertion that would kill it. Do not edit files unless I ask; then add those assertions to the tests, never to the source, and rerun mutation_probe to confirm.'
       ].join(' ') };
+    }
+    case 'localize': {
+      const text = String(argument || '').trim();
+      const [runner, tests] = text.includes(' -- ') ? text.split(' -- ', 2).map((part) => part.trim()) : [text, ''];
+      return { output: 'Ranking the lines most likely to hold the bug' + (runner ? ' with `' + runner + '`' : '') + '.', prompt: [
+        runner ? 'Use this test runner: ' + JSON.stringify(runner) + '.' : 'Pick the test runner command for this project (for example "node --test" or "pytest -q") and say which one you chose.',
+        tests ? 'Run these tests: ' + JSON.stringify(tests.split(/\s+/).filter(Boolean)) + '.' : 'Pick the failing tests from this conversation (ask me if none failed) plus the passing tests that exercise the same code, ideally five or more passing ones; say which you chose.',
+        'Call localize_fault with them. Read the top-ranked locations, confirm in the code which one is wrong and why the failing test catches it, and report that with file:line. Treat scores as leads, not proof. Do not edit files unless I ask.'
+      ].join(' ') };
+    }
+    case 'hunt': {
+      const text = String(argument || '').trim();
+      const goodMatch = /(?:^|\s)--good[= ](\S+)/.exec(text);
+      const good = goodMatch ? goodMatch[1] : '';
+      const check = text.replace(/(?:^|\s)--good[= ]\S+/, '').trim();
+      if (!check) return { output: 'Usage: /hunt CHECK [--good REVISION], for example /hunt npm test -- test/cart.test.mjs --good v2.3.0. CHECK is the command that fails. Nothing has run.' };
+      return { output: 'Bug hunt for `' + check + '`' + (good ? ' (it passed at ' + good + ')' : '') + ': confirm, locate, fix, prove.', prompt: [
+        'Hunt the bug behind this failing check: ' + JSON.stringify(check) + '. Work evidence-first, in this order, and report each step\'s result before the next:',
+        '1. Confirm. Call flaky_check on the check (runs 4). If it is flaky, stop and report the causes; do not change product code to make a flaky test pass. If it passes every time, say so and stop.',
+        '2. Locate. ' + (good
+          ? 'It passed at ' + JSON.stringify(good) + ': call bisect_regression with good ' + JSON.stringify(good) + ' and read the first bad commit\'s diff.'
+          : 'If you know a tag or commit where it passed (check git tags and the log), call bisect_regression with it and read the first bad commit\'s diff.') + ' If the failure is a wrong result without a useful stack trace, call localize_fault with the failing tests and the passing tests nearest them. If it is triggered by a large input file, call minimize_repro on that file. Use the tools that fit; skip the others and say why.',
+        '3. Explain. State the root cause with file:line and the evidence for it, separating confirmed facts from inferences.',
+        '4. Fix. Write a regression test that fails now, then the smallest source change that fixes the cause (not the symptom). Do not weaken or delete existing tests.',
+        '5. Prove. Rerun the check and the new test. Then call mutation_probe with the narrowest test command for the fix; if the tests still pass with the fix reverted, or a mutant on the fixed lines survives, strengthen the test.',
+        'Finish with: the cause, the commit that introduced it if found, the fix, the regression test, and the exact checks that ran with their results.'
+      ].join('\n') };
     }
     case 'minimize': {
       const [file, ...rest] = String(argument || '').trim().split(/\s+/).filter(Boolean);

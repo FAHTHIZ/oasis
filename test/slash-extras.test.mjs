@@ -120,3 +120,17 @@ test('/bisect, /flaky, /mutate and /minimize hand the right tool and arguments t
   const minimize = await runBuiltinCommand('minimize', 'data/big.json node parse.mjs data/big.json', state);
   assert.match(minimize.prompt, /minimize_repro with file "data\/big\.json" and command "node parse\.mjs data\/big\.json"/);
 });
+
+test('/localize and /hunt chain the evidence tools', async () => {
+  const state = { root: process.cwd(), env: process.env, sessionOptions: {} };
+  const localize = await runBuiltinCommand('localize', 'node --test -- test/a.test.mjs test/b.test.mjs', state);
+  assert.match(localize.prompt, /"node --test"/);
+  assert.match(localize.prompt, /\["test\/a\.test\.mjs","test\/b\.test\.mjs"\]/);
+  assert.match(localize.prompt, /localize_fault/);
+  assert.match((await runBuiltinCommand('hunt', '', state)).output, /Usage: \/hunt CHECK/);
+  const hunt = await runBuiltinCommand('hunt', 'npm test -- test/cart.test.mjs --good v2.3.0', state);
+  assert.match(hunt.prompt, /"npm test -- test\/cart\.test\.mjs"/);
+  assert.match(hunt.prompt, /bisect_regression with good "v2\.3\.0"/);
+  for (const tool of ['flaky_check', 'localize_fault', 'minimize_repro', 'mutation_probe']) assert.match(hunt.prompt, new RegExp(tool));
+  assert.match(hunt.prompt, /Do not weaken or delete existing tests/);
+});

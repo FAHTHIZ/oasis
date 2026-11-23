@@ -241,7 +241,11 @@ When a bug only shows on a big input, such as a 3,000-line fixture or a log that
 
 ### Where is the bug?
 
-A test that fails with a wrong number, and no exception, does not say which line computed it. With some failing and some passing tests, the agent can call `localize_fault` with the test runner and a list of tests (or you can ask: "localize the bug behind test/ca.test.mjs, using the other shipping tests"). Each test runs on its own with line coverage, and lines that the failing tests run but the passing ones do not rank highest (the Ochiai score from spectrum-based fault localization). You get the top `file:line` ranges with their code. Node projects need no setup; Python needs `coverage` installed. More passing tests that exercise nearby code sharpen the ranking, and a high score is a lead to confirm in the code, not proof.
+A test that fails with a wrong number, and no exception, does not say which line computed it. With some failing and some passing tests, the agent can call `localize_fault` with the test runner and a list of tests (or you can ask: "localize the bug behind test/ca.test.mjs, using the other shipping tests"). Each test runs on its own with line coverage, and lines that the failing tests run but the passing ones do not rank highest (the Ochiai score from spectrum-based fault localization). You get the top `file:line` ranges with their code. Node projects need no setup; Python needs `coverage` installed. More passing tests that exercise nearby code sharpen the ranking, and a high score is a lead to confirm in the code, not proof. `/localize [runner] [-- tests]` starts it directly.
+
+### Hunt a bug end to end
+
+`/hunt CHECK [--good REVISION]` runs the tools above in order on one failing check: `flaky_check` first (a flaky test stops the hunt with its causes, so no product code is changed to make it green), then `bisect_regression` when a passing revision is known, `localize_fault` for a wrong result without a useful stack trace, or `minimize_repro` for a large input. The agent states the cause with `file:line`, writes a regression test that fails before the fix, makes the smallest fix, and finishes with `mutation_probe` to show the new test would catch the bug coming back.
 
 `/export review.html` writes a standalone review page; `/export notes.md` writes Markdown. A model saying "done" is not a test result; see [Benchmark methodology](development/BENCHMARKS.md).
 
