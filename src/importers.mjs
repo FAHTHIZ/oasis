@@ -133,7 +133,7 @@ async function listFiles(dir, ext, depth = 3, prefix = []) {
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'item';
 const serverName = (s) => { const n = String(s).toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^[^a-z]+/, '').slice(0, 40); return n || 'server'; };
 
-function normalizeServer(raw, flavor) {
+export function normalizeServer(raw, flavor) {
   if (!raw || typeof raw !== 'object') return null;
   if (raw.enabled === false || raw.disabled === true) return null;
   const out = {};
