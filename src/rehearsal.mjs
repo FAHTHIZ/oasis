@@ -93,6 +93,22 @@ function tail(text) {
  * changes: { created, modified, deleted, touched }, git, readOnlyWrites, ms, keep }.
  * Call disposeRehearsal(result) when done, or applyRehearsal(result) to keep its changes.
  */
+// Git settings passed in the environment (GIT_CONFIG_KEY_n / GIT_CONFIG_VALUE_n) can carry
+// credentials: a proxy URL with a password, an Authorization header, a token in an
+// insteadOf URL. An unapproved rehearsal has no network to use them on, but could write
+// them into file names the model sees, so those entries are neutralised.
+const CREDENTIAL_VALUE = /:\/\/[^/\s@]+@|\bauthorization\s*:|\bbearer\s+\S|\b(?:token|password|secret)\s*[=:]/i;
+export function withoutGitConfigCredentials(env) {
+  const out = { ...env };
+  const count = /^\d{1,3}$/.test(String(out.GIT_CONFIG_COUNT || '')) ? Number(out.GIT_CONFIG_COUNT) : 0;
+  for (let i = 0; i < count; i++) {
+    const key = 'GIT_CONFIG_KEY_' + i;
+    const value = 'GIT_CONFIG_VALUE_' + i;
+    if (CREDENTIAL_VALUE.test(String(out[value] || '')) || CREDENTIAL_VALUE.test(String(out[key] || '')) || /extraheader$/i.test(String(out[key] || ''))) { out[key] = 'oasis.rehearsalRedacted'; out[value] = ''; }
+  }
+  return out;
+}
+
 export async function rehearseCommand({ root, command, args = [], env = process.env, timeoutMs = REHEARSAL_TIMEOUT_MS, cwd = root, network = false, masked = [] } = {}) {
   const started = Date.now();
   const support = rehearsalSupport();
@@ -144,7 +160,7 @@ export async function rehearseCommand({ root, command, args = [], env = process.
   if (!network) bwrapArgs.push('--unshare-net');
   bwrapArgs.push('--chdir', path.resolve(cwd), '--', process.execPath, LISTER, upper, lower, path.join(report, 'merged.json'), '--', ...(filter ? [filter] : []), command, ...args);
   const { scrubEnvironment } = await import('./tools.mjs');
-  const child = spawn('bwrap', bwrapArgs, { env: { ...scrubEnvironment(env), OASIS_REHEARSAL: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn('bwrap', bwrapArgs, { env: { ...withoutGitConfigCredentials(scrubEnvironment(env)), OASIS_REHEARSAL: '1', ...(network ? {} : { OASIS_REHEARSAL_RECORD_NET: '1' }) }, stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (chunk) => { stdout = tail(stdout + chunk); });
@@ -159,9 +175,11 @@ export async function rehearseCommand({ root, command, args = [], env = process.
   let merged = {};
   let commandExit = exitCode;
   let reported = false;
+  let contacts = [];
   try {
     const parsed = JSON.parse(await readFile(path.join(report, 'merged.json'), 'utf8'));
     merged = parsed.dirs || {};
+    if (Array.isArray(parsed.contacts)) contacts = parsed.contacts.filter((item) => item && typeof item.host === 'string' && /^[a-z0-9.:_-]{1,253}$/.test(item.host)).slice(0, 20).map((item) => ({ host: item.host, port: Number(item.port) || 0 }));
     if (Number.isInteger(parsed.exitCode)) commandExit = parsed.exitCode;
     reported = true;
   } catch {}
@@ -175,6 +193,7 @@ export async function rehearseCommand({ root, command, args = [], env = process.
     git: changes.git,
     readOnlyWrites: /read-only file system/i.test(stderr),
     network: Boolean(network),
+    contacts,
     ms: Date.now() - started,
     keep: { state, upper, lower, entries: changes.entries, digests: changes.digests }
   };
@@ -337,6 +356,8 @@ function listed(label, items) {
 }
 
 /** Lines for an approval prompt. */
+const contactLabel = (item) => (item.host.includes(':') ? '[' + item.host + ']' : item.host) + (item.port && item.port !== 443 && item.port !== 80 ? ':' + item.port : '');
+
 export function formatRehearsal(result) {
   if (!result) return '';
   if (result.status === 'unavailable') return '';
@@ -350,6 +371,7 @@ export function formatRehearsal(result) {
     + (none ? '\n  It changed no files in the workspace.' : listed('would create', created) + listed('would modify', modified) + listed('would delete', deleted))
     + (result.git ? '\n  It also changed ' + result.git + ' path(s) inside .git.' : '')
     + (result.readOnlyWrites ? '\n  It tried to write outside the workspace (refused in the rehearsal; the real run may succeed there).' : '')
+    + (result.contacts && result.contacts.length ? '\n  It tried to reach ' + result.contacts.slice(0, 8).map(contactLabel).join(', ') + (result.contacts.length > 8 ? ', ...' : '') + ' (refused: nothing was sent).' : '')
     + (result.status === 'failed' && !result.network ? '\n  It failed; it may need the network, which the rehearsal does not have.' : '');
 }
 
@@ -357,7 +379,7 @@ export function formatRehearsal(result) {
 export function publicRehearsal(result) {
   if (!result || result.status === 'unavailable') return null;
   const cap = (items) => items.slice(0, MAX_LISTED);
-  return { status: result.status, exitCode: result.exitCode, ms: result.ms, created: cap(result.changes.created), modified: cap(result.changes.modified), deleted: cap(result.changes.deleted), ...(result.git ? { gitPaths: result.git } : {}), ...(result.readOnlyWrites ? { wroteOutsideWorkspace: true } : {}) };
+  return { status: result.status, exitCode: result.exitCode, ms: result.ms, created: cap(result.changes.created), modified: cap(result.changes.modified), deleted: cap(result.changes.deleted), ...(result.git ? { gitPaths: result.git } : {}), ...(result.readOnlyWrites ? { wroteOutsideWorkspace: true } : {}), ...(result.contacts && result.contacts.length ? { contacted: result.contacts.slice(0, MAX_LISTED).map(contactLabel) } : {}) };
 }
 
 /**
@@ -389,7 +411,8 @@ export function rehearsalDivergence(result, observed) {
  */
 export function rehearsalApplicable(result) {
   if (!result || result.status !== 'ok' || result.exitCode !== 0 || !result.keep) return false;
-  if (result.readOnlyWrites || result.git) return false;
+  // A command that wanted the network may have produced something different without it.
+  if (result.readOnlyWrites || result.git || (result.contacts && result.contacts.length)) return false;
   const { created, modified, deleted } = result.changes;
   return created.length + modified.length + deleted.length > 0;
 }

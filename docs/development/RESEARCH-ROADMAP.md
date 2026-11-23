@@ -117,6 +117,11 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - Commit: see `git log -- src/receipts.mjs` ("Record rehearsal outcomes in receipts").
 - Each rehearsed command's evidence event carries `rehearsal` (applied, matched, diverged plus `unrehearsed`, incomplete); it is saved with the session and signed in the chain, and verification adds a `rehearsals` line. Tests: `test/receipts.test.mjs` (outcomes, verification line, a forged outcome detected as tampering) and `test/rehearsal.test.mjs` (a real applied-then-matched pair through the agent).
 
+### Servers a rehearsal tried to reach
+
+- Commit: see `git log -- src/rehearsal-lister.mjs` ("Show which servers a rehearsed command tried to reach").
+- A refusing HTTP proxy on the rehearsal's loopback records CONNECT and absolute-URI targets; proxy variables, `PIP_PROXY`, `NODE_USE_ENV_PROXY` and git's `http.proxy` point at it. 6 of 6 common clients reported correctly in this sandbox, local servers unaffected, about 6 ms overhead. Building it showed that git settings in the environment carried a proxy password into rehearsals; those are now removed. Tests in `test/rehearsal.test.mjs`.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |
@@ -126,6 +131,7 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 | Universal work certificates | `receipts.mjs` already signs verifiable receipts (Ed25519, evidence chain, replay). | Not duplicated; the provenance work above extends the same idea to releases. |
 | Capability passports | `capability-router.mjs` routes task classes to models from measured eval reports; `calibration.mjs` measures trust in stated confidence. | Not duplicated. |
 | WASI plugin runtime | `node:wasi` is documented as not a security sandbox ([Node.js WASI](https://nodejs.org/docs/latest/api/wasi.html)); OASIS already isolates workflow code in `workflow-sandbox.mjs` and commands in bubblewrap/Seatbelt. | Rejected as specified: a WASI runtime on `node:wasi` would add a boundary that is not one. |
+| Effect-aware scheduling | Running independent edit calls of one reply in parallel saves about 14 ms per 10 edits (20.6 ms sequential, 6.1 ms parallel, `edit_file` on 10 files), against model turns measured in seconds; parallel commands would break per-command effect attribution, rehearsal divergence and the safety snapshot. | Rejected: no measurable advantage for the risk. |
 | Context compiler | `context-window.mjs`, `local-context.mjs`, compaction and the repo map cover budgeted context today. | Deferred until a measurable gap is shown (see below). |
 
 ## Roadmap
@@ -141,8 +147,7 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 ### Experimental
 
 - Cross-session claim store: let claims settled in one session (with evidence) answer questions in the next, invalidated by file hashes. Acceptance: fewer repeated checks in multi-session evals with no stale answers.
-- Effect-aware scheduling: run tool calls in parallel when their rehearsed or predicted effect sets are disjoint. Acceptance: wall-clock reduction on parallel-tool evals with zero conflicting writes.
 
 ### Long term
 
-- Network effect rehearsal through a recording proxy, so a rehearsal can show which hosts a command would contact and what it would send.
+- Record direct socket and DNS attempts in rehearsals (seccomp user notification or a fake resolver), for clients that ignore proxy variables.
