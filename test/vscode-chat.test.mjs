@@ -13,12 +13,6 @@ const require = createRequire(import.meta.url);
 const { OasisChatProcess, translateEvent, splitCommand } = require('../ide/vscode/src/chat-process.js');
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.mjs');
 
-async function tmp(t) {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-chat-'));
-  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
-  return dir;
-}
-
 function collect(proc) {
   const events = [];
   const waiters = [];
