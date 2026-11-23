@@ -33,6 +33,7 @@ export { parseFrontMatter };
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
+import { vscodeUserPromptDirs } from './vscode-paths.mjs';
 
 // Claude Code reads agent files of any size; 64 KiB dropped larger ones silently.
 const MAX_AGENT_FILE = 1024 * 1024;
@@ -444,7 +445,12 @@ function agentDirectories(root, env) {
       { dir: path.join(opencodeHome, 'agents'), source: 'user', flavor: 'opencode' },
       // Kilo Code's current agents use OpenCode's format.
       { dir: path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'kilo', 'agent'), source: 'user', flavor: 'opencode', label: 'Kilo Code' },
-      { dir: path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'kilo', 'agents'), source: 'user', flavor: 'opencode', label: 'Kilo Code' }
+      { dir: path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'kilo', 'agents'), source: 'user', flavor: 'opencode', label: 'Kilo Code' },
+      // VS Code user-level custom agents and chat modes live with its prompt files.
+      ...vscodeUserPromptDirs(env, home).flatMap((dir) => [
+        { dir, source: 'user', flavor: 'vscode', suffix: '.chatmode.md' },
+        { dir, source: 'user', flavor: 'vscode', suffix: '.agent.md' }
+      ])
     ] : []),
     { dir: path.join(home, '.claude', 'agents'), source: 'user' },
     // Google Antigravity layouts: <name>.md or <name>/agent.md.

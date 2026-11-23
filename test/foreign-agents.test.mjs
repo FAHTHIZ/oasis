@@ -101,7 +101,9 @@ test('VS Code / Copilot custom agents and chat modes become OASIS agents', async
     '.github/agents/planner.agent.md': '---\nname: Plan Mode\ndescription: Plans before coding\ntools: [search, "search/codebase", fetch, "github/*"]\nmodel: GPT-5\n---\nPlan the work; do not edit files.',
     '.github/agents/fixer.agent.md': '---\ndescription: Fixes bugs\ntools: [edit, runCommands]\ninfer: false\n---\nFix it.',
     '.github/agents/notes.md': '---\ndescription: not an agent file\n---\nx',
-    '.github/chatmodes/explain.chatmode.md': '---\ndescription: Explains code\n---\nExplain.'
+    '.github/chatmodes/explain.chatmode.md': '---\ndescription: Explains code\n---\nExplain.',
+    '~/.config/Code/User/prompts/mine.agent.md': '---\ndescription: My own agent\n---\nMine.',
+    '~/.config/Code/User/prompts/standup.prompt.md': 'A prompt file, not an agent.'
   });
   const agents = await loadAgentDefinitions(root, { env });
   assert.equal(agents.planner.origin, 'VS Code');
@@ -112,5 +114,7 @@ test('VS Code / Copilot custom agents and chat modes become OASIS agents', async
   assert.equal(agents.fixer.subagentAllowed, false);
   assert.ok(agents.explain);
   assert.ok(!agents.notes);
+  if (process.platform === 'linux') assert.equal(agents.mine.origin, 'VS Code');
+  assert.ok(!agents.standup);
   assert.doesNotMatch(taskToolDefinition(agents).function.description, /- fixer:/);
 });
