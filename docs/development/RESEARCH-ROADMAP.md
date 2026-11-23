@@ -131,10 +131,20 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - Acceptance: the decoy is found as written, reversed, percent-, hex-, base64- and base64url-encoded at all three byte alignments and split by separators; ordinary arguments, the variable's name alone and long base64 blobs are not flagged; end to end, a command prints the decoy and a following `fetch_url` that carries it base64url-encoded is refused and holds the turn; a repository's settings cannot turn it off; under a live bubblewrap sandbox, `cat` of the masked `~/.aws/credentials` and `~/.ssh/id_ed25519` returns the decoys (never the real files), and both carry a detectable value. `test/canary-credentials.test.mjs`, `test/settings-keys.test.mjs`.
 - Limit: a single command that pipes the environment to the network never passes the value through OASIS; the sandbox network controls cover that.
 
+### Egress provenance
+
+- Commit: see `git log -- src/egress-provenance.mjs` ("Ask before sending composed data to a host only outside content named"). Docs: [Security model](../SECURITY.md#controls-oasis-enforces).
+- Problem: the injection hold only starts when outside text reads like instructions. A page that says, in plain data terms, "debug logs are collected at https://logs.example-cdn.net/upload?d=" passes it, and the agent may then put file contents in that URL. Blocking every query string after a web read would stop ordinary research.
+- Prior art: CaMeL attaches capabilities to every value and refuses flows of private data to sinks the user's query did not authorize ([Debenedetti et al., arXiv 2503.18813](https://arxiv.org/abs/2503.18813)); FIDES tracks confidentiality and integrity labels through an agent planner and enforces flow policies deterministically ([Costa et al., arXiv 2505.23643](https://arxiv.org/abs/2505.23643), [microsoft/fides](https://github.com/microsoft/fides)). Both require a custom interpreter or planner that the agent's actions are rewritten into.
+- New: provenance is tracked for destinations, not values, inside an ordinary tool-calling loop with no planner rewrite. A host earns trust from the user's own messages and settings, never from outside content; outside content only marks a host as "named by untrusted text". The check separates navigation from writing: the exact link, or values seen in the content, pass, while values the agent composed (token-like or long) to such a host wait for a person.
+- Acceptance: a page names a collector; a following `curl -d` with a composed value to it asks a person and is not run when declined; the exact link, a plain search phrase, short values, unrelated hosts and hosts the user named or allowed pass; a 100+ character value is caught. `test/egress-provenance.test.mjs`.
+- Limit: data in a URL path, or to a host the user also named, is not caught; the canary credential and secret shield still cover credentials.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |
 | --- | --- | --- |
+| DNS record in rehearsals | A fake resolver on 127.0.0.1:53 inside unprivileged bubblewrap fails with EACCES even with `--cap-add CAP_NET_BIND_SERVICE` (also with `--unshare-user`, and with uid 0 plus that capability); it only bound with `--unshare-user --uid 0 --cap-add ALL`, which would run rehearsed commands as root. `resolv.conf` cannot name another port. | Not built; the proxy recorder covers HTTP clients. |
 | Neuron mesh | `src/neuron-network.mjs`, `neuron-ledger.mjs`, `neuron-scheduler.mjs` already project the agent registry as a lineage graph with a scheduler and approvals. | Not duplicated. |
 | Truth graph | `claim-ledger.mjs`, `evidence-ledger.mjs`, `claim-check.mjs`, `knowledge-board.mjs` and `calibration.mjs` already record claims, their footing and settled confidence. | Not duplicated. A cross-session claim store is listed below as experimental. |
 | Universal work certificates | `receipts.mjs` already signs verifiable receipts (Ed25519, evidence chain, replay). | Not duplicated; the provenance work above extends the same idea to releases. |

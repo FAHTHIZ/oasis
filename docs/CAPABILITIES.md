@@ -28,6 +28,7 @@ performance claim.
 | --- | --- | --- |
 | Agent turn loop, tool calls, streaming, compaction, checkpoints and `/rewind` | Stable | [Architecture](ARCHITECTURE.md) |
 | Permission modes (`plan` … `dont-ask`), shell-command risk analysis, protected paths, secret scanning | Stable | [Security model](SECURITY.md) |
+| Egress provenance: composed data sent to a host that only outside content named waits for a person; following links passes | Unreleased | [Security model](SECURITY.md#controls-oasis-enforces) |
 | Canary credential: a decoy token in every command environment; a tool call that carries it (also encoded) is refused and holds the turn's outbound actions | Unreleased | [Security model](SECURITY.md#controls-oasis-enforces) |
 | Verification gate: a reply that claims success without a reviewed diff or a passing check is sent back | Stable | [Architecture](ARCHITECTURE.md) |
 | `mutation_probe`: revert check and planted bugs on the changed lines show whether the tests catch a regression in the change | Released, lightly tested | [User guide](USER-GUIDE.md#do-the-tests-catch-a-bug-in-the-change) |
