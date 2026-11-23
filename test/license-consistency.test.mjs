@@ -15,7 +15,7 @@ test('the canonical project license and package declaration agree on Apache-2.0'
     assert.ok(license.includes(section), 'LICENSE must include ' + section);
   }
   assert.equal(pkg.license, 'Apache-2.0');
-  assert.match(pkg.version, /^1\.\d+\.\d+$/);
+  assert.match(pkg.version, /^(?:0|[2-9]\d*)\.\d+\.\d+$/);
   assert.equal(pkg.oasisRelease?.channel, 'stable');
   assert.equal(pkg.oasisRelease?.stableTag, 'v' + pkg.version);
 });

@@ -1,7 +1,7 @@
 # Live run: non-code eval tasks on a free hosted endpoint (23 November 2026)
 
 - Command: `OASIS_CONFIG_DIR=… node src/cli.mjs eval --task archive-old-logs,conflicting-sources-answer,meeting-action-items,project-schedule-plan,release-notes-brief,remove-hardcoded-key,sales-region-report --trials 1 --timeout-seconds 1200 --yes`
-- OASIS 1.8.0 at `b7c3daab`, Node 22.21.1, Linux x64.
+- OASIS 0.9.0 (published as 1.8.0) at `b7c3daab`, Node 22.21.1, Linux x64.
 - Endpoint: `https://text.pollinations.ai/openai` (OpenAI-compatible, anonymous tier, no key; OASIS needs a non-empty `apiKey`, so it was set to `anonymous`). Model alias `openai`, which the service serves with gpt-oss-20b at the time of the run. `maxSteps` 40, `maxCommandSeconds` 120, permission mode auto. No charge, so cost is reported as unknown.
 - One trial per task: a smoke test, not a score. The service is shared and its model behind an alias can change, so a rerun may differ. Raw file: [results.json](results.json).
 

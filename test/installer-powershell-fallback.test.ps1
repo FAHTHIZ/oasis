@@ -53,6 +53,12 @@ $stableTag = Resolve-OasisStableTagFromList -Tags $stableTags
 Assert-Equal 'v9.10.0' $stableTag.Tag 'newest stable semantic version tag'
 Assert-Equal '2222222222222222222222222222222222222222' $stableTag.CommitSha 'stable tag commit SHA'
 
+$renumbered = @(
+    [pscustomobject]@{ name = 'v1.8.0'; commit = [pscustomobject]@{ sha = '6666666666666666666666666666666666666666' } },
+    [pscustomobject]@{ name = 'v0.10.0'; commit = [pscustomobject]@{ sha = '7777777777777777777777777777777777777777' } }
+)
+Assert-Equal 'v0.10.0' (Resolve-OasisStableTagFromList -Tags $renumbered).Tag 'a retired 1.x tag sorts as its 0.x number'
+
 $rejected = $false
 try {
     Resolve-OasisStableTagFromList -Tags @([pscustomobject]@{ name = 'v10.0.0-beta.1'; commit = [pscustomobject]@{ sha = '3333333333333333333333333333333333333333' } })

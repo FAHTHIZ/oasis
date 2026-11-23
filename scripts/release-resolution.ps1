@@ -27,6 +27,16 @@ function Resolve-OasisReleaseTagFromResponse {
     return $tagMatch.Groups[1].Value
 }
 
+# OASIS 1.0.0-1.8.0 were renumbered to 0.1.0-0.9.0 (docs/RELEASES.md#version-numbers);
+# the 1.x major is retired, so a 1.x tag sorts as its 0.x equivalent.
+function ConvertTo-OasisLineageVersion {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$Text)
+    $parsed = [version]::Parse($Text)
+    if ($parsed.Major -eq 1) { return [version]::new(0, $parsed.Minor + 1, $parsed.Build) }
+    return $parsed
+}
+
 function Resolve-OasisStableTagFromList {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][object[]]$Tags)
@@ -42,7 +52,7 @@ function Resolve-OasisStableTagFromList {
                 [pscustomobject]@{
                     Tag = $name
                     CommitSha = $sha
-                    Version = [version]::Parse($name.Substring(1))
+                    Version = ConvertTo-OasisLineageVersion -Text $name.Substring(1)
                 }
             }
         }
@@ -80,7 +90,7 @@ function Resolve-OasisStableTagFromGitOutput {
                 [pscustomobject]@{
                     Tag = $tag
                     CommitSha = $sha
-                    Version = [version]::Parse($tag.Substring(1))
+                    Version = ConvertTo-OasisLineageVersion -Text $tag.Substring(1)
                 }
             }
         }
