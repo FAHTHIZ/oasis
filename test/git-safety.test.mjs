@@ -125,3 +125,16 @@ test('deletions are only matched in command position', () => {
   assert.match(discardingGitCommand('ls | xargs rm'), /^rm/, 'xargs feeds the paths');
   assert.equal(discardingGitCommand('grep -r rm src'), '');
 });
+
+test('edits made while the approval prompt is open are in the safety snapshot', async (t) => {
+  const root = await repo(t);
+  await writeFile(path.join(root, 'a.txt'), 'first edit\n');
+  const approval = async () => { await writeFile(path.join(root, 'a.txt'), 'edit made during the prompt\n'); await writeFile(path.join(root, 'new.txt'), 'new during the prompt\n'); return true; };
+  const result = await executeTool('run_command', { command: 'git', args: ['checkout', '.'] }, { root, autoApprove: false, approval, env: { ...process.env, OASIS_REHEARSE: '0' } });
+  assert.equal(result.exitCode, 0);
+  assert.equal(await readFile(path.join(root, 'a.txt'), 'utf8'), 'committed\n');
+  const ref = result.safetySnapshot.match(/refs\/oasis\/safety\/[^\s`]+/)[0];
+  assert.equal(git(root, 'show', ref + ':a.txt'), 'edit made during the prompt');
+  assert.equal(git(root, 'show', ref + ':new.txt'), 'new during the prompt');
+  assert.equal(git(root, 'for-each-ref', 'refs/oasis/safety/').split('\n').filter(Boolean).length, 1, 'the stale snapshot was dropped');
+});
