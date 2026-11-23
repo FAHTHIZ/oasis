@@ -137,6 +137,21 @@ function recursiveRead(name, args) {
     return { paths: explicitPattern ? operands : operands.slice(1), hidden, followLinks };
   }
   if (name === 'diff' && args.some((arg) => arg === '--recursive' || shortFlag(arg, 'r'))) return { paths: operands, hidden: true, followLinks: true };
+  // Listings that follow symlinks (find -L, ls -RL, du -L, tree -l) walk into a
+  // linked folder outside the workspace, which `ls linked` alone would ask for.
+  if (name === 'find' && args.some((arg) => arg === '-L' || arg === '-follow')) {
+    const paths = [];
+    for (const arg of args) {
+      if (/^-[HLP]$/.test(arg)) continue;
+      if (arg.startsWith('-') || arg === '(' || arg === '!') break;
+      paths.push(arg);
+    }
+    return { paths, hidden: true, followLinks: true };
+  }
+  if (name === 'ls' && args.some((arg) => arg === '--recursive' || shortFlag(arg, 'R')) &&
+      args.some((arg) => arg === '--dereference' || shortFlag(arg, 'L'))) return { paths: operands, hidden: true, followLinks: true };
+  if (name === 'du' && args.some((arg) => arg === '--dereference' || shortFlag(arg, 'L'))) return { paths: operands, hidden: true, followLinks: true };
+  if (name === 'tree' && args.some((arg) => shortFlag(arg, 'l'))) return { paths: operands, hidden: true, followLinks: true };
   return null;
 }
 

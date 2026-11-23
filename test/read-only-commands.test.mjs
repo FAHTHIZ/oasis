@@ -255,3 +255,19 @@ test('jq filters that print the environment ask, like printenv', () => {
   assert.equal(readOnlyShellLine('jq -r .name package.json', { root }), true);
   assert.equal(readOnlyShellLine('jq .environment package.json', { root }), true);
 });
+
+test('listings that follow symlinks out of the workspace ask', { skip: process.platform === 'win32' }, async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-ro-follow-'));
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'oasis-ro-outside-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(outside, { recursive: true, force: true })]));
+  await writeFile(path.join(outside, 'private.txt'), 'x');
+  await writeFile(path.join(root, 'a.txt'), 'a');
+  await symlink(outside, path.join(root, 'linked'));
+  for (const line of ['find -L . -name private.txt', 'find . -follow -name x', 'ls -RL', 'ls -R -L .', 'du -L', 'du --dereference .', 'tree -l']) {
+    assert.equal(readOnlyShellLine(line, { root }), false, line + ' follows linked/ outside the workspace');
+  }
+  // Without following links they stay inside and still need no prompt.
+  for (const line of ['find . -name a.txt', 'ls -R', 'du -sh .']) assert.equal(readOnlyShellLine(line, { root }), true, line);
+  await rm(path.join(root, 'linked'));
+  assert.equal(readOnlyShellLine('find -L . -name a.txt', { root }), true, 'no symlink, nothing to follow');
+});

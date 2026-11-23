@@ -39,6 +39,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Fixed
 
+- Read-only commands that follow symlinks (`find -L`, `find -follow`, `ls -RL`, `du -L`, `tree -l`) ran without asking and listed folders a workspace symlink pointed to outside the workspace, although `ls linked` alone asks. They now ask when the tree they walk contains a symlink.
 - `oasis eval` printed the self-assessment line from the wrong code path, so OASIS runs never showed it; and a run that ended with an empty reply counted as making no claim rather than reporting failure.
 - Command risk analysis no longer misses destructive or code-running commands spelled with extra options. `git --git-dir .git push --force`, `git --work-tree . reset --hard` and `git -C . branch -D main` hid their subcommand behind a value-taking global option and ran under `--yes` without a prompt; they are now blocked or high-risk like the plain forms. Clustered short flags (`node -pe`, `perl -le`, `ruby -we`) are recognised as inline code, and `curl -sSo FILE`, `curl --output=FILE`, `curl -dDATA`, `curl --request DELETE`, `wget -qO FILE` and `wget --post-data=...` count as writing files or sending data.
 - Replies in the same 16 languages are checked like English ones. A reply that says a failed edit was made ("notes.txt আপডেট করেছি", "已更新 notes.txt") is sent back, one that admits the failure or says the tests were not run gets no duplicate note, and the claim ledger splits sentences at 。！？ and । instead of reading a whole Chinese or Bengali paragraph as one claim.
