@@ -148,6 +148,15 @@ Claude Code hooks move to `hooks/claude-hooks.json` so agents that read
 `hooks/hooks.json` in their own format do not misread them. The command prints
 what each target runs as is, what it translated and what it left out.
 
+Pointed at a marketplace (a folder with `.claude-plugin/marketplace.json`, or a
+Codex, Cursor or Copilot one), the command exports every plugin the marketplace
+keeps in the repository into `plugins/NAME/` and writes a marketplace file for
+each agent: `.claude-plugin/marketplace.json`, `.agents/plugins/marketplace.json`
+(Codex), `.cursor-plugin/marketplace.json` and `.github/plugin/marketplace.json`
+(Copilot CLI). Gemini CLI has no marketplace file; each plugin folder is an
+extension on its own. Plugins listed from other repositories are named in the
+report and left as they are.
+
 ## Cursor Cloud Agents API
 
 Scripts written for Cursor's [Cloud Agents API](https://cursor.com/docs/cloud-agent/api/endpoints) can call `oasis web` instead: it answers the v1 and v0 REST endpoints (agents, runs, follow-ups, steering, cancel, the run event stream, usage, conversation and signed `statusChange` webhooks) with the OASIS web access key as the API key, and runs the agent in the folder the server serves with any configured model. Cursor's Cloud Agents also clone repositories, create branches and open pull requests on hosted machines. OASIS does none of that: those fields return a 4xx naming the field. Details are in [Interfaces](INTERFACES.md#cursor-cloud-agents-api).
