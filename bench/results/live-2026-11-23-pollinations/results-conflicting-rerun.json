@@ -1,0 +1,296 @@
+{
+  "label": "OASIS 1.8.0 (openai)",
+  "sourceRevision": "684ca16f8a936b1cc89a6a4a9e83fa4d7282a598",
+  "runId": "2026-11-23T09-10-21-785Z-16386",
+  "startedAt": "2026-11-23T09:10:21.785Z",
+  "completedAt": "2026-11-23T09:23:10.664Z",
+  "taskCount": 1,
+  "taskIds": [
+    "conflicting-sources-answer"
+  ],
+  "trialsPerTask": 2,
+  "timeoutSeconds": 1200,
+  "runtime": {
+    "node": "v22.21.1",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "passRate": 0.5,
+  "passed": 1,
+  "failed": 1,
+  "medianTimeMs": 383925,
+  "totalCostUSD": null,
+  "costPerPassedTaskUSD": null,
+  "selfAssessment": {
+    "assessed": 2,
+    "notAssessed": 0,
+    "agreement": 1,
+    "successPrecision": null,
+    "overclaims": 0,
+    "underclaims": 0,
+    "truePositive": 0,
+    "trueNegative": 1,
+    "unsure": {
+      "passed": 1,
+      "failed": 0
+    },
+    "note": "OASIS verdicts recorded before the hidden verifier ran. Overclaim: OASIS said verified, the verifier failed it. Underclaim: OASIS said it failed, the verifier passed it."
+  },
+  "routing": {
+    "enabled": false
+  },
+  "provider": {
+    "model": "openai",
+    "protocol": "openai-compatible",
+    "baseURL": "https://text.pollinations.ai/openai",
+    "maxSteps": 40,
+    "maxOutputTokens": null
+  },
+  "pricing": {
+    "inputUsdPerMillionTokens": null,
+    "outputUsdPerMillionTokens": null,
+    "note": "Cost is a rough estimate from configured rates and does not distinguish cached tokens. Pass-rate differences under 10 percentage points are noisy with small task samples; run at least three trials per task when benchmarking."
+  },
+  "results": [
+    {
+      "taskId": "conflicting-sources-answer",
+      "taskFingerprint": "5ccd58a4ab7a28253f136663354e864cccef2e4460f2449d7f5d6e6fb61d56f9",
+      "category": "research-synthesis",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "failed",
+      "model": "openai",
+      "requestedModel": "openai",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openai",
+      "protocol": "openai-compatible",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "maxSteps": 40,
+      "maxOutputTokens": null,
+      "inputTokens": 40501,
+      "outputTokens": 715,
+      "totalTokens": 41216,
+      "costUSD": null,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS",
+      "wallTimeMs": 318711,
+      "finished": true,
+      "toolCalls": 6,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "sources/official-api-docs.md",
+          "resultChars": 300
+        },
+        {
+          "tool": "list_files",
+          "arg": "sources",
+          "resultChars": 160
+        },
+        {
+          "tool": "read_file",
+          "arg": "sources/blog-repost.md",
+          "resultChars": 275
+        },
+        {
+          "tool": "read_file",
+          "arg": "sources/forum-thread.md",
+          "resultChars": 315
+        },
+        {
+          "tool": "read_file",
+          "arg": "sources/press-release-2025.md",
+          "resultChars": 275
+        },
+        {
+          "tool": "write_file",
+          "arg": "answer.md",
+          "resultChars": 91
+        }
+      ],
+      "requestTokens": [
+        [
+          4624,
+          43
+        ],
+        [
+          4755,
+          32
+        ],
+        [
+          4831,
+          39
+        ],
+        [
+          4953,
+          10
+        ],
+        [
+          5097,
+          43
+        ],
+        [
+          5232,
+          43
+        ],
+        [
+          5356,
+          272
+        ],
+        [
+          5653,
+          233
+        ]
+      ],
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n\nAssertionError [ERR_ASSERTION]: has a Contradiction: paragraph\n    at file:///tmp/oasis-pinned/evals/tasks/conflicting-sources-answer/verify.mjs:8:8\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {\n  generatedMessage: false,\n  code: 'ERR_ASSERTION',\n  actual: '',\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n\nNode.js v22.21.1\n"
+      },
+      "changes": [
+        {
+          "path": "answer.md",
+          "status": "added",
+          "content": "# Current Acme API Rate Limit\n\nThe Acme API current rate limit per key is **1,200 requests per minute**.\n\n## Supporting source\n- `sources/official-api-docs.md`: “Each API key may make up to 1,200 requests per minute.”【1】\n\n## Contradiction\n- `sources/blog-repost.md` and `sources/press-release-2025.md` both say **600 requests per minute**. The press release is an older announcement and the blog repost merely repeats that figure; neither has been updated to reflect the change in the official docs, so they are not current.\n- `sources/forum-thread.md` mentions the 1,200‑request figure, confirming the current limit but also noting that the 600 figure was from the launch announcement.\n\nThe official API documentation is the authoritative source, and the forum thread references the same figure, indicating it is up‑to‑date. The older documents are outdated copies.\n\n---\n\n**Citations**\n\n1. `sources/official-api-docs.md` – rate‑limit statement\n"
+        }
+      ],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "rejected",
+        "claim": "failure"
+      }
+    },
+    {
+      "taskId": "conflicting-sources-answer",
+      "taskFingerprint": "5ccd58a4ab7a28253f136663354e864cccef2e4460f2449d7f5d6e6fb61d56f9",
+      "category": "research-synthesis",
+      "difficulty": "medium",
+      "trial": 2,
+      "status": "passed",
+      "model": "openai",
+      "requestedModel": "openai",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openai",
+      "protocol": "openai-compatible",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "maxSteps": 40,
+      "maxOutputTokens": null,
+      "inputTokens": 53578,
+      "outputTokens": 1630,
+      "totalTokens": 55208,
+      "costUSD": null,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS",
+      "wallTimeMs": 449139,
+      "finished": true,
+      "toolCalls": 8,
+      "trace": [
+        {
+          "tool": "glob_files",
+          "arg": "sources",
+          "resultChars": 170
+        },
+        {
+          "tool": "read_file",
+          "arg": "sources/official-api-docs.md",
+          "resultChars": 300
+        },
+        {
+          "tool": "read_file",
+          "arg": "sources/blog-repost.md",
+          "resultChars": 275
+        },
+        {
+          "tool": "read_file",
+          "arg": "sources/press-release-2025.md",
+          "resultChars": 275
+        },
+        {
+          "tool": "write_file",
+          "arg": "answer.md",
+          "resultChars": 91
+        },
+        {
+          "tool": "edit_file",
+          "arg": "answer.md",
+          "resultChars": 130
+        },
+        {
+          "tool": "read_file",
+          "arg": "sources/forum-thread.md",
+          "resultChars": 315
+        },
+        {
+          "tool": "edit_file",
+          "arg": "answer.md",
+          "resultChars": 130
+        }
+      ],
+      "requestTokens": [
+        [
+          4628,
+          43
+        ],
+        [
+          4706,
+          39
+        ],
+        [
+          4837,
+          39
+        ],
+        [
+          4959,
+          54
+        ],
+        [
+          5083,
+          278
+        ],
+        [
+          5334,
+          324
+        ],
+        [
+          5654,
+          311
+        ],
+        [
+          5936,
+          56
+        ],
+        [
+          6071,
+          279
+        ],
+        [
+          6370,
+          207
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "answer.md",
+          "status": "added",
+          "content": "Acme API rate limit per key is **1,200 requests per minute**.\n\n- **Sources supporting this figure**:\n  - `sources/official-api-docs.md`: “Each API key may make up to 1,200 requests per minute.”\n\nContradiction: The following sources state a different limit (600 requests per minute) and are not considered current:\n- `sources/blog-repost.md`: Repost of an older announcement claiming 600 requests per minute. It is a secondary source, essentially a copy of the press release.\n- `sources/press-release-2025.md`: Original press release from 2025 stating 600 requests per minute. This release predates the official API documentation update and thus reflects an earlier limit.\n- `sources/forum-thread.md`: Forum post noting users hit 429s at around 1,200 requests per minute, matching the docs.\n\nThese older references are superseded by the latest official documentation and should not be used to determine the current rate limit."
+        }
+      ],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "evidenced",
+        "claim": "unsure"
+      }
+    }
+  ]
+}

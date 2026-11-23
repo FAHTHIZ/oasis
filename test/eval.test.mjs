@@ -1150,6 +1150,7 @@ test('OASIS eval records a compact, redacted tool trace and per-request tokens f
       options.onToolResult({ name: 'read_file', call: call('read_file', { path: 'src/a.mjs' }), result: { content: 'x'.repeat(50) } });
       options.onUsage({ inputTokens: 160, outputTokens: 9 });
       options.onToolResult({ name: 'run_command', call: call('run_command', { command: 'node', args: ['--test', 'token=sk-abcdefghijklmnopqrstuvwx'] }), result: { exitCode: 1, stdout: 'ok 1\n', stderr: 'AssertionError: expected 2, got 3 (key sk-abcdefghijklmnopqrstuvwx)\n' } });
+      options.onActionNudge({ kind: 'task-contract' });
       return { finished: true, toolCalls: 2 };
     }
   });
@@ -1167,6 +1168,8 @@ test('OASIS eval records a compact, redacted tool trace and per-request tokens f
   assert.match(trial.trace[1].why, /AssertionError: expected 2, got 3/);
   assert.doesNotMatch(trial.trace[1].why, /sk-abcdef/);
   assert.equal(trial.trace[0].why, undefined);
+  // When the completion gate sent the answer back, and after which step.
+  assert.deepEqual(trial.nudges, [{ kind: 'task-contract', afterStep: 2 }]);
 });
 
 test('a CLI result marked cost_known: false is an unknown cost, not a free run', async () => {

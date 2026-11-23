@@ -37,3 +37,7 @@ The one failure showed a gap in the task contract, not only in the model: OASIS 
 - `cites_sources` accepts cited workspace files, not only URLs, and each cited file must have been read.
 
 An unmet criterion goes back to the model once before it may finish (`test/local-sources-criteria.test.mjs`).
+
+## Rerun of the failed task at `684ca16f`
+
+`conflicting-sources-answer`, two trials, same endpoint ([results-conflicting-rerun.json](results-conflicting-rerun.json)): 1/2 passed. Both trials read all four sources this time (one only after the new `sources_read` criterion sent it back for `sources/forum-thread.md`). The failing trial again wrote `## Contradiction` as a heading; the `opening` criterion caught it (OASIS's verdict was `rejected`, matching the verifier), but the model was never told. The eval trace does not keep reply text, so the reason is inferred, not observed: the gate allowed one round per turn, and the likeliest use of it is an earlier reply given before `answer.md` existed, which a missing file sends back. Each problem now gets its own round, two at most per turn (`test/task-contract-gate.test.mjs`). The passing trial was `evidenced`, not `verified`: its quoted line from the docs is a single-source claim.
