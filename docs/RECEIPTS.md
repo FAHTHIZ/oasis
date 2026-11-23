@@ -14,6 +14,8 @@ oasis -p "fix the failing date test" --receipt fix.receipt.json
 ```
 
 In an interactive session, `/receipt [FILE]` writes one for the session so far.
+For a session that is already saved, `oasis receipt create --session ID -o FILE`
+(or `--last` for the most recent one) writes it after the fact.
 If you give no file name, it writes `oasis-receipt-<time>.json` in the workspace.
 
 Headless JSON output reports the file under `receipt`, or the reason it could not
@@ -27,6 +29,7 @@ oasis receipt verify fix.receipt.json --replay   # also rerun the recorded check
 oasis receipt verify fix.receipt.json --trust ed25519:0123...   # pin the signer
 oasis receipt verify fix.receipt.json --json     # machine-readable verdict
 oasis receipt show fix.receipt.json              # one-screen summary
+oasis receipt create --last -o last.json          # receipt for the latest saved session
 oasis receipt key                                # this machine's signing key id
 ```
 
