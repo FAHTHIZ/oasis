@@ -587,7 +587,7 @@ function inlineCodeLoads(code, file, executable) {
   if (/^python/.test(executable) || executable === 'py') {
     // python -c "import parser" / "from pkg.parser import x" for pkg/parser.py.
     if (!/\.py$/i.test(file)) return false;
-    const dotted = file.replace(/\.py$/i, '').replace(/\//g, '.').replace(/\.__init__$/, '').replace(/[.]/g, '\\.');
+    const dotted = file.replace(/\.py$/i, '').replace(/\//g, '.').replace(/\.__init__$/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp('(?:^|[\\s;])(?:import|from)\\s+' + dotted + '(?:[\\s;,.]|$)').test(code);
   }
   return false;
