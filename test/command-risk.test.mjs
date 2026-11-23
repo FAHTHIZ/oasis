@@ -78,3 +78,43 @@ test('explicit inline-code classification remains intact', () => {
   assert.match(analyzeCommand('node', ['-e', 'process.exit(0)']).highRisk || '', /runs inline code/);
   assert.match(analyzeCommand('python3', ['-c', 'print(1)']).highRisk || '', /runs inline code/);
 });
+
+test('git global options with a separate value do not hide a destructive subcommand', () => {
+  for (const args of [
+    ['--git-dir', '.git', 'push', '--force'],
+    ['--work-tree', '.', 'push', '-f', 'origin', 'main'],
+    ['-C', '.', 'reset', '--hard'],
+    ['--namespace', 'x', 'clean', '-fdx'],
+    ['--git-dir', '.git', 'push', 'origin', '+main']
+  ]) {
+    assert.ok(analyzeCommand('git', args).blocked, 'git ' + args.join(' ') + ' must be blocked');
+  }
+  assert.match(analyzeCommand('git', ['-C', '.', 'branch', '-D', 'main']).highRisk || '', /force-deletes/);
+  assert.match(analyzeCommand('git', ['--git-dir', '.git', 'branch', '-dD', 'main']).highRisk || '', /force-deletes/);
+  assert.match(analyzeCommand('git', ['--work-tree', '.', 'checkout', '.']).highRisk || '', /discards/);
+  // A plain read after global options stays ordinary.
+  assert.equal(analyzeCommand('git', ['--git-dir', '.git', 'status']).highRisk, undefined);
+  assert.equal(analyzeCommand('git', ['--git-dir', '.git', 'status']).blocked, undefined);
+});
+
+test('clustered short flags that run inline code are high-risk', () => {
+  for (const [command, args] of [['node', ['-pe', 'x']], ['perl', ['-le', 'system(1)']], ['perl', ['-pie', 's/a/b/', 'f']], ['ruby', ['-we', 'x']], ['python3', ['-Bc', 'x']]]) {
+    assert.match(analyzeCommand(command, args).highRisk || '', /inline code/, command + ' ' + args.join(' '));
+  }
+  assert.equal(analyzeCommand('node', ['--trace-warnings', 'script.js']).highRisk, undefined);
+  assert.equal(analyzeCommand('perl', ['-w', 'script.pl']).highRisk, undefined);
+});
+
+test('curl and wget writes are high-risk however the flags are spelled', () => {
+  for (const [command, args] of [
+    ['curl', ['--output=out.bin', 'https://example.com']], ['curl', ['-sSo', 'out', 'https://example.com']],
+    ['curl', ['-oout', 'https://example.com']], ['curl', ['-dfoo', 'https://example.com']],
+    ['curl', ['--request', 'DELETE', 'https://example.com']], ['curl', ['-K', 'cfg']],
+    ['wget', ['-qO', 'out', 'https://example.com']], ['wget', ['--output-document=x', 'https://example.com']],
+    ['wget', ['--post-data=a', 'https://example.com']]
+  ]) {
+    assert.match(analyzeCommand(command, args).highRisk || '', /writes files or sends data/, command + ' ' + args.join(' '));
+  }
+  assert.equal(analyzeCommand('curl', ['-sSL', 'https://example.com']).highRisk, undefined);
+  assert.equal(analyzeCommand('wget', ['-q', 'https://example.com']).highRisk, undefined);
+});

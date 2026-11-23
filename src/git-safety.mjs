@@ -17,11 +17,26 @@ function tokens(segment) {
 }
 
 // Returns a short reason when argv (git subcommand + args) discards local work.
+// Git global options that take their value as the next argument (`git -C dir`,
+// `git --git-dir .git`). Skipping only -C/-c let `git --git-dir .git reset --hard`
+// and `git --work-tree . checkout .` hide their subcommand from safety checks.
+const GIT_GLOBAL_VALUE_OPTIONS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--super-prefix', '--list-cmds', '--attr-source', '--config-env']);
+
+// Index of the git subcommand in argv (after global options), or args.length.
+export function gitSubcommandIndex(args) {
+  const list = (args || []).map(String);
+  let index = 0;
+  while (index < list.length && list[index].startsWith('-')) {
+    if (list[index] === '--') return index + 1;
+    index += GIT_GLOBAL_VALUE_OPTIONS.has(list[index]) ? 2 : 1;
+  }
+  return index;
+}
+
 export function discardReason(args) {
   const list = (args || []).map(String);
-  // Skip global options such as -C dir / --git-dir=x to find the subcommand.
-  let index = 0;
-  while (index < list.length && list[index].startsWith('-')) index += (list[index] === '-C' || list[index] === '-c') ? 2 : 1;
+  // Skip global options such as -C dir / --git-dir x to find the subcommand.
+  const index = gitSubcommandIndex(list);
   const sub = list[index];
   const rest = list.slice(index + 1);
   const restOpts = new Set(rest.filter((arg) => arg.startsWith('-')));

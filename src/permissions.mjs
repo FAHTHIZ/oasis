@@ -8,7 +8,7 @@
 //   mcp_github                every tool from one MCP server (prefix), or an exact MCP tool name
 //   Bash(...), Edit(...), Write(...), Read(...), WebFetch(...), Grep, Glob are accepted aliases.
 // Precedence: deny > ask > allow > mode default.
-import { discardReason } from './git-safety.mjs';
+import { discardReason, gitSubcommandIndex } from './git-safety.mjs';
 import { containerHostAccess } from './container-risk.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -997,19 +997,21 @@ export function analyzeCommand(command, args = [], depth = 0) {
     return { ...result, highRisk: result.highRisk || ('runs another program through the ' + base + ' wrapper') };
   }
   if (base === 'git') {
-    const sub = args.find((a) => !String(a).startsWith('-'));
-    if ((sub === 'reset' && args.includes('--hard')) ||
-        (sub === 'clean' && args.some((a) => /^-[a-z]*f/i.test(a) || a === '--force')) ||
-        (sub === 'push' && args.some((a) => /force|^-[a-z]*f/i.test(a) || /^\+/.test(a)))) {
+    const subIndex = gitSubcommandIndex(args);
+    const sub = String(args[subIndex] || '').toLowerCase();
+    const subArgs = args.slice(subIndex + 1).map(String);
+    if ((sub === 'reset' && subArgs.includes('--hard')) ||
+        (sub === 'clean' && subArgs.some((a) => /^-[a-z]*f/i.test(a) || a === '--force')) ||
+        (sub === 'push' && subArgs.some((a) => /force|^-[a-z]*f/i.test(a) || /^\+/.test(a)))) {
       return { blocked: 'This destructive Git command is blocked by default.' };
     }
     if (args.some((a) => a === '-c' || a.startsWith('--config-env') || a.startsWith('--exec-path') || a.startsWith('--upload-pack') || a.startsWith('--receive-pack'))) {
       return { highRisk: 'git configuration overrides can execute arbitrary programs', effective: { base, args } };
     }
-    if (((sub === 'checkout' || sub === 'restore') && args.some((a) => a === '.' || a === '--' )) || discardReason(args.map(String))) {
+    if (((sub === 'checkout' || sub === 'restore') && subArgs.some((a) => a === '.' || a === '--' )) || discardReason(args.map(String))) {
       return { highRisk: 'discards uncommitted changes (OASIS saves a safety snapshot under refs/oasis/safety first)', effective: { base, args } };
     }
-    if (sub === 'branch' && args.some((a) => a === '-D')) return { highRisk: 'force-deletes a branch', effective: { base, args } };
+    if (sub === 'branch' && subArgs.some((a) => a === '-D' || (/^-[a-zA-Z]+$/.test(a) && a.includes('D')) || (a === '--delete' && subArgs.some((b) => b === '--force' || b === '-f')))) return { highRisk: 'force-deletes a branch', effective: { base, args } };
   }
   if (['npm', 'pnpm', 'yarn'].includes(base)) {
     const action = packageManagerAction(args);
@@ -1023,7 +1025,11 @@ export function analyzeCommand(command, args = [], depth = 0) {
   }
   const evalFlags = INTERPRETER_EVAL_FLAGS[base] || (/^python\d+(\.\d+)?$/.test(base) ? ['-c'] : null);
   if (evalFlags) {
-    const hit = args.find((a) => evalFlags.includes(String(a).split('=')[0]) || /^-[a-zA-Z]*c$/.test(a) && evalFlags.includes('-c'));
+    // Short flags combine: `node -pe code`, `perl -le code`, `ruby -we code`,
+    // `python3 -Bc code` all run inline code, as -e / -c alone does.
+    const shortLetters = evalFlags.filter((flag) => /^-[a-zA-Z]$/.test(flag)).map((flag) => flag[1]);
+    const hit = args.find((a) => evalFlags.includes(String(a).split('=')[0]) ||
+      (/^-[a-zA-Z]{2,}$/.test(String(a)) && [...String(a).slice(1)].some((letter) => shortLetters.includes(letter))));
     if (hit) return { highRisk: 'runs inline code (' + base + ' ' + hit + ')', effective: { base, args } };
   }
   // Inline evaluation is handled above. In addition, flag explicit remote
@@ -1071,7 +1077,16 @@ export function analyzeCommand(command, args = [], depth = 0) {
   if (['kill', 'killall', 'pkill', 'systemctl', 'launchctl', 'service', 'crontab', 'at', 'iptables', 'ufw', 'netsh', 'reg', 'scp', 'rsync', 'ssh'].includes(base)) {
     return { highRisk: base + ' affects processes, services, or remote systems', effective: { base, args } };
   }
-  if ((base === 'curl' || base === 'wget') && args.some((a) => /^(-o|-O|--output|--remote-name|-T|--upload-file|-d|--data|-F|--form|-X)$/.test(a) || /^--(data|form|upload)/.test(a))) {
+  if ((base === 'curl' || base === 'wget') && args.some((a) => {
+    const value = String(a);
+    // Long options, with or without =value: --output=x, --request PUT, --post-data ...
+    if (/^--(output|remote-name|upload|data|form|request|post-|method|body-|config|execute)/.test(value)) return true;
+    // Short options, alone or clustered with a value attached: -o, -sSo, -ofile, -dfoo, -qO.
+    const short = value.match(/^-([a-zA-Z][^=]*)$/);
+    if (!short) return false;
+    const writes = base === 'curl' ? 'oOTdFXK' : 'oOe';
+    return [...short[1]].some((letter) => writes.includes(letter)) && /^[a-zA-Z]/.test(short[1]);
+  })) {
     return { highRisk: base + ' writes files or sends data', effective: { base, args } };
   }
   return { effective: { base, args } };
