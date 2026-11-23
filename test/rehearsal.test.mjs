@@ -228,3 +228,96 @@ test('an approval rehearsal also hides the active sandbox\'s own masks (denyRead
   const shown = await rehearseForApproval({ root, line, settings: {}, sandbox });
   assert.deepEqual(shown.summary.created, ['s-'], 'rehearsal is on by default under bubblewrap and honors its masks');
 });
+
+async function script(root, name, body) {
+  await writeFile(path.join(root, name), '#!/bin/sh\n' + body + '\n', { mode: 0o755 });
+  return './' + name;
+}
+const rehearsalDirs = async () => (await readdir(os.tmpdir())).filter((name) => name.startsWith('oasis-rehearsal-')).length;
+
+test('"apply the rehearsal" lands exactly the rehearsed changes without a second run', { skip }, async (t) => {
+  const root = await workspace();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const count = await script(root, 'count.sh', 'echo run >> count.txt');
+  const before = await rehearsalDirs();
+  let offered = null;
+  const result = await runWorkspaceCommand(root, count, [], {
+    env: { ...process.env, OASIS_REHEARSE: '1' }, readOnlyCommands: false,
+    approval: async (text, high, extra) => { offered = extra; extra.choice.value = 'rehearsal'; return true; }
+  });
+  assert.equal(offered.rehearsal.offer, true);
+  assert.equal(result.appliedRehearsal, true);
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(result.rehearsal.created, ['count.txt']);
+  assert.equal(await readFile(path.join(root, 'count.txt'), 'utf8'), 'run\n', 'ran once (in the rehearsal), not twice');
+  assert.equal(await rehearsalDirs(), before, 'the kept rehearsal is cleaned up');
+});
+
+test('a plain yes still runs the command for real and discards the kept rehearsal', { skip }, async (t) => {
+  const root = await workspace();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const count = await script(root, 'count.sh', 'echo run >> count.txt');
+  const before = await rehearsalDirs();
+  const result = await runWorkspaceCommand(root, count, [], { env: { ...process.env, OASIS_REHEARSE: '1' }, readOnlyCommands: false, approval: async () => true });
+  assert.equal(result.appliedRehearsal, undefined);
+  assert.equal(await readFile(path.join(root, 'count.txt'), 'utf8'), 'run\n');
+  assert.equal(await rehearsalDirs(), before);
+});
+
+test('applying a rehearsal refuses when its files moved meanwhile, and runs nothing', { skip }, async (t) => {
+  const root = await workspace();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const more = await script(root, 'more.sh', 'echo more >> a.txt');
+  const result = await runWorkspaceCommand(root, more, [], {
+    env: { ...process.env, OASIS_REHEARSE: '1' }, readOnlyCommands: false,
+    approval: async (text, high, extra) => { await writeFile(path.join(root, 'a.txt'), 'edited meanwhile\n'); extra.choice.value = 'rehearsal'; return true; }
+  });
+  assert.match(result.error, /changed since the rehearsal: a\.txt[\s\S]*not run/);
+  assert.equal(await readFile(path.join(root, 'a.txt'), 'utf8'), 'edited meanwhile\n');
+});
+
+test('apply is not offered for a failing rehearsal, a no-op or a high-risk command', { skip }, async (t) => {
+  const root = await workspace();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const offers = [];
+  const options = { env: { ...process.env, OASIS_REHEARSE: '1' }, readOnlyCommands: false, approval: async (text, high, extra) => { offers.push(extra); return false; } };
+  await runWorkspaceCommand(root, await script(root, 'fail.sh', 'echo x > out.txt; exit 3'), [], options);
+  await runWorkspaceCommand(root, await script(root, 'noop.sh', 'true'), [], options);
+  await runWorkspaceCommand(root, 'python3', ['-c', 'open("p.txt","w").write("x")'], options);
+  assert.deepEqual(offers, [null, null, null]);
+});
+
+test('the agent turns an "apply the rehearsal" answer into a single landed change', { skip }, async (t) => {
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const root = await workspace();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_REHEARSE: '1', OASIS_CONFIG_DIR: path.join(root, '.cfg') };
+  const count = await script(root, 'count.sh', 'echo run >> count.txt');
+  const { config, requests } = await scriptedModel(t, [toolCall('c1', 'run_command', { command: count, args: [] }), { content: 'done' }]);
+  const session = await createSession({ root, config, env });
+  t.after(() => closeSession(session));
+  const metas = [];
+  await runAgentTurn(session, 'count', { env, approval: async (text, force, meta) => { metas.push(meta); return meta && meta.rehearsal && meta.rehearsal.offer ? 'rehearsal' : false; } });
+  assert.equal(metas.length, 1, JSON.stringify(requests[1] && requests[1].messages.filter((m) => m.role === 'tool')));
+  assert.equal(await readFile(path.join(root, 'count.txt'), 'utf8'), 'run\n');
+  const tool = requests[1].messages.find((message) => message.role === 'tool');
+  assert.match(tool.content, /"appliedRehearsal":true/);
+  assert.match(tool.content, /not run a second time/);
+});
+
+test('run_shell offers and applies the rehearsal the same way', { skip }, async (t) => {
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const root = await workspace();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_REHEARSE: '1', OASIS_CONFIG_DIR: path.join(root, '.cfg') };
+  const { config, requests } = await scriptedModel(t, [toolCall('s1', 'run_shell', { command: 'echo run >> count.txt && echo two >> other.txt' }), { content: 'done' }]);
+  const session = await createSession({ root, config, env });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'count', { env, approval: async (text, force, meta) => meta && meta.rehearsal && meta.rehearsal.offer ? 'rehearsal' : false });
+  const tool = requests[1].messages.find((message) => message.role === 'tool');
+  assert.match(tool.content, /"appliedRehearsal":true/, tool.content);
+  assert.equal(await readFile(path.join(root, 'count.txt'), 'utf8'), 'run\n');
+  assert.equal(await readFile(path.join(root, 'other.txt'), 'utf8'), 'two\n');
+});

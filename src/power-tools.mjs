@@ -677,10 +677,21 @@ async function runShell(root, args, context, flavor = 'sh') {
   let rehearsal = { text: '', summary: null };
   if (!autoAllowed && context.approval && flavor === 'sh' && process.platform === 'linux') {
     const { rehearseForApproval } = await import('./rehearsal.mjs');
-    rehearsal = await rehearseForApproval({ root, line: command, env: env0, settings: (context.session && context.session.settings) || {}, sandbox, injectionHold });
+    rehearsal = await rehearseForApproval({ root, line: command, env: env0, settings: (context.session && context.session.settings) || {}, sandbox, injectionHold, keep: !hardRisk && !appRisk });
   }
   if (!autoAllowed) {
-    const ok = context.approval && await context.approval((install.approvalNote ? install.approvalNote + '\n' : '') + (hardRisk ? 'HIGH RISK: this command ' + hardRisk + '. Auto-approval does not apply.\n' : '') + (appRisk ? 'Warning: ' + appRisk + (/^it appears to write|^it sets a git config/.test(appRisk) ? '.\n' : '. Unsaved work in those apps could be lost.\n') : '') + 'Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + (sandbox.ssh.display || sandbox.ssh.host) + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.') + rehearsal.text, !sandbox || Boolean(appRisk) || Boolean(hardRisk));
+    const choice = { value: null };
+    let ok;
+    try {
+    ok = context.approval && await context.approval((install.approvalNote ? install.approvalNote + '\n' : '') + (hardRisk ? 'HIGH RISK: this command ' + hardRisk + '. Auto-approval does not apply.\n' : '') + (appRisk ? 'Warning: ' + appRisk + (/^it appears to write|^it sets a git config/.test(appRisk) ? '.\n' : '. Unsaved work in those apps could be lost.\n') : '') + 'Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + (sandbox.ssh.display || sandbox.ssh.host) + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.') + rehearsal.text, !sandbox || Boolean(appRisk) || Boolean(hardRisk), rehearsal.kept ? { rehearsal: { offer: true }, choice } : null);
+    if (ok && choice.value === 'rehearsal' && rehearsal.kept) {
+      const { applyRehearsedRun } = await import('./tools.mjs');
+      const { args: _ignored, ...applied } = await applyRehearsedRun(rehearsal.kept, command, []);
+      return applied;
+    }
+    } finally {
+      if (rehearsal.kept) { const { disposeRehearsal } = await import('./rehearsal.mjs'); await disposeRehearsal(rehearsal.kept); }
+    }
     if (!ok) return { approved: false, command, ...(rehearsal.summary ? { rehearsal: rehearsal.summary } : {}), message: 'Shell command was not approved. ' + (rehearsal.summary ? 'It only ran as a rehearsal in a throwaway copy of the workspace, and nothing it did was kept.' : 'Nothing ran.') };
   }
   if (context.signal && context.signal.aborted) {
