@@ -142,3 +142,13 @@ test('a reworded command prompt keeps the rehearsal result and the high-risk rea
   const plain = formatApprovalMessage('Run this command in the workspace?\n  ls\nCommands can change project files.', { tool: 'run_command', input: { command: 'ls', args: [] } }).message;
   assert.doesNotMatch(plain, /Rehearsal|HIGH RISK/);
 });
+
+test('a reworded shell prompt keeps package warnings, app warnings and where the command runs', () => {
+  const shell = 'Package check: "reqeusts" is not a known package; did you mean "requests"?\nWarning: it may close Xcode. Unsaved work in those apps could be lost.\nRun this shell command in the workspace?\n  pip install reqeusts\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.';
+  const { message } = formatApprovalMessage(shell, { tool: 'run_shell', input: { command: 'pip install reqeusts' } });
+  assert.match(message, /\nPackage check: "reqeusts" is not a known package; did you mean "requests"\?/);
+  assert.match(message, /\nWarning: it may close Xcode\./);
+  assert.match(message, /\nThis runs through a real shell WITHOUT an OS sandbox/);
+  const ssh = formatApprovalMessage('Run this command in the workspace?\n  make deploy\nCommands can change project files.\nIt will run on build-box over SSH.', { tool: 'run_command', input: { command: 'make', args: ['deploy'] } }).message;
+  assert.match(ssh, /\nIt will run on build-box over SSH\./);
+});
