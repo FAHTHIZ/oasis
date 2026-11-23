@@ -318,7 +318,7 @@ export class McpHttpClient {
     if (this.closed) throw new Error('MCP server session closed.');
     if (!this.config.headersHelper) return {};
     if (this.helperHeaders && !refresh) return this.helperHeaders;
-    const env = { ...this.env, CLAUDE_CODE_MCP_SERVER_NAME: this.config.name, CLAUDE_CODE_MCP_SERVER_URL: this.config.url, ...(this.config.pluginRoot ? { CLAUDE_PLUGIN_ROOT: this.config.pluginRoot } : {}) };
+    const env = { ...this.env, CLAUDE_CODE_MCP_SERVER_NAME: this.config.name, CLAUDE_CODE_MCP_SERVER_URL: this.config.url, ...(this.config.pluginRoot ? { OASIS_PLUGIN_ROOT: this.config.pluginRoot, CLAUDE_PLUGIN_ROOT: this.config.pluginRoot, PLUGIN_ROOT: this.config.pluginRoot } : {}) };
     const output = await new Promise((resolve, reject) => {
       const child = spawn(this.config.headersHelper, {
         shell: true, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],

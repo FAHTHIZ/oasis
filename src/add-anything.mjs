@@ -307,11 +307,12 @@ async function skillNames(dir, { includeHidden = false } = {}) {
 
 // What is in this folder? Reads files only.
 export async function inspectAddonDirectory(dir) {
-  const marketplace = await readJsonFile(path.join(dir, '.claude-plugin', 'marketplace.json'));
+  const marketplace = (await readJsonFile(path.join(dir, '.oasis-plugin', 'marketplace.json'))) || (await readJsonFile(path.join(dir, '.claude-plugin', 'marketplace.json')));
   if (marketplace && Array.isArray(marketplace.plugins)) {
     return { type: 'marketplace', name: String(marketplace.name || ''), plugins: marketplace.plugins.filter((p) => p && p.name).map((p) => ({ name: String(p.name).toLowerCase(), description: String(p.description || '').slice(0, 160) })), skills: await skillNames(dir) };
   }
-  const claudePlugin = await readJsonFile(path.join(dir, '.claude-plugin', 'plugin.json'));
+  const oasisPlugin = await readJsonFile(path.join(dir, '.oasis-plugin', 'plugin.json'));
+  const claudePlugin = oasisPlugin && oasisPlugin.name ? oasisPlugin : await readJsonFile(path.join(dir, '.claude-plugin', 'plugin.json'));
   if (claudePlugin && claudePlugin.name) {
     const parts = [];
     for (const [label, test] of [['commands', /^commands\/.+\.md$/], ['agents', /^agents\/.+\.md$/], ['skills', /^skills\/[^/]+\/SKILL\.md$/i]]) {
@@ -320,13 +321,13 @@ export async function inspectAddonDirectory(dir) {
     }
     if (await exists(path.join(dir, 'hooks', 'hooks.json')) || claudePlugin.hooks) parts.push('hooks (they run commands on events)');
     if (await exists(path.join(dir, '.mcp.json')) || claudePlugin.mcpServers) parts.push('MCP servers (they run when sessions start)');
-    return { type: 'claude-plugin', name: String(claudePlugin.name).toLowerCase(), description: String(claudePlugin.description || '').slice(0, 200), contents: parts };
+    return { type: 'claude-plugin', label: oasisPlugin && oasisPlugin.name ? 'OASIS plugin' : 'Claude Code plugin', name: String(claudePlugin.name).toLowerCase(), description: String(claudePlugin.description || '').slice(0, 200), contents: parts };
   }
   const convert = await import('./plugin-convert.mjs');
   const foreign = await convert.detectForeignPlugin(dir);
-  if (foreign) return { type: 'foreign-plugin', format: foreign.format, label: foreign.label, name: foreign.name, description: foreign.description.slice(0, 200), contents: await convert.describeForeignPlugin(dir, foreign) };
-  const codexMarket = await convert.detectCodexMarketplace(dir);
-  if (codexMarket && codexMarket.plugins.length) return { type: 'codex-marketplace', name: codexMarket.name, plugins: codexMarket.plugins.map((p) => ({ name: p.name, description: p.description.slice(0, 160), path: p.path })) };
+  if (foreign) return { type: 'foreign-plugin', format: foreign.format, label: foreign.label, name: foreign.name, description: foreign.description.slice(0, 200), contents: await convert.describeForeignPlugin(dir, foreign), unsupported: await convert.unsupportedParts(dir, foreign) };
+  const foreignMarket = await convert.detectForeignMarketplace(dir);
+  if (foreignMarket && foreignMarket.plugins.length) return { type: 'codex-marketplace', format: foreignMarket.format, label: foreignMarket.label, name: foreignMarket.name, plugins: foreignMarket.plugins.map((p) => ({ name: p.name, description: p.description.slice(0, 160), path: p.path })) };
   const native = await readJsonFile(path.join(dir, 'plugin.json'));
   if (native && native.schemaVersion === 1 && native.name) {
     return { type: 'native-plugin', name: String(native.name), description: String(native.description || '').slice(0, 200), permissions: Array.isArray(native.permissions) ? native.permissions.map(String) : [] };
@@ -471,8 +472,8 @@ async function planAddon(raw, options = {}) {
       }) };
   }
   if (info.type === 'claude-plugin') {
-    return { ...base, kind: 'claude-plugin', title: 'Claude Code plugin ' + info.name,
-      summary: 'Install and enable the Claude Code plugin "' + info.name + '" from ' + repoLabel + (info.contents.length ? ': ' + info.contents.join(', ') : '') + '.',
+    return { ...base, kind: 'claude-plugin', title: (info.label || 'Claude Code plugin') + ' ' + info.name,
+      summary: 'Install and enable the ' + (info.label || 'Claude Code plugin') + ' "' + info.name + '" from ' + repoLabel + (info.contents.length ? ': ' + info.contents.join(', ') : '') + '.',
       run: () => done(async () => {
         const { addMarketplace, installPlugin } = await plugins();
         // A plugin repository without a marketplace: wrap it in a one-plugin marketplace.
@@ -497,14 +498,15 @@ async function planAddon(raw, options = {}) {
     if (!wanted) {
       await fetched.cleanup();
       const list = info.plugins.slice(0, 30).map((p) => p.name).join(', ');
-      if (source.pick) throw new Error('The Codex marketplace ' + info.name + ' has no plugin called ' + source.pick + '. Plugins: ' + list + '.');
-      return { kind: 'none', title: 'Codex marketplace ' + info.name, summary: '', run: async () => ({ installed: [], available: info.plugins.map((p) => p.name), message: 'The Codex marketplace ' + info.name + ' has ' + info.plugins.length + ' plugins: ' + list + '. Add one with ' + repoLabel + '#NAME.' }) };
+      if (source.pick) throw new Error('The ' + (info.label || 'Codex marketplace') + ' ' + info.name + ' has no plugin called ' + source.pick + '. Plugins: ' + list + '.');
+      return { kind: 'none', title: (info.label || 'Codex marketplace') + ' ' + info.name, summary: '', run: async () => ({ installed: [], available: info.plugins.map((p) => p.name), message: (info.label || 'Codex marketplace') + ' ' + info.name + ' has ' + info.plugins.length + ' plugins: ' + list + '. Add one with ' + repoLabel + '#NAME.' }) };
     }
     const convert = await import('./plugin-convert.mjs');
-    const foreign = (await convert.detectForeignPlugin(wanted.path)) || { format: 'codex', label: 'Codex plugin', name: wanted.name, description: wanted.description, version: '', manifest: { name: wanted.name } };
+    const foreign = (await convert.detectForeignPlugin(wanted.path)) || { format: info.format === 'cursor' ? 'cursor' : info.format === 'copilot' ? 'copilot' : 'codex', label: info.format === 'cursor' ? 'Cursor plugin' : info.format === 'copilot' ? 'Copilot CLI plugin' : 'Codex plugin', name: wanted.name, description: wanted.description, version: '', manifest: { name: wanted.name } };
     const contents = await convert.describeForeignPlugin(wanted.path, foreign);
+    const dropped = await convert.unsupportedParts(wanted.path, foreign);
     return { ...base, kind: 'foreign-plugin', title: foreign.label + ' ' + foreign.name,
-      summary: 'Install and enable the ' + foreign.label + ' "' + foreign.name + '" from ' + repoLabel + (contents.length ? ': ' + contents.join(', ') : '') + '. OASIS runs it as a Claude Code plugin.',
+      summary: 'Install and enable the ' + foreign.label + ' "' + foreign.name + '" from ' + repoLabel + (contents.length ? ': ' + contents.join(', ') : '') + '. OASIS runs it as one of its own plugins.' + (dropped.length ? ' Not carried over: ' + dropped.join('; ') + '.' : ''),
       run: () => done(() => installConverted(wanted.path, foreign, source, { env, root, scope, risky })) };
   }
   if (info.type === 'foreign-plugin') {
@@ -518,7 +520,7 @@ async function planAddon(raw, options = {}) {
     const contents = release ? await convert.describeForeignPlugin(release.dir, foreign) : info.contents;
     return { ...base, kind: 'foreign-plugin', title: info.label + ' ' + info.name,
       cleanup: async () => { await fetched.cleanup(); if (release) await release.cleanup(); },
-      summary: 'Install and enable the ' + info.label + ' "' + info.name + '" from ' + repoLabel + (release ? ' (release ' + release.tag + ', ' + release.asset + ')' : '') + (contents.length ? ': ' + contents.join(', ') : '') + '. OASIS runs it as a Claude Code plugin.',
+      summary: 'Install and enable the ' + info.label + ' "' + info.name + '" from ' + repoLabel + (release ? ' (release ' + release.tag + ', ' + release.asset + ')' : '') + (contents.length ? ': ' + contents.join(', ') : '') + '. OASIS runs it as one of its own plugins.' + (info.unsupported && info.unsupported.length ? ' Not carried over: ' + info.unsupported.join('; ') + '.' : ''),
       run: () => done(async () => { try { return await installConverted(from, foreign, source, { env, root, scope, risky }); } finally { if (release) await release.cleanup(); } }) };
   }
   if (info.type === 'native-plugin') {

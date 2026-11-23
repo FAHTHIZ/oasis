@@ -157,6 +157,15 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - New: trust on first use applied to instruction files at line granularity: only lines added since the last accepted version are judged, so a project's existing instructions never trip it and a harmless edit causes no prompt; the risky new lines are withheld, not the file. Pins live outside the repository, and acceptance needs a person at a terminal.
 - Acceptance: the risk patterns flag piping to a shell, data sent out, credential reads, concealment, disabling controls and injection phrasing, and pass ordinary instructions; a planted line is withheld across loads while a harmless new line in the same change loads; trust loads it; a moved line is not new; `loadMemory` withholds lines planted in AGENTS.md and a project rule. `test/instruction-pins.test.mjs`.
 
+### Universal plugins
+
+- Commit: see `git log -- test/universal-plugins.test.mjs`. Docs: [Compatibility](../COMPATIBILITY.md#plugins-from-other-agents).
+- Problem: OASIS ran Claude Code plugins and converted three other formats, but its plugin system was named after another product and Cursor, Copilot CLI and Kiro plugins, now the largest catalogs after Claude Code's, could not be installed. Converters that translate everything also hide what was lost.
+- Prior art: Copilot CLI reads several manifest locations including Claude Code's ([reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference)); the Agent Plugins open standard ([spec](https://github.com/agentplugins/agent-plugins-spec/blob/main/spec/1.0.0.md)); Cursor plugins ([reference](https://cursor.com/docs/reference/plugins)); Kiro powers ([docs](https://kiro.dev/docs/powers/create/)).
+- New: one runtime that reads eight formats, an OASIS-owned manifest that is a superset of Claude Code's, every variable spelling in one environment, and an approval that names the parts not carried over. Hooks with a foreign protocol are refused rather than guessed, because a wrong translation of a blocking hook fails open.
+- Acceptance: an `.oasis-plugin` plugin and marketplace install, validate and expand all variable names; a Cursor plugin's rule becomes a skill with its globs, its `mcp.json` server starts from the plugin folder, its Claude-named hook loads and its Cursor hook is reported; a Copilot plugin's `.github/mcp.json` and root skill load and its hook is reported; a Kiro power's guide and steering files become one skill; Cursor and Copilot marketplaces list and install a picked plugin and skip entries outside the repository. `test/universal-plugins.test.mjs`.
+- Limit: Cursor and Copilot hooks do not run. Remote (non-local) entries in Cursor and Copilot marketplaces are skipped.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |

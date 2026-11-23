@@ -4,7 +4,15 @@
 //   Gemini CLI extension   gemini-extension.json, commands/*.toml, GEMINI.md, skills/, agents/
 //   Codex plugin           .codex-plugin/plugin.json, .mcp.json, skills/, hooks/
 //   Agent Plugins          plugin.json ($schema agent-plugins.org), mcp.json, skills/
-//   Codex marketplace      .agents/plugins/marketplace.json (local plugin entries)
+//   Cursor plugin          .cursor-plugin/plugin.json, rules/*.mdc, mcp.json, skills/, agents/
+//   Copilot CLI plugin     .plugin/plugin.json, .github/plugin/plugin.json or a bare plugin.json
+//   Kiro power             POWER.md, mcp.json, steering/*.md
+//   Marketplaces           .agents/plugins/ (Codex), .cursor-plugin/, .github/plugin/, .plugin/
+//                          or a root marketplace.json (Copilot CLI and Agent Plugins)
+//
+// Parts a format has that OASIS cannot run faithfully (Cursor and Copilot hook
+// protocols, for example) are listed as not carried over instead of being
+// half-translated, so the approval summary says exactly what will run.
 //
 // The converted copy keeps every file; only manifests and Gemini's TOML commands
 // are rewritten, so a plugin's scripts and assets keep working.
@@ -44,23 +52,113 @@ export async function detectForeignPlugin(dir) {
   if (isAgentPluginsManifest(portable)) return { format: 'agent-plugin', label: 'Agent Plugins plugin', name: slug(portable.name), description: String(portable.description || ''), version: String(portable.version || ''), manifest: portable };
   const codex = await readJson(path.join(dir, '.codex-plugin', 'plugin.json'));
   if (codex && codex.name) return { format: 'codex', label: 'Codex plugin', name: slug(codex.name), description: String(codex.description || ''), version: String(codex.version || ''), manifest: codex };
+  const cursor = await readJson(path.join(dir, '.cursor-plugin', 'plugin.json'));
+  if (cursor && cursor.name) return { format: 'cursor', label: 'Cursor plugin', name: slug(cursor.name), description: String(cursor.description || ''), version: String(cursor.version || ''), manifest: cursor };
+  // Copilot CLI's legacy manifest locations, in the order it checks them. A bare
+  // plugin.json with schemaVersion is an OASIS native package, not this.
+  for (const rel of [['.plugin', 'plugin.json'], ['plugin.json'], ['.github', 'plugin', 'plugin.json']]) {
+    const copilot = rel.length === 1 ? portable : await readJson(path.join(dir, ...rel));
+    if (copilot && typeof copilot === 'object' && copilot.name && copilot.schemaVersion === undefined && !isAgentPluginsManifest(copilot)) {
+      return { format: 'copilot', label: 'Copilot CLI plugin', name: slug(copilot.name), description: String(copilot.description || ''), version: String(copilot.version || ''), manifest: copilot, manifestFile: rel.join('/') };
+    }
+  }
+  const power = await readFile(path.join(dir, 'POWER.md'), 'utf8').catch(() => '');
+  if (power) {
+    const front = frontmatter(power);
+    const name = slug(front.name || path.basename(dir), 'power');
+    return { format: 'kiro-power', label: 'Kiro power', name, description: String(front.description || ''), version: String(front.version || ''), manifest: { name, displayName: front.displayName || '', keywords: front.keywords || '' } };
+  }
   return null;
+}
+
+// Simple YAML frontmatter: key: value lines (quotes stripped), enough for
+// POWER.md and Cursor .mdc rules. Lists stay as their raw text.
+export function frontmatter(text) {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(String(text));
+  const out = {};
+  if (!match) return out;
+  for (const line of match[1].split(/\r?\n/)) {
+    const kv = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line);
+    if (kv) out[kv[1]] = kv[2].trim().replace(/^(["'])(.*)\1$/, '$2');
+  }
+  return out;
+}
+const stripFrontmatter = (text) => String(text).replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
+
+// Claude Code hook event names. Hooks written with these keep their meaning;
+// Cursor (beforeShellExecution, …) and Copilot (preToolUse, …) hooks speak a
+// different stdin/stdout protocol, so they are reported, not guessed at.
+const CLAUDE_EVENTS = new Set(['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'UserPromptSubmit', 'Notification', 'Stop', 'SubagentStart', 'SubagentStop', 'PreCompact', 'PostCompact', 'SessionStart', 'SessionEnd', 'PermissionRequest', 'PermissionDenied', 'Setup', 'TeammateIdle', 'TaskCreated', 'TaskCompleted', 'ConfigChange', 'InstructionsLoaded', 'WorktreeCreate', 'WorktreeRemove', 'Elicitation', 'ElicitationResult', 'FileChanged', 'CwdChanged', 'StopFailure']);
+export function splitHookEvents(doc) {
+  const hooks = doc && doc.hooks && typeof doc.hooks === 'object' && !Array.isArray(doc.hooks) ? doc.hooks : null;
+  if (!hooks) return { kept: null, dropped: [] };
+  const kept = {}, dropped = [];
+  for (const [event, groups] of Object.entries(hooks)) {
+    if (CLAUDE_EVENTS.has(event) && Array.isArray(groups)) kept[event] = JSON.parse(JSON.stringify(groups), (key, value) => portableVars(value));
+    else dropped.push(event);
+  }
+  return { kept: Object.keys(kept).length ? kept : null, dropped };
+}
+
+async function hookDoc(dir, info) {
+  const m = info.manifest;
+  if (m.hooks && typeof m.hooks === 'object' && !Array.isArray(m.hooks)) return m.hooks.hooks ? m.hooks : { hooks: m.hooks };
+  const openai = (m.extensions && m.extensions['com.openai']) || {};
+  for (const rel of [typeof m.hooks === 'string' ? m.hooks : '', typeof openai.hooks === 'string' ? openai.hooks : '', 'hooks/hooks.json', ...(info.format === 'copilot' ? ['hooks.json'] : [])]) {
+    if (!rel) continue;
+    const file = path.resolve(dir, rel);
+    if (path.relative(dir, file).startsWith('..')) continue;
+    const doc = await readJson(file);
+    if (doc) return doc;
+  }
+  return null;
+}
+
+/** What a foreign plugin has that will not run under OASIS, in plain words. */
+export async function unsupportedParts(dir, info) {
+  if (info.format === 'gemini') return [];
+  const out = [];
+  if (info.format === 'cursor' || info.format === 'copilot') {
+    const { dropped } = splitHookEvents(await hookDoc(dir, info));
+    if (dropped.length) out.push(info.label.replace(/ plugin$/, '') + ' hooks (' + dropped.slice(0, 6).join(', ') + ') use a different hook protocol');
+  }
+  if (info.format === 'cursor' && info.manifest.variables) out.push('Cursor plugin variables');
+  return out;
 }
 
 /** Plugins listed in a Codex marketplace that live inside the repository. */
 export async function detectCodexMarketplace(dir) {
-  const market = await readJson(path.join(dir, '.agents', 'plugins', 'marketplace.json'));
-  if (!market || !Array.isArray(market.plugins)) return null;
-  const plugins = [];
-  for (const entry of market.plugins) {
-    if (!entry || !entry.name) continue;
-    const src = typeof entry.source === 'string' ? entry.source : (entry.source && entry.source.source === 'local' ? entry.source.path : '');
-    if (!src) continue;
-    const resolved = path.resolve(dir, src);
-    if (path.relative(dir, resolved).startsWith('..')) continue;
-    plugins.push({ name: slug(entry.name), description: String(entry.description || ''), path: resolved });
+  const found = await detectForeignMarketplace(dir);
+  return found && found.format === 'codex' ? found : null;
+}
+
+// Where other agents keep a marketplace file, in the order each checks them.
+const MARKETPLACES = [
+  { format: 'codex', label: 'Codex marketplace', rel: ['.agents', 'plugins', 'marketplace.json'] },
+  { format: 'cursor', label: 'Cursor marketplace', rel: ['.cursor-plugin', 'marketplace.json'] },
+  { format: 'copilot', label: 'Copilot CLI marketplace', rel: ['marketplace.json'] },
+  { format: 'copilot', label: 'Copilot CLI marketplace', rel: ['.plugin', 'marketplace.json'] },
+  { format: 'copilot', label: 'Copilot CLI marketplace', rel: ['.github', 'plugin', 'marketplace.json'] }
+];
+
+/** Plugins listed in a Codex, Cursor or Copilot marketplace that live inside the repository. */
+export async function detectForeignMarketplace(dir) {
+  for (const spot of MARKETPLACES) {
+    const market = await readJson(path.join(dir, ...spot.rel));
+    if (!market || !Array.isArray(market.plugins)) continue;
+    const base = path.resolve(dir, market.metadata && typeof market.metadata.pluginRoot === 'string' ? market.metadata.pluginRoot : '.');
+    const plugins = [];
+    for (const entry of market.plugins) {
+      if (!entry || !entry.name) continue;
+      const src = typeof entry.source === 'string' ? entry.source : (entry.source && entry.source.source === 'local' ? entry.source.path : '');
+      if (!src) continue;
+      const resolved = path.resolve(base, src);
+      if (path.relative(dir, resolved).startsWith('..')) continue;
+      plugins.push({ name: slug(entry.name), description: String(entry.description || ''), path: resolved });
+    }
+    return { format: spot.format, label: spot.label, name: slug(market.name || spot.format + '-marketplace'), plugins };
   }
-  return { name: slug(market.name || 'codex-marketplace'), plugins };
+  return null;
 }
 
 // Gemini puts ${extensionPath}, ${workspacePath} and ${/} into MCP settings.
@@ -148,7 +246,13 @@ export async function describeForeignPlugin(dir, info) {
   if (agents) parts.push(agents + ' agents');
   const servers = info.format === 'gemini' ? Object.keys(info.manifest.mcpServers || {}) : Object.keys(await foreignServers(dir, info));
   if (servers.length) parts.push(servers.length + ' MCP server' + (servers.length === 1 ? '' : 's') + ' (they run when sessions start)');
-  if (files.includes('hooks/hooks.json') || info.manifest.hooks) parts.push('hooks (they run commands on events)');
+  if (info.format === 'cursor' || info.format === 'copilot') {
+    if (splitHookEvents(await hookDoc(dir, info)).kept) parts.push('hooks (they run commands on events)');
+  } else if (files.includes('hooks/hooks.json') || info.manifest.hooks) parts.push('hooks (they run commands on events)');
+  const rules = files.filter((f) => /^rules\/.+\.(mdc|md)$/i.test(f)).length;
+  if (info.format === 'cursor' && rules) parts.push(rules + ' rule' + (rules === 1 ? '' : 's') + ' (as skills)');
+  if (info.format === 'kiro-power') parts.push('its POWER.md guide' + (files.some((f) => /^steering\/.+\.md$/i.test(f)) ? ' and steering files' : '') + ' (as a skill)');
+  if (info.format === 'copilot' && !skills && files.includes('SKILL.md')) parts.push('1 skill');
   if (info.format === 'gemini' && contextFiles(info.manifest, files).length) parts.push('its ' + contextFiles(info.manifest, files).join(', ') + ' instructions');
   const settings = geminiSettings(info.manifest);
   if (settings.length) parts.push('settings to fill in: ' + settings.map((s) => s.envVar).join(', '));
@@ -168,7 +272,7 @@ async function foreignServers(dir, info) {
   const m = info.manifest;
   const openai = (m.extensions && m.extensions['com.openai']) || {};
   if (m.mcpServers && typeof m.mcpServers === 'object') return normalizeServers(m);
-  for (const rel of [typeof m.mcpServers === 'string' ? m.mcpServers : '', typeof openai.mcpServers === 'string' ? openai.mcpServers : '', '.mcp.json', 'mcp.json']) {
+  for (const rel of [typeof m.mcpServers === 'string' ? m.mcpServers : '', typeof openai.mcpServers === 'string' ? openai.mcpServers : '', '.mcp.json', 'mcp.json', '.github/mcp.json']) {
     if (!rel) continue;
     const file = path.resolve(dir, rel);
     if (path.relative(dir, file).startsWith('..')) continue;
@@ -229,10 +333,80 @@ export async function convertToClaudePlugin(srcDir, destDir, info) {
     else if (hooksRel && path.posix.normalize(hooksRel.replace(/^\.\//, '')) !== 'hooks/hooks.json') manifest.hooks = './' + hooksRel.replace(/^\.\//, '');
     const skillsRel = typeof m.skills === 'string' ? m.skills.replace(/^\.\//, '').replace(/\/$/, '') : '';
     if (skillsRel && skillsRel !== 'skills') manifest.skills = './' + skillsRel;
+    if (info.format === 'cursor' || info.format === 'copilot') await adaptCursorOrCopilot(destDir, info, manifest, files);
+    if (info.format === 'kiro-power') await adaptKiroPower(destDir, info, files);
   }
   await mkdir(path.join(destDir, '.claude-plugin'), { recursive: true });
   await writeFile(path.join(destDir, '.claude-plugin', 'plugin.json'), JSON.stringify(manifest, null, 2) + '\n');
   return name;
+}
+
+const insideRel = (value) => {
+  if (typeof value !== 'string') return '';
+  const clean = path.posix.normalize(value.replace(/\\/g, '/')).replace(/^\.\//, '').replace(/\/$/, '');
+  return clean && clean !== '.' && !clean.startsWith('..') && !path.posix.isAbsolute(clean) ? clean : '';
+};
+
+async function writeSkill(destDir, name, description, body) {
+  const dir = path.join(destDir, 'skills', name);
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, 'SKILL.md'), '---\nname: ' + name + '\ndescription: ' + JSON.stringify(String(description).replace(/\s+/g, ' ').slice(0, 900)) + '\n---\n\n' + String(body).trim() + '\n');
+  return dir;
+}
+
+// Cursor and Copilot CLI plugins share Claude Code's folder layout; what
+// differs is hooks, Cursor rules, a few file names and custom component paths.
+async function adaptCursorOrCopilot(destDir, info, manifest, files) {
+  const m = info.manifest;
+  for (const key of ['commands', 'agents']) {
+    const rels = [].concat(m[key] || []).map(insideRel).filter(Boolean);
+    if (rels.length && !(rels.length === 1 && rels[0] === key)) manifest[key] = rels.map((rel) => './' + rel);
+  }
+  // Hooks: keep groups under Claude Code event names, drop the rest (reported).
+  const { kept } = splitHookEvents(await hookDoc(destDir, info));
+  delete manifest.hooks;
+  for (const rel of ['hooks/hooks.json', 'hooks.json']) await rm(path.join(destDir, rel), { force: true });
+  if (kept) manifest.hooks = kept;
+  if (info.format === 'copilot') {
+    if (!manifest.mcpServers && !(await readJson(path.join(destDir, '.mcp.json')))) {
+      const servers = normalizeServers(await readJson(path.join(destDir, '.github', 'mcp.json')));
+      if (Object.keys(servers).length) manifest.mcpServers = servers;
+    }
+    if (files.includes('lsp.json') && !files.includes('.lsp.json')) await writeFile(path.join(destDir, '.lsp.json'), await readFile(path.join(destDir, 'lsp.json'), 'utf8'));
+    if (m.lspServers && typeof m.lspServers === 'object') manifest.lspServers = m.lspServers;
+    // A root SKILL.md (Copilot's one-skill plugin) is already read by the plugin loader.
+    return;
+  }
+  // Cursor rules (.mdc) become skills: the agent reads them when they apply.
+  const ruleDirs = [].concat(m.rules || 'rules').map(insideRel).filter(Boolean);
+  for (const rel of files.filter((f) => /\.(mdc|md)$/i.test(f) && ruleDirs.some((dir) => f.startsWith(dir + '/')))) {
+    const text = await readFile(path.join(destDir, rel), 'utf8').catch(() => '');
+    if (!text.trim()) continue;
+    const front = frontmatter(text);
+    const base = slug(path.posix.basename(rel).replace(/\.(mdc|md)$/i, ''), 'rule');
+    const always = /^true$/i.test(String(front.alwaysApply || ''));
+    const scope = front.globs ? ' Applies to files matching ' + front.globs + '.' : '';
+    const description = (front.description || 'Project rule ' + base + ' from the ' + manifest.name + ' plugin') + '.' + scope + (always ? ' Always follow this rule.' : '');
+    await writeSkill(destDir, slug(manifest.name + '-rule-' + base).slice(0, 64), description, stripFrontmatter(text));
+  }
+  const skillsRels = [].concat(m.skills || []).map(insideRel).filter(Boolean);
+  if (skillsRels.length > 1) manifest.skills = skillsRels.map((rel) => './' + rel);
+}
+
+// A Kiro power is a POWER.md guide (plus optional steering files) next to an
+// mcp.json. The guide becomes a skill; steering files go with it.
+async function adaptKiroPower(destDir, info, files) {
+  const text = await readFile(path.join(destDir, 'POWER.md'), 'utf8').catch(() => '');
+  const front = frontmatter(text);
+  const steering = files.filter((f) => /^steering\/.+\.md$/i.test(f));
+  const keywords = String(front.keywords || '').replace(/[[\]"']/g, '').trim();
+  const description = (info.description || 'How to use the ' + (front.displayName || info.name) + ' power') + (keywords ? ' Keywords: ' + keywords + '.' : '');
+  const list = steering.length ? '\n\n## Steering files\n\nRead the one that matches the task:\n\n' + steering.map((f) => '- ' + f).join('\n') + '\n' : '';
+  const dir = await writeSkill(destDir, info.name, description, stripFrontmatter(text) + list);
+  for (const rel of steering) {
+    await mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
+    await writeFile(path.join(dir, rel), await readFile(path.join(destDir, rel), 'utf8'));
+  }
 }
 
 // Gemini CLI installs GitHub extensions from the release marked Latest when it
