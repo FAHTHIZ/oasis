@@ -129,3 +129,16 @@ test('repository hooks from Copilot and Cursor run through the bridge', async (t
   const post = hooks.PostToolUse.flatMap((g) => g.hooks);
   assert.ok(post.some((h) => h.protocol === 'cursor' && h.command.includes('/.cursor/hooks/fmt.sh')), JSON.stringify(post));
 });
+
+test('a pack keeps skills in hidden agent folders and Codex project servers', async (t) => {
+  const { src, root, env } = await fixture(t, {
+    '.github/prompts/go.prompt.md': 'Go.\n',
+    '.github/skills/triage/SKILL.md': '---\nname: triage\ndescription: Triage issues\n---\nTriage.\n',
+    '.agents/skills/deploy/SKILL.md': '---\nname: deploy\ndescription: Deploy\n---\nDeploy.\n',
+    '.codex/config.toml': '[mcp_servers.docs]\ncommand = "docs-mcp"\nargs = ["--stdio"]\n'
+  });
+  const { plugins } = await install(src, root, env);
+  const names = (await pluginSkills(plugins, { env })).map((s) => s.name).sort();
+  assert.ok(names.includes('triage') && names.includes('deploy'), names.join());
+  assert.equal((await servers(plugins, env, root)).docs.command, 'docs-mcp');
+});

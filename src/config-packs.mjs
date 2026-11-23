@@ -259,6 +259,18 @@ async function scanPack(dir) {
     const { servers, userConfig } = vscodeServers(vscodeMcp);
     if (Object.keys(servers).length) { Object.assign(found.servers, servers); Object.assign(found.userConfig, userConfig); found.tools.add('VS Code'); }
   }
+  // Codex project settings: .codex/config.toml [mcp_servers.*].
+  const codexToml = await readText(path.join(dir, '.codex', 'config.toml'));
+  if (codexToml.trim()) {
+    try {
+      const { parse: parseToml } = await import('smol-toml');
+      const { normalizeServer } = await import('./importers.mjs');
+      for (const [name, raw] of Object.entries(parseToml(codexToml).mcp_servers || {})) {
+        const server = normalizeServer(raw, 'codex');
+        if (server) { found.servers[slug(name, 'server')] = server; found.tools.add('Codex'); }
+      }
+    } catch { /* unreadable TOML: nothing from it */ }
+  }
   // Continue: .continue/{rules,prompts,mcpServers}/ blocks and a config.yaml.
   const blocks = [];
   for (const sub of ['rules', 'prompts', 'mcpServers']) {
@@ -302,6 +314,19 @@ async function scanPack(dir) {
       } else if (item.kind === 'skill' && inside(item.from)) { found.skills.push({ name: item.name, from: item.from }); found.tools.add(label[item.source] || item.source); }
     }
   } catch { /* A pack without import-readable files is still a pack. */ } finally { await rm(home, { recursive: true, force: true }); }
+  // Skills kept in an agent's hidden folder (.github/skills for Copilot,
+  // .agents/skills for Codex and Agent Skills, .claude/skills, ...).
+  const have = new Set(found.skills.map((skill) => path.resolve(skill.from)));
+  for (const folder of ['.github', '.agents', '.claude', '.codex', '.cursor', '.gemini', '.opencode', '.windsurf', '.kiro']) {
+    let entries = [];
+    try { entries = await readdir(path.join(dir, folder, 'skills'), { withFileTypes: true }); } catch {}
+    for (const entry of entries.filter((e) => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
+      const from = path.resolve(dir, folder, 'skills', entry.name);
+      if (have.has(from) || !(await stat(path.join(from, 'SKILL.md')).catch(() => null))) continue;
+      have.add(from);
+      found.skills.push({ name: entry.name, from });
+    }
+  }
   return found;
 }
 
