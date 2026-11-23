@@ -50,6 +50,7 @@ import { DIAGNOSTICS_TOOL_DEFINITION, runDiagnostics } from './diagnostics.mjs';
 import { SECURITY_SCAN_TOOL_DEFINITION } from './security-scan.mjs';
 import { MUTATION_PROBE_TOOL_DEFINITION } from './mutation-probe.mjs';
 import { BISECT_TOOL_DEFINITION } from './bisect.mjs';
+import { FLAKY_CHECK_TOOL_DEFINITION } from './flaky-check.mjs';
 import { MONITOR_TOOL_DEFINITION } from './monitor-definition.mjs';
 import { assertNotAgentIgnored, filterAgentIgnored } from './agent-ignore.mjs';
 import { startCommandMonitor, startWsMonitor, backgroundExitNotifier, backgroundStuckNotifier } from './monitors.mjs';
@@ -2282,6 +2283,18 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         sandbox: context.sandbox
       });
     }
+    case 'flaky_check': {
+      const { runFlakyCheck } = await import('./flaky-check.mjs');
+      return await runFlakyCheck(root, args, {
+        approval: context.approval,
+        autoApprove: Boolean(context.autoApprove),
+        ruleAllowed: Boolean(context.ruleAllowed),
+        env: context.env || process.env,
+        signal: context.signal,
+        sandbox: context.sandbox,
+        injectionHold: injectionHoldReason(context.session)
+      });
+    }
     case 'bisect_regression': {
       const { runBisect } = await import('./bisect.mjs');
       return await runBisect(root, args, {
@@ -2346,6 +2359,7 @@ TOOL_DEFINITIONS.push(DIAGNOSTICS_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(SECURITY_SCAN_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(MUTATION_PROBE_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(BISECT_TOOL_DEFINITION);
+TOOL_DEFINITIONS.push(FLAKY_CHECK_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(LSP_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(MONITOR_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(...GIT_TOOL_DEFINITIONS);

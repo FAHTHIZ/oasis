@@ -4,7 +4,7 @@ const READ_TOOLS = new Set(['read_file', 'read_notebook', 'notebook_read', 'list
 const EDIT_TOOLS = new Set(['edit_file', 'multi_edit', 'notebook_edit', 'apply_patch']);
 const COMMAND_TOOLS = new Set(['run_command', 'run_shell', 'powershell', 'auto_test']);
 const SEARCH_TOOLS = new Set(['search_files', 'grep', 'ast_grep', 'glob_files', 'repo_map']);
-const REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'diagnostics', 'ide_get_diagnostics', 'security_scan', 'mutation_probe', 'bisect_regression']);
+const REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'diagnostics', 'ide_get_diagnostics', 'security_scan', 'mutation_probe', 'bisect_regression', 'flaky_check']);
 const WEB_TOOLS = new Set(['web_search', 'fetch_url']);
 
 function text(value, limit = 240) {
@@ -99,6 +99,7 @@ export function labelToolActivity(name, args = {}, result = null) {
   if (tool === 'memory_verify') return 'Checked saved memory';
   if (tool === 'diagnostics' || tool === 'ide_get_diagnostics') return 'Checked for code issues';
   if (tool === 'security_scan') return 'Ran the security scanners';
+  if (tool === 'flaky_check') return 'Reran the check to see whether it is flaky';
   if (tool === 'bisect_regression') return 'Searched the history for the commit that broke the check';
   if (tool === 'mutation_probe') return 'Checked whether the tests catch bugs in the change';
   if (tool === 'install_package') return 'Prepared a package installation';
