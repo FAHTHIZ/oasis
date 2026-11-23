@@ -7,6 +7,9 @@
 // Codex hooks (.codex/hooks.json and [hooks] in .codex/config.toml, and the
 // same under ~/.codex) already use Claude Code's events and replies, so they
 // load as they are, with Codex's apply_patch matcher read as the edit tools.
+// OpenCode plugins (.opencode/plugins/*.{js,ts}, ~/.config/opencode/plugins)
+// are JavaScript modules; each runs through opencode-plugin-host.mjs on the
+// events it handles.
 // They are read in place and run through the protocol bridge
 // (hook-bridges.mjs): each hook is filed under the Claude Code event that
 // fires at the same moment, gets the stdin fields its own tool sends, and its
@@ -17,6 +20,7 @@
 // OASIS_OTHER_AGENT_RULES=0, or "otherAgentHooks": false in settings, turns
 // this off.
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { readdir, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -99,6 +103,49 @@ async function codexLayer(dir, scope, platform) {
   return out.filter((item) => Object.keys(item.hooks).length || item.dropped.length);
 }
 
+const HOST = fileURLToPath(new URL('./opencode-plugin-host.mjs', import.meta.url));
+const quoted = (value) => '"' + String(value).replace(/"/g, '\\"') + '"';
+
+// Plugin files in an OpenCode plugin folder: direct .js/.mjs/.ts files and
+// package folders (their package.json main, or index.*).
+async function openCodePluginFiles(dir) {
+  let entries = [];
+  try { entries = await readdir(dir, { withFileTypes: true }); } catch { return []; }
+  const files = [];
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    if (entry.isFile() && /\.(?:m?js|ts)$/.test(entry.name) && !entry.name.endsWith('.d.ts')) files.push(path.join(dir, entry.name));
+    else if (entry.isDirectory() && entry.name !== 'node_modules' && !entry.name.startsWith('.')) {
+      const pkg = await readJson(path.join(dir, entry.name, 'package.json'));
+      const candidates = [...(pkg && typeof pkg.main === 'string' ? [pkg.main] : []), 'index.ts', 'index.js', 'index.mjs', 'src/index.ts', 'src/index.js'];
+      const found = candidates.map((rel) => path.resolve(dir, entry.name, rel)).find((file) => file.startsWith(path.join(dir, entry.name) + path.sep) && existsSync(file));
+      if (found) files.push(found);
+    }
+  }
+  return files;
+}
+
+// Which OASIS events a plugin needs, read from its source so the host only runs
+// where the plugin has something to do.
+async function openCodePlugin(file, scope) {
+  let text = '';
+  try { text = await readFile(file, 'utf8'); } catch { return null; }
+  if (/\.ts$/.test(file) && !process.features.typescript) return { scope, file, protocol: 'opencode', hooks: {}, dropped: ['TypeScript plugins need Node.js 22.18 or later'] };
+  // OpenCode V2 plugins (Plugin.define) need OpenCode's own runtime.
+  if (/Plugin\.define\s*\(/.test(text)) return { scope, file, protocol: 'opencode', hooks: {}, dropped: ['OpenCode V2 plugin (Plugin.define)'] };
+  const events = new Set();
+  if (text.includes('tool.execute.before')) events.add('PreToolUse');
+  if (text.includes('tool.execute.after') || text.includes('file.edited')) events.add('PostToolUse');
+  if (text.includes('session.idle')) events.add('Stop');
+  if (text.includes('session.created')) events.add('SessionStart');
+  if (text.includes('session.deleted')) events.add('SessionEnd');
+  const hooks = {};
+  for (const event of events) {
+    const command = [quoted(process.execPath), quoted(HOST), quoted(file), event].join(' ');
+    (hooks[event] ||= []).push({ ...(event === 'PostToolUse' && !text.includes('tool.execute.after') ? { matcher: 'Edit|Write|MultiEdit' } : {}), hooks: [{ type: 'command', command, timeout: 30, statusMessage: 'OpenCode plugin ' + path.basename(file) }] });
+  }
+  return { scope, file, protocol: 'opencode', hooks, dropped: [] };
+}
+
 /**
  * Hook groups (Claude Code format, tagged for the bridge) from other agents'
  * hook files. Returns [{ scope, file, protocol, hooks, dropped }].
@@ -122,6 +169,18 @@ export async function loadForeignHooks(root, { env = process.env, home = env.HOM
   }
   const out = [...await codexLayer(codexHome, 'user', platform)];
   if (root && trusted && path.resolve(root, '.codex') !== codexHome) out.push(...await codexLayer(path.resolve(root, '.codex'), 'project', platform));
+  const openCodeHome = path.join(env.XDG_CONFIG_HOME ? path.resolve(env.XDG_CONFIG_HOME) : path.join(home, '.config'), 'opencode');
+  const pluginDirs = [...['plugins', 'plugin'].map((name) => ({ scope: 'user', dir: path.join(openCodeHome, name) })),
+    ...(root && trusted ? ['plugins', 'plugin'].map((name) => ({ scope: 'project', dir: path.join(path.resolve(root), '.opencode', name) })) : [])];
+  const seenDirs = new Set();
+  for (const { scope, dir } of pluginDirs) {
+    if (seenDirs.has(dir)) continue;
+    seenDirs.add(dir);
+    for (const file of await openCodePluginFiles(dir)) {
+      const item = await openCodePlugin(file, scope);
+      if (item && (Object.keys(item.hooks).length || item.dropped.length)) out.push(item);
+    }
+  }
   for (const source of sources) {
     const doc = await readJson(source.file);
     if (!doc || !doc.hooks) continue;
