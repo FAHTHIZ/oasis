@@ -3,9 +3,11 @@
 // in src/page-store.mjs and the evidence ledger), never on the model's memory
 // of a page.
 //
-//   verify_quote  is this passage on that page, as I fetched it?
+//   verify_quote         is this passage on that page, as I fetched it?
+//   source_independence  how many independent sources do these URLs amount to?
 import { normalizeUrl } from './evidence-ledger.mjs';
 import { findQuote, pageText } from './page-store.mjs';
+import { describeIndependence, independentSources } from './source-independence.mjs';
 
 const fn = (name, description, properties, required = []) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties, required, additionalProperties: false } } });
 
@@ -14,11 +16,13 @@ export const RESEARCH_TOOL_DEFINITIONS = [
     { checks: { type: 'array', minItems: 1, maxItems: 20, items: { type: 'object', properties: {
       url: { type: 'string', description: 'The page the passage is attributed to' },
       quote: { type: 'string', description: 'The passage, as you would quote it' }
-    }, required: ['url', 'quote'], additionalProperties: false } } }, ['checks'])
+    }, required: ['url', 'quote'], additionalProperties: false } } }, ['checks']),
+  fn('source_independence', 'Count how many independent sources a set of URLs really is before you call a claim corroborated. URLs on one site (subdomains included; one owner on github.com, medium.com and similar), the same page with tracking parameters or AMP, and pages whose fetched text copies another (syndicated wire stories, reprinted press releases, mirrors: half of the shorter page appears in the other) count once. Pages fetched in this session are compared by text; others by site only (unchecked). Use it when cross-checking: two outlets running the same wire story are one source, so look for one that reported independently.',
+    { urls: { type: 'array', minItems: 1, maxItems: 40, items: { type: 'string' }, description: 'The URLs that back one claim' } }, ['urls'])
 ];
 
 export const RESEARCH_TOOL_NAMES = new Set(RESEARCH_TOOL_DEFINITIONS.map((tool) => tool.function.name));
-export const RESEARCH_READ_ONLY_TOOL_NAMES = new Set(['verify_quote']);
+export const RESEARCH_READ_ONLY_TOOL_NAMES = new Set(['verify_quote', 'source_independence']);
 
 function verifyQuotes(args) {
   const checks = Array.isArray(args.checks) ? args.checks.slice(0, 20) : [];
@@ -47,5 +51,11 @@ function verifyQuotes(args) {
 
 export function runResearchTool(session, name, args = {}) {
   if (name === 'verify_quote') return verifyQuotes(args || {});
+  if (name === 'source_independence') {
+    const urls = Array.isArray(args && args.urls) ? args.urls : [];
+    if (!urls.length) throw new Error('source_independence needs urls: [...].');
+    const result = independentSources(urls);
+    return { summary: describeIndependence(result), ...result, ...(result.total < urls.length ? { ignored: urls.length - result.total + ' entries were not http(s) URLs or were duplicates' } : {}) };
+  }
   throw new Error('Unknown research tool ' + name);
 }

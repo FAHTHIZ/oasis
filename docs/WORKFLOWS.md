@@ -27,7 +27,11 @@ parallel subagents and cross-checks their claims:
 ```
 
 It plans 3–6 search angles, runs one research agent per angle, votes on each
-claim across agents and returns a cited report. The
+claim across agents and returns a cited report. Each claim comes with a
+verbatim quote checked against the fetched page (`verify_quote`), verifiers
+count [independent sources](AGENT-NETWORK.md#source-independence) so
+syndicated copies count once, and the report calls a claim corroborated only
+when two or more independent sources back it. The
 [research pack](EXTENDING.md#domain-packs) adds a `researcher` and a
 `fact-checker` agent with no write or shell tools:
 

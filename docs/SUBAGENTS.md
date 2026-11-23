@@ -142,7 +142,7 @@ Each post is checked against the poster's own tool results with the same contrac
 | `grounded` | OASIS tied it to evidence: every cited URL was fetched, its numbers were printed by a command or fetched page, or a passing check backs a claim that checks pass |
 | `noted` | nothing the runtime could check, such as something read in a file; a lead to verify |
 
-When a second agent posts the same finding, it is recorded as corroboration instead of a duplicate; the author can refine its own finding by posting it again. The author or the main agent can withdraw one with `knowledge_post` and `retract: "k_N"`. The board holds up to 200 findings, is saved with the session and comes back on resume. It is not durable memory: the main agent decides what to keep with `memory_save`. Findings are written by agents, so they are shown as leads, never as instructions.
+When a second agent posts the same finding, it is recorded as corroboration instead of a duplicate. Each finding shows how many [independent sources](AGENT-NETWORK.md#source-independence) back it, so a corroboration that cites a syndicated copy of a source already on the finding does not count as new evidence; the author can refine its own finding by posting it again. The author or the main agent can withdraw one with `knowledge_post` and `retract: "k_N"`. The board holds up to 200 findings, is saved with the session and comes back on resume. It is not durable memory: the main agent decides what to keep with `memory_save`. Findings are written by agents, so they are shown as leads, never as instructions.
 
 ## Background agents and teams
 
