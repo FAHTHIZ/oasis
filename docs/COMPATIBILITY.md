@@ -229,8 +229,8 @@ other agent whether the export is full or which parts it leaves out
 
 `oasis plugin export [PATH] --out DIR` writes the plugin at PATH (an OASIS or
 Claude Code plugin, or anything in the table above) into one folder that
-OASIS, Claude Code, Codex, Gemini CLI, Cursor and Copilot CLI can each
-install. `--to codex,gemini` limits the targets. Skills and MCP servers are
+OASIS, Claude Code, Codex, Gemini CLI, Cursor, Copilot CLI and OpenCode can
+each install. `--to codex,gemini` limits the targets. Skills and MCP servers are
 shared; each target gets its own manifest:
 
 | Target | Manifest | Translated | Left out |
@@ -240,6 +240,15 @@ shared; each target gets its own manifest:
 | Gemini CLI | `gemini-extension.json` | Commands as TOML (`$ARGUMENTS` as `{{args}}`), hooks under Gemini event and tool names, options as settings, `${CLAUDE_PLUGIN_ROOT}` as `${extensionPath}` | Hook events with no Gemini counterpart |
 | Cursor | `.cursor-plugin/plugin.json`, `mcp.json` | Options as variables | Hooks |
 | Copilot CLI | `.plugin/plugin.json` | Agents as `*.agent.md` (in `copilot/agents/`) | Hooks, options |
+| OpenCode | `opencode/index.js` | Commands, agents (as subagents) and MCP servers added through the `config` hook; PreToolUse, PostToolUse, Stop and SessionStart hooks run in Claude Code format from `tool.execute.before`/`after` and `event` | Other hook events, skills (link `skills/*` into `.opencode/skills/`), options |
+
+The OpenCode export is a small plugin with no dependencies: `opencode/runtime.js`
+reads `opencode/oasis-plugin.json` and runs the hook commands with Claude Code
+JSON on stdin. A deny (or exit 2) throws, which blocks the tool call;
+`updatedInput` rewrites the arguments in place; `additionalContext` and block
+reasons are appended to the tool result; a blocking Stop hook sends its reason
+as the next prompt. Your own `opencode.json` entries win over the plugin's.
+Install it by linking the folder: `ln -s "$PWD/PLUGIN/opencode" .opencode/plugins/PLUGIN`.
 
 Claude Code hooks move to `hooks/claude-hooks.json` so agents that read
 `hooks/hooks.json` in their own format do not misread them. The command prints
