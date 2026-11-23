@@ -213,7 +213,7 @@ test('a reply in another language that admits nothing was checked gets no duplic
   ]) assert.equal(appendUnverifiedNotice(reply, issue, {}, newClaimState()), reply, reply);
   // An English reply still gets the notice, and one claiming a pass in Bengali is flagged.
   assert.match(appendUnverifiedNotice('Fixed the login.', issue, {}, newClaimState()), /Not verified: /);
-  assert.match(appendUnverifiedNotice('লগইন ঠিক করেছি। সব টেস্ট পাস করেছে।', issue, {}, newClaimState()), /Not verified: [\s\S]*not observed by OASIS/);
+  assert.match(appendUnverifiedNotice('লগইন ঠিক করেছি। সব টেস্ট পাস করেছে।', issue, {}, newClaimState()), /যাচাই হয়নি: [\s\S]*OASIS দেখেনি।$/);
 });
 
 test('claim sentences split on 。！？ and the danda', async () => {

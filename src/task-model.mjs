@@ -49,6 +49,7 @@
 // and criteria (task_contract declare), but it can never mark a criterion as
 // met: only the runtime's own evaluation does.
 
+import { noteLabel, noteEnd } from './runtime-notes.mjs';
 import { multilingualRisk, multilingualIntent } from './multilingual-signals.mjs';
 import path from 'node:path';
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -771,9 +772,10 @@ export function taskGateNudge(problems) {
 }
 
 /** One line for the user naming what remained unverified after the gate, or ''. */
-export function gateNotice(problems) {
+export function gateNotice(problems, lang = 'en') {
   if (!problems || !problems.length) return '';
-  return 'Not verified: ' + problems.slice(0, 4).map((item) => item.detail || item.description).join('; ') + '.';
+  // The label follows the reply's language; the details name files and checks.
+  return noteLabel(lang, 'verified') + problems.slice(0, 4).map((item) => item.detail || item.description).join('; ') + (lang === 'en' ? '.' : noteEnd(lang));
 }
 
 /** One short line for the user about a finished task, or '' when nothing needs saying. */
