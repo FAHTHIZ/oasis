@@ -13,7 +13,8 @@ import { resolveToolAlias, normalizeRunCommandCall, cleanToolCallName } from './
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { runsOutsideRoot, shellExitTarget } from './pipe-status.mjs';
 import { loadPins, savePins } from './mcp-trust.mjs';
-import { applyInjectionTaint, commandFetchesExternal, fetchedOutputPaths, guardExternalContent, guardJudgedOutput, guardJudgedRead, clearInjectionTurnFlag, injectionHoldReason, showHiddenCharacters, untrustedGuardEnabled } from './untrusted-content.mjs';
+import { applyInjectionTaint, commandFetchesExternal, fetchedOutputPaths, guardExternalContent, guardJudgedOutput, guardJudgedRead, clearInjectionTurnFlag, injectionHoldReason, isExternalContentTool, showHiddenCharacters, untrustedGuardEnabled } from './untrusted-content.mjs';
+import { commandEgressReason, egressProvenanceEnabled, egressReason, noteExternalContent } from './egress-provenance.mjs';
 import { maskSecrets, unmaskSecretsForTool, secretShieldEnabled, redactSecretText, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { canaryTripwire } from './canary-credentials.mjs';
 import { followupReminder, followupsEnabled } from './followups.mjs';
@@ -1257,6 +1258,7 @@ function trackBackgroundMcpTask(session, { server, tool, taskId, settled }) {
     // Same size as a normal tool result, keeping head and tail with a note.
     // It used to keep only the first 12,000 characters with no note.
     let text = headTailText(typeof result.content === 'string' ? result.content : (Array.isArray(result.content) ? result.content : []).map((part) => part && typeof part.text === 'string' ? part.text : part && part.type ? '[' + part.type + ']' : '').filter(Boolean).join('\n'), MAX_REPLY_CHARS);
+    if (text && egressProvenanceEnabled(session, process.env)) noteExternalContent(session, 'mcp__' + server + '__' + tool, text);
     if (text && untrustedGuardEnabled(session, process.env)) text = guardExternalContent(session, 'mcp__' + server + '__' + tool, text);
     (session.inbox ||= []).push({ kind: 'mcp-task', text: 'Background MCP task ' + taskId + ' (' + label + ') ' + (result.isError ? 'failed' : 'finished') + '. Result:\n' + (text || '(no text output)') });
     if (typeof session.onAgentNotice === 'function') { try { session.onAgentNotice('MCP task ' + label + (result.isError ? ' failed' : ' finished')); } catch {} }
@@ -1757,6 +1759,12 @@ function heldOutboundCall(session, name, args) {
   return false;
 }
 
+function outboundEgressReason(session, name, args) {
+  if (!args || typeof args !== 'object') return '';
+  if (name === 'fetch_url' || (name === 'browser' && ['navigate', 'new_tab'].includes(args.action))) return egressReason(session, String(args.url || ''), { body: args.body || '' });
+  return commandEgressReason(session, name, args);
+}
+
 async function authorizeCall(session, name, args, context, options) {
   const policy = session.permissions;
   if (session.restricted && RESTRICTED_TOOL_NAMES.has(name) && !(session.toolDefinitions || []).some((tool) => tool.function.name === name)) return { deniedReason: name + ' is disabled in --restricted mode.' };
@@ -1970,6 +1978,13 @@ async function authorizeCall(session, name, args, context, options) {
   if (hold) {
     const ok = await overlay.approval('Allow ' + (CLAUDE_TOOL_NAMES[name] || name) + '? It sends data out, changes remote state or saves something later sessions act on, and ' + hold + '.\n  ' + JSON.stringify(redactAuditValue(args)).slice(0, 1500), true);
     if (!ok) return { deniedReason: overlay.permissionHookDenial || 'Not run: ' + hold + ', so ' + name + ' needs the user until this turn ends. Finish without it and tell the user what you would have done.' };
+  }
+  // Data the agent composed, going to a host only outside content named
+  // (src/egress-provenance.mjs): a person decides, in every mode.
+  const egress = !hold && egressProvenanceEnabled(session, context.env || process.env) ? outboundEgressReason(session, name, args) : '';
+  if (egress) {
+    const ok = await overlay.approval('Allow ' + (CLAUDE_TOOL_NAMES[name] || name) + '? ' + egress[0].toUpperCase() + egress.slice(1) + '.\n  ' + JSON.stringify(redactAuditValue(args)).slice(0, 1500), true);
+    if (!ok) return { deniedReason: overlay.permissionHookDenial || 'Not run: ' + egress + '. Sending data there needs the user. Use only addresses the user gave or links exactly as they appeared, and tell the user what you would have sent.' };
   }
   if (decision === 'ask') {
     if (!siteApprovalHandled) {
@@ -3463,7 +3478,9 @@ async function applyToolResults(session, options, turn) {
       const callArgs = safeToolArguments(call.function && call.function.arguments);
       const readPath = name === 'read_file' ? normalizeReviewPath(callArgs.path || '') : '';
       const fetchedFile = Boolean(session.fetchedPaths && session.fetchedPaths.size) && toolPathWords(name, callArgs).some((word) => session.fetchedPaths.has(path.resolve(session.root || '.', String(callArgs.cwd || ''), word)));
-      item.content = guardExternalContent(session, item.name || name, item.content, { external: fetchedFile || commandFetchesExternal(name, callArgs) });
+      const externalResult = fetchedFile || commandFetchesExternal(name, callArgs);
+      if ((externalResult || isExternalContentTool(item.name || name)) && egressProvenanceEnabled(session, options.env || process.env)) noteExternalContent(session, item.name || name, item.content);
+      item.content = guardExternalContent(session, item.name || name, item.content, { external: externalResult });
       for (const file of fetchedOutputPaths(name, callArgs)) (session.fetchedPaths ||= new Set()).add(path.resolve(session.root || '.', String(callArgs.cwd || ''), file));
       if (name === 'read_file' && session.judgedPaths) item.content = guardJudgedRead(session, name, readPath, item.content);
       else if (session.judgedPaths) item.content = guardJudgedOutput(session, name, item.content);
