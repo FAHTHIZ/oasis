@@ -82,7 +82,7 @@
     "open-source"
   ],
   "dependencies": {
-    "@agentclientprotocol/sdk": "^2.7.0",
+    "@agentclientprotocol/sdk": "^2.8.0",
     "@anthropic-ai/sandbox-runtime": "^0.0.83",
     "@cfworker/json-schema": "4.1.6",
     "@earendil-works/pi-tui": "1.5.2",
