@@ -124,3 +124,33 @@ test('Gemini hooksConfig.disabled skips a named hook; enabled: false skips all',
   await writeFile(path.join(root, '.gemini', 'settings.json'), doc({ enabled: false }));
   assert.deepEqual(await loadForeignHooks(root, { env, home, trusted: true }), []);
 });
+
+test('Codex hooks.json and config.toml [hooks] load as Claude Code hooks; apply_patch matches the edit tools', async (t) => {
+  const { root, home, env } = await setup(t);
+  await mkdir(path.join(home, '.codex'), { recursive: true });
+  await writeFile(path.join(home, '.codex', 'hooks.json'), JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'apply_patch', hooks: [{ type: 'command', command: 'echo user', timeout: 5 }] }], Interrupt: [{ hooks: [{ type: 'command', command: 'echo i' }] }] } }));
+  await mkdir(path.join(root, '.codex'), { recursive: true });
+  await writeFile(path.join(root, '.codex', 'config.toml'), [
+    '[[hooks.PostToolUse]]', 'matcher = "^Bash$"', '[[hooks.PostToolUse.hooks]]', 'type = "command"', 'command = "echo project"', 'statusMessage = "Reviewing"', ''
+  ].join('\n'));
+  const items = await loadForeignHooks(root, { env, home, trusted: true });
+  const user = items.find((item) => item.scope === 'user' && item.protocol === 'codex');
+  assert.equal(user.hooks.PreToolUse[0].matcher, 'Edit|Write|MultiEdit|apply_patch');
+  assert.deepEqual(user.dropped, ['Interrupt']);
+  const settings = await loadSettings(root, { env });
+  const post = settings.hooks.PostToolUse.flatMap((group) => group.hooks).find((hook) => hook.command === 'echo project');
+  assert.ok(post && !post.protocol, 'Codex hooks run natively');
+  const { matcherAccepts } = await import('../src/hooks.mjs');
+  assert.ok(matcherAccepts(settings.hooks.PreToolUse.find((group) => group.hooks.some((hook) => hook.command === 'echo user')).matcher, ['edit_file', 'Edit'], 'PreToolUse'));
+  // Untrusted: only the user layer.
+  assert.ok(!(await loadForeignHooks(root, { env, home, trusted: false })).some((item) => item.scope === 'project'));
+  // [features] hooks = false turns a layer off.
+  await writeFile(path.join(home, '.codex', 'config.toml'), '[features]\nhooks = false\n');
+  assert.ok(!(await loadForeignHooks(root, { env, home, trusted: true })).some((item) => item.scope === 'user' && item.protocol === 'codex'));
+});
+
+test('codexMatcher keeps regular expressions anchored', async () => {
+  const { codexMatcher } = await import('../src/foreign-hooks.mjs');
+  assert.equal(codexMatcher('^apply_patch$'), '^(?:Edit|Write|MultiEdit|apply_patch)$');
+  assert.equal(codexMatcher('Bash'), 'Bash');
+});
