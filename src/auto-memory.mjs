@@ -763,6 +763,10 @@ export async function runMemoryTool(name, args = {}, { root, env = process.env, 
   }
   if (name === 'memory_save') {
     const saved = await saveMemory(root, args, { env, source: session && session.sessionId || null });
+    // A memory saved from a finding follows it: if the finding is later retracted, the memory is revised.
+    if (args.from_finding && saved && saved.id && session && session.knowledgeBoard) {
+      try { const { linkMemoryToFinding } = await import('./knowledge-board.mjs'); linkMemoryToFinding(session.knowledgeBoard, String(args.from_finding).trim(), saved.id, { root, env }); } catch {}
+    }
     return { ...saved, note: saveNote(saved) };
   }
   if (name === 'memory_search') {

@@ -46,7 +46,7 @@
 // finding and its provenance; src/auto-memory.mjs).
 
 import MiniSearch from 'minisearch';
-import { tokenize, redactSecrets } from './auto-memory.mjs';
+import { tokenize, redactSecrets, verifyMemory } from './auto-memory.mjs';
 import { sessionEvidence, normalizeUrl, lastCheck, fetchedUrls } from './evidence-ledger.mjs';
 import { analysisContract, checkReport, citedUrls, reportedNumbers } from './verification-contracts.mjs';
 import { claimsPassing } from './claim-check.mjs';
@@ -137,6 +137,7 @@ function sanitizeEntry(item) {
     ...(item.retracted && typeof item.retracted === 'object' ? { retracted: { by: clean(item.retracted.by, 100) || 'main', reason: clean(item.retracted.reason, 400), at: iso(item.retracted.at) } } : {}),
     ...(parseConfidence(item.confidence) !== null ? { confidence: parseConfidence(item.confidence) } : {}),
     ...(clean(item.model, 120) ? { model: clean(item.model, 120) } : {}),
+    ...(Array.isArray(item.savedAs) && item.savedAs.length ? { savedAs: list(item.savedAs, 10, 200) } : {}),
     ...(item.settled && typeof item.settled === 'object' && (item.settled.outcome === 0 || item.settled.outcome === 1) && SETTLE_KINDS.has(item.settled.kind) ? { settled: { outcome: item.settled.outcome, kind: item.settled.kind, ...(clean(item.settled.by, 100) ? { by: clean(item.settled.by, 100) } : {}), at: iso(item.settled.at) } } : {})
   };
 }
@@ -491,12 +492,55 @@ function retractFinding(session, board, args) {
   for (const contest of contests) settle(board, board.entries.find((item) => item.id === contest.id), 1, 'won-dispute', actor);
   const undermined = underminedFindings(board).filter((item) => item.fallen.some((premise) => premise.id === id)).map((item) => item.entry);
   for (const dependent of undermined) tellAuthor(session, dependent, '[OASIS] Your finding ' + dependent.id + ' ("' + dependent.claim.slice(0, 160) + '") builds on ' + id + ', which ' + actor + ' just retracted' + (entry.retracted.reason ? ' (' + entry.retracted.reason.slice(0, 160) + ')' : '') + '. Re-check it: retract it, or re-post it with evidence that does not depend on ' + id + '.');
+  const memories = reviseMemories(session, board, [entry, ...undermined], id, actor, entry.retracted.reason);
   const voided = voidEvidenceCiting(board, [id, ...undermined.map((item) => item.id)], { by: actor, reason: entry.retracted.reason, cause: id });
   const notes = [];
+  if (memories.length) notes.push('Durable memor' + (memories.length === 1 ? 'y' : 'ies') + ' saved from it marked ' + memories.map((item) => item.memory + ' ' + item.status).join(', ') + '.');
   if (voided.length) notes.push('Hypotheses evidence that cited it no longer counts: ' + voided.join(', ') + '.');
   if (contests.length) notes.push('The dispute with ' + contests.map((item) => item.id).join(', ') + ' is resolved in their favour.');
   if (undermined.length) notes.push('This undermines ' + undermined.map((item) => item.id + ' (' + item.author + ')').join(', ') + ', which build' + (undermined.length === 1 ? 's' : '') + ' on it. Their authors have been told; re-check them before relying on them.');
-  return { retracted: id, ...(contests.length ? { resolved: contests.map((item) => item.id) } : {}), ...(undermined.length ? { undermines: undermined.map((item) => item.id) } : {}), ...(voided.length ? { voided_evidence: voided } : {}), ...(notes.length ? { note: notes.join(' ') } : {}) };
+  return { retracted: id, ...(contests.length ? { resolved: contests.map((item) => item.id) } : {}), ...(undermined.length ? { undermines: undermined.map((item) => item.id) } : {}), ...(voided.length ? { voided_evidence: voided } : {}), ...(memories.length ? { revised_memories: memories } : {}), ...(notes.length ? { note: notes.join(' ') } : {}) };
+}
+
+// Durable memories saved from a finding (memory_save from_finding) follow it.
+// When the finding is retracted, the memory is marked outdated (it leaves the
+// index and recall); when it is only undermined, uncertain. The memory's
+// verification note names the finding and why it fell, so a later session
+// does not keep recalling what this session found to be wrong.
+const memoryRevisions = new WeakMap();
+// Where memories live is runtime state (a path and the env), never saved with the board.
+const memoryHomes = new WeakMap();
+
+/** Remember that `memoryId` was saved from finding `id`, with where the memory lives. */
+export function linkMemoryToFinding(board, id, memoryId, { root = '', env = process.env } = {}) {
+  const entry = board && Array.isArray(board.entries) ? board.entries.find((item) => item.id === id) : null;
+  if (!entry || !memoryId) return false;
+  entry.savedAs = [...new Set([...(entry.savedAs || []), String(memoryId)])].slice(-10);
+  if (root) memoryHomes.set(board, { root, env });
+  return true;
+}
+
+function reviseMemories(session, board, fallen, cause, actor, reason) {
+  const home = memoryHomes.get(board) || (session && session.root ? { root: session.root, env: process.env } : null);
+  const revised = [];
+  const jobs = [];
+  for (const entry of fallen) {
+    for (const memoryId of entry.savedAs || []) {
+      const direct = entry.id === cause;
+      const status = direct ? 'outdated' : 'uncertain';
+      revised.push({ memory: memoryId, finding: entry.id, status });
+      if (!home) continue;
+      const evidence = 'Saved from knowledge board finding ' + entry.id + (direct ? ', which ' + actor + ' retracted' : ', which builds on ' + cause + ' that ' + actor + ' retracted') + (reason ? ': ' + reason : '') + '.';
+      jobs.push(verifyMemory(home.root, memoryId, { status, evidence, env: home.env }).catch(() => null));
+    }
+  }
+  if (jobs.length) memoryRevisions.set(board, Promise.all([memoryRevisions.get(board), ...jobs]));
+  return revised;
+}
+
+/** Resolves when memory revisions started by retractions have been written (tests, shutdown). */
+export function settledMemoryRevisions(board) {
+  return Promise.resolve(board && memoryRevisions.get(board)).then(() => undefined);
 }
 
 // The author of an undermined finding hears about it at its next step, if it is still running.
