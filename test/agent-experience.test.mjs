@@ -24,18 +24,55 @@ test('outcomes come from the runtime record, not the report', () => {
   assert.equal(classifyOutcome({ status: 'completed', verificationIssues: [{ domain: 'code', reason: 'x' }] }), 'rejected');
   assert.equal(classifyOutcome({ status: 'completed', unverifiedClaim: 'ran no test' }), 'unverified');
   assert.equal(classifyOutcome({ status: 'completed', partial: true }), 'partial');
-  assert.equal(classifyOutcome({ status: 'completed', evidence: { counts: {}, lastCheck: { passed: true, stale: false } } }), 'verified');
-  assert.equal(classifyOutcome({ status: 'completed', evidence: { counts: {}, lastCheck: { passed: true, stale: true } } }), 'clean');
-  assert.equal(classifyOutcome({ status: 'completed', evidence: { counts: { fetch: 2 } } }), 'verified');
+  // A change followed by a passing check is verified; a check with nothing
+  // changed, or a stale one, proves nothing about the agent's work.
+  assert.equal(classifyOutcome({ status: 'completed', evidence: { counts: { edit: 1 }, lastCheck: { passed: true, stale: false } } }), 'verified');
+  assert.equal(classifyOutcome({ status: 'completed', evidence: { counts: {}, lastCheck: { passed: true, stale: false } } }), 'clean');
+  assert.equal(classifyOutcome({ status: 'completed', evidence: { counts: { edit: 1 }, lastCheck: { passed: true, stale: true } } }), 'clean');
+  // Tool activity is not verification (regression: fetches and executions
+  // used to count as verified whatever the report said).
+  assert.equal(classifyOutcome({ status: 'completed', evidence: { counts: { fetch: 2 } } }), 'clean');
+  assert.equal(classifyOutcome({ status: 'completed', evidence: { counts: { execution: 3 } } }), 'clean');
   assert.equal(classifyOutcome({ status: 'completed', evidence: { counts: { search: 1 } } }), 'clean');
+  // Checked claims decide: all supported is verified, any unsupported is not.
+  assert.equal(classifyOutcome({ status: 'completed', evidence: { counts: { fetch: 2 } }, claims: { checked: 2, supported: 2 } }), 'verified');
+  assert.equal(classifyOutcome({ status: 'completed', evidence: { counts: { fetch: 2 } }, claims: { checked: 2, supported: 1 } }), 'clean');
+  assert.equal(classifyOutcome({ status: 'completed', claims: { checked: 0, supported: 0 } }), 'clean');
 });
 
-test('task domains are coarse buckets', () => {
-  assert.equal(taskDomain('Fix the failing test in src/agent.mjs and refactor the helper'), 'code');
+test('task domains are coarse buckets shared with the task model', () => {
+  assert.equal(taskDomain('Fix the failing test in src/agent.mjs and refactor the helper'), 'software');
   assert.equal(taskDomain('Research the latest sources and documentation on vector databases'), 'research');
   assert.equal(taskDomain('Analyze this CSV dataset and compute the metrics'), 'analysis');
   assert.equal(taskDomain('Take a screenshot and click the login button on the desktop'), 'computer');
   assert.equal(taskDomain('hello there'), 'general');
+  assert.equal(taskDomain('Write a blog post announcing the release'), 'writing');
+});
+
+test('schema 1 rows verified by tool activity alone are not trusted as verified', async (t) => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const dir = await scratch(t);
+  const file = path.join(dir, 'exp.sqlite');
+  // A store written by the schema 1 code: no rule column.
+  const old = new DatabaseSync(file);
+  old.exec(`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+    CREATE TABLE agent_runs (seq INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, project TEXT NOT NULL, session_id TEXT, agent_id TEXT,
+     agent_type TEXT NOT NULL, model TEXT, domain TEXT, task_class TEXT, description TEXT, task TEXT, outcome TEXT NOT NULL, detail TEXT, lesson TEXT,
+     tool_calls INTEGER, tokens INTEGER, cost_usd REAL, duration_ms INTEGER, checks_passed INTEGER, fetches INTEGER, edits INTEGER);
+    INSERT INTO meta VALUES ('version', '1');
+    INSERT INTO agent_runs (at, project, agent_type, domain, outcome, checks_passed, fetches) VALUES (1, 'p', 'Explore', 'code', 'verified', 0, 3);
+    INSERT INTO agent_runs (at, project, agent_type, domain, outcome, checks_passed, fetches) VALUES (2, 'p', 'Explore', 'code', 'verified', 1, 0);`);
+  old.close();
+  const store = openExperienceStore(file);
+  t.after(() => store.close());
+  const rows = store.runs({ project: 'p' }).sort((a, b) => a.at - b.at);
+  assert.deepEqual(rows.map((row) => row.outcome), ['clean', 'verified']);
+  assert.deepEqual(rows.map((row) => row.domain), ['software', 'software'], 'legacy domain names map onto the task model');
+  assert.equal(store.record({ project: 'p', agentType: 'Explore', outcome: 'verified', claimsChecked: 2, claimsSupported: 2, verdict: 'verified' }), true);
+  const fresh = store.runs({ project: 'p' }).find((row) => row.rule === 2);
+  assert.equal(fresh.outcome, 'verified');
+  assert.equal(fresh.claimsChecked, 2);
+  assert.equal(fresh.verdict, 'verified');
 });
 
 test('the store redacts secrets, filters, prunes and forgets', async (t) => {
@@ -92,32 +129,40 @@ test('track records aggregate and the Wilson bound punishes small samples', () =
     { agentType: 'a', model: 'm1', domain: 'code', outcome: 'failed', tokens: 50, costUsd: 0, durationMs: 1000, at: 2 },
     { agentType: 'a', model: 'm1', domain: 'code', outcome: 'cancelled', at: 3 }
   ];
-  const [record] = trackRecord(rows);
-  assert.equal(record.runs, 10);
+  const [record] = trackRecord([...rows, { agentType: 'a', model: 'm1', domain: 'code', outcome: 'clean', at: 4 }]);
+  assert.equal(record.runs, 11);
+  assert.equal(record.decisive, 9, 'clean and cancelled runs are not decisive');
+  assert.equal(record.unchecked, 1);
   assert.equal(record.succeeded, 8);
   assert.equal(record.verified, 8);
   assert.equal(record.failed, 1);
-  assert.equal(record.avgTokens, 85);
-  assert.ok(record.successLowerBound > 0.6 && record.successLowerBound < 0.89);
+  assert.equal(record.successRate, 8 / 9);
+  assert.ok(record.successLowerBound > 0.5 && record.successLowerBound < 8 / 9);
   assert.ok(wilsonLower(1, 1) < 0.75, 'one success is weak evidence');
   assert.equal(wilsonLower(0, 0), 0);
-  assert.match(formatTrackRecord([record]), /a \/ m1 \/ code\n  10 runs, 80% succeeded \(80% verified\), 1 failed/);
+  assert.match(formatTrackRecord([record]), /a \/ m1 \/ software\n  11 runs, 89% verified of 9 decisive \(1 unchecked\), 1 failed/);
   assert.match(formatTrackRecord([]), /No agent experience recorded yet/);
 });
 
 test('experience routing picks a cheaper model only on enough matching evidence', () => {
   const runs = (model, ok, bad) => [
-    ...Array.from({ length: ok }, () => ({ agentType: 'Explore', model, domain: 'code', outcome: 'clean' })),
+    ...Array.from({ length: ok }, () => ({ agentType: 'Explore', model, domain: 'code', outcome: 'verified' })),
     ...Array.from({ length: bad }, () => ({ agentType: 'Explore', model, domain: 'code', outcome: 'failed' }))
   ];
   const price = (model) => ({ strong: 10, cheap: 1, free: 0, worse: 0.5 })[model] ?? null;
   const pick = (rows, extra = {}) => chooseExperienceModel({ rows, agentType: 'Explore', domain: 'code', baseModel: 'strong', candidates: ['cheap', 'free', 'worse', 'mystery'], price, ...extra });
   assert.equal(pick(runs('strong', 3, 0)).changed, false, 'too little history for the default model');
-  assert.match(pick(runs('strong', 3, 0)).reason, /3 of 5 runs/);
+  assert.match(pick(runs('strong', 3, 0)).reason, /3 of 5 decisive runs/);
+  // Runs nobody could check are not a track record (regression: clean used
+  // to count as success, so a model that never produced a checkable claim
+  // looked as good as one whose claims held).
+  const unchecked = (model, n) => Array.from({ length: n }, () => ({ agentType: 'Explore', model, domain: 'code', outcome: 'clean' }));
+  assert.equal(pick([...runs('strong', 10, 0), ...unchecked('cheap', 20)]).changed, false);
+  assert.equal(pick([...unchecked('strong', 20), ...runs('cheap', 10, 0)]).changed, false, 'the default model needs checked history too');
   const rows = [...runs('strong', 10, 0), ...runs('cheap', 10, 0), ...runs('free', 2, 0), ...runs('worse', 3, 7), ...runs('mystery', 20, 0)];
   const choice = pick(rows);
   assert.equal(choice.model, 'cheap', 'free has too few runs, worse fails too often, mystery has no known price');
-  assert.match(choice.reason, /cheap succeeded on 10 of 10 Explore code runs/);
+  assert.match(choice.reason, /cheap was verified on 10 of 10 decisive Explore software runs/);
   assert.equal(pick(rows, { domain: 'research' }).changed, false, 'records do not cross domains');
   assert.equal(pick([...rows, ...runs('free', 10, 0)]).model, 'free');
   assert.equal(pick(rows, { candidates: [] }).model, 'strong');
@@ -188,7 +233,7 @@ test('a finished subagent run is recorded and recalled for the next similar task
   assert.equal(experienceFile(env), path.join(env.OASIS_CONFIG_DIR, 'sessions', 'agent-experience.sqlite'));
   const rows = store.runs({ project: experienceProject(root) });
   assert.equal(rows.length, 2);
-  assert.ok(rows.every((row) => row.outcome === 'verified' && row.agentType === 'general-purpose' && row.checksPassed === 1 && row.toolCalls === 1 && row.domain === 'code'));
+  assert.ok(rows.every((row) => row.outcome === 'verified' && row.agentType === 'general-purpose' && row.checksPassed === 1 && row.toolCalls === 1 && row.domain === 'software' && row.claimsChecked >= 1 && row.claimsSupported === row.claimsChecked));
 });
 
 test('OASIS_AGENT_EXPERIENCE=0 records and recalls nothing', async () => {
@@ -209,7 +254,7 @@ test('modelRouting.subagents "experience" starts the child on the cheaper proven
   });
   assert.deepEqual(childModels, ['gpt-mini', 'gpt-mini']);
   assert.equal(results[0].model, 'gpt-mini');
-  assert.match(results[0].model_route, /experience: gpt-mini succeeded on 6 of 6/);
+  assert.match(results[0].model_route, /experience: gpt-mini was verified on 6 of 6/);
 });
 
 test('the control room shows each agent type and model track record', async (t) => {
@@ -224,13 +269,14 @@ test('the control room shows each agent type and model track record', async (t) 
   const activity = experienceActivity({ env });
   assert.equal(activity.available, true);
   assert.equal(activity.records[0].runs, 4);
-  assert.equal(activity.records[0].successRate, 0.75);
+  assert.equal(activity.records[0].successRate, 2 / 3, 'the clean run is not counted as a success');
+  assert.equal(activity.records[0].unchecked, 1);
   assert.doesNotMatch(JSON.stringify(activity), /secret plan/, 'counts only, never task text');
   const snapshot = controlRoomSnapshot({ env });
-  assert.match(formatControlRoom(snapshot), /Track record \(last 30 days[^\n]*\n  Explore \/ small\s+4 runs\s+75% ok  2 verified  1 failed/);
+  assert.match(formatControlRoom(snapshot), /Track record \(last 30 days[^\n]*\n  Explore \/ small\s+4 runs\s+67% ok  2 verified  1 unchecked  1 failed/);
   const [row] = controlRoomTrackRecord(snapshot);
   assert.equal(row.title, 'Explore · small');
   assert.equal(row.tone, 'waiting');
-  assert.match(row.detail, /4 runs · 75% succeeded · 2 verified · 1 failed/);
+  assert.match(row.detail, /4 runs · 67% verified of decisive · 2 verified · 1 unchecked · 1 failed/);
   assert.equal(experienceActivity({ env: { ...env, OASIS_AGENT_EXPERIENCE: '0' } }).available, false);
 });

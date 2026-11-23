@@ -162,6 +162,6 @@ export function controlRoomTrackRecord(snapshot, { now = Date.now(), limit = 10 
     key: item.agentType + '|' + item.model,
     title: item.agentType + (item.model ? ' · ' + item.model : ''),
     tone: item.successRate >= 0.8 ? 'completed' : item.successRate >= 0.5 ? 'waiting' : 'failed',
-    detail: [item.runs + (item.runs === 1 ? ' run' : ' runs'), Math.round(item.successRate * 100) + '% succeeded', item.verified ? item.verified + ' verified' : '', item.failed ? item.failed + ' failed' : '', item.rejected ? item.rejected + ' rejected' : '', formatTokens(item.avgTokens) + ' tokens avg', item.avgCostUsd ? formatCost(item.avgCostUsd) + ' avg' : '', ago(item.lastAt, now)].filter(Boolean).join(' · ')
+    detail: [item.runs + (item.runs === 1 ? ' run' : ' runs'), Math.round(item.successRate * 100) + '% verified of decisive', item.verified ? item.verified + ' verified' : '', item.unchecked ? item.unchecked + ' unchecked' : '', item.failed ? item.failed + ' failed' : '', item.rejected ? item.rejected + ' rejected' : '', formatTokens(item.avgTokens) + ' tokens avg', item.avgCostUsd ? formatCost(item.avgCostUsd) + ' avg' : '', ago(item.lastAt, now)].filter(Boolean).join(' · ')
   }));
 }

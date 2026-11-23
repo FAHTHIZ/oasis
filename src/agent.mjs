@@ -100,6 +100,7 @@ import { CONNECT_SERVICE_TOOL_DEFINITION } from './connectors.mjs';
 import { webAccessSites, outboundEmailHit, userEmailAddresses } from './web-access.mjs';
 import { exitPlanMode, permissionMode } from './plan-mode.mjs';
 import { newGateState, runCompletionGates } from './completion-gates.mjs';
+import { deriveTaskSpec, restoreSpec, taskBrief, taskModelEnabled } from './task-model.mjs';
 import { adoptReportedContextWindow, useCompactToolProfile } from './context-window.mjs';
 import { MIXTURE_TOOL_DEFINITION, parseMixtureModels, runMixture } from './mixture.mjs';
 import { detectRepetition, collapseRepetition, DEGENERATE_OUTPUT_NUDGE } from './degenerate-output.mjs';
@@ -708,6 +709,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     definedAgents: sanitizeDefinedAgents(restore && restore.definedAgents),
     mustPreserve: Array.isArray(restore && restore.mustPreserve) ? restore.mustPreserve.slice(0, 20) : [],
     ...(restore && restore.goal && typeof restore.goal.condition === 'string' ? { goal: { ...restore.goal, active: false } } : {}),
+    ...(restoreSpec(restore && restore.task) ? { task: restoreSpec(restore.task) } : {}),
     settings: loadedSettings,
     settingsError,
     permissions,
@@ -3313,6 +3315,18 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     if (changes) userContent = changes + '\n\n' + userContent;
   }
   session.currentRequest = request;
+  // The universal task spec for this request (src/task-model.mjs): what was
+  // asked, what counts as done and how it will be checked. The completion
+  // gate evaluates it against the evidence this turn leaves.
+  let taskBriefText = '';
+  if (!options.isSubagent && taskModelEnabled(session, options.env || process.env)) {
+    try {
+      session.task = deriveTaskSpec(request, { previous: restoreSpec(session.task), mode: session.permissions && session.permissions.mode || '' });
+      const ledger = sessionEvidence(session);
+      session.taskEvidenceFrom = ledger ? ledger.seq : 0;
+      taskBriefText = options.planOnly ? '' : taskBrief(session.task);
+    } catch { session.task = null; }
+  }
   if (session.pendingDynamicContext && !options.isSubagent) { userContent = '<session-context>\n' + session.pendingDynamicContext + '\n</session-context>\n\n' + userContent; session.pendingDynamicContext = null; }
   // Opt-in repository map on the first turn (settings.repoMap: true | { maxChars }, or OASIS_REPO_MAP=1).
   if (!options.isSubagent && !session.repoMapInjected && !session.messages.some((message) => message.role === 'user' || message.role === 'assistant')) {
@@ -3389,6 +3403,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   }
   const startNotice = drainInbox(session);
   if (startNotice) userContent += '\n\n' + startNotice;
+  // task_contract stays deferred: a direct call loads it, and loading it here
+  // would change the tool list mid-session and break the prompt cache.
+  if (taskBriefText) userContent += '\n\n' + taskBriefText;
   editScopeFromEnv(session, options.env || process.env);
   if (!options.isSubagent && session.editScope && !session.editScopeAnnounced) {
     session.editScopeAnnounced = true;

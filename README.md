@@ -344,7 +344,7 @@ oasis -p --permission-mode auto --goal "npm test passes"              # keeps go
   <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/pipeline-dark.svg"><img src="assets/readme/pipeline-light.svg" alt="Animated diagram: a task moves from Ask to Plan, Act, Verify and Done. Verify is a gate: if a check failed or was skipped, or a claim has no evidence behind it, the task goes back to work instead of finishing." width="100%"></picture>
 </p>
 
-You ask in plain words. OASIS plans the work, acts through tools (files, shell, browser, search, apps), then has to pass a verification gate before it may say it is done. The gate checks the evidence the run actually produced: a diff was reviewed, a command really exited 0, a cited page was really fetched, a number was really printed by code. If something is missing, the agent is sent back to work. Every file change is checkpointed, so <kbd>Esc</kbd> <kbd>Esc</kbd> or `/rewind` undoes a turn.
+You ask in plain words. OASIS plans the work, acts through tools (files, shell, browser, search, apps), then has to pass a verification gate before it may say it is done. The gate checks the evidence the run actually produced: a diff was reviewed, a command really exited 0, a cited page was really fetched, a number was really printed by code. If something is missing, the agent is sent back to work. Each request is also read into a [task contract](docs/TASK-MODEL.md) (deliverables, acceptance criteria, risk), and the outcome says separately whether the work ran, what was checked and whether the criteria were met, so finishing is not mistaken for succeeding. Every file change is checkpointed, so <kbd>Esc</kbd> <kbd>Esc</kbd> or `/rewind` undoes a turn.
 
 <p align="center">
   <img src="assets/readme/architecture.svg" alt="Animated diagram: the terminal, web app, desktop app, editors and other agents, chat gateways, and the SDK, CI and GitHub Action all drive one OASIS runtime with a turn loop, permissions, the agent network, a verification gate, and checkpoints and memory. The runtime talks to any model provider, to tools and integrations such as MCP servers, app connectors and plugins, and to the places work runs: this machine, a sandbox, a container or a remote machine." width="100%">
@@ -458,7 +458,7 @@ Engineering benchmarks of the harness itself (tool-call repair, edit application
 
 | Get started | Go deeper | Project |
 | --- | --- | --- |
-| [User guide](docs/USER-GUIDE.md) | [Architecture](docs/ARCHITECTURE.md) | [Capabilities and status](docs/CAPABILITIES.md) |
+| [User guide](docs/USER-GUIDE.md) | [Architecture](docs/ARCHITECTURE.md) · [Task model](docs/TASK-MODEL.md) | [Capabilities and status](docs/CAPABILITIES.md) |
 | [First run](docs/FIRST-RUN.md) | [Agent network](docs/AGENT-NETWORK.md) · [Subagents](docs/SUBAGENTS.md) | [Changelog](CHANGELOG.md) |
 | [Workflows](docs/WORKFLOWS.md) | [Configuration](docs/CONFIGURATION.md) | [Contributing](CONTRIBUTING.md) |
 | [Terminal guide](docs/TERMINAL.md) | [Skills, hooks, MCP and plugins](docs/EXTENDING.md) | [Security](SECURITY.md) |

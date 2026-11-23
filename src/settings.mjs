@@ -465,6 +465,9 @@ export async function loadSettings(root, options = {}) {
     if (settings.agentExperience === false) result.agentExperience = false;
     // The confidence calibration ledger (src/calibration.mjs); off never loosens anything.
     if (settings.calibration === false) result.calibration = false;
+    // The task contract and its completion gate (src/task-model.mjs). Off
+    // removes a verification check, so an untrusted workspace cannot do it.
+    if (settings.taskModel === false && trusted) result.taskModel = false;
     // Memory write approval only tightens, so it applies before trust too.
     const writeApproval = String(settings.memoryWriteApproval || (settings.memory && settings.memory.writeApproval) || '').toLowerCase();
     if (['ask', 'queue'].includes(writeApproval)) result.memoryWriteApproval = writeApproval;

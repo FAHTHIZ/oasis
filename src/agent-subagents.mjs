@@ -30,7 +30,8 @@ import { repairInterruptedHistory } from './tool-results.mjs';
 import { unsupportedChildClaim } from './claim-check.mjs';
 import { applyInjectionTaint, injectionTaint, judgedPathsFor, taintNotice } from './untrusted-content.mjs';
 import { evidenceSince, evidenceSummary, sessionEvidence } from './evidence-ledger.mjs';
-import { checkReport } from './verification-contracts.mjs';
+import { assessReport, checkReport } from './verification-contracts.mjs';
+import { assessOutcome, deriveTaskSpec } from './task-model.mjs';
 
 /** Symbol key on runSubagent results: the run's evidence and contract issues (never serialized). */
 export const REPORT_EVIDENCE = Symbol.for('oasis.reportEvidence');
@@ -775,6 +776,15 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   record.verificationIssues = checkReport(outcome.text, evidence, { domains: record.domains });
   const codeIssue = record.verificationIssues.find((issue) => issue.domain === 'code');
   record.unverifiedClaim = (codeIssue && codeIssue.reason) || (record.verificationIssues.length ? null : unsupportedChildClaim(outcome)) || null;
+  // What the contracts checked (claim counts) and the delegated task's
+  // outcome under the universal task model (src/task-model.mjs): the
+  // verdict comes from evidence, never from the child saying it is done.
+  const assessed = assessReport(outcome.text, evidence, { domains: record.domains });
+  record.claims = { checked: assessed.checked, supported: assessed.supported };
+  try {
+    record.task = deriveTaskSpec(prompt, { source: 'delegated', parentId: (parent.task && parent.task.id) || '', id: record.id });
+    record.taskOutcome = assessOutcome(record.task, { status: 'completed', partial: Boolean(outcome.limitReached), events: evidence, reply: outcome.text, root: child.root || parent.root, domains: record.domains });
+  } catch { record.task = null; record.taskOutcome = null; }
   if (record.verificationIssues.length) recordAgentEvent(parent, 'agent.report_rejected', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: record.verificationIssues.map((issue) => issue.domain + ': ' + issue.reason).join('; ').slice(0, 600) });
   // Disputes this agent opened or was drawn into on the knowledge board.
   const disputes = parent.knowledgeBoard ? openConflicts(parent.knowledgeBoard, { author: record.id }).slice(0, 5) : [];
@@ -783,7 +793,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   record.reportFile = handoff ? handoff.file : null;
   if (record.pane) record.pane.write('[completed] ' + Math.max(0, Number(outcome.toolCalls) || 0) + ' tool calls');
   record.tokensUsed += Math.max(0, Number(outcome.tokensUsed) || 0);
-  recordAgentExperience(parent, record, experienceRun({ tokens: Math.max(0, Number(outcome.tokensUsed) || 0), evidence: record.evidence, partial: Boolean(outcome.limitReached), toolCalls: Math.max(0, Number(outcome.toolCalls) || 0) }), { env: options.env });
+  recordAgentExperience(parent, record, experienceRun({ tokens: Math.max(0, Number(outcome.tokensUsed) || 0), evidence: record.evidence, partial: Boolean(outcome.limitReached), toolCalls: Math.max(0, Number(outcome.toolCalls) || 0), claims: record.claims, taskOutcome: record.taskOutcome }), { env: options.env });
   return {
     agent: type,
     description,
@@ -801,6 +811,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     ...(record.outputSchema ? (outcome.schemaErrors && outcome.schemaErrors.length ? { schema_errors: outcome.schemaErrors } : { structured: outcome.structured }) : {}),
     ...(record.schedulerNote ? { scheduler_note: record.schedulerNote } : {}),
     ...(record.modelRoute && child.config && (child.config.model !== parent.config.model || record.escalatedFrom) ? { model: child.config.model, model_route: record.modelRoute } : {}),
+    ...(record.taskOutcome ? { outcome: { verdict: record.taskOutcome.verdict, claims_checked: record.taskOutcome.claims.checked, claims_supported: record.taskOutcome.claims.supported, acceptance: record.taskOutcome.acceptance.criteria.map(({ kind, description, status }) => ({ kind, description, status })) } } : {}),
     toolCalls: Math.max(0, Number(outcome.toolCalls) || 0),
     tokensUsed: Math.max(0, Number(outcome.tokensUsed) || 0),
     [REPORT_EVIDENCE]: { events: evidence, issues: record.verificationIssues || [], text: outcome.text },

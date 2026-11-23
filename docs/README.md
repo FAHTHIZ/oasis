@@ -47,6 +47,7 @@ every guide.
 - [Security model](SECURITY.md): what OASIS enforces, what is outside its controls, recommended setup.
 - [Provider transport](architecture/provider-transport.md): protocol-specific requests and streaming.
 - [Agent network](AGENT-NETWORK.md): how subagents are scheduled, budgeted, cancelled and checked.
+- [Task model](TASK-MODEL.md): the task contract every request is read into, its acceptance criteria and how outcomes are decided.
 - [Compatibility](COMPATIBILITY.md): the Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Goose and other agent files and protocols OASIS reads or speaks.
 
 ## Development evidence

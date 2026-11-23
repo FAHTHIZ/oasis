@@ -201,7 +201,7 @@ export function evidenceFromToolResult(name, args = {}, result = {}, context = {
   if (context.edited && context.path) {
     return { kind: 'edit', tool: name, path: String(context.path).slice(0, 400), digest };
   }
-  if (['install_package', 'install_plugin', 'install_extension', 'install_external_skill', 'configure_provider', 'configure_mcp_server', 'add_extension', 'git_commit', 'git_branch', 'worktree_merge'].includes(name) && typeof result.error !== 'string') {
+  if (['install_package', 'install_plugin', 'install_extension', 'install_external_skill', 'configure_provider', 'configure_mcp_server', 'add_extension', 'git_commit', 'git_branch', 'git_push', 'create_pull_request', 'worktree_merge', 'delete_file', 'cron_create', 'cron_delete', 'routine_manage'].includes(name) && result && typeof result.error !== 'string') {
     return { kind: 'side_effect', tool: name, digest };
   }
   return null;

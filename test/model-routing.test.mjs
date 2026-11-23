@@ -198,7 +198,7 @@ test('easy read-only requests use the cheaper model and restore the session defa
   const root = await temporaryDirectory(t);
   const env = { ...process.env, OASIS_CONFIG_DIR: path.join(root, 'config') };
   const { config, requests } = await scriptedModel(t, [
-    { content: 'The README explains the project.' },
+    { content: '- The README explains the project.\n- It lists the commands.\n- It links the docs.' },
     { content: 'The authentication change needs a regression test.' }
   ]);
   config.model = 'strong-fixture';
