@@ -100,3 +100,16 @@ test('a Continue block installs its rules and MCP servers', async (t) => {
   const skills = await pluginSkills(plugins, { env });
   assert.ok(skills.some((s) => /tests/.test(s.name)), JSON.stringify(skills.map((s) => s.name)));
 });
+
+test('an .mcpb download link installs as a bundle, not as a remote MCP server', async (t) => {
+  const { classifySource } = await import('../src/add-anything.mjs');
+  assert.equal(classifySource('https://example.com/dl/weather.mcpb').archive, 'https://example.com/dl/weather.mcpb');
+  const http = await import('node:http');
+  const body = Buffer.from(zipSync({ 'manifest.json': strToU8(JSON.stringify(bundle)), 'server/index.js': strToU8('// s\n') }));
+  const server = http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'application/zip' }); res.end(body); });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const { root, env } = await fixture(t, {});
+  const { plugins } = await install('http://127.0.0.1:' + server.address().port + '/weather.mcpb', root, env);
+  assert.deepEqual(plugins.map((p) => p.name), ['weather-bundle']);
+});
