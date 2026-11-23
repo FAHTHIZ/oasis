@@ -375,6 +375,7 @@ export async function saveSession(session, options = {}) {
     ...(claimLogSnapshot(session).length ? { claimLog: claimLogSnapshot(session) } : {}),
     ...(session.evidenceLedger && Array.isArray(session.evidenceLedger.events) && session.evidenceLedger.events.length ? { evidenceLedger: sanitizeEvidenceLedger(session.evidenceLedger) } : {}),
     agents: sanitizeAgentHistory(session.agentTasks),
+    ...(typeof session.journalId === 'string' && /^[A-Za-z0-9_-]{8,80}$/.test(session.journalId) ? { journalId: session.journalId } : {}),
     // A mid-turn snapshot marks the turn as unfinished; the end-of-turn save
     // drops the mark. A session restored with it tells the model its last
     // step may not have completed.
@@ -458,7 +459,8 @@ export async function loadSession(root, id, options = {}) {
       ? { request: safePersistedText(String(payload.turnInProgress.request || '').slice(0, 2000), 2000), savedAt: String(payload.turnInProgress.savedAt || '').slice(0, 40) }
       : null,
     workflowCheckpoint: sanitizeWorkflowCheckpoint(payload.workflowCheckpoint),
-    checkpointsDir: checkpointDirectory(root, payload.id, env)
+    checkpointsDir: checkpointDirectory(root, payload.id, env),
+    journalId: typeof payload.journalId === 'string' && /^[A-Za-z0-9_-]{8,80}$/.test(payload.journalId) ? payload.journalId : null
   };
 }
 
