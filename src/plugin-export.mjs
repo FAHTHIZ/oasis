@@ -147,6 +147,34 @@ const baseManifest = (m) => Object.fromEntries(Object.entries({
  * @param {string} source plugin folder
  * @param {{ out: string, targets?: string[], force?: boolean }} options
  */
+// ---------- Cursor and Copilot hooks ----------
+
+// Cursor and Copilot read hooks in their own protocols, so the export registers
+// hooks/oasis-hook-shim.mjs (a copy of src/hook-shim.mjs) for each event the
+// Claude-format hooks use; the shim runs them and answers in that protocol.
+async function shimHooks(out, protocol, hooks, rootVar) {
+  const { SHIM_EVENTS } = await import('./hook-shim.mjs');
+  const table = SHIM_EVENTS[protocol];
+  const events = {};
+  const left = [];
+  for (const [event, groups] of Object.entries(hooks)) {
+    const names = Object.keys(table).filter((name) => table[name] === event);
+    const timeout = Math.max(10, ...(Array.isArray(groups) ? groups : []).flatMap((g) => (g.hooks || []).map((h) => Number(h && h.timeout) || 60))) + 5;
+    if (!names.length) { left.push(event); continue; }
+    for (const name of names) {
+      const script = rootVar + '/hooks/oasis-hook-shim.mjs';
+      events[name] = [protocol === 'cursor'
+        ? { command: 'node "' + '${' + rootVar + '}' + '/hooks/oasis-hook-shim.mjs" cursor ' + name, timeout }
+        : { type: 'command', bash: 'node "${' + rootVar + '}/hooks/oasis-hook-shim.mjs" copilot ' + name, powershell: 'node "$env:' + script + '" copilot ' + name, timeoutSec: timeout }];
+    }
+  }
+  if (Object.keys(events).length) {
+    await mkdir(path.join(out, 'hooks'), { recursive: true });
+    await writeFile(path.join(out, 'hooks', 'oasis-hook-shim.mjs'), await readFile(fileURLToPath(new URL('./hook-shim.mjs', import.meta.url)), 'utf8'));
+  }
+  return { doc: Object.keys(events).length ? { version: 1, hooks: events } : null, left };
+}
+
 export async function exportPlugin(source, options = {}) {
   const targets = [...new Set((options.targets && options.targets.length ? options.targets : EXPORT_TARGETS).map((t) => String(t).toLowerCase()))];
   for (const t of targets) if (!EXPORT_TARGETS.includes(t)) throw new Error('Unknown export target "' + t + '". Use ' + EXPORT_TARGETS.join(', ') + ' or all.');
@@ -262,10 +290,13 @@ export async function exportPlugin(source, options = {}) {
       const variables = Object.keys(userConfig).length ? { type: 'object', properties: Object.fromEntries(Object.entries(userConfig).map(([key, option]) => [key, { type: 'string', ...(option && option.description ? { description: String(option.description) } : {}) }])) } : null;
       const cursorServers = mapStrings(servers, (v) => v.replace(/\$\{user_config\.([A-Za-z_][A-Za-z0-9_]*)\}/g, '${$1}').replace(/\$\{OASIS_PLUGIN_ROOT\}/g, '${CURSOR_PLUGIN_ROOT}').replace(/\$\{(?:CLAUDE|OASIS)_PROJECT_DIR\}/g, '${workspaceFolder}'));
       if (counts.servers) await writeFile(path.join(out, 'mcp.json'), json({ mcpServers: cursorServers }));
-      const manifest = { ...baseManifest(m), ...(variables ? { variables } : {}) };
+      const shim = hasHooks ? await shimHooks(out, 'cursor', hooks, 'CURSOR_PLUGIN_ROOT') : { doc: null, left: [] };
+      if (shim.doc) { await mkdir(path.join(out, 'cursor'), { recursive: true }); await writeFile(path.join(out, 'cursor', 'hooks.json'), json(shim.doc)); }
+      const manifest = { ...baseManifest(m), ...(variables ? { variables } : {}), ...(shim.doc ? { hooks: './cursor/hooks.json' } : {}) };
       await mkdir(path.join(out, '.cursor-plugin'), { recursive: true });
       await writeFile(path.join(out, '.cursor-plugin', 'plugin.json'), json(manifest));
-      report.push({ target: 'cursor', label: 'Cursor', file: '.cursor-plugin/plugin.json', carried: carried(['commands', 'agents', 'skills', 'servers']), translated: variables ? [counts.options + ' options as variables'] : [], dropped: [...(hasHooks ? ['hooks (Cursor hooks read a different protocol)'] : []), ...extra] });
+      const translated = [...(variables ? [counts.options + ' options as variables'] : []), ...(shim.doc ? [Object.keys(shim.doc.hooks).length + ' hook events through the hook shim'] : [])];
+      report.push({ target: 'cursor', label: 'Cursor', file: '.cursor-plugin/plugin.json', carried: carried(['commands', 'agents', 'skills', 'servers']), translated, dropped: [...(shim.left.length ? ['hook events ' + shim.left.join(', ')] : []), ...extra] });
     }
 
     if (targets.includes('copilot')) {
@@ -281,10 +312,12 @@ export async function exportPlugin(source, options = {}) {
         }
         translated.push(agents.length + ' agents as .agent.md');
       }
-      const manifest = { ...baseManifest(m), ...(agentsRel ? { agents: agentsRel } : {}), skills: './skills/', ...(commands.length ? { commands: './commands/' } : {}), ...(counts.servers ? { mcpServers: './.mcp.json' } : {}) };
+      const shim = hasHooks ? await shimHooks(out, 'copilot', hooks, 'COPILOT_PLUGIN_ROOT') : { doc: null, left: [] };
+      if (shim.doc) { await mkdir(path.join(out, 'copilot'), { recursive: true }); await writeFile(path.join(out, 'copilot', 'hooks.json'), json(shim.doc)); translated.push(Object.keys(shim.doc.hooks).length + ' hook events through the hook shim'); }
+      const manifest = { ...baseManifest(m), ...(agentsRel ? { agents: agentsRel } : {}), skills: './skills/', ...(commands.length ? { commands: './commands/' } : {}), ...(counts.servers ? { mcpServers: './.mcp.json' } : {}), ...(shim.doc ? { hooks: './copilot/hooks.json' } : {}) };
       await mkdir(path.join(out, '.plugin'), { recursive: true });
       await writeFile(path.join(out, '.plugin', 'plugin.json'), json(manifest));
-      report.push({ target: 'copilot', label: 'Copilot CLI', file: '.plugin/plugin.json', carried: carried(['commands', 'skills', 'servers']), translated, dropped: [...(hasHooks ? ['hooks (Copilot hooks read a different protocol)'] : []), ...(counts.options ? ['options'] : []), ...extra] });
+      report.push({ target: 'copilot', label: 'Copilot CLI', file: '.plugin/plugin.json', carried: carried(['commands', 'skills', 'servers']), translated, dropped: [...(shim.left.length ? ['hook events ' + shim.left.join(', ')] : []), ...(counts.options ? ['options'] : []), ...extra] });
     }
     if (targets.includes('opencode')) {
       // OpenCode plugins are code, so the export is a small dependency-free
@@ -526,7 +559,7 @@ export async function scaffoldPlugin(rawName, { dir, description = '', force = f
 // Files `plugin export` writes for the other agents. Refreshing in place
 // removes them first, so a deleted command or agent does not leave a stale copy.
 async function generatedPaths(dir) {
-  const out = ['codex', 'copilot', 'opencode', '.codex-plugin', '.cursor-plugin', '.plugin', 'gemini-extension.json', 'mcp.json'];
+  const out = ['codex', 'copilot', 'opencode', 'cursor', path.join('hooks', 'oasis-hook-shim.mjs'), '.codex-plugin', '.cursor-plugin', '.plugin', 'gemini-extension.json', 'mcp.json'];
   const walkToml = async (sub) => {
     let entries = [];
     try { entries = await readdir(path.join(dir, sub), { withFileTypes: true }); } catch { return; }
