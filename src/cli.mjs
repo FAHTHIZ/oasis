@@ -1432,6 +1432,10 @@ async function openSession(root, config, persistence) {
     if (restored.turnInProgress) stdout.write('[session] The last turn stopped before it finished; Oasis will ask the model to check the files before continuing.\n');
   }
   const session = await createSession({ root, config, restore: restored, ...sessionCreateOptions(), watchFiles: true });
+  if (restored && session.worldDrift) {
+    const { driftSummary } = await import('./world-drift.mjs');
+    stdout.write(driftSummary(session.worldDrift) + '\n');
+  }
   if (restored) {
     let price = null;
     try { price = priceFor(session.config && session.config.model || config.model, { config: session.config || config }); } catch {}

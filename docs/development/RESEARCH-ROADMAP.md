@@ -62,6 +62,14 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - New: before approval, the command runs once in a bubblewrap overlay with no network, no host sockets and a read-only system; the prompt lists the exact files it would create, modify and delete; after approval the real run is compared with the rehearsal and any file it changed beyond what was shown is named. `oasis rehearse --apply` lands exactly the rehearsed changes after re-checking every touched path.
 - Acceptance: `scripts/rehearsal-bench.mjs` on 16 commands: exact file list for 15 (static prediction: 4), median overhead about 50 ms; the miss (a time-named output file) is caught by the divergence check. The workspace is byte-identical after a rehearsal; network, `/run` sockets and writes outside the workspace are refused (`test/rehearsal.test.mjs`, 10 tests). The benchmark also exposed that `find -delete`, `xargs sed -i` and package scripts were predicted to change nothing; fixed in the same commit.
 
+### World drift on resume
+
+- Commit: `5d7af1e2`. Docs: [World drift on resume](../CONTINUITY.md).
+- Problem: a resumed session assumes the workspace is as it left it; commits, branch switches and external edits made in between are invisible to the model.
+- Prior art: Claude Code and Codex resume restore the conversation only; OASIS's `file-state.mjs` reminder is in-memory and lost when the process exits.
+- New: each save records HEAD, branch and content hashes of the files the conversation touched; resume reports new commits, branch change, rewritten history and changed known files to the user and, once, to the model.
+- Acceptance: `test/world-drift.test.mjs` (7 tests); capture on 300 files of this repository about 127 ms, comparison about 91 ms.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |
