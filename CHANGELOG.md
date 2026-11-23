@@ -6,6 +6,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Added
 
+- "Apply the rehearsed changes only" in the terminal approval prompt for a rehearsed `run_command` or `run_shell`: lands exactly the files the rehearsal showed, after a conflict check, without running the command again. Offered only for a clean rehearsal (exit 0, changes inside the workspace, no `.git` changes) of a command that is not high-risk. See [Command rehearsal](docs/REHEARSAL.md#apply-the-rehearsal-instead-of-running-again).
 - Command rehearsal is on by default when the OS sandbox runs on bubblewrap. Under the sandbox it also hides that sandbox's own `denyRead` masks. `"rehearse"` and `"worldDrift"` in settings now take effect (they were dropped by the settings loader); a repository can turn rehearsal off but not on.
 - `/insights` reports effects: failed calls that had in fact taken effect, approved commands that changed more files than their rehearsal showed (per command, with a tip when one misses repeatedly), and resumed sessions that found the workspace changed.
 - World drift on resume. Each session save records the commit, branch and a content hash of every file the conversation read or wrote. On resume, OASIS prints what moved since then (new commits with subjects, branch switch, rewritten history, changed, deleted or newly created known files) and the first turn tells the model to read those files again. A touch or same-bytes checkout is not drift. `OASIS_WORLD_DRIFT=0` turns it off. See [World drift on resume](docs/CONTINUITY.md).

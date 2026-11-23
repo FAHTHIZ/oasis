@@ -80,6 +80,13 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - Commit: see `git log -- src/rehearsal.mjs` ("Rehearse by default under the bubblewrap sandbox").
 - The roadmap item said "with `sandbox.autoAllowCommands`"; under that setting ordinary commands never prompt, so the useful default is the sandbox itself: the commands that still prompt there are the high-risk ones. Building it exposed that the shipped rehearsal read credential paths and the unscrubbed environment before approval (fixed concurrently in `aeb229fd`; this change adds the sandbox's own `denyRead` masks) and that `"rehearse"` in settings was dropped by the loader (fixed here). `test/settings-keys.test.mjs` shows a repository cannot turn it on.
 
+### Apply the rehearsal
+
+- Commit: see `git log -- src/rehearsal.mjs` ("Offer to apply a rehearsal instead of running again").
+- Problem: after a rehearsal, approval ran the command a second time; for time- or randomness-dependent commands the real run differs from what was shown (the divergence check could only report it afterwards).
+- New: a third terminal answer lands the rehearsed upper layer, conflict-checked, with no second run; offered only for clean, non-high-risk rehearsals.
+- Acceptance: `test/rehearsal.test.mjs`: a counting script lands one line, not two; a file edited during the prompt blocks the apply and nothing runs; failing, no-op and high-risk commands are not offered it; the agent path for `run_command` and `run_shell` returns `appliedRehearsal: true`; no rehearsal directory is left behind.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |
@@ -99,7 +106,7 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### Ready for implementation
 
-- Approval answer "apply the rehearsal" in the terminal and app prompts, so a person can accept exactly what was shown instead of a second run (the apply path and its conflict check exist).
+- Approval answer "apply the rehearsal" in the app's approval cards (the terminal has it).
 - Rehearsal on macOS: no overlay mount there, but an APFS clone (`clonefile`) of the workspace plus Seatbelt would give the same change list for small workspaces; acceptance would be the same 16-command benchmark.
 
 ### Experimental

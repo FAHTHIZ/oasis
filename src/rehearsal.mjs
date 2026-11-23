@@ -382,7 +382,19 @@ export function rehearsalDivergence(result, observed) {
  * container runs somewhere else, and one held because of suspected prompt injection is not
  * started at all, so neither is rehearsed.
  */
-export async function rehearseForApproval({ root, command, args = [], line = null, env = process.env, settings = {}, sandbox = null, injectionHold = '' } = {}) {
+/**
+ * Whether a rehearsal can stand in for the real run: it finished with exit 0, changed
+ * something, wrote nothing outside the workspace and left .git alone. Its network was off,
+ * so a command that needed the network fails its rehearsal and is never offered.
+ */
+export function rehearsalApplicable(result) {
+  if (!result || result.status !== 'ok' || result.exitCode !== 0 || !result.keep) return false;
+  if (result.readOnlyWrites || result.git) return false;
+  const { created, modified, deleted } = result.changes;
+  return created.length + modified.length + deleted.length > 0;
+}
+
+export async function rehearseForApproval({ root, command, args = [], line = null, env = process.env, settings = {}, sandbox = null, injectionHold = '', keep = false } = {}) {
   const skip = { text: '', summary: null };
   if (!rehearsalEnabled(env, settings, sandbox) || injectionHold) return skip;
   if (sandbox && sandbox.available && sandbox.kind !== 'bubblewrap') return skip;
@@ -393,9 +405,11 @@ export async function rehearseForApproval({ root, command, args = [], line = nul
     const result = line === null
       ? await rehearseCommand({ root, command, args, env, masked })
       : await rehearseCommand({ root, command: '/bin/sh', args: ['-c', line], env, masked });
-    await disposeRehearsal(result);
+    // keep: the caller may offer "apply exactly this" and then calls disposeRehearsal(kept).
+    const kept = keep && rehearsalApplicable(result) ? result : null;
+    if (!kept) await disposeRehearsal(result);
     if (result.status === 'unavailable') return skip;
-    return { text: '\n' + formatRehearsal(result), summary: publicRehearsal(result) };
+    return { text: '\n' + formatRehearsal(result), summary: publicRehearsal(result), ...(kept ? { kept } : {}) };
   } catch {
     return skip;
   }
