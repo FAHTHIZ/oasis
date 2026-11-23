@@ -1464,10 +1464,15 @@ function normalizeAssistantToolCalls(session, assistant, step) {
     }
   }
   // Results are matched to calls by ID, so a reply that leaves an ID empty or
-  // repeats one in the same message (some local servers and gateways do) gets
-  // fresh IDs before anything runs; otherwise one result would overwrite another.
+  // repeats one (some local servers and gateways do) gets fresh IDs before
+  // anything runs; otherwise one result would overwrite another. Repeats of an
+  // earlier turn's ID count too: text calls and stream placeholders are
+  // numbered per step, and the journal, exports and history pair by ID.
   if (Array.isArray(assistant.tool_calls) && !Array.isArray(assistant.responseItems)) {
     const seen = new Set();
+    for (const message of Array.isArray(session.messages) ? session.messages : []) {
+      if (message && message.role === 'assistant' && Array.isArray(message.tool_calls)) for (const call of message.tool_calls) if (call && call.id) seen.add(call.id);
+    }
     for (const call of assistant.tool_calls) {
       if (!call || typeof call !== 'object') continue;
       if (typeof call.id !== 'string' || !call.id || seen.has(call.id)) call.id = 'call_' + randomUUID().replace(/-/g, '').slice(0, 24);
