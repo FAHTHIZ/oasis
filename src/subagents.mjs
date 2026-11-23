@@ -252,6 +252,16 @@ const OPENCODE_TOOLS = {
   webfetch: ['fetch_url', 'web_search'], websearch: ['web_search'], todowrite: ['todo_write'], task: ['task'], subagent: ['task']
 };
 
+// VS Code / Copilot custom agent tool and tool-set names
+// (code.visualstudio.com/docs/copilot/reference/copilot-vscode-features).
+const READ_TOOLS = ['read_file', 'list_files', 'glob_files', 'grep', 'search_files'];
+const VSCODE_TOOLS = {
+  read: READ_TOOLS, readfile: ['read_file'], codebase: READ_TOOLS, search: READ_TOOLS, usages: ['grep', 'search_files', 'lsp'], problems: ['lsp'], changes: ['run_command'],
+  edit: ['edit_file', 'multi_edit', 'write_file', 'apply_patch'], editfiles: ['edit_file', 'multi_edit', 'write_file', 'apply_patch'], createfile: ['write_file'], new: ['write_file'],
+  execute: CLAUDE_TO_OASIS.bash, runcommands: CLAUDE_TO_OASIS.bash, runinterminal: CLAUDE_TO_OASIS.bash, terminallastcommand: ['command_output'], runtasks: CLAUDE_TO_OASIS.bash, runtests: CLAUDE_TO_OASIS.bash,
+  fetch: ['fetch_url'], web: ['fetch_url', 'web_search'], websearch: ['web_search'], todos: ['todo_write'], agent: ['task'], runsubagent: ['task']
+};
+
 /**
  * Gemini CLI and OpenCode agent front matter -> the Claude-style fields
  * normalizeAgentDefinition reads. Returns null for files OASIS cannot run
@@ -273,6 +283,18 @@ function foreignAgentFrontMatter(flavor, raw = {}) {
     }
     const maxTurns = Number.parseInt(data.max_turns ?? '', 10);
     return { name: data.name, description: data.description, tools: tools || undefined, maxTurns: Number.isInteger(maxTurns) && maxTurns > 0 ? maxTurns : undefined, mcpServers: data.mcpServers };
+  }
+  if (flavor === 'vscode') {
+    // tools: [search, edit, 'github/*'] — names may carry a tool-set prefix
+    // (search/codebase); MCP server entries have no OASIS counterpart.
+    const listed = Array.isArray(data.tools) ? data.tools.map(String) : null;
+    let tools;
+    if (listed && listed.length) {
+      tools = [...new Set(listed.flatMap((tool) => { const key = lower(tool).split('/').pop().replace(/[^a-z]/g, ''); return VSCODE_TOOLS[lower(tool).replace(/[^a-z]/g, '')] || VSCODE_TOOLS[key] || []; }))];
+      if (!tools.length) tools = ['read_file'];
+    }
+    // A display name ("Plan Mode") is not an agent id; the file name is.
+    return { name: /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(String(data.name || '')) ? data.name : undefined, description: data.description || 'VS Code custom agent', tools, subagent: data.infer === false || lower(data.infer) === 'false' ? false : undefined };
   }
   if (flavor === 'opencode') {
     if (data.disable === true || data.disabled === true || lower(data.disable) === 'true' || lower(data.disabled) === 'true') return null;
@@ -430,6 +452,8 @@ function agentDirectories(root, env) {
     { dir: path.join(getConfigDirectory(env), 'agents'), source: 'user' },
     ...(foreign ? [
       { dir: path.join(root, '.gemini', 'agents'), source: 'project', flavor: 'gemini' },
+      { dir: path.join(root, '.github', 'chatmodes'), source: 'project', flavor: 'vscode', suffix: '.chatmode.md' },
+      { dir: path.join(root, '.github', 'agents'), source: 'project', flavor: 'vscode', suffix: '.agent.md' },
       { dir: path.join(root, '.opencode', 'agent'), source: 'project', flavor: 'opencode' },
       { dir: path.join(root, '.opencode', 'agents'), source: 'project', flavor: 'opencode' },
       { dir: path.join(root, '.kilocode', 'agents'), source: 'project', flavor: 'opencode', label: 'Kilo Code' },
@@ -514,13 +538,13 @@ export async function loadAgentDefinitions(root, options = {}) {
   if (env.OASIS_OTHER_AGENT_RULES !== '0') for (const mode of await loadLegacyModes(root, env)) agents[mode.name] = mode;
   // OpenCode / Kilo Code agents defined inline in opencode.json(c) / kilo.json(c); agent files of the same name win.
   if (env.OASIS_OTHER_AGENT_RULES !== '0') for (const agent of await loadJsonConfigAgents(root, env)) agents[agent.name] = agent;
-  for (const { dir, source, nested, flavor, label } of agentDirectories(root, env)) {
+  for (const { dir, source, nested, flavor, label, suffix = '.md' } of agentDirectories(root, env)) {
     let entries;
     try { entries = await readdir(dir, { withFileTypes: true }); } catch { continue; }
     for (const entry of entries) {
       let file;
       let fallback;
-      if (entry.isFile() && entry.name.endsWith('.md')) { file = path.join(dir, entry.name); fallback = entry.name.replace(/\.md$/, ''); }
+      if (entry.isFile() && entry.name.endsWith(suffix)) { file = path.join(dir, entry.name); fallback = entry.name.slice(0, -suffix.length); }
       else if (nested && entry.isDirectory()) { file = path.join(dir, entry.name, 'agent.md'); fallback = entry.name; }
       else continue;
       let text;
@@ -533,7 +557,7 @@ export async function loadAgentDefinitions(root, options = {}) {
       const name = String((flavor !== 'opencode' && data.name) || fallback).trim().toLowerCase();
       if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(name)) continue;
       agents[name] = normalizeAgentDefinition(data, parsed.body, { name, source: source + ':' + file });
-      if (flavor) agents[name].origin = label || (flavor === 'gemini' ? 'Gemini CLI' : 'OpenCode');
+      if (flavor) agents[name].origin = label || (flavor === 'gemini' ? 'Gemini CLI' : flavor === 'vscode' ? 'VS Code' : 'OpenCode');
     }
   }
   // Agents from enabled Claude Code plugins, named plugin-name:agent.
