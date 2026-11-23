@@ -14,11 +14,16 @@
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { faultLog, resetFaults } from './fault-injection.mjs';
 
 const APPEND_SCRIPT = "import { appendFileSync } from 'node:fs';\nappendFileSync('log.txt', 'entry\\n');\nconsole.log('appended');\n";
+// Writes a file whose name changes on every run (time and randomness), like a build stamp or
+// a log: its rehearsal and its real run never agree.
+const STAMP_SCRIPT = "import { writeFileSync } from 'node:fs';\nconst name = 'stamp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.txt';\nwriteFileSync(name, 'built\\n');\nconsole.log(name);\n";
+const stamp = () => ({ name: 'run_command', args: { command: process.execPath, args: ['stamp.mjs'] } });
+const stamps = async (root) => (await readdir(root)).filter((name) => /^stamp-.*\.txt$/.test(name));
 const write = (file, content) => ({ name: 'write_file', args: { path: file, content } });
 const append = () => ({ name: 'run_command', args: { command: process.execPath, args: ['append.mjs'] } });
 
@@ -42,6 +47,19 @@ export const SCENARIOS = [
   { id: 'lost-reply-idempotent-write', faults: 'tool:write_file:lost-reply@1', plan: [write('a.txt', 'alpha\n'), write('b.txt', 'beta\n')], check: async (root) => (await text(root, 'a.txt')) === 'alpha\n' && (await text(root, 'b.txt')) === 'beta\n' },
   { id: 'lost-reply-append-command', faults: 'tool:run_command:lost-reply@1', plan: [append()], check: async (root) => lines(await text(root, 'log.txt')) === 1, duplicates: async (root) => Math.max(0, lines(await text(root, 'log.txt')) - 1) },
   { id: 'tool-error-before-command', faults: 'tool:run_command:error@1', plan: [append()], check: async (root) => lines(await text(root, 'log.txt')) === 1, duplicates: async (root) => Math.max(0, lines(await text(root, 'log.txt')) - 1) },
+  // Rehearsal (src/rehearsal.mjs): a person approves what a throwaway run showed. These need
+  // bubblewrap with overlay support and are skipped elsewhere.
+  { id: 'rehearsal-divergence-reported', requires: 'rehearsal', approve: 'yes', faults: '', plan: [stamp()],
+    check: async (root, run) => (await stamps(root)).length === 1 && run.toolResults.some((r) => r.rehearsal && r.rehearsal.divergence && r.rehearsal.divergence.unrehearsed.some((p) => p.startsWith('stamp-'))) },
+  { id: 'rehearsal-applied-as-shown', requires: 'rehearsal', approve: 'rehearsal', faults: '', plan: [stamp()],
+    check: async (root, run) => {
+      const shown = run.toolResults.find((r) => r.appliedRehearsal);
+      const landed = await stamps(root);
+      return Boolean(shown) && landed.length === 1 && shown.rehearsal.created.includes(landed[0]) && !run.toolResults.some((r) => r.rehearsal && r.rehearsal.divergence);
+    } },
+  { id: 'rehearsal-conflict-then-retry', requires: 'rehearsal', approve: 'rehearsal-after-edit', faults: '', plan: [append()],
+    check: async (root, run) => (await text(root, 'log.txt')) === 'edited meanwhile\nentry\n' && run.toolResults.some((r) => /changed since the rehearsal/.test(String(r.error || ''))),
+    duplicates: async (root) => Math.max(0, lines(await text(root, 'log.txt')) - 2) },
   { id: 'mixed-storm', faults: 'model:503@1,model:reset@3,tool:write_file:error@2,tool:run_command:lost-reply@1', plan: [write('a.txt', 'alpha\n'), write('b.txt', 'beta\n'), append()], check: async (root) => (await text(root, 'a.txt')) === 'alpha\n' && (await text(root, 'b.txt')) === 'beta\n' && lines(await text(root, 'log.txt')) === 1, duplicates: async (root) => Math.max(0, lines(await text(root, 'log.txt')) - 1) }
 ];
 
@@ -80,7 +98,7 @@ export function nextAction(plan, messages, maxAttemptsPerStep = 4) {
 }
 
 async function reactiveModel(plan) {
-  const state = { requests: 0, gaveUp: false };
+  const state = { requests: 0, gaveUp: false, messages: [] };
   const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', (chunk) => { body += chunk; });
@@ -88,6 +106,7 @@ async function reactiveModel(plan) {
       state.requests++;
       let payload = {};
       try { payload = JSON.parse(body); } catch {}
+      state.messages = payload.messages || [];
       const action = nextAction(plan, payload.messages || []);
       if (action.gaveUp) state.gaveUp = true;
       const message = action.done
@@ -103,26 +122,52 @@ async function reactiveModel(plan) {
 
 const LAB_SETTINGS = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
 
+// Scenarios without `approve` run auto-approved. Otherwise a stand-in person answers every
+// prompt: 'yes', 'rehearsal' (apply what was shown) or 'rehearsal-after-edit' (someone edits
+// log.txt while the prompt is open, once, then the person picks apply).
+function labApproval(scenario, root) {
+  if (!scenario.approve) return { autoApprove: true };
+  let edited = false;
+  return {
+    approval: async (text, force, meta) => {
+      const offered = Boolean(meta && meta.rehearsal && meta.rehearsal.offer);
+      if (scenario.approve === 'rehearsal-after-edit' && offered && !edited) {
+        edited = true;
+        await writeFile(path.join(root, 'log.txt'), 'edited meanwhile\n');
+      }
+      return scenario.approve !== 'yes' && offered ? 'rehearsal' : true;
+    }
+  };
+}
+
 export async function runScenario(scenario, { env = process.env } = {}) {
+  if (scenario.requires === 'rehearsal') {
+    const { rehearsalSupport } = await import('./rehearsal.mjs');
+    const support = rehearsalSupport();
+    if (!support.available) return { id: scenario.id, faults: scenario.faults || '(none)', skipped: support.reason, passed: true, completed: true, gaveUp: false, duplicateEffects: 0, modelRequests: 0, injected: 0, durationMs: 0 };
+  }
   const { createSession, runAgentTurn } = await import('./agent.mjs');
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-lab-'));
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-lab-home-'));
   const model = await reactiveModel(scenario.plan);
   const started = Date.now();
   resetFaults();
-  const runEnv = { ...env, OASIS_FAULTS: scenario.faults, OASIS_FAULTS_SEED: '1', OASIS_PROVIDER_RETRIES: '3', OASIS_CONFIG_DIR: home, OASIS_ENABLE_TELEMETRY: '', OASIS_EFFECT_CONTRACTS: env.OASIS_EFFECT_CONTRACTS ?? '' };
+  const runEnv = { ...env, ...(scenario.requires === 'rehearsal' ? { OASIS_REHEARSE: '1' } : {}), OASIS_FAULTS: scenario.faults, OASIS_FAULTS_SEED: '1', OASIS_PROVIDER_RETRIES: '3', OASIS_CONFIG_DIR: home, OASIS_ENABLE_TELEMETRY: '', OASIS_EFFECT_CONTRACTS: env.OASIS_EFFECT_CONTRACTS ?? '' };
   if (!scenario.faults) delete runEnv.OASIS_FAULTS;
   let reply = '';
   let error = '';
   try {
     await writeFile(path.join(root, 'append.mjs'), APPEND_SCRIPT);
+    await writeFile(path.join(root, 'stamp.mjs'), STAMP_SCRIPT);
+    // Lab-made files are not part of what the plan should change.
+    await writeFile(path.join(root, '.gitignore'), '');
     // A git work tree, like the projects OASIS runs in (effect contracts
     // observe commands through git).
     const git = (...args) => spawnSync('git', ['-c', 'user.name=lab', '-c', 'user.email=lab@example.invalid', '-c', 'commit.gpgsign=false', ...args], { cwd: root, stdio: 'ignore' });
     git('init', '-q'); git('add', '-A'); git('commit', '-q', '-m', 'lab');
     const config = { protocol: 'openai-compatible', baseURL: model.baseURL, model: 'lab-model', apiKey: '', maxSteps: 16, maxCommandSeconds: 20 };
     const session = await createSession({ root, config, settings: LAB_SETTINGS, bare: true, env: runEnv });
-    const result = await runAgentTurn(session, 'Carry out the plan.', { env: runEnv, autoApprove: true });
+    const result = await runAgentTurn(session, 'Carry out the plan.', { env: runEnv, ...labApproval(scenario, root) });
     reply = String(result && result.text || '');
   } catch (caught) {
     error = String(caught && caught.message || caught).slice(0, 300);
@@ -131,7 +176,8 @@ export async function runScenario(scenario, { env = process.env } = {}) {
   }
   const faults = faultLog();
   resetFaults();
-  const passed = await scenario.check(root).catch(() => false);
+  const toolResults = model.state.messages.filter((message) => message && message.role === 'tool').map((message) => { try { return JSON.parse(message.content); } catch { return {}; } });
+  const passed = await scenario.check(root, { toolResults }).catch(() => false);
   const duplicateEffects = scenario.duplicates ? await scenario.duplicates(root).catch(() => 0) : 0;
   await rm(root, { recursive: true, force: true }).catch(() => {});
   await rm(home, { recursive: true, force: true }).catch(() => {});

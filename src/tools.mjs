@@ -778,6 +778,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
       (highRisk ? '\nHIGH RISK: ' + (configRisk ? configRisk : 'this command ' + highRisk) + '. Auto-approval does not apply.' : '') +
       '\nCommands can change project files or execute project scripts. ' + (typeof options.clientTerminal === 'function' && !(sandbox && sandbox.available) ? 'It will run in the editor\'s terminal, with the editor\'s environment.' : 'Oasis strips common secret environment variables from the child process.') +
       (sandbox && sandbox.available ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + (sandbox.ssh.display || sandbox.ssh.host) + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : ''), Boolean(highRisk), extra);
+    if (ok && typeof options.onApproved === 'function') await options.onApproved();
     if (ok && choice.value === 'rehearsal' && rehearsal.kept) return await applyRehearsedRun(rehearsal.kept, command, args);
     } finally {
       if (rehearsal.kept) { const { disposeRehearsal } = await import('./rehearsal.mjs'); await disposeRehearsal(rehearsal.kept); }
@@ -2181,6 +2182,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         readOnlyCommands: readOnlyCommandsEnabled(env, (context.session && context.session.settings) || {}),
         settings: (context.session && context.session.settings) || {},
         rehearsalSink,
+        onApproved: typeof context.onApproved === 'function' ? context.onApproved : undefined,
         background: args.run_in_background === true,
         interactive: args.interactive === true,
         ptyManager: context.session && (context.session.ptyManager ||= new PtySessionManager()),
