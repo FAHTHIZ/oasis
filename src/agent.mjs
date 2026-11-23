@@ -78,7 +78,8 @@ import { createKnowledgeBoard, KNOWLEDGE_TOOL_NAMES } from './knowledge-board.mj
 import { unrequestedGitWrite } from './git-intent.mjs';
 import { recordTokenUsage } from './cost-policy.mjs';
 import { spend as spendBudget } from './budget-algebra.mjs';
-import { evidenceFromToolResult, recordEvidence, sessionEvidence } from './evidence-ledger.mjs';
+import { evidenceFromToolResult, outputText as evidenceOutputText, recordEvidence, sessionEvidence } from './evidence-ledger.mjs';
+import { rememberPage } from './page-store.mjs';
 import { goalEvidenceGate, goalEvidenceText, goalVerifierEnabled, goalVerifierPrompt, parseVerifierResult, reviewPrompt } from './goal-evidence.mjs';
 import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls, hideStreamingToolCalls } from './tool-call-repair.mjs';
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, needsLocalContextAdvice, SMALL_CONTEXT_TOKENS } from './local-context.mjs';
@@ -909,7 +910,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (Array.isArray(tools) || typeof tools === 'string') {
     const keep = new Set(allowedToolNames || []);
     // Coordination tools stay so the agent can finish or ask; everything else must be listed.
-    for (const name of ['exit_plan_mode', 'ask_user_question', 'team_send_message', ...SHARED_TASK_TOOL_NAMES, ...KNOWLEDGE_TOOL_NAMES]) keep.add(name);
+    for (const name of ['exit_plan_mode', 'ask_user_question', 'team_send_message', ...SHARED_TASK_TOOL_NAMES, ...KNOWLEDGE_TOOL_NAMES, 'verify_quote']) keep.add(name);
     session.toolDefinitions = session.toolDefinitions.filter((tool) => keep.has(tool.function.name) || [...keep].some((rule) => rule.endsWith('*') && tool.function.name.startsWith(rule.slice(0, -1))));
   }
   if (!session.toolDefinitions.some((tool) => tool.function.name === 'workflow') && loadedSettings.workflowsEnabled !== false && env.OASIS_DISABLE_WORKFLOWS !== '1' && (!(Array.isArray(tools) || typeof tools === 'string') || (allowedToolNames || []).includes('workflow'))) session.toolDefinitions.push(WORKFLOW_TOOL_DEFINITION);
@@ -3240,6 +3241,8 @@ async function applyToolResults(session, options, turn) {
         }
         const event = evidenceFromToolResult(name, evidenceArgs, result, context);
         if (event) recordEvidence(sessionEvidence(session), event);
+        // Keep what the agent read, so quotes attributed to the page can be checked.
+        if (event && event.kind === 'fetch') rememberPage(event.url, evidenceOutputText(result), { finalUrl: event.finalUrl });
       } catch { /* evidence is advisory; a bad result shape cannot break the turn */ }
     }
     if (result && result.lspVerification && result.lspVerification.path) {

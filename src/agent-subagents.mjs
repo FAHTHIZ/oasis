@@ -31,6 +31,7 @@ import { unsupportedChildClaim } from './claim-check.mjs';
 import { applyInjectionTaint, injectionTaint, judgedPathsFor, taintNotice } from './untrusted-content.mjs';
 import { evidenceSince, evidenceSummary, sessionEvidence } from './evidence-ledger.mjs';
 import { checkReport } from './verification-contracts.mjs';
+import { RESEARCH_TOOL_NAMES } from './research-tools.mjs';
 import { recoveryPlan, waitForRecovery } from './agent-recovery.mjs';
 import { defineSessionAgent } from './session-agents.mjs';
 import { spawnScope } from './spawn-scope.mjs';
@@ -285,7 +286,7 @@ export async function runSubagent(parent, args, context, options) {
     if (name === 'task') return depth + 1 < maxDepth && !disallowed.has(name) && (!allowed || allowed.has(name));
     if (!name || name === 'workflow' || name === 'enter_worktree' || name === 'exit_worktree' || name === 'schedule_wakeup' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'connect_service' || name === 'enter_plan_mode' || name === 'advisor' || name === 'mixture_of_agents' || name.startsWith('cron_') || name === 'memory_save' || name === 'memory_verify' || name === 'memory_delete' || name === 'honcho_profile' || name === 'honcho_conclude' || name === 'skill_propose' || (AGENT_TOOL_NAMES.has(name) && name !== 'team_send_message')) return false;
     if (disallowed.has(name)) return false;
-    return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name) || KNOWLEDGE_TOOL_NAMES.has(name) || name === 'team_send_message';
+    return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name) || KNOWLEDGE_TOOL_NAMES.has(name) || RESEARCH_TOOL_NAMES.has(name) || name === 'team_send_message';
   });
   // Agent environments: "desktop" gives the child its own virtual screen, with the
   // computer tool and a browser that opens visibly on that screen.
@@ -320,7 +321,7 @@ export async function runSubagent(parent, args, context, options) {
   // Coordination tools can mutate the team board or inbox without editing the workspace.
   // permissionMode: plan in the definition keeps the agent read-only whatever its tools.
   // A nested task tool does not count against read-only; a read-only agent never gets it.
-  const ownReadOnly = agent.permissionMode === 'plan' || definitions.every((definition) => definition.function.name === 'task' || READ_ONLY_TOOLS.has(definition.function.name) || SHARED_TASK_TOOL_NAMES.has(definition.function.name) || KNOWLEDGE_TOOL_NAMES.has(definition.function.name) || definition.function.name === 'team_send_message');
+  const ownReadOnly = agent.permissionMode === 'plan' || definitions.every((definition) => definition.function.name === 'task' || READ_ONLY_TOOLS.has(definition.function.name) || SHARED_TASK_TOOL_NAMES.has(definition.function.name) || KNOWLEDGE_TOOL_NAMES.has(definition.function.name) || RESEARCH_TOOL_NAMES.has(definition.function.name) || definition.function.name === 'team_send_message');
   // Spawn-time scope check (roadmap 2.2): a read-only parent starts only
   // read-only children and cannot delegate a deploy or publish step.
   const scope = spawnScope({ parent, options, prompt, childReadOnly: ownReadOnly });

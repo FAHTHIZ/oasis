@@ -135,7 +135,7 @@ With `"modelRouting": { "subagents": "experience" }` (or `OASIS_SUBAGENT_ROUTING
 
 The main agent and every subagent of a session share one knowledge board, so parallel agents stop rediscovering the same facts. `knowledge_post` adds a finding (a claim, optional detail, sources and tags); `knowledge_search` finds them by keyword, tag, author or status. Read-only agents such as `explore` can post too, since posting changes only the session's board, never the workspace. A new subagent starts with the findings most relevant to its task in its system prompt.
 
-Each post is checked against the poster's own tool results with the same contracts as a [checked report](#checked-reports). A finding that cites a page the agent never fetched, says tests pass without a passing check, or gives computed numbers no execution printed is refused, with the reason. Accepted findings are labelled:
+Each post is checked against the poster's own tool results with the same contracts as a [checked report](#checked-reports). A finding that cites a page the agent never fetched, quotes words that page does not contain, says tests pass without a passing check, or gives computed numbers no execution printed is refused, with the reason. Accepted findings are labelled:
 
 | Status | Meaning |
 | --- | --- |

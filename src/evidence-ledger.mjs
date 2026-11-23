@@ -66,7 +66,7 @@ export function normalizeUrl(raw) {
   } catch { return null; }
 }
 
-function outputText(result) {
+export function outputText(result) {
   if (!result || typeof result !== 'object') return String(result ?? '');
   const parts = [];
   for (const key of ['stdout', 'stderr', 'output', 'content', 'text', 'result']) {

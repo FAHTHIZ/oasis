@@ -74,9 +74,16 @@ Verification contracts (`src/verification-contracts.mjs`) read a report together
 | --- | --- | --- |
 | `code` | The report says tests, builds or checks pass | The last check finished with exit code 0, no pipe hid its status, and nothing was edited after it |
 | `research` | The report cites URLs | Every cited URL was fetched (`fetch_url` or the browser); a search hit alone does not count |
+| `research` (quotes) | The report puts 5+ words in quotes or a blockquote next to a cited URL | The fetched page contains those words in that order (see [Quote checks](#quote-checks)) |
 | `analysis` | The agent declares `domain: analysis`, or it executed code without running any test | Every decimal, percentage or 3+ digit number (years aside) was printed by an execution, command or fetched page; rounding is allowed |
 
 When a subagent finishes, its report is checked against the evidence from that run before the parent sees it. A report with an unsupported claim comes back with `report_status: "rejected"` and `verification_issues` (domain and reason), and the timeline records `agent.report_rejected`. `unverified_claim` is still set for code claims. Background agents' completion notices list the reasons too.
+
+### Quote checks
+
+A fetched URL is not proof that the page says what the report claims. OASIS keeps the text each fetch showed the agent (`src/page-store.mjs`: in memory, up to 2 MB per page and 64 pages, repeated fetches of a page add up, a redirect's final URL is stored too) and checks direct quotes against it. A quote is five or more words in `"..."`, `“...”`, `«...»` or a `>` blockquote; it is tied to the URLs cited in the same paragraph or list item, or on the line after a blockquote. Words are compared after lowercasing and dropping punctuation, quote styles and dashes, and `...` or `…` splits a quote into pieces that must appear in order. A quote no cited page contains is a misquote: the report is rejected with the closest passage the page does have. A quote within a word or two of the page (85% word overlap) passes but is reported back as `near`. Pages fetched before a restart have no stored text, so their quotes are skipped rather than failed.
+
+Agents can check before they write with `verify_quote` (`{checks: [{url, quote}]}`), a read-only session tool open to subagents. Each check returns `exact`, `near`, `missing` (with the closest passage), `not_fetched` or `invalid`. Test: `test/quote-verification.test.mjs`.
 
 Agents of one session can also share findings while they work, on the [shared knowledge board](SUBAGENTS.md#shared-knowledge-board). Each post goes through the same contracts against the poster's evidence and is labelled `grounded` or `noted`.
 
