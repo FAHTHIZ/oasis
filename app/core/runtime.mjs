@@ -63,6 +63,13 @@ export function forgetRuntimeToken(win = globalThis) {
   try { win.localStorage.removeItem(DEVICE_KEY); } catch { /* storage blocked */ }
 }
 
+// An approval answer as the computer's /approval endpoint takes it: true, 'always'
+// (also add the suggested rule) or 'rehearsal' (land the rehearsed changes, no second run).
+export function approvalBody(approvalId, value) {
+  const approved = value === true || value === 'always' || value === 'rehearsal';
+  return { approvalId, approved, always: value === 'always', ...(value === 'rehearsal' ? { rehearsal: true } : {}) };
+}
+
 export class RuntimeClient {
   constructor({ token = '', origin = '', fetchImpl = globalThis.fetch.bind(globalThis) } = {}) {
     this.token = token;
@@ -327,8 +334,8 @@ export class RuntimeAgent {
           after = Math.max(after, event.id);
           const data = event.data || {};
           if (event.type === 'approval_required') {
-            const value = await this.approve({ name: toolName, args: { prompt: data.prompt, suggestion: data.suggestion, risky: data.risky }, runtime: true });
-            await this.client.api('/api/jobs/' + this.jobId + '/approval', { method: 'POST', body: { approvalId: data.approvalId, approved: value === 'always' || value === true, always: value === 'always' } }).catch(() => {});
+            const value = await this.approve({ name: toolName, args: { prompt: data.prompt, suggestion: data.suggestion, risky: data.risky, rehearsal: data.rehearsal === true }, runtime: true });
+            await this.client.api('/api/jobs/' + this.jobId + '/approval', { method: 'POST', body: approvalBody(data.approvalId, value) }).catch(() => {});
           } else if (event.type === 'terminal_output') {
             if (data.approved === false) { content = 'Not run: you declined it.'; break; }
             const code = data.exitCode === undefined || data.exitCode === null ? 'unknown' : data.exitCode;
@@ -624,16 +631,16 @@ export class RuntimeAgent {
             approvals = approvals.then(async () => {
               if (signal.aborted || resolved.has(approvalId)) return;
               this.emit('approval_waiting', { approvalId, tool: data.tool || '' });
-              const value = await this.answeredHere(this.approve({ name: data.tool || 'runtime', args: { prompt: data.prompt, diff: data.diff, suggestion: data.suggestion, risky: data.risky }, runtime: true }), approvalId, event.id, signal, jobId);
+              const value = await this.answeredHere(this.approve({ name: data.tool || 'runtime', args: { prompt: data.prompt, diff: data.diff, suggestion: data.suggestion, risky: data.risky, rehearsal: data.rehearsal === true }, runtime: true }), approvalId, event.id, signal, jobId);
               // Left for another chat or device while it was open: the
               // question stays open on the computer for whoever looks next.
               if (signal.aborted) return;
               resolved.add(approvalId);
               // Answered on another device: the next poll brings its result.
               if (value === ELSEWHERE) { this.emit('answered_elsewhere', { kind: 'approval' }); return; }
-              const approved = value === 'always' || value === true;
-              this.emit('approval_answered', { approvalId, approved });
-              await this.client.api('/api/jobs/' + jobId + '/approval', { method: 'POST', body: { approvalId: data.approvalId, approved, always: value === 'always' } }).catch(() => {});
+              const body = approvalBody(data.approvalId, value);
+              this.emit('approval_answered', { approvalId, approved: body.approved });
+              await this.client.api('/api/jobs/' + jobId + '/approval', { method: 'POST', body }).catch(() => {});
             }).catch(() => {});
             break;
           }

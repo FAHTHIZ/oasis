@@ -782,24 +782,27 @@ export function createOasisWebServer(options = {}) {
       let settled = false;
       const detail = formatApprovalMessage(prompt, meta && typeof meta === 'object' ? meta : {});
       const suggestion = meta && meta.suggestion && !forceInteractive ? String(meta.suggestion).slice(0, 300) : null;
+      // "Apply the rehearsal": only when the agent kept a rehearsal it can land.
+      const rehearsal = Boolean(meta && meta.rehearsal && meta.rehearsal.offer && !forceInteractive);
       const finish = (approved) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
         job.pendingApprovals.delete(approvalId);
         if (job.pendingApprovals.size === 0 && job.status === 'waiting_approval') job.status = 'running';
-        const value = approved === 'always' && suggestion ? 'always' : Boolean(approved);
-        emit(job, 'approval_resolved', { approvalId, approved: Boolean(value), always: value === 'always' });
+        const value = approved === 'always' && suggestion ? 'always' : approved === 'rehearsal' && rehearsal ? 'rehearsal' : Boolean(approved);
+        emit(job, 'approval_resolved', { approvalId, approved: Boolean(value), always: value === 'always', ...(value === 'rehearsal' ? { rehearsal: true } : {}) });
         resolve(value);
       };
       const timer = setTimeout(() => finish(false), 5 * 60 * 1000);
       timer.unref?.();
-      job.pendingApprovals.set(approvalId, { resolve: finish, prompt: detail.message, risky: detail.risky, suggestion });
+      job.pendingApprovals.set(approvalId, { resolve: finish, prompt: detail.message, risky: detail.risky, suggestion, rehearsal });
       job.status = 'waiting_approval';
       emit(job, 'approval_required', {
         approvalId, prompt: detail.message, risky: detail.risky, expiresInSeconds: 300,
         ...(detail.diff ? { diff: detail.diff } : {}),
         ...(suggestion ? { suggestion } : {}),
+        ...(rehearsal ? { rehearsal: true } : {}),
         ...(meta && meta.tool ? { tool: String(meta.tool).slice(0, 100) } : {}),
         ...(meta && meta.subagent ? { subagent: String(meta.subagent).slice(0, 100) } : {})
       });
@@ -3212,8 +3215,9 @@ export function createOasisWebServer(options = {}) {
       const pending = job.pendingApprovals.get(approvalId);
       if (!pending || pending.question || pending.elicitation || pending.connector) { json(res, 404, { error: 'That approval request is no longer pending.' }); return; }
       const always = approved && body.always === true && Boolean(pending.suggestion);
-      pending.resolve(always ? 'always' : approved);
-      json(res, 200, { resolved: true, approved, always });
+      const rehearsal = approved && !always && body.rehearsal === true && Boolean(pending.rehearsal);
+      pending.resolve(always ? 'always' : rehearsal ? 'rehearsal' : approved);
+      json(res, 200, { resolved: true, approved, always, ...(rehearsal ? { rehearsal: true } : {}) });
       return;
     }
 

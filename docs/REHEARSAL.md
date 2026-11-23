@@ -33,7 +33,9 @@ Rehearsal never runs a command held because of suspected prompt injection, and i
 
 In the terminal, the approval prompt for a rehearsed command offers a third answer, "Apply the rehearsed changes only (do not run it again)" (`r` in line mode). It copies exactly the files the rehearsal showed into the workspace and does not start the command a second time, so a command whose output depends on time or randomness lands what you read, not a new variant. The same conflict check as `oasis rehearse --apply` runs first: if any file the rehearsal touched changed while you were deciding, nothing is applied, the command is not run, and the result names the files. The model is told the changes came from the rehearsal (network off) and sees its output.
 
-It is offered only when the rehearsal exited 0, changed at least one file, wrote nothing outside the workspace and left `.git` alone, and never for a high-risk command (those are approved by reading the command) or for a command headed to the editor's terminal. Hooks, auto mode and the app's approval cards answer yes or no as before.
+It is offered only when the rehearsal exited 0, changed at least one file, wrote nothing outside the workspace and left `.git` alone, and never for a high-risk command (those are approved by reading the command) or for a command headed to the editor's terminal. Hooks and auto mode answer yes or no as before.
+
+The app's approval card has the same answer as an **Apply rehearsal** button, shown only when the agent offered it. The web server sends `rehearsal: true` with `approval_required`, and the card answers with `{ "approved": true, "rehearsal": true }` on `POST /api/jobs/<id>/approval`; a rehearsal answer to an approval that did not offer one counts as a plain yes. The rehearsal's result (exit code and the files it would create, modify or delete) and the reason a command is high risk are part of the approval text in both the terminal and the app.
 
 ## By hand: `oasis rehearse`
 

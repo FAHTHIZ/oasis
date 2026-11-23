@@ -272,3 +272,11 @@ test('a long request after a shell command reaches the model whole', async () =>
   await agent.send(request);
   assert.ok(chat.message.endsWith('Your request:\n' + request));
 });
+
+test('approval answers map to the /approval body, including "apply the rehearsal"', async () => {
+  const { approvalBody } = await import('../app/core/runtime.mjs');
+  assert.deepEqual(approvalBody('a', true), { approvalId: 'a', approved: true, always: false });
+  assert.deepEqual(approvalBody('a', 'always'), { approvalId: 'a', approved: true, always: true });
+  assert.deepEqual(approvalBody('a', 'rehearsal'), { approvalId: 'a', approved: true, always: false, rehearsal: true });
+  assert.deepEqual(approvalBody('a', false), { approvalId: 'a', approved: false, always: false });
+});
