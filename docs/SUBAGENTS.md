@@ -150,6 +150,28 @@ A finding that disagrees with another agent's finding is never merged into it. W
 
 Both sides of a dispute show `contested_by` (with the detected reason, such as `500 vs 1000`) in `knowledge_search`, `status: "contested"` lists them, and a subagent's starting prompt marks them `CONTESTED by k_N`, so nobody builds on one side without knowing. A subagent whose posts opened or joined a dispute returns `knowledge_conflicts` in its result, and the parent is asked to check the sources or start a fact-checker rather than pick one silently. Retracting either side (by its author or the main agent) resolves the dispute. Test: `test/claim-conflict.test.mjs`.
 
+### Calibrated confidence
+
+`knowledge_post` takes an optional `confidence` (0 to 1, or a percentage). OASIS keeps score of it. A finding is settled by what happens to it on the board, never by its author saying so:
+
+| Outcome | What settles it |
+| --- | --- |
+| held | another agent posts the same finding with grounded evidence, links a grounded `supports` to it, or the finding that disputed it is retracted |
+| failed | its author withdraws it, the main agent retracts it, or it loses a dispute |
+
+A failure is final. A finding that held and is later retracted counts as failed. Each settled finding with a stated confidence is one forecast, recorded per model and agent type in `<config>/sessions/calibration.json` (at most 5,000).
+
+From that record, OASIS works out what a model's stated confidence has actually meant: a kernel-weighted hit rate of its past forecasts near that value, shrunk toward the stated value while the record is thin (fewer than 5 forecasts changes nothing). For example, a model whose "0.95" findings held 40% of the time is shown like this in `knowledge_search`, and in a subagent's starting prompt as `confidence 0.95 (calibrated 0.49)`:
+
+```json
+"confidence": 0.95, "calibrated_confidence": 0.49,
+"calibration": "stated 0.95; brash-model's findings at that confidence have held about 49% of the time (20 settled)"
+```
+
+Search ranks by the calibrated value, so a careful model's 0.7 can outrank a brash model's 0.95. A model whose confidence keeps its word is not adjusted.
+
+`oasis agents calibration` prints each model's Brier score (0 is perfect, 0.25 is a coin flip), its average stated confidence against how often it held, and a reliability table. `--by-type` splits the scores by agent type, `--model NAME` shows one model, `--json` prints the raw numbers, and `--forget` deletes the record (only that model's with `--model`). Turn calibration off with `OASIS_CALIBRATION=0` or the setting `"calibration": false`, and move the file with `OASIS_CALIBRATION_FILE`. Test: `test/calibration.test.mjs`.
+
 ## Background agents and teams
 
 - `run_in_background: true` returns an id immediately. The parent is notified when the agent finishes.

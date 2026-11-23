@@ -59,6 +59,7 @@ performance claim.
 | Subagents with their own virtual desktop (`environment: "desktop"`) | Unreleased, experimental | [Computer use](COMPUTER_USE.md) |
 | Control room: every agent on this computer, its screen, history and spend | Unreleased | [Control room](CONTROL_ROOM.md) |
 | Agent experience: evidence-decided outcomes per run, recall of earlier runs, `oasis agents experience`, optional experience-based model routing | Unreleased | [Subagents](SUBAGENTS.md#experience) |
+| Calibrated confidence: findings on the knowledge board carry a stated confidence, are settled by corroboration, retraction or disputes, and are scored per model (Brier, reliability); readers see and search by the calibrated value, `oasis agents calibration` | Unreleased | [Subagents](SUBAGENTS.md#calibrated-confidence) |
 | Shared knowledge board for the agents of a session (`knowledge_post`, `knowledge_search`), with posts checked against the poster's evidence | Unreleased | [Subagents](SUBAGENTS.md#shared-knowledge-board) |
 
 ## Interfaces

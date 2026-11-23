@@ -463,6 +463,8 @@ export async function loadSettings(root, options = {}) {
     if (settings.compactionReflection === false) result.compactionReflection = false;
     // Agent experience recall and track record (src/agent-experience.mjs); turning it off never loosens anything.
     if (settings.agentExperience === false) result.agentExperience = false;
+    // The confidence calibration ledger (src/calibration.mjs); off never loosens anything.
+    if (settings.calibration === false) result.calibration = false;
     // Memory write approval only tightens, so it applies before trust too.
     const writeApproval = String(settings.memoryWriteApproval || (settings.memory && settings.memory.writeApproval) || '').toLowerCase();
     if (['ask', 'queue'].includes(writeApproval)) result.memoryWriteApproval = writeApproval;
