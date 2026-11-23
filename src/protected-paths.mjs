@@ -26,6 +26,8 @@ const PROTECTED = [
   /^\.(?:oasis|claude)\/commands\//,
   /^\.gemini\/commands\//,
   /^\.opencode\/commands?\//,
+  // OpenCode plugins are JavaScript that OpenCode and OASIS run on tool events.
+  /^\.opencode\/plugins?\//,
   /^opencode\.jsonc?$/,
   // Project agent files can declare hooks and inline MCP servers that run when
   // the agent is launched in a trusted workspace.
@@ -66,6 +68,7 @@ const PROTECTED = [
 
 const REASONS = [
   [/^\.(?:oasis|claude|agents|gemini)\/agents\//, 'project agent files can declare hooks and MCP servers that run when the agent is launched in a trusted workspace'],
+  [/^\.opencode\/plugins?\//, 'OpenCode and OASIS run these plugins on tool and session events'],
   [/commands?\/|opencode\.jsonc?$/, 'custom commands in a trusted project run their inline shell and grant their allowed-tools when you type the command'],
   [/^\.(?:cursor|gemini|codex|continue)\/|^\.aider\.conf/, 'another coding agent loads this configuration (MCP servers, hooks, rules) automatically'],
   [/^\.github\/hooks\//, 'GitHub Copilot and OASIS run the hooks in these files automatically'],

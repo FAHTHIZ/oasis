@@ -154,3 +154,38 @@ test('codexMatcher keeps regular expressions anchored', async () => {
   assert.equal(codexMatcher('^apply_patch$'), '^(?:Edit|Write|MultiEdit|apply_patch)$');
   assert.equal(codexMatcher('Bash'), 'Bash');
 });
+
+test('OpenCode plugins run through the plugin host: throw denies, args and output rewrites, session.idle', async (t) => {
+  const { root, home, env } = await setup(t);
+  await mkdir(path.join(root, '.opencode', 'plugins'), { recursive: true });
+  const idle = path.join(root, 'idle.txt');
+  await writeFile(path.join(root, '.opencode', 'plugins', 'guard.ts'), `
+import type { Plugin } from "@opencode-ai/plugin"
+export const Guard: Plugin = async ({ $, directory }) => ({
+  "tool.execute.before": async (input: { tool: string }, output: { args: any }) => {
+    if (input.tool === "read" && String(output.args.filePath).includes(".env")) throw new Error("Do not read .env files")
+    if (input.tool === "edit") output.args.newString = output.args.newString.toUpperCase()
+  },
+  "tool.execute.after": async (input: { tool: string }, output: { output: string }) => {
+    if (input.tool === "bash") output.output = output.output.replace(/secret/g, "[redacted]")
+  },
+  event: async ({ event }: any) => {
+    if (event.type === "session.idle") await $\`node -e "require('fs').writeFileSync('idle.txt', process.cwd())"\`.cwd(directory).quiet()
+  }
+})
+`);
+  const items = (await loadForeignHooks(root, { env, home, trusted: true })).filter((item) => item.protocol === 'opencode');
+  assert.equal(items.length, 1);
+  assert.deepEqual(Object.keys(items[0].hooks).sort(), ['PostToolUse', 'PreToolUse', 'Stop']);
+  const settings = await loadSettings(root, { env });
+  const base = { session_id: 's1', cwd: root };
+  const denied = await runHooks('PreToolUse', { ...base, tool_name: 'Read', oasis_tool_name: 'read_file', tool_name_oasis: 'read_file', tool_input: { path: '.env' } }, { hooks: settings.hooks, root });
+  assert.equal(denied.permissionDecision, 'deny');
+  assert.match(denied.reason, /Do not read .env files/);
+  const edit = await runHooks('PreToolUse', { ...base, tool_name: 'Edit', oasis_tool_name: 'edit_file', tool_name_oasis: 'edit_file', tool_input: { path: 'a.txt', old_string: 'a', new_string: 'b' } }, { hooks: settings.hooks, root });
+  assert.deepEqual(edit.updatedInput, { path: 'a.txt', old_string: 'a', new_string: 'B' });
+  const after = await runHooks('PostToolUse', { ...base, tool_name: 'Bash', oasis_tool_name: 'run_shell', tool_name_oasis: 'run_shell', tool_input: { command: 'cat x' }, tool_response: { output: 'the secret is 4' } }, { hooks: settings.hooks, root });
+  assert.equal(JSON.stringify(after).includes('[redacted]'), true);
+  await runHooks('Stop', { ...base }, { hooks: settings.hooks, root });
+  assert.equal(await readFile(idle, 'utf8'), root);
+});
