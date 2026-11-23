@@ -61,6 +61,7 @@ performance claim.
 | Control room: every agent on this computer, its screen, history and spend | Unreleased | [Control room](CONTROL_ROOM.md) |
 | Agent experience: evidence-decided outcomes per run, recall of earlier runs, `oasis agents experience`, optional experience-based model routing | Unreleased | [Subagents](SUBAGENTS.md#experience) |
 | Calibrated confidence: findings on the knowledge board carry a stated confidence, are settled by corroboration, retraction or disputes, and are scored per model (Brier, reliability); readers see and search by the calibrated value, `oasis agents calibration` | Unreleased | [Subagents](SUBAGENTS.md#calibrated-confidence) |
+| Typed agent messages: `team_send_message` speech acts (request, propose, challenge, commit, answer, accept, reject) with tracked obligations, open threads in `team_status`, and lapse notices when an agent finishes without replying | Unreleased | [Subagents](SUBAGENTS.md#typed-messages-and-obligations) |
 | Memory belief revision: contradicting saves replace the old statement and keep it in a revision history, supersede conflicting memories, need evidence to overturn a verified memory, flag flip-flops; `memory_save from_finding` saves a checked knowledge board finding with its provenance | Unreleased | [Memory](MEMORY.md#belief-revision) |
 | Shared knowledge board for the agents of a session (`knowledge_post`, `knowledge_search`), with posts checked against the poster's evidence | Unreleased | [Subagents](SUBAGENTS.md#shared-knowledge-board) |
 

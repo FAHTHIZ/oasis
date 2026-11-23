@@ -184,6 +184,23 @@ Search ranks by the calibrated value, so a careful model's 0.7 can outrank a bra
 - Every subagent's start, end and spending is also written to the [network ledger](AGENT-NETWORK.md#network-ledger). If OASIS is killed mid-turn, the workers it had started come back as `interrupted` when the session is resumed, never as running. `OASIS_NEURON_LEDGER=0` turns the ledger off. On resume the main agent is told which of its agents need attention: a background agent whose result it never read (OASIS exited or crashed between its finish and the next turn), and workers the restart interrupted, with whether `send_message` can resume them.
 - Every subagent request streams, even with nothing on screen. If a provider goes silent mid-request, it fails after `OASIS_STREAM_IDLE_SECONDS` (default 300, or 600 at high reasoning effort) and is retried, instead of blocking for the 600-second header timeout. Set `OASIS_SUBAGENT_STREAM=0` for a provider that cannot stream.
 
+### Typed messages and obligations
+
+`team_send_message` takes an `act`, so the runtime knows what a message expects and who owes what:
+
+| Act | Means | Obligation |
+| --- | --- | --- |
+| `inform` (default) | shares findings or warns about overlap | none |
+| `request` | asks the recipient for a decision or input | recipient owes an `answer` (or `reject`) |
+| `propose` | suggests a plan or decision | recipient owes `accept` or `reject` |
+| `challenge` | disputes something the recipient said or posted (`about: "k_3"`) | recipient owes an `answer` with evidence, or `accept` |
+| `commit` | promises to deliver something | sender owes delivery |
+| `answer`, `accept`, `reject` | reply to one of the above; need `reply_to: "m_N"` | discharges it |
+
+Every message gets an id (`m_N`). The recipient's copy starts with a header such as `[request m_4, about task_2] agent_1 expects a reply: ... reply_to "m_4"`. A reply from the obligated party with `reply_to` discharges the thread (a commit is delivered by the sender's own follow-up with `reply_to`). You can only reply on threads you are part of, and `accept` or `reject` only answers a request, proposal or challenge.
+
+Open threads appear in `team_status` (`open_threads`, with `owed_by` and age), and a sender that still owes replies is reminded in its next `team_send_message` result (`you_still_owe`). When an agent finishes or fails with obligations outstanding, they lapse: each running agent left waiting gets a notice at its next step ("agent_2 finished without replying to your request m_4 ... do not wait for it"), and the parent's result lists them under `open_obligations`. Nobody waits on a reply that cannot come, and an unanswered challenge does not disappear quietly. The ledger keeps up to 500 messages per session, dropping closed ones first. Test: `test/agent-messaging-acts.test.mjs`.
+
 ## Safety boundaries
 
 Subagents can launch their own subagents up to three layers below the main conversation, as in Claude Code. Change the limit with `subagentMaxDepth` (1-5), `OASIS_SUBAGENT_MAX_DEPTH`, or Claude Code's `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`; `1` turns nesting off. At the limit the `task` tool is withheld. Read-only agents never get it, so they can't gain write access through a child. To stop one agent from delegating, leave `Agent` out of its `tools` or add it to `disallowedTools`. The 8-agent background cap is shared across the whole tree; each agent can still run up to 6 in parallel. To run fewer at once, for example on a rate-limited provider, set `subagentMaxParallel` (1-6) in your user settings or `OASIS_SUBAGENT_MAX_PARALLEL`; extra `task` calls from the same reply wait for a free slot, in order. Subagents cannot ask the user questions, enter plan mode, schedule cron jobs, or write shared durable memory. They suggest memory and skill candidates in their report for the parent to review. Their spend counts toward the parent's `--max-budget-usd`. An agent definition can also cap one run with `budgetTokens`, `budgetUsd`, `budgetRequests`, `budgetSteps` and `budgetChildren` (or `OASIS_SUBAGENT_BUDGET="tokens=200000,usd=0.5"` for all of them); the budget is reserved from the parent's and the unspent part is returned when the run ends. See [Budget algebra](AGENT-NETWORK.md#budget-algebra). `SubagentStart` and `SubagentStop` hooks run around every child.

@@ -1,3 +1,4 @@
+import { recordDialogue, dialogueHeader, openObligations, openThreads, lapseObligations, describeLapse } from './agent-dialogue.mjs';
 import { restoreApprovals, waitingApprovals } from './neuron-approvals.mjs';
 import { applyInjectionTaint, injectionTaint, taintNotice } from './untrusted-content.mjs';
 import { AGENT_DEFINE_TOOL_DEFINITION } from './session-agents.mjs';
@@ -56,9 +57,12 @@ export const AGENT_TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'team_shutdown', description: 'Stop a named team: prevent new members, request cancellation of its running agents, and close the team when its workers have exited. Only the main coordinator can shut down teams.', parameters: { type: 'object', properties: {
     team_id: { type: 'string', description: 'Team ID such as team_1' }
   }, required: ['team_id'] } } },
-  { type: 'function', function: { name: 'team_send_message', description: 'Send a direct coordination message to another running agent in this task team. Messages are delivered at the recipient\'s next model step. Use this to share findings, ask for an interface decision, or warn about overlapping work. This cannot resume a finished agent or grant it extra permissions.', parameters: { type: 'object', properties: {
+  { type: 'function', function: { name: 'team_send_message', description: 'Send a typed coordination message to another running agent in this task team. Messages are delivered at the recipient\'s next model step. Use act to say what you want: inform (share findings, warn about overlap), request (ask for a decision or input), propose, challenge (dispute a claim or finding), commit (promise work), and answer/accept/reject with reply_to. This cannot resume a finished agent or grant it extra permissions.', parameters: { type: 'object', properties: {
     to: { type: 'string', description: 'Target agent ID from agent_status, such as agent_2' },
-    message: { type: 'string', description: 'Coordination message, maximum 20,000 characters' }
+    message: { type: 'string', description: 'Coordination message, maximum 20,000 characters' },
+    act: { type: 'string', enum: ['inform', 'request', 'propose', 'challenge', 'commit', 'answer', 'accept', 'reject'], description: 'Speech act (default inform). request/propose/challenge oblige the recipient to reply; commit obliges you to deliver. answer/accept/reject reply to a message and need reply_to. Open obligations show in team_status and lapse visibly when an agent finishes.' },
+    reply_to: { type: 'string', description: 'Message id (m_N, shown in the header of the message you received) this replies to or delivers on' },
+    about: { type: 'string', description: 'Optional subject: a finding id (k_N), task, or file path' }
   }, required: ['to', 'message'] } } },
   { type: 'function', function: { name: 'send_message', description: 'Send a message to a subagent by id. A running agent sees it at its next step (use this to steer or add requirements). A finished agent resumes in the background with its full previous context, so follow-up work does not start from scratch.', parameters: { type: 'object', properties: {
     id: { type: 'string', description: 'Agent id from task or agent_status' },
@@ -303,7 +307,8 @@ function summarizeTeam(session, team) {
     closed_at: team.closedAt,
     member_count: roster.length,
     running: roster.filter((member) => member.status === 'running').length,
-    members: roster
+    members: roster,
+    open_threads: openThreads(agentRegistry(session), new Set(members.map((member) => member.id)))
   };
 }
 
@@ -331,7 +336,7 @@ export function createAgentTeam(session, args = {}) {
 export function agentTeamStatus(session, args = {}) {
   if (args.team_id) return { team: summarizeTeam(session, getAgentTeam(session, args.team_id)) };
   const teams = listAgentTeams(session);
-  return { teams, total: teams.length, active: teams.filter((team) => team.status === 'active').length };
+  return { teams, total: teams.length, active: teams.filter((team) => team.status === 'active').length, open_threads: openThreads(agentRegistry(session)) };
 }
 
 export function shutdownAgentTeam(session, args = {}) {
@@ -594,9 +599,39 @@ export function sendTeamMessage(session, args = {}) {
   if (inbox.length >= 100) throw new Error('Agent ' + targetId + ' has too many queued messages; wait for it to catch up.');
   const senderLabel = senderRecord ? senderRecord.description : 'main coordinator';
   const taint = injectionTaint(session, 'teammate ' + senderId);
-  inbox.push({ text: 'Direct message from teammate ' + senderId + ' (' + senderLabel + '):\n' + message + (taint ? '\n[OASIS] ' + taintNotice(taint) : ''), senderId, kind: 'peer-message', ...(taint ? { taint } : {}) });
-  recordAgentEvent(session, 'agent.message_queued', { agentId: targetId, teamId: record.teamId || undefined, description: senderId + ' → ' + targetId, detail: message });
-  return { delivered: 'queued', from: senderId, to: targetId, status: record.status, message: 'Message queued for ' + targetId + '; it will be delivered at the recipient\'s next model step.' };
+  const { message: entry, closes } = recordDialogue(agentRegistry(session), { from: senderId, to: targetId, act: args.act, text: message, replyTo: args.reply_to, about: args.about });
+  inbox.push({ text: dialogueHeader(entry) + '\nDirect message from teammate ' + senderId + ' (' + senderLabel + '):\n' + message + (taint ? '\n[OASIS] ' + taintNotice(taint) : ''), senderId, kind: 'peer-message', messageId: entry.id, act: entry.act, ...(taint ? { taint } : {}) });
+  recordAgentEvent(session, 'agent.message_queued', { agentId: targetId, teamId: record.teamId || undefined, description: senderId + ' → ' + targetId + ' (' + entry.act + ' ' + entry.id + ')', detail: message });
+  const pending = openObligations(agentRegistry(session), senderId);
+  return {
+    delivered: 'queued', from: senderId, to: targetId, status: record.status, id: entry.id, act: entry.act,
+    ...(closes ? { closes } : {}),
+    ...(pending.owes.length ? { you_still_owe: pending.owes.map((item) => item.id + ' (' + item.act + ' from ' + item.from + ')') } : {}),
+    message: 'Message ' + entry.id + ' queued for ' + targetId + '; it will be delivered at the recipient\'s next model step.'
+      + (closes ? ' This discharges ' + closes + '.' : '')
+      + (entry.open ? (entry.act === 'commit' ? ' You now owe delivery: send it with reply_to ' + entry.id + '.' : ' ' + targetId + ' owes a reply to ' + entry.id + '.') : '')
+  };
+}
+
+/**
+ * An agent finished (or failed): what it still owed in team dialogue lapses.
+ * Each running agent left waiting is told at its next step, so it stops
+ * waiting for a reply that cannot come. Returns the lapsed threads for the
+ * parent's result.
+ */
+export function lapseAgentDialogue(session, record) {
+  const registry = agentRegistry(session);
+  const lapsed = lapseObligations(registry, record.id);
+  for (const item of lapsed) {
+    const waiterId = item.act === 'commit' ? item.to : item.from;
+    const waiter = registry.agents.get(waiterId);
+    if (waiter && waiter.status === 'running' && waiter.child) {
+      const inbox = waiter.child.inbox || (waiter.child.inbox = []);
+      if (inbox.length < 100) inbox.push({ text: '[OASIS] Thread ' + item.id + ' lapsed: ' + describeLapse(item), senderId: 'oasis', kind: 'dialogue-lapse', messageId: item.id });
+    }
+    recordAgentEvent(session, 'agent.thread_lapsed', { agentId: record.id, teamId: record.teamId || undefined, description: item.act + ' ' + item.id + ' (' + item.from + ' → ' + item.to + ')', detail: item.text });
+  }
+  return lapsed.map((item) => ({ id: item.id, act: item.act, from: item.from, to: item.to, text: item.text.slice(0, 200) }));
 }
 
 // Closes what a child session opened for itself: its browser, its computer-use
