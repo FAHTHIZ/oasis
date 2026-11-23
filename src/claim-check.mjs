@@ -3,6 +3,7 @@
 // pass" right after a failing run, after editing again, or from a piped
 // command whose real exit status was hidden. One reconcile nudge per turn.
 
+import { replyLanguage, notePhrase, noteLabel, noteEnd, hasNote } from './runtime-notes.mjs';
 import { multilingualClaimsPassing, multilingualAdmitsUnverified, multilingualClaimsChange, multilingualAdmitsFailure } from './multilingual-signals.mjs';
 
 const POSITIVE = [
@@ -83,17 +84,20 @@ export function appendUnverifiedNotice(text, issues, verification = {}, state = 
   const denied = verification && verification.deniedCheck ? String(verification.deniedCheck) : '';
   const failed = state && state.ran && Number.isInteger(state.lastExit) && state.lastExit !== 0 && !state.editedAfter;
   const stale = state && state.ran && state.editedAfter;
+  // The note is written in the reply's language (src/runtime-notes.mjs).
+  const lang = replyLanguage(value);
+  const gap = lang === 'zh' || lang === 'ja' ? '' : ' ';
   let reason;
-  if (failed) reason = 'the last check (`' + state.lastCommand + '`) failed with exit code ' + state.lastExit;
-  else if (stale) reason = 'files changed after the last check (`' + state.lastCommand + '`) ran';
-  else if (denied) reason = '`' + denied + '` was not approved, so no check ran';
-  else reason = 'no test or check command ran after the last edit';
+  if (failed) reason = notePhrase(lang, 'failed', { c: state.lastCommand, n: state.lastExit });
+  else if (stale) reason = notePhrase(lang, 'stale', { c: state.lastCommand });
+  else if (denied) reason = notePhrase(lang, 'denied', { c: denied });
+  else reason = notePhrase(lang, 'noCheck');
   const claimed = claimsPassing(value);
   const command = denied || (state && state.lastCommand) || '';
   // A reply that reports a pass after OASIS saw the check fail is the case users most need flagged.
-  const contradiction = claimed ? (failed ? ' The reply above says it passed; OASIS saw it fail.' : ' Any passing test results described above were not observed by OASIS.') : '';
-  const note = 'Not verified: ' + reason + '.' + contradiction + (command && !failed ? ' Run `' + command + '` to confirm.' : '');
-  if (value.includes('Not verified: ')) return value;
+  const contradiction = claimed ? gap + notePhrase(lang, failed ? 'saidPassed' : 'notObserved') : '';
+  const note = noteLabel(lang, 'verified') + reason + noteEnd(lang) + contradiction + (command && !failed ? gap + notePhrase(lang, 'run', { c: command }) : '');
+  if (hasNote(value, 'verified')) return value;
   // The answer already admits the check did not run and makes no passing claim: no need to repeat it.
   if (!claimed && !failed && !stale && (ADMITS_UNVERIFIED.test(value) || multilingualAdmitsUnverified(value))) return value;
   return (value.trim() ? value.replace(/\s+$/, '') + '\n\n' : '') + note;
@@ -144,8 +148,9 @@ export function failedEditIssue(state, text) {
 export function appendFailedEditNotice(text, state) {
   const value = String(text || '');
   const files = unsettled(state, value);
-  if (!files.length || value.includes('Not done: ')) return value;
-  const note = files.map(([file, error]) => 'Not done: the change to ' + file + ' did not apply (' + error + ').').join('\n');
+  if (!files.length || hasNote(value, 'done')) return value;
+  const lang = replyLanguage(value);
+  const note = files.map(([file, error]) => noteLabel(lang, 'done') + notePhrase(lang, 'notApplied', { f: file, e: error }) + noteEnd(lang)).join('\n');
   return (value.trim() ? value.replace(/\s+$/, '') + '\n\n' : '') + note;
 }
 

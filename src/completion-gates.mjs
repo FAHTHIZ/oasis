@@ -17,6 +17,7 @@
 // Agent-owned helpers come in through `host`, which keeps this module free of
 // an import cycle with agent.mjs.
 
+import { replyLanguage } from './runtime-notes.mjs';
 import { currentReviews } from './task-reviews.mjs';
 import { recordSkillOutcomes } from './skill-record.mjs';
 import path from 'node:path';
@@ -457,7 +458,7 @@ export async function runCompletionGates(turn, host) {
     }
   }
   const shownText = assistant.providerStop && text ? text.replace(/\s+$/, '') + '\n\n' + providerCutNotice(assistant.providerStop) : text;
-  const taskNotice = g.taskNudged ? gateNotice(taskProblems) : '';
+  const taskNotice = g.taskNudged ? gateNotice(taskProblems, replyLanguage(shownText)) : '';
   const noticedText = taskNotice && shownText ? shownText.replace(/\s+$/, '') + '\n\n' + taskNotice : shownText;
   const finalText = g.emptyReply ? (assistant.providerStop ? providerStopNotice(assistant.providerStop) : EMPTY_REPLY_NOTICE) : appendFailedEditNotice(issues.length ? appendUnverifiedNotice(noticedText, issues, verification, claimState) : appendLspUnavailableNotice(noticedText, verification), claimState);
   assistantMessage.content = finalText;
