@@ -25,6 +25,7 @@ import { FALLBACK_REASON_TEXT } from './fallback-chain.mjs';
 import { redactSecretText } from './secret-shield.mjs';
 import { reviewRounds } from './goal-evidence.mjs';
 import { sessionEvidence } from './evidence-ledger.mjs';
+import { PermissionPolicy } from './permissions.mjs';
 
 // Finds an MCP tool by Claude-style name (mcp__server__tool) or Oasis safe name.
 function resolvePermissionTool(session, name) {
@@ -653,22 +654,37 @@ export function headlessSetupErrorOutput(error, outputFormat) {
 export function deniedHint(denied, { env = process.env } = {}) {
   const commands = [];
   const tools = [];
+  const rules = [];
+  const unrulable = [];
   let highRisk = false;
   for (const item of denied || []) {
     const input = item && item.tool_input;
     if (input && typeof input.command === 'string' && (item.tool_name === 'run_command' || item.tool_name === 'run_shell')) {
       const line = [input.command].concat(Array.isArray(input.args) ? input.args : []).join(' ').trim();
-      if (line && !commands.includes(line)) commands.push(line);
-      if (/HIGH RISK:/.test(String(item.detail || ''))) highRisk = true;
+      if (!line || commands.includes(line)) continue;
+      commands.push(line);
+      const risky = /HIGH RISK:/.test(String(item.detail || ''));
+      // The rule must name the tool that was called (run_shell, not always
+      // run_command), and is only offered when it would really allow the call:
+      // a rule never pre-approves shell lines with redirects or substitutions,
+      // nor a high-risk shell line.
+      const rule = item.tool_name + '(' + line.split(/\s+/).slice(0, 2).join(' ') + ':*)';
+      let works = !(risky && item.tool_name === 'run_shell');
+      if (works) {
+        try { works = new PermissionPolicy({ permissions: { allow: [rule] } }).evaluate(item.tool_name, input).decision === 'allow'; } catch { works = false; }
+      }
+      if (works) { if (!rules.includes(rule)) rules.push(rule); if (risky) highRisk = true; } else unrulable.push(line);
     } else if (item && item.tool_name && !tools.includes(item.tool_name)) tools.push(item.tool_name);
   }
   if (!commands.length && !tools.length) return '';
-  const rules = [...new Set(commands.map((line) => 'run_command(' + line.split(/\s+/).slice(0, 2).join(' ') + ':*)'))].slice(0, 3);
+  const shownRules = rules.slice(0, 3);
   const head = '\nNot approved in this run (nobody can approve in -p mode): ' + [...commands.map((line) => '`' + line + '`'), ...tools].slice(0, 6).join(', ') + '.\n';
-  if (!rules.length) return head + 'To allow next time: --allowedTools, --yes or --permission-mode auto.\n';
+  const noRule = unrulable.length ? 'A permission rule cannot pre-approve ' + unrulable.slice(0, 3).map((line) => '`' + line + '`').join(', ') +
+    ' (shell redirects, substitutions or a high-risk shell line always need a person); run ' + (unrulable.length > 1 ? 'them' : 'it') + ' yourself, or ask for plain commands without shell syntax.\n' : '';
+  if (!shownRules.length) return head + noRule + (unrulable.length && !tools.length ? '' : 'To allow next time: --allowedTools, --yes or --permission-mode auto.\n');
   // Inline code, wrappers and the like ask even with --full-auto or --yes; only an allow rule lets them run.
-  if (highRisk) return head + 'High-risk commands (inline code, wrappers and the like) always ask, even with --full-auto. To allow next time: --allowedTools "' + rules.join(',') + '".\n';
+  if (highRisk) return head + noRule + 'High-risk commands (inline code, wrappers and the like) always ask, even with --full-auto. To allow next time: --allowedTools "' + shownRules.join(',') + '".\n';
   // --full-auto sets OASIS_SANDBOX=1; suggesting it again would not help.
   const sandboxed = String(env.OASIS_SANDBOX || '') === '1';
-  return head + 'To allow next time: ' + (sandboxed ? '' : '--full-auto (edits plus commands inside the OS sandbox), ') + '--allowedTools "' + rules.join(',') + '", or --permission-mode auto.\n';
+  return head + noRule + 'To allow next time: ' + (sandboxed ? '' : '--full-auto (edits plus commands inside the OS sandbox), ') + '--allowedTools "' + shownRules.join(',') + '", or --permission-mode auto.\n';
 }

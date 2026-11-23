@@ -133,3 +133,18 @@ test('deny rules still inspect nested Bash wrappers after strict allow parsing u
     assert.equal(policy.evaluate('run_shell', { command }).decision, 'deny', command);
   }
 });
+
+test('run_command rules match argv entries as literal words', async () => {
+  const { loadShellParser } = await import('../src/shell-ast.mjs');
+  await loadShellParser();
+  const policy = new PermissionPolicy({ permissions: { deny: ['run_command(git push:*)', 'Read(.env)'], allow: ['run_command(node -e:*)', 'run_command(git commit:*)'] } }, { root: process.cwd() });
+  // An argument with a quote, parenthesis or $ used to make the joined line unparsable.
+  assert.equal(policy.evaluate('run_command', { command: 'cat', args: ["it's", '.env'] }).decision, 'deny');
+  assert.equal(policy.evaluate('run_command', { command: 'git', args: ['push', 'origin', "it's"] }).decision, 'deny');
+  assert.equal(policy.evaluate('run_command', { command: 'node', args: ['-e', 'console.log(1)'] }).decision, 'allow');
+  assert.equal(policy.evaluate('run_command', { command: 'node', args: ['-e', "require('fs')"] }).decision, 'allow');
+  assert.equal(policy.evaluate('run_command', { command: 'git', args: ['commit', '-m', 'fix (bug) $HOME'] }).decision, 'allow');
+  // Still exact about the program and prefix.
+  assert.equal(policy.evaluate('run_command', { command: 'node', args: ['--eval', 'x'] }).decision, 'default');
+  assert.equal(policy.evaluate('run_command', { command: 'python3', args: ['-e', 'x'] }).decision, 'default');
+});
