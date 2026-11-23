@@ -651,12 +651,30 @@ export async function pluginDefaultSettings(plugins) {
 
 // ---------- marketplaces ----------
 
+// Values from a marketplace manifest or a typed source end up as git
+// arguments. One that starts with "-" is read as an option: a plugin entry
+// with "sha": "--upload-pack=CMD" and a local "url" ran CMD during
+// `oasis plugin install`, before the install audit looked at anything.
+export function checkedGitRef(value, label = 'ref') {
+  const text = String(value);
+  if (!text || text.startsWith('-') || /[\s\0-\x1f\x7f~^:?*[\\]|\.\.|@\{/.test(text) || text.length > 255) throw new Error('Invalid git ' + label + ': ' + JSON.stringify(text.slice(0, 80)));
+  return text;
+}
+
+export function checkedCommitSha(value) {
+  const text = String(value).trim();
+  if (!/^[0-9a-f]{7,64}$/i.test(text)) throw new Error('Invalid commit sha in plugin source (expected 7-64 hex digits): ' + JSON.stringify(text.slice(0, 80)));
+  return text;
+}
+
 function parseSource(input, cwd) {
   const text = String(input || '').trim();
   if (!text) throw new Error('Usage: oasis plugin marketplace add OWNER/REPO | GIT-URL | PATH');
-  const [base, ref] = text.split('#');
-  const local = path.resolve(cwd, base);
-  if (/^(\.|\/|~|[A-Za-z]:\\)/.test(base)) return { type: 'directory', path: local.replace(/^~/, os.homedir()) };
+  const [base, rawRef] = text.split('#');
+  const ref = rawRef ? checkedGitRef(rawRef) : rawRef;
+  // ~ is the home folder, not a folder named "~" under the current one.
+  const local = /^~(?=$|[\/\\])/.test(base) ? path.join(os.homedir(), base.slice(1)) : path.resolve(cwd, base);
+  if (/^(\.|\/|~|[A-Za-z]:\\)/.test(base)) return { type: 'directory', path: local };
   if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(base)) return { type: 'github', repo: base, url: 'https://github.com/' + base + '.git', ...(ref ? { ref } : {}) };
   if (/^(https:\/\/|git@|ssh:\/\/|file:\/\/)/.test(base)) return { type: 'git', url: base, ...(ref ? { ref } : {}) };
   return { type: 'directory', path: local };
@@ -789,7 +807,7 @@ export async function updateMarketplace(name, options = {}) {
     const record = known[item];
     if (!record) throw new Error('Unknown marketplace "' + item + '". Run oasis plugin marketplace list.');
     if (record.source.type !== 'directory') {
-      git(['fetch', '--depth', '1', 'origin', ...(record.source.ref ? [record.source.ref] : [])], { cwd: record.installLocation });
+      git(['fetch', '--depth', '1', 'origin', ...(record.source.ref ? [checkedGitRef(record.source.ref)] : [])], { cwd: record.installLocation });
       git(['reset', '--hard', 'FETCH_HEAD'], { cwd: record.installLocation });
     }
     await readMarketplaceManifest(record.installLocation);
@@ -861,8 +879,10 @@ export async function installPlugin(spec, options = {}) {
     const staging = cacheDir + '.staging';
     await rm(staging, { recursive: true, force: true });
     await mkdir(path.dirname(staging), { recursive: true });
-    clone(url, staging, source.ref);
-    if (source.sha) { git(['fetch', '--depth', '1', 'origin', source.sha], { cwd: staging }); git(['checkout', '--quiet', source.sha], { cwd: staging }); }
+    const ref = source.ref ? checkedGitRef(source.ref) : null;
+    const sha = source.sha ? checkedCommitSha(source.sha) : null;
+    clone(url, staging, ref);
+    if (sha) { git(['fetch', '--depth', '1', 'origin', sha], { cwd: staging }); git(['checkout', '--quiet', sha, '--'], { cwd: staging }); }
     const from = kind === 'git-subdir' ? path.resolve(staging, String(source.path || '')) : staging;
     if (!inside(staging, from) || !inside(await realpath(staging), await realpath(from))) throw new Error('git-subdir path escapes the repository.');
     installPath = cacheDir;
