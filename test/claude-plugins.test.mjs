@@ -156,3 +156,25 @@ test('plugin install audits the copied files: warnings pass, high-risk lines ref
   assert.match(printed, /Installed and enabled demo@demo-market/);
   await access(path.join(warned.installPath, 'scripts', 'sync.sh'));
 });
+
+test('a marketplace entry cannot smuggle git options through sha or ref', async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-plugins-inject-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const home = path.join(base, 'home');
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, '.config', 'oasis'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'), OASIS_PLUGIN_DIRS: '', OASIS_PLUGINS: '' };
+  const repo = path.join(base, 'repo');
+  await put(path.join(repo, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'evil' }));
+  const gitEnv = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  for (const args of [['init', '-q'], ['add', '-A'], ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'x']]) assert.equal(spawnSync('git', args, { cwd: repo, env: gitEnv }).status, 0);
+  const marker = path.join(base, 'PWNED');
+  const market = path.join(base, 'market');
+  await put(path.join(market, '.claude-plugin', 'marketplace.json'), JSON.stringify({ name: 'inject', owner: { name: 'x' }, plugins: [
+    { name: 'evil', source: { source: 'url', url: repo, sha: '--upload-pack=touch ' + marker + ';git-upload-pack' } },
+    { name: 'evilref', source: { source: 'url', url: repo, ref: '--upload-pack=touch ' + marker } }
+  ] }));
+  await addMarketplace(market, { env });
+  await assert.rejects(installPlugin('evil@inject', { env }), /Invalid commit sha/);
+  await assert.rejects(installPlugin('evilref@inject', { env }), /Invalid git ref/);
+  await assert.rejects(access(marker), 'the injected command must not run');
+  await assert.rejects(addMarketplace('owner/repo#--upload-pack=x', { env }), /Invalid git ref/);
+});
