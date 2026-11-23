@@ -18,7 +18,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-export const BRIDGE_PROTOCOLS = ['cursor', 'copilot', 'gemini'];
+export const BRIDGE_PROTOCOLS = ['cursor', 'copilot', 'gemini', 'factory'];
 
 // Cursor hook events -> the Claude Code event that fires at the same moment,
 // and (for tool events) which tools it covers. Events with no OASIS moment
@@ -83,6 +83,8 @@ const CURSOR_TOOLS = { run_command: 'Shell', run_shell: 'Shell', powershell: 'Sh
 const COPILOT_TOOLS = { run_command: 'bash', run_shell: 'bash', powershell: 'powershell', read_file: 'view', list_files: 'view', write_file: 'create', edit_file: 'edit', multi_edit: 'edit', grep: 'grep', search_files: 'grep', glob_files: 'glob', fetch_url: 'web_fetch', web_search: 'web_search', task: 'task' };
 
 const GEMINI_TOOLS = { run_command: 'run_shell_command', run_shell: 'run_shell_command', powershell: 'run_shell_command', read_file: 'read_file', write_file: 'write_file', edit_file: 'replace', multi_edit: 'replace', grep: 'grep_search', search_files: 'grep_search', glob_files: 'glob', list_files: 'list_directory', fetch_url: 'web_fetch', web_search: 'google_web_search', todo_write: 'write_todos' };
+// Droid's names for the Claude Code tools OASIS shows hooks.
+const FACTORY_TOOLS = { Bash: 'Execute', Write: 'Create', MultiEdit: 'Edit', WebFetch: 'FetchUrl' };
 const GEMINI_DIR_TOOLS = new Set(['list_directory', 'glob', 'grep_search']);
 
 const PERMISSION_EVENTS = { cursor: new Set(['preToolUse', 'beforeShellExecution', 'beforeMCPExecution', 'beforeReadFile']), copilot: new Set(['preToolUse']), gemini: new Set(['BeforeTool']) };
@@ -163,6 +165,9 @@ function foreignMatcherAccepts(protocol, matcher, name, lifecycle = false) {
 /** The stdin payload a Cursor or Copilot hook expects, or null to skip the hook. */
 export function toForeignPayload(protocol, foreignEvent, payload, hook = {}) {
   const p = payload || {};
+  // Factory Droid hooks use Claude Code's events and replies; only the tool
+  // names differ (Execute, Create, FetchUrl), and the matcher is already OASIS's.
+  if (protocol === 'factory') return { ...p, ...(typeof p.tool_name === 'string' ? { tool_name: FACTORY_TOOLS[p.tool_name] || p.tool_name } : {}) };
   const cwd = p.cwd || process.cwd();
   const tool = foreignToolName(protocol, p);
   if (hook.foreignMatcher) {
@@ -253,6 +258,7 @@ const reply = (out, json) => ({ ...out, exitCode: 0, stdout: json ? JSON.stringi
 
 /** A Cursor or Copilot hook's result, rewritten into a Claude Code hook result. */
 export function fromForeignOutput(protocol, foreignEvent, out, context = {}) {
+  if (protocol === 'factory') return out;
   const permission = PERMISSION_EVENTS[protocol] && PERMISSION_EVENTS[protocol].has(foreignEvent);
   if (!out || out.exitCode !== 0) {
     if (!out) return out;
@@ -400,6 +406,7 @@ export function bridgeEnv(protocol, root, pluginEnv = {}) {
   const pluginRoot = pluginEnv.CLAUDE_PLUGIN_ROOT || pluginEnv.OASIS_PLUGIN_ROOT || '';
   if (protocol === 'cursor') return { CURSOR_PROJECT_DIR: root, ...(pluginRoot ? { CURSOR_PLUGIN_ROOT: pluginRoot } : {}) };
   if (protocol === 'copilot') return { ...(pluginRoot ? { COPILOT_PLUGIN_ROOT: pluginRoot } : {}) };
+  if (protocol === 'factory') return { FACTORY_PROJECT_DIR: root, ...(pluginRoot ? { DROID_PLUGIN_ROOT: pluginRoot } : {}) };
   if (protocol === 'gemini') return { GEMINI_PROJECT_DIR: root, GEMINI_CWD: root, ...(pluginRoot ? { GEMINI_EXTENSION_PATH: pluginRoot } : {}) };
   return {};
 }

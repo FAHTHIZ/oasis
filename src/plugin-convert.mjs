@@ -464,9 +464,35 @@ export function droidToolNames(tools) {
 }
 
 /** A hook matcher under Droid tool names, rewritten to Claude Code's. */
+// Droid tool names in a hook matcher, as the OASIS (Claude Code) tools they
+// cover: Execute is Bash, Create is Write, ApplyPatch and Edit are the edit tools.
+const DROID_MATCH = { Execute: ['Bash'], Create: ['Write'], ApplyPatch: ['Edit', 'MultiEdit', 'Write'], Edit: ['Edit', 'MultiEdit'], FetchUrl: ['WebFetch'] };
 export function droidMatcher(matcher) {
   if (typeof matcher !== 'string' || !matcher) return matcher;
-  return matcher.replace(/\b(Execute|Create|ApplyPatch|FetchUrl)\b/g, (name) => DROID_TOOLS[name][0] === 'Edit' ? 'Edit' : DROID_TOOLS[name][0]);
+  if (!/\b(Execute|Create|ApplyPatch|Edit|FetchUrl)\b/.test(matcher)) return matcher;
+  if (/^[A-Za-z0-9_\- ,|]+$/.test(matcher)) return [...new Set(matcher.split(/[|,]/).map((item) => item.trim()).filter(Boolean).flatMap((item) => DROID_MATCH[item] || [item]))].join('|');
+  return matcher.replace(/\b(Execute|Create|ApplyPatch|Edit|FetchUrl)\b/g, (name) => DROID_MATCH[name].length > 1 ? '(?:' + DROID_MATCH[name].join('|') + ')' : DROID_MATCH[name][0]);
+}
+
+/**
+ * A Droid hook map ({ Event: [groups] }, or { hooks: {...} }) as Claude Code
+ * hook groups: matchers use OASIS tool names, ${DROID_PLUGIN_ROOT} reads as
+ * ${CLAUDE_PLUGIN_ROOT}, and each handler is tagged for the Factory bridge,
+ * which shows the hook Droid's own tool names (Execute, Create) on stdin.
+ */
+export function factoryHookGroups(doc) {
+  const map = doc && doc.hooks && typeof doc.hooks === 'object' && !Array.isArray(doc.hooks) ? doc.hooks : doc;
+  const hooks = {}, dropped = [];
+  if (!map || typeof map !== 'object' || Array.isArray(map)) return { hooks, dropped };
+  for (const [event, groups] of Object.entries(map)) {
+    if (!CLAUDE_EVENTS.has(event) || !Array.isArray(groups)) { dropped.push(event); continue; }
+    for (const group of JSON.parse(JSON.stringify(groups), (key, value) => droidVars(value))) {
+      if (!group || !Array.isArray(group.hooks)) continue;
+      const handlers = group.hooks.filter((hook) => hook && typeof hook === 'object').map((hook) => hook.type === undefined || hook.type === 'command' ? { ...hook, protocol: 'factory', foreignEvent: event } : hook);
+      (hooks[event] ||= []).push({ ...group, ...(group.matcher ? { matcher: droidMatcher(group.matcher) } : {}), hooks: handlers });
+    }
+  }
+  return { hooks, dropped };
 }
 
 const droidVars = (value) => typeof value === 'string'
@@ -502,11 +528,7 @@ async function adaptFactory(destDir, info, manifest, files) {
   else if (m.hooks && typeof m.hooks === 'object') docs.push(m.hooks);
   const merged = {};
   for (const doc of docs) {
-    const map = doc.hooks && typeof doc.hooks === 'object' && !Array.isArray(doc.hooks) ? doc.hooks : doc;
-    for (const [event, groups] of Object.entries(map)) {
-      if (!CLAUDE_EVENTS.has(event) || !Array.isArray(groups)) continue;
-      (merged[event] ||= []).push(...JSON.parse(JSON.stringify(groups), (key, value) => droidVars(value)).map((g) => ({ ...g, ...(g.matcher ? { matcher: droidMatcher(g.matcher) } : {}) })));
-    }
+    for (const [event, groups] of Object.entries(factoryHookGroups(doc).hooks)) (merged[event] ||= []).push(...groups);
   }
   delete manifest.hooks;
   await rm(path.join(destDir, 'hooks', 'hooks.json'), { force: true });
