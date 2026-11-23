@@ -529,6 +529,10 @@ export function chooseExperienceModel({ rows = [], agentType, domain, baseModel,
     const cost = price(model);
     if (cost === null || cost === undefined || !Number.isFinite(cost)) continue;
     if (basePrice !== null && basePrice !== undefined && Number.isFinite(basePrice) && cost >= basePrice) continue;
+    // A lower price per token is not a saving if the model spends more tokens
+    // or more runs per result: when both have a recorded cost per verified
+    // result, the candidate must also be cheaper by that measure.
+    if (Number.isFinite(record.costPerSuccessUsd) && Number.isFinite(baseRecord.costPerSuccessUsd) && record.costPerSuccessUsd >= baseRecord.costPerSuccessUsd) continue;
     if (!best || cost < best.cost || (cost === best.cost && record.successLowerBound > best.record.successLowerBound)) best = { model, cost, record };
   }
   if (!best) return { model: base, changed: false, reason: 'no cheaper configured model matches ' + base + ' on ' + agentType + ' ' + wanted + ' work (' + Math.round(baseRecord.successRate * 100) + '% verified of ' + baseRecord.decisive + ' decisive runs)' };

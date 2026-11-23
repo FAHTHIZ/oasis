@@ -300,3 +300,15 @@ test('track records report cost per verified result, failures included', () => {
   assert.match(text, /cheap\n .*\$0\.0300 per verified result/);
   assert.doesNotMatch(text.split('\n').find((line, index, all) => all[index - 1] === 'never') || '', /per verified result/);
 });
+
+test('experience routing does not switch to a model whose verified results cost more, even at a lower token price', () => {
+  const runs = (model, n, costUsd, outcome = 'verified') => Array.from({ length: n }, (_, i) => ({ agentType: 'Explore', model, domain: 'code', outcome, costUsd, at: i }));
+  const price = (model) => ({ strong: 10, cheap: 1 })[model] ?? null;
+  const pick = (rows) => chooseExperienceModel({ rows, agentType: 'Explore', domain: 'code', baseModel: 'strong', candidates: ['cheap'], price, maxDrop: 0.2 });
+  // cheap is 10x cheaper per token but burns 15x the tokens per result.
+  assert.equal(pick([...runs('strong', 10, 0.02), ...runs('cheap', 10, 0.3)]).changed, false);
+  // Cheaper per result too: switch.
+  assert.equal(pick([...runs('strong', 10, 0.02), ...runs('cheap', 10, 0.005)]).model, 'cheap');
+  // No recorded cost: the token price decides, as before.
+  assert.equal(pick([...runs('strong', 10, 0), ...runs('cheap', 10, 0)]).model, 'cheap');
+});
