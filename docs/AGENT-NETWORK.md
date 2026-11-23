@@ -91,7 +91,7 @@ Five URLs are not five sources when four of them run the same wire story. `src/s
 
 The `source_independence` tool (`{urls: [...]}`, read-only, open to subagents) returns the groups and a count. Knowledge-board findings carry `independent_sources`; a corroborating post whose sources are copies of ones already cited is told it adds no independent evidence, and search ranks findings with more independent sources higher. The `deep-research` workflow has each verifier report `independent_sources` and search again when it is 1, and the report says "according to" for single-source claims and calls only claims with two or more corroborated. Test: `test/source-independence.test.mjs`.
 
-Agents of one session can also share findings while they work, on the [shared knowledge board](SUBAGENTS.md#shared-knowledge-board). Each post goes through the same contracts against the poster's evidence and is labelled `grounded` or `noted`.
+Agents of one session can also share findings while they work, on the [shared knowledge board](SUBAGENTS.md#shared-knowledge-board). Each post goes through the same contracts against the poster's evidence and is labelled `grounded` or `noted`. Findings that disagree are kept as [disputes](SUBAGENTS.md#disagreements) rather than merged.
 
 ## Waiting approvals
 
