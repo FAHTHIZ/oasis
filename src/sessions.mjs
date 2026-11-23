@@ -573,9 +573,40 @@ export async function setSessionArchived(root, id, archived, options = {}) {
   return { id, archived: Boolean(archived), updatedAt: String(payload.updatedAt || ''), name: typeof payload.name === 'string' ? payload.name : '' };
 }
 
+// Session files in this workspace's folder that cannot be read (truncated by a
+// disk error, edited by hand). Listings skip them, so without this they were
+// invisible: `oasis -c` silently continued an older conversation and the file
+// could not be deleted.
+export async function unreadableSessions(root, options = {}) {
+  const env = options.env || process.env;
+  const directory = getSessionDirectory(root, env);
+  let entries;
+  try { entries = await readdir(directory, { withFileTypes: true }); } catch { return []; }
+  const out = [];
+  for (const entry of entries) {
+    const match = /^([a-f0-9-]{20,80})\.json$/i.exec(entry.name);
+    if (!entry.isFile() || !match) continue;
+    const file = path.join(directory, entry.name);
+    let reason = '';
+    try {
+      const data = JSON.parse(await readBoundedRegularFile(file, MAX_SESSION_BYTES, { label: 'Saved session', tooLargeMessage: 'Stored session is too large.' }));
+      if (!data || data.schemaVersion !== 1 || !Array.isArray(data.messages)) reason = 'unsupported format';
+      else continue;
+    } catch (error) { reason = error instanceof SyntaxError ? 'not valid JSON (truncated or damaged)' : String(error && error.message || error).slice(0, 120); }
+    const info = await stat(file).catch(() => null);
+    out.push({ id: match[1], reason, modifiedAt: info ? info.mtime.toISOString() : '' });
+  }
+  return out.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
+}
+
 export async function deleteSession(root, id, options = {}) {
   const target = sessionPath(root, id, options.env || process.env);
-  const data = await loadSession(root, id, options);
+  let data;
+  try { data = await loadSession(root, id, options); } catch (error) {
+    // A damaged file in this workspace's folder can still be removed.
+    if (!(await unreadableSessions(root, options)).some((item) => item.id === id)) throw error;
+    data = { id };
+  }
   await unlink(target);
   await rm(target.replace(/\.json$/, '.agents'), { recursive: true, force: true }).catch(() => {});
   await rm(target.replace(/\.json$/, '.checkpoints'), { recursive: true, force: true }).catch(() => {});
