@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="194" height="30" viewBox="0 0 194 30" role="img" aria-label="license: Apache 2.0">
+<title>license: Apache 2.0</title>
+<defs>
+<linearGradient id="license-edge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7CFF5E" stop-opacity=".55"/><stop offset=".5" stop-color="#32E07A" stop-opacity=".18"/><stop offset="1" stop-color="#0ED168" stop-opacity=".5"/></linearGradient>
+<linearGradient id="license-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#121A14"/><stop offset="1" stop-color="#0B0F0C"/></linearGradient>
+<linearGradient id="license-val" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#B6FF83"/><stop offset=".55" stop-color="#7CFF5E"/><stop offset="1" stop-color="#0ED168"/></linearGradient>
+<linearGradient id="license-shine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<clipPath id="license-clip"><rect width="194" height="30" rx="15"/></clipPath>
+</defs>
+<style>
+@media (prefers-reduced-motion: no-preference) {
+.sw{animation:sw 8s 2.3s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes sw{0%{transform:translateX(-70px)}18%,100%{transform:translateX(264px)}}
+.ic{animation:ic 8s 2.3s ease-in-out infinite;transform-origin:21px 15px}
+@keyframes ic{0%,100%{transform:scale(1)}6%{transform:scale(1.14)}12%{transform:scale(1)}}
+}
+</style>
+<g clip-path="url(#license-clip)">
+<rect width="194" height="30" fill="url(#license-bg)"/>
+<rect x="97" y="3" width="94" height="24" rx="12" fill="url(#license-val)"/>
+
+<rect class="sw" x="-60" y="0" width="46" height="30" fill="url(#license-shine)" transform="translate(-70 0)"/>
+</g>
+<rect x=".5" y=".5" width="193" height="29" rx="14.5" fill="none" stroke="url(#license-edge)"/>
+<g class="ic"><g transform="translate(12 6) scale(.75)" fill="none" stroke="#7CFF5E" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M6 21h12M4 7h16M7 7l-3 7a3 3 0 0 0 6 0ZM17 7l-3 7a3 3 0 0 0 6 0Z"/></g></g>
+<text x="38" y="18.8" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#9DB5A5" textLength="49" lengthAdjust="spacingAndGlyphs">LICENSE</text>
+<text x="109" y="19.4" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#0B0F0C" textLength="70" lengthAdjust="spacingAndGlyphs">Apache 2.0</text>
+</svg>
