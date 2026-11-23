@@ -12,6 +12,7 @@
 // /status, /mode default|acceptEdits|plan|auto, /help.
 import path from 'node:path';
 import { receiveAttachments, gatewayTranscriber, chunkText } from './gateway-core.mjs';
+import { chatApprovalText } from './approval-language.mjs';
 import { speakableText, synthesizeSpeech, textToSpeechConfig, voiceReplyMode } from './tts.mjs';
 import { createPairing, strangerMessage, withPairing } from './gateway-pairing.mjs';
 import { CHAT_COMMAND_HELP, chatUsageRecorder, chatCommandMenu } from './gateway-commands.mjs';
@@ -129,7 +130,7 @@ export function createTelegramGateway(options = {}) {
           const id = String(++approvalCounter);
           const timer = setTimeout(() => { approvals.delete(id); resolve(false); say(chatId, 'Approval ' + id + ' timed out and was rejected.').catch(() => {}); }, APPROVAL_TIMEOUT_MS);
           approvals.set(id, { chatId, resolve: (value) => { clearTimeout(timer); approvals.delete(id); resolve(value); }, always: Boolean(meta && meta.suggestion) });
-          say(chatId, 'Approval needed:\n' + String(message).slice(0, 3000), { reply_markup: approvalButtons(id, Boolean(meta && meta.suggestion)) }).catch((error) => { log(error.message); approvals.get(id) && approvals.get(id).resolve(false); });
+          say(chatId, 'Approval needed:\n' + chatApprovalText(message, meta, 3000), { reply_markup: approvalButtons(id, Boolean(meta && meta.suggestion)) }).catch((error) => { log(error.message); approvals.get(id) && approvals.get(id).resolve(false); });
         })
       });
       try { const { saveSession } = deps.sessions || await import('./sessions.mjs'); await saveSession(state.session, { env }); } catch (error) { log('could not save the session: ' + (error && error.message || error)); }
