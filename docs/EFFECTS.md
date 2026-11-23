@@ -46,3 +46,5 @@ The evidence ledger used to guess: any command that was not provably read-only w
 ## Compared with other runtimes
 
 Claude Code's checkpoints do not track files changed by shell commands; Codex and Aider rely on Git commits made after the fact or on an OS sandbox that restricts writes but does not report them. Snapshot-based effect observation turns "the command might have written something" into an exact, reversible record per command, and the predicted-versus-observed comparison flags side effects that the command line did not announce, such as a script that also rewrites a config file.
+
+The prediction is made from the command line alone, so programs (`python3 gen.py`, `make`, package scripts) are "broad". [Command rehearsal](REHEARSAL.md) measures their file changes before approval instead, and compares the real run against that rehearsal.
