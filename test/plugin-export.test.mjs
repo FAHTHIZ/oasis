@@ -33,7 +33,7 @@ const plugin = {
 test('export writes one folder every agent can install', async (t) => {
   const { src, out } = await fixture(t, plugin);
   const result = await exportPlugin(src, { out });
-  assert.deepEqual(result.report.map((r) => r.target), ['claude', 'codex', 'gemini', 'cursor', 'copilot']);
+  assert.deepEqual(result.report.map((r) => r.target), ['claude', 'codex', 'gemini', 'cursor', 'copilot', 'opencode']);
   const read = async (rel) => JSON.parse(await readFile(path.join(out, rel), 'utf8'));
 
   const claude = await read('.claude-plugin/plugin.json');
@@ -134,7 +134,7 @@ test('inspect reports what a plugin becomes in OASIS and every other agent witho
   const result = await inspectPlugin(src);
   assert.equal(result.native, true);
   assert.equal(result.format, 'Claude Code plugin');
-  assert.deepEqual(result.targets.map((x) => x.target), ['claude', 'codex', 'gemini', 'cursor', 'copilot']);
+  assert.deepEqual(result.targets.map((x) => x.target), ['claude', 'codex', 'gemini', 'cursor', 'copilot', 'opencode']);
   assert.equal(result.targets.find((x) => x.target === 'claude').full, true);
   assert.equal(result.targets.find((x) => x.target === 'cursor').full, false);
   assert.deepEqual(await readdir(base), before);
@@ -183,4 +183,46 @@ test('plugin new writes a universal plugin and export --in-place refreshes only 
   assert.equal(await readFile(path.join(dir, 'NOTES.txt'), 'utf8'), 'mine');
   assert.equal(JSON.parse(await readFile(path.join(dir, '.claude-plugin', 'plugin.json'), 'utf8')).description, 'Kit for tests');
   await assert.rejects(exportInPlace(path.join(base, 'src')), /needs an OASIS or Claude Code plugin|No plugin folder/);
+});
+
+test('the OpenCode export is a working OpenCode plugin that runs the Claude-format hooks', async (t) => {
+  const { src, out } = await fixture(t, {
+    ...plugin,
+    'hooks/hooks.json': { hooks: {
+      PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/guard.mjs"' }] }],
+      PostToolUse: [{ matcher: 'Read', hooks: [{ type: 'command', command: 'echo \'{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"checked"}}\'' }] }],
+      SubagentStop: [{ hooks: [{ type: 'command', command: 'x' }] }]
+    } },
+    'guard.mjs': "let s='';process.stdin.on('data',(c)=>s+=c).on('end',()=>{const p=JSON.parse(s);const c=p.tool_input.command;" +
+      "if(c.includes('rm -rf'))console.log(JSON.stringify({hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny',permissionDecisionReason:'no rm -rf'}}));" +
+      "else if(c==='ls')console.log(JSON.stringify({hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'allow',updatedInput:{command:'ls -la'}}}));});\n"
+  });
+  const result = await exportPlugin(src, { out, targets: ['opencode'] });
+  const entry = result.report[0];
+  assert.equal(entry.file, 'opencode/index.js');
+  assert.ok(entry.translated.some((s) => /2 hook events/.test(s)), entry.translated.join());
+  assert.ok(entry.dropped.some((s) => /SubagentStop/.test(s)));
+  const pkg = JSON.parse(await readFile(path.join(out, 'opencode', 'package.json'), 'utf8'));
+  assert.equal(pkg.main, 'index.js');
+  const mod = await import(path.join(out, 'opencode', 'index.js'));
+  const factories = Object.values(mod).filter((v) => typeof v === 'function');
+  assert.equal(factories.length, 1);
+  const hooks = await factories[0]({ directory: out });
+
+  const config = { command: { mine: { template: 'x' } } };
+  await hooks.config(config);
+  assert.equal(config.command.review.template, 'Review $ARGUMENTS carefully.');
+  assert.equal(config.command.review.description, 'Review a change');
+  assert.ok(config.command.mine);
+  assert.equal(config.agent.planner.mode, 'subagent');
+  assert.deepEqual(config.mcp.kit.command, ['node', path.join(await import('node:fs').then((fs) => fs.realpathSync(out)), 'server.js')]);
+
+  await assert.rejects(hooks['tool.execute.before']({ tool: 'bash', sessionID: 's', callID: 'c1' }, { args: { command: 'rm -rf /' } }), /no rm -rf/);
+  const args = { command: 'ls' };
+  await hooks['tool.execute.before']({ tool: 'bash', sessionID: 's', callID: 'c2' }, { args });
+  assert.equal(args.command, 'ls -la');
+  await hooks['tool.execute.before']({ tool: 'read', sessionID: 's', callID: 'c3' }, { args: { filePath: '/x' } });
+  const output = { title: '', output: 'file text', metadata: {} };
+  await hooks['tool.execute.after']({ tool: 'read', sessionID: 's', callID: 'c3' }, output);
+  assert.equal(output.output, 'file text\n\nchecked');
 });

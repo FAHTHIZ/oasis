@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Added
 
+- `oasis plugin export --to opencode`: a plugin exports as a dependency-free OpenCode plugin (`opencode/index.js`) that adds its commands, agents and MCP servers and runs its Claude Code-format PreToolUse, PostToolUse, Stop and SessionStart hooks inside OpenCode. `plugin new` and `--in-place` include it.
 - Config packs carry Gemini CLI settings hooks, Codex hooks and OpenCode plugins, so installing another team's repository brings those along too. Hooks can now run OASIS's own Node.js and the OpenCode plugin host as `${OASIS_NODE}` and `${OASIS_OPENCODE_HOST}`.
 - OpenCode plugins run under OASIS: `.opencode/plugins/*.{js,ts}` (trusted workspace) and `~/.config/opencode/plugins/` go through a plugin host on `PreToolUse`, `PostToolUse`, `Stop`, `SessionStart` and `SessionEnd`. A throw in `tool.execute.before` denies the call, changed args rewrite it, and a changed `tool.execute.after` output replaces the result.
 - Codex hooks run live: `.codex/hooks.json` and `[hooks]` in `.codex/config.toml` (trusted workspace) and the same in `~/.codex`, with `apply_patch` matchers covering the edit tools. Writing `.codex/hooks.json` or `.github/hooks/` is now a protected-path change.
