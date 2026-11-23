@@ -14,6 +14,7 @@
 // session_info_update, usage_update) and session/request_permission (request). Diagnostics go to stderr only;
 // stdout carries protocol messages exclusively.
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { stat } from 'node:fs/promises';
 import { readFileSync, statSync } from 'node:fs';
 import { Readable, Writable } from 'node:stream';
@@ -85,9 +86,16 @@ export function promptFromBlocks(blocks = [], root = process.cwd()) {
     if (!block || typeof block !== 'object') continue;
     if (block.type === 'text' && typeof block.text === 'string') parts.push(block.text);
     else if (block.type === 'resource_link' && typeof block.uri === 'string') {
-      const file = block.uri.startsWith('file://') ? decodeURIComponent(new URL(block.uri).pathname) : '';
-      const relative = file ? path.relative(root, file) : '';
-      parts.push(file && !relative.startsWith('..') && !path.isAbsolute(relative) ? '@' + relative.split(path.sep).join('/') : '[' + (block.name || 'link') + '](' + block.uri + ')');
+      // fileURLToPath handles Windows drive letters and UNC hosts; a malformed
+      // escape makes the link a plain link instead of failing the whole prompt.
+      let file = '';
+      if (block.uri.startsWith('file://')) { try { file = fileURLToPath(block.uri); } catch { file = ''; } }
+      const relative = file ? path.relative(root, file).split(path.sep).join('/') : '';
+      const inside = Boolean(file && relative && relative !== '..' && !relative.startsWith('../') && !path.isAbsolute(relative));
+      // @mentions only cover plain path characters; other names (spaces,
+      // accents) are given as a link with the workspace path so they stay readable.
+      if (inside && /^[\w.\-/]*[\w\-/]$/.test(relative)) parts.push('@' + relative);
+      else parts.push('[' + (block.name || 'link') + '](' + block.uri + ')' + (inside ? ' (workspace file: ' + relative + ')' : ''));
     } else if (block.type === 'resource' && block.resource && typeof block.resource.text === 'string') {
       parts.push('<context uri="' + String(block.resource.uri || '').replace(/"/g, '') + '">\n' + block.resource.text.slice(0, 200000) + '\n</context>');
     } else if (block.type === 'image' && typeof block.data === 'string') {
