@@ -20,7 +20,7 @@ import { loadConfig, getProviderSummary, carryLearnedContextWindow, isLoopbackUr
 import { startIdleCompaction, idleCompactMinutes, idleCompactionNote } from './idle-compaction.mjs';
 import { compactHistoryIfNeeded } from './agent.mjs';
 import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, repairInterruptedHistory, resolveQuestionAnswer, stopFailureType, formatWait, steerSession, takeSteering } from './agent.mjs';
-import { loadSession, saveSession, listSessions, pruneSessions, saveMidTurn, settleMidTurnSave, sessionRecap } from './sessions.mjs';
+import { loadSession, saveSession, listSessions, pruneSessions, saveMidTurn, settleMidTurnSave, sessionRecap, unreadableSessions } from './sessions.mjs';
 import { executeTool, listAvailableSkills } from './tools.mjs';
 import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
@@ -3548,6 +3548,11 @@ async function main() {
   if (continueSession && !resumeId) {
     const saved = (await listSessions(workspace)).filter((item) => !item.archived);
     persistence.resumeId = saved[0] && saved[0].id || null;
+    // A newer session that cannot be read is not continued silently: say which one is.
+    const damaged = (await unreadableSessions(workspace).catch(() => []))[0];
+    if (damaged && (!saved[0] || damaged.modifiedAt > String(saved[0].updatedAt || ''))) {
+      (headless.enabled ? stderr : stdout).write('The most recent saved session ' + damaged.id + ' could not be read (' + damaged.reason + ')' + (persistence.resumeId ? '; continuing the previous one, ' + persistence.resumeId : '') + '. oasis sessions list shows it.\n');
+    }
     if (!persistence.resumeId) (headless.enabled ? stderr : stdout).write('No previous session exists for this workspace; a new session will be saved after your next task.\n');
   }
 
