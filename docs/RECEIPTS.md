@@ -53,9 +53,9 @@ oasis receipt key                                # this machine's signing key id
 | `format`, `issuedAt`, `producer` | `oasis.receipt/v1`, the time it was written, the OASIS version |
 | `subject` | Workspace name, plus git head, branch, whether it was dirty, and a digest of the uncommitted diff |
 | `run` | Session id, model, request and reply (secrets redacted), and the task intent, risk and verdict if available |
-| `evidence` | Every tool event from the evidence ledger (`src/evidence-ledger.mjs`), linked in a SHA-256 hash chain; `head` is the last link |
+| `evidence` | Every tool event from the evidence ledger (`src/evidence-ledger.mjs`), linked in a SHA-256 hash chain; `head` is the last link. A command or check event carries `changed`: the files it was observed to change ([effect contracts](EFFECTS.md)), up to 30, left out when another command ran in the same tree at the same time |
 | `claims` | Each checkable statement in the reply, its status (observed, calculated, reported, inferred, unverified, contradicted) and the event numbers that back it. See [claims](TASK-MODEL.md#claims) |
-| `files` | Each changed file and the SHA-256 of its content when the receipt was written |
+| `files` | Each file edited by a tool or observed changing under a command (a formatter, a code generator, `sed -i`, a snapshot update), and the SHA-256 of its content when the receipt was written; a deleted file is recorded as missing |
 | `replay` | The latest finished, unmasked run of each check after the last edit, and whether it passed |
 | `signature` | Ed25519 over the canonical JSON of everything else, with the public key and key id |
 

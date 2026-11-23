@@ -321,6 +321,7 @@ export function sanitizeEvidenceLedger(ledger) {
     for (const key of ['finished', 'passed', 'masked', 'noTests', 'filtered', 'mayEdit']) if (typeof event[key] === 'boolean') out[key] = event[key];
     if (Number.isInteger(event.exitCode)) out.exitCode = event.exitCode;
     if (Array.isArray(event.numbers)) out.numbers = event.numbers.filter((value) => typeof value === 'string').slice(0, 100);
+    if (Array.isArray(event.changed)) out.changed = event.changed.filter((value) => typeof value === 'string').slice(0, 30).map((value) => value.slice(0, 400));
     if (Array.isArray(event.urls)) out.urls = event.urls.filter((value) => typeof value === 'string').slice(0, 50);
     events.push(out);
   }
