@@ -182,3 +182,28 @@ test('evidence is weighted by the rater model\'s track record on resolved questi
   const restored = sanitizeMatrix(JSON.parse(JSON.stringify(board.hypotheses)));
   assert.equal(restored.questions[0].evidence[1].weight, good.weight, 'weights above 1 survive a save');
 });
+
+test('plan ranks candidate tests by expected information before any are run', async () => {
+  const { planTests } = await import('../src/hypothesis-board.mjs');
+  const board = {};
+  open(board);
+  const result = runHypothesisTool({}, board, { action: 'plan', question: 'q_1', tests: [
+    { test: 'Rerun the test on CI', predictions: { h_1: '++', h_2: '++', h_3: '++' } },
+    { test: 'Run locally with TZ=UTC', predictions: { h_1: '++', h_2: '--', h_3: '--' } },
+    { test: 'Run with the env var set on CI', predictions: { h_1: '+', h_2: '+', h_3: '--' } }
+  ] }, { actor: 'main', ground: grounded });
+  assert.equal(result.tests.length, 3);
+  assert.ok(result.uncertainty_bits > 1.5);
+  assert.equal(result.tests[2].test, 'Rerun the test on CI');
+  assert.ok(result.tests[2].expected_bits < result.tests[0].expected_bits);
+  assert.ok(result.tests[0].expected_bits > 0.5);
+  assert.match(result.advice, /^Run "/);
+  const separating = result.tests.find((item) => item.test === 'Run locally with TZ=UTC');
+  assert.match(separating.if_positive, /^h_1 0\.\d+/);
+  const same = planTests(board.hypotheses.questions[0], [{ test: 'Look at the logo', predictions: {} }]);
+  assert.equal(same.tests[0].expected_bits, 0);
+  assert.match(same.tests[0].note, /moves nothing/);
+  assert.match(same.advice, /None of these tests separates/);
+  assert.throws(() => runHypothesisTool({}, board, { action: 'plan', question: 'q_1', tests: [{ test: 'x', predictions: { h_9: '+' } }] }), /Unknown hypothesis h_9/);
+  assert.throws(() => runHypothesisTool({}, board, { action: 'plan', question: 'q_1' }), /plan needs tests/);
+});
