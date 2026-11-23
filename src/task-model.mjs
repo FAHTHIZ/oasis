@@ -58,6 +58,7 @@ import { buildClaims } from './claim-ledger.mjs';
 import { digestOf, fetchedUrls } from './evidence-ledger.mjs';
 import { independentSources } from './source-independence.mjs';
 import { combinedReview } from './task-reviews.mjs';
+import { reviewDiversity } from './verifier-diversity.mjs';
 
 export const TASK_SCHEMA_VERSION = 1;
 export const DOMAINS = Object.freeze(['software', 'security', 'research', 'analysis', 'writing', 'planning', 'automation', 'computer', 'operations', 'general']);
@@ -657,6 +658,7 @@ export function evaluateAcceptance(spec, { events = [], reply = '', root = '', r
  *   verified            every runtime-checkable criterion met, and at least
  *                       one claim or criterion was actually checked
  *   independently_verified   verified, and an independent review passed
+ *                       (on a model other than the author's, when known)
  *
  * Tool activity alone never raises the verdict: a run that fetched ten pages
  * and cited none of them is unverified, not verified.
@@ -675,6 +677,14 @@ export function assessOutcome(spec, { status = 'completed', partial = false, eve
   for (const item of acceptance) tally[item.status === 'met' ? 'met' : item.status === 'unmet' ? 'unmet' : 'unknown'] += 1;
   const review = combinedReview(reviews);
   const independent = { required: Boolean(spec && spec.autonomy && spec.autonomy.verification === 'independent'), done: Boolean(review), passed: Boolean(review && review.verdict === 'pass'), verdict: review ? review.verdict : null, by: review ? review.by || '' : '', ...(staleReviews ? { stale: staleReviews } : {}) };
+  // A pass from the author's own model is a second look, not an independent
+  // one (src/verifier-diversity.mjs). Reviews without a recorded model are
+  // taken as before.
+  const diversity = reviewDiversity(reviews, (reviews || []).flatMap((item) => (item && item.authors) || []));
+  if (diversity) {
+    independent.diversity = { effectiveVotes: diversity.effectiveVotes, independence: diversity.independence, diverse: diversity.diverse, selfReview: diversity.selfReview, reviews: diversity.reviews.map(({ by, model, relation }) => ({ by, model, relation })) };
+    if (independent.passed && diversity.selfReview) independent.selfReview = true;
+  }
   const execution = ['failed', 'stalled', 'cancelled'].includes(status) ? status : partial ? 'partial' : status === 'completed' ? 'completed' : 'failed';
   let verdict;
   if (execution === 'cancelled') verdict = 'cancelled';
@@ -683,7 +693,7 @@ export function assessOutcome(spec, { status = 'completed', partial = false, eve
   else if (report.issues.length || tally.unmet || (review && review.verdict === 'fail')) verdict = 'rejected';
   else if (!report.checked && !tally.met) verdict = 'unverified';
   else if (tally.unknown || softClaims.length) verdict = 'evidenced';
-  else verdict = independent.passed ? 'independently_verified' : 'verified';
+  else verdict = independent.passed && !independent.selfReview ? 'independently_verified' : 'verified';
   return {
     verdict,
     execution,

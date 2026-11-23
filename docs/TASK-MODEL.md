@@ -59,7 +59,7 @@ The verdict is derived from them, weakest first:
 | `unverified` | Completed, but nothing about the result was checked |
 | `evidenced` | Everything checked held, but some criteria could not be judged by the runtime, or some claims rest only on one source as read, on inference, or on evidence that has since changed |
 | `verified` | Every runtime-checkable criterion met, and at least one claim or criterion was actually checked |
-| `independently_verified` | Verified, and an independent review passed |
+| `independently_verified` | Verified, and an independent review passed on a model other than the author's (when the models are known) |
 
 Tool activity alone never raises the verdict: a run that fetched ten pages and cited none of them is `unverified`, and an answer that accurately repeats one page is `evidenced`, not `verified`.
 
@@ -72,6 +72,33 @@ An agent does not certify its own work by finishing it. A review counts when a s
 The verdict is read from the report rather than trusted. Reviewers are asked to end with `VERDICT: PASS`, `FAIL` or `INCONCLUSIVE`; without that line, "no actionable defects" reads as a pass and a critical or high finding as a fail. A pass is downgraded to `inconclusive` when the reviewer inspected nothing, stopped at a limit, or named a severe finding in the same report. With several current reviews, any fail fails; otherwise any pass passes.
 
 A delegated agent that edits the parent's tree (not an isolated worktree) moves the parent's epoch on too, so a review from before its edits stops counting, and the next review is credited to, or held against, that agent's run in the [experience store](SUBAGENTS.md#experience).
+
+### Verifier diversity
+
+Source: `src/verifier-diversity.mjs`.
+
+A separate session on the same model is a second sample from the same distribution, and it tends to make the same mistake on the same input. Across more than 350 models, errors are strongly correlated, most of all between models from one provider and between the most accurate ones ([Kim et al., ICML 2025](https://dl.acm.org/doi/10.5555/3780338.3781516)). A panel of nine frontier judges from seven families carried about two independent votes' worth of information ([Kohli, 2026](https://arxiv.org/html/2605.29800)), and model families share blind spots through distillation and common training data ([arXiv:2604.07650](https://arxiv.org/html/2604.07650)).
+
+So each review records the model it ran on and the models that did the work it judged (the session's model, and the model of each delegated worker whose edits it saw). Its relation to the closest of them is one of:
+
+| Relation | Example | Prior error correlation |
+| --- | --- | --- |
+| `same-model` | `claude-opus-4-5` reviewing `claude-opus-4-5` | 0.9 |
+| `same-lineage` | `claude-sonnet-4-5` reviewing `claude-opus-4-5`; a Qwen distill reviewing Qwen | 0.6 |
+| `different-lineage` | `gpt-5.1` reviewing `claude-opus-4-5` | 0.4 |
+| `unknown` | a model id OASIS cannot place | 0.6 |
+
+The outcome's `independent.diversity` lists each review's relation, its independence from the authors (1 minus the correlation) and the panel's effective number of independent votes, Kish's `n_eff = k / (1 + (k - 1) * mean_rho)` over the passing reviews. The correlations are conservative priors read from the papers above, not measurements on your tasks.
+
+A pass from the author's own model alone is a second look, not an independent review: the outcome is `verified`, with `independent.selfReview: true`, and the same holds for a delegated worker's record in the [experience store](SUBAGENTS.md#experience). A failed review rejects the outcome whatever model ran it. Reviews recorded without a model count as before.
+
+To get independent reviews, route reviewers to another lineage:
+
+```json
+{ "modelRouting": { "reviewers": "diverse", "reviewerModels": ["gpt-5.1", "gemini-2.5-pro"] } }
+```
+
+or `OASIS_REVIEWER_ROUTING=diverse`. Built-in `code-review`, `security-review` and `verify` agents and `run_specialist_review` then start on the allowed configured model least related to the session's model: `reviewerModels` first, then the routing `strongModel`, `easyModel`, `routes`, `subagentModels` and `availableModels`. A model of another lineage wins over another model of the same lineage; the author's own model and models OASIS cannot place are never picked. The model policy (`availableModels`, `deniedModels`) and zero-budget mode still apply, a `model` on the `task` call or in an agent definition still wins, and the `task` result names the routed model in `model_route`. The reviewer is sent through the session's provider, so the models listed must be ones that provider serves (an OpenRouter or gateway endpoint serves several lineages).
 
 A failed review rejects the outcome even when the tests passed. An inconclusive one neither rejects nor verifies: the `independent_review` criterion stays unknown. The tool result the parent receives carries `review_verdict` and `review_note`; `run_specialist_review` returns `verdict`.
 

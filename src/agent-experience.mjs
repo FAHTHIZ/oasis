@@ -42,6 +42,7 @@
 // disk turns it off and orchestration carries on. OASIS_AGENT_EXPERIENCE=0
 // (or settings "agentExperience": false) turns it off.
 
+import { lineageRelation } from './verifier-diversity.mjs';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { mkdirSync, chmodSync } from 'node:fs';
@@ -241,13 +242,15 @@ export function openExperienceStore(file) {
      * review makes it rejected; a passed one makes a clean or verified run
      * verified. Only the latest row of that agent in that session changes.
      */
-    amend({ sessionId = '', agentId = '', since = 0, verdict = '', detail = '' } = {}) {
+    amend({ sessionId = '', agentId = '', since = 0, verdict = '', detail = '', selfReview = false } = {}) {
       if (!open || !agentId || (verdict !== 'pass' && verdict !== 'fail')) return 0;
       const row = db.prepare('SELECT seq, outcome FROM agent_runs WHERE IFNULL(session_id, \'\') = ? AND agent_id = ? AND at >= ? ORDER BY seq DESC LIMIT 1').get(cleanExperienceText(sessionId, 200) || '', cleanExperienceText(agentId, 100), Math.floor(Number(since) || 0));
       if (!row) return 0;
       if (verdict === 'fail') return Number(db.prepare("UPDATE agent_runs SET outcome = 'rejected', verdict = 'rejected', detail = ?, lesson = '' WHERE seq = ?").run(cleanExperienceText('independent review failed: ' + detail, 400), row.seq).changes) || 0;
       if (row.outcome !== 'clean' && row.outcome !== 'verified') return 0;
-      return Number(db.prepare("UPDATE agent_runs SET outcome = 'verified', verdict = 'independently_verified' WHERE seq = ?").run(row.seq).changes) || 0;
+      // A pass from the run's own model is a second look, not an
+      // independent one (src/verifier-diversity.mjs).
+      return Number(db.prepare("UPDATE agent_runs SET outcome = 'verified', verdict = ? WHERE seq = ?").run(selfReview ? 'verified' : 'independently_verified', row.seq).changes) || 0;
     },
     /** Drop rows past the retention window, and the oldest beyond the row cap. */
     prune(now = Date.now(), retentionMs = RETENTION_MS, maxRows = MAX_ROWS) {
@@ -351,7 +354,8 @@ export function applyReviewToExperience(parent, review, { env } = {}) {
     let changed = 0;
     for (const agentId of review.reviewed) {
       const worker = workers.find((item) => item.agentId === agentId);
-      changed += store.amend({ sessionId: parent && parent.sessionId, agentId, since: worker ? worker.startedAt : 0, verdict: review.verdict, detail: review.detail });
+      const selfReview = Boolean(review.model && worker && worker.model && lineageRelation(worker.model, review.model) === 'same-model');
+      changed += store.amend({ sessionId: parent && parent.sessionId, agentId, since: worker ? worker.startedAt : 0, verdict: review.verdict, detail: review.detail, selfReview });
     }
     return changed;
   } catch { return 0; }
