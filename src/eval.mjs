@@ -14,6 +14,7 @@ import { oasisVersion } from './version.mjs';
 import { redactArtifactText, redactSecretPatterns } from './artifacts.mjs';
 import { redactProviderDetail } from './api-error.mjs';
 import { buildRoutingTable, routesFromTable } from './capability-router.mjs';
+import { verdictIsVerified } from './task-model.mjs';
 
 // A compact, redacted record of what the agent did in a trial: tool, the
 // argument that identifies the step (path, command, pattern), result size and
@@ -1424,7 +1425,61 @@ async function runClaudeCodeEval(config, options = {}) {
   if (stoppedEarly) output.write('Stopped early: the provider failed ' + PROVIDER_ERROR_STOP_AT + ' trials in a row (' + stoppedEarly.error + '). ' + (selectedDirs.length * config.trials - trials.length) + ' trials were not run.\n');
   output.write('Median time: ' + (summary.medianTimeMs === null ? 'n/a' : summary.medianTimeMs + ' ms') + '\n');
   output.write('Cost per passed trial: ' + (summary.costPerPassedTaskUSD === null ? 'n/a' : '$' + summary.costPerPassedTaskUSD.toFixed(6)) + '\n');
+  const selfLine = describeSelfAssessment(summary.selfAssessment);
+  if (selfLine) output.write(selfLine + '\n');
   return { ok: !stoppedEarly && trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
+}
+
+/**
+ * What OASIS itself concluded about a trial, before the hidden verifier ran:
+ * the task outcome verdict from the completion gate, reduced to a claim of
+ * success, of failure, or neither. The verifier, not this, scores the trial;
+ * comparing the two measures whether OASIS knows when it is done.
+ */
+export function trialSelfAssessment(agentResult) {
+  const verdict = agentResult && agentResult.task && agentResult.task.outcome && agentResult.task.outcome.verdict || null;
+  if (!verdict) return { verdict: null, claim: 'none' };
+  const claim = verdictIsVerified(verdict) && agentResult.finished !== false ? 'success'
+    : ['failed', 'cancelled', 'incomplete', 'rejected'].includes(verdict) || agentResult.finished === false ? 'failure'
+      : 'unsure';
+  return { verdict, claim };
+}
+
+/**
+ * Agreement between OASIS's own verdicts and the hidden verifiers over scored
+ * trials. An overclaim is a trial OASIS called verified that the verifier
+ * failed (the costly error); an underclaim is one it called failed that passed.
+ * "unsure" (unverified or evidenced) is neither, and is counted on its own.
+ */
+export function summarizeSelfAssessment(trials) {
+  const rows = (trials || []).filter((item) => item && item.selfAssessment && item.selfAssessment.claim !== 'none');
+  const count = (claim, status) => rows.filter((item) => item.selfAssessment.claim === claim && item.status === status).length;
+  const truePositive = count('success', 'passed');
+  const overclaims = count('success', 'failed');
+  const trueNegative = count('failure', 'failed');
+  const underclaims = count('failure', 'passed');
+  const unsurePassed = count('unsure', 'passed');
+  const unsureFailed = count('unsure', 'failed');
+  const decided = truePositive + overclaims + trueNegative + underclaims;
+  const claimedSuccess = truePositive + overclaims;
+  return {
+    assessed: rows.length,
+    notAssessed: (trials || []).length - rows.length,
+    agreement: decided ? Math.round(((truePositive + trueNegative) / decided) * 1000) / 1000 : null,
+    successPrecision: claimedSuccess ? Math.round((truePositive / claimedSuccess) * 1000) / 1000 : null,
+    overclaims, underclaims, truePositive, trueNegative,
+    unsure: { passed: unsurePassed, failed: unsureFailed },
+    note: 'OASIS verdicts recorded before the hidden verifier ran. Overclaim: OASIS said verified, the verifier failed it. Underclaim: OASIS said it failed, the verifier passed it.'
+  };
+}
+
+export function describeSelfAssessment(stats) {
+  if (!stats || !stats.assessed) return '';
+  return 'Self-assessment: ' + stats.assessed + ' trial' + (stats.assessed === 1 ? '' : 's') + ' with an OASIS verdict · ' +
+    (stats.agreement === null ? 'no definite claims' : Math.round(stats.agreement * 100) + '% agree with the verifier') +
+    ' · ' + stats.overclaims + ' overclaim' + (stats.overclaims === 1 ? '' : 's') +
+    ' · ' + stats.underclaims + ' underclaim' + (stats.underclaims === 1 ? '' : 's') +
+    ' · ' + (stats.unsure.passed + stats.unsure.failed) + ' unsure';
 }
 
 async function saveResults(results, metadata, options = {}) {
@@ -1672,7 +1727,8 @@ export async function runEvalCommand(args = [], options = {}) {
           changes,
           gitBaseline,
           error: errorText,
-          ...(agentResult && !agentResult.finished ? { unfinished: unfinishedReason(agentResult) } : {})
+          ...(agentResult && !agentResult.finished ? { unfinished: unfinishedReason(agentResult) } : {}),
+          selfAssessment: trialSelfAssessment(agentResult)
         });
         output.write((passed ? '  PASS ' : providerError ? '  ERROR ' : '  FAIL ') + task.id + ' trial ' + trial +
           ' · ' + (config.routeEasyModel ? (routed && routed.tier || 'strong') + '/' : '') + model + (routed && routed.escalation ? '→' + routed.escalation.to + ' (step ' + routed.escalation.step + ')' : '') +
@@ -1715,6 +1771,7 @@ export async function runEvalCommand(args = [], options = {}) {
     ...(erroredCount ? { errored: erroredCount, erroredNote: 'Trials where the provider never answered (no tokens; quota, outage or connection error) are not scored.' } : {}),
     ...(stoppedEarly ? { stoppedEarly } : {}),
     medianTimeMs, totalCostUSD, costPerPassedTaskUSD,
+    selfAssessment: summarizeSelfAssessment(scored),
     routing: config.routeEasyModel ? {
       enabled: true,
       easyModel: config.routeEasyModel,

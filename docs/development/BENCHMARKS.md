@@ -140,6 +140,8 @@ Compare systems using the same model, task set, provider settings and environmen
 
 `oasis eval` (OASIS and the external agents: Claude Code, Codex, Gemini CLI, OpenCode) does not score a trial when the provider never answered: no tokens were used and the error is a quota, rate limit, HTTP 401/402/403/429/5xx, an exhausted fallback chain or a refused connection. Such trials print `ERROR`, are stored with `status: "errored"`, and are left out of the pass rate, the failure count and the median time (`summary.errored` counts them). After three in a row the run stops, prints `Stopped early: …` with the provider error and exits non-zero, rather than recording the rest of the task set as failures. A model that used tokens and then failed is still scored as a failure. `--compare` skips errored rows.
 
+Each OASIS trial also records `selfAssessment`: the verdict OASIS's own completion gate reached (`verified`, `rejected`, `evidenced` and so on, see [Task model](../TASK-MODEL.md)), reduced to a claim of success, failure or neither, before the hidden verifier ran. A run that ended with verification incomplete never counts as claiming success. The summary compares those claims with the verifier: `agreement`, `successPrecision` (of the trials OASIS called verified, how many passed), `overclaims` (OASIS said verified, the verifier failed it) and `underclaims` (OASIS said it failed, the verifier passed it); `evidenced` and `unverified` verdicts are counted as unsure. The score is still the verifier's alone. An overclaim is the error that matters most: it is OASIS certifying work that is wrong.
+
 ## Latest results (12 November 2026)
 
 Measured on commit `c1396e7b`, Node 22, a 2-core Linux machine. Raw files are in [bench/results](../../bench/results).
