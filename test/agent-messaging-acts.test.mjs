@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, agentTeamStatus, createAgentTeam, lapseAgentDialogue, AGENT_TOOL_DEFINITIONS } from '../src/agent-tasks.mjs';
 import { recordDialogue, openObligations, openThreads, SPEECH_ACTS } from '../src/agent-dialogue.mjs';
 
+import { createSharedTaskStore } from '../src/shared-tasks.mjs';
+
 function team() {
-  const main = {};
+  const main = { sharedTasks: createSharedTaskStore() };
   const registry = agentRegistry(main);
   const a = registerAgent(main, { type: 'general-purpose', description: 'API designer', child: { inbox: [] } });
   const b = registerAgent(main, { type: 'general-purpose', description: 'test writer', child: { inbox: [] } });
-  return { main, registry, a, b, as: (agent) => ({ agentTasks: registry, agentId: agent.id }) };
+  return { main, registry, a, b, as: (agent) => ({ agentTasks: registry, agentId: agent.id, sharedTasks: main.sharedTasks }) };
 }
 
 test('team_send_message advertises the speech acts', () => {
@@ -113,4 +115,42 @@ test('the ledger stays bounded and keeps open threads over closed ones', () => {
   for (let index = 0; index < 600; index++) recordDialogue(registry, { from: 'agent_1', to: 'agent_2', text: 'note ' + index });
   assert.equal(registry.dialogue.messages.length, 500);
   assert.equal(registry.dialogue.messages[0].text, 'keep me');
+});
+
+test('a commit goes on the task board, delivery completes it, and a lapse reopens it for anyone', async () => {
+  const { runSharedTaskTool } = await import('../src/shared-tasks.mjs');
+  const { main, a, b, as } = team();
+  const sent = sendTeamMessage(as(a), { to: b.id, message: 'I will write the users migration', act: 'commit' });
+  assert.equal(sent.task, 'task_1');
+  assert.match(sent.message, /on the task board as task_1, claimed by you/);
+  let task = runSharedTaskTool(main, 'task_get', { task_id: 'task_1' }).task;
+  assert.equal(task.status, 'in_progress');
+  assert.equal(task.claimed_by, a.id);
+  assert.match(task.subject, /^Promised to agent_2: I will write the users migration/);
+  assert.equal(task.promised, 'agent_2 in m_1');
+  const done = sendTeamMessage(as(a), { to: b.id, message: 'Migration is in db/0003_users.sql', act: 'inform', reply_to: 'm_1' });
+  assert.equal(done.completed_task, 'task_1');
+  task = runSharedTaskTool(main, 'task_get', { task_id: 'task_1' }).task;
+  assert.equal(task.status, 'completed');
+  assert.equal(task.promised, 'agent_2 in m_1, delivered in m_2');
+
+  sendTeamMessage(as(a), { to: b.id, message: 'I will add the index too', act: 'commit' });
+  const lapsed = lapseAgentDialogue(main, a);
+  assert.equal(lapsed[0].reopened_task, 'task_2');
+  task = runSharedTaskTool(main, 'task_get', { task_id: 'task_2' }).task;
+  assert.equal(task.status, 'pending');
+  assert.equal(task.claimed_by, null);
+  assert.equal(task.ready, true);
+  assert.match(task.description, /finished without delivering this \(m_3 lapsed\)/);
+  assert.match(drainInbox(b.child), /back on the task board as task_2 \(pending\); task_claim it/);
+  const claimed = runSharedTaskTool(as(b), 'task_claim', { task_id: 'task_2' });
+  assert.equal(claimed.task.claimed_by, b.id);
+});
+
+test('promise tasks survive a session save', async () => {
+  const { sanitizeSharedTaskStore } = await import('../src/shared-tasks.mjs');
+  const { main, a, b, as } = team();
+  sendTeamMessage(as(a), { to: b.id, message: 'I will ship the docs', act: 'commit' });
+  const restored = sanitizeSharedTaskStore(JSON.parse(JSON.stringify(main.sharedTasks)));
+  assert.deepEqual(restored.tasks[0].promise, { message: 'm_1', to: 'agent_2' });
 });

@@ -1,3 +1,4 @@
+import { trackCommitment, settleCommitment } from './shared-tasks.mjs';
 import { buildSitrep } from './team-sitrep.mjs';
 import { recordDialogue, dialogueHeader, openObligations, openThreads, lapseObligations, describeLapse } from './agent-dialogue.mjs';
 import { restoreApprovals, waitingApprovals } from './neuron-approvals.mjs';
@@ -338,7 +339,7 @@ export function agentTeamStatus(session, args = {}) {
   if (args.team_id) return { team: summarizeTeam(session, getAgentTeam(session, args.team_id)) };
   const teams = listAgentTeams(session);
   const registry = agentRegistry(session);
-  return { sitrep: buildSitrep({ registry, board: session.knowledgeBoard, self: session.agentId || 'main' }), teams, total: teams.length, active: teams.filter((team) => team.status === 'active').length, open_threads: openThreads(registry) };
+  return { sitrep: buildSitrep({ registry, board: session.knowledgeBoard, tasks: session.sharedTasks, self: session.agentId || 'main' }), teams, total: teams.length, active: teams.filter((team) => team.status === 'active').length, open_threads: openThreads(registry) };
 }
 
 export function shutdownAgentTeam(session, args = {}) {
@@ -602,16 +603,22 @@ export function sendTeamMessage(session, args = {}) {
   const senderLabel = senderRecord ? senderRecord.description : 'main coordinator';
   const taint = injectionTaint(session, 'teammate ' + senderId);
   const { message: entry, closes } = recordDialogue(agentRegistry(session), { from: senderId, to: targetId, act: args.act, text: message, replyTo: args.reply_to, about: args.about });
+  // A promise is work: it goes on the shared task board, and delivering it completes the task.
+  const promiseTask = entry.act === 'commit' ? trackCommitment(session, { message: entry.id, from: senderId, to: targetId, text: message }) : '';
+  const deliveredTask = closes ? settleCommitment(session, closes, { deliveredIn: entry.id }) : '';
   inbox.push({ text: dialogueHeader(entry) + '\nDirect message from teammate ' + senderId + ' (' + senderLabel + '):\n' + message + (taint ? '\n[OASIS] ' + taintNotice(taint) : ''), senderId, kind: 'peer-message', messageId: entry.id, act: entry.act, ...(taint ? { taint } : {}) });
   recordAgentEvent(session, 'agent.message_queued', { agentId: targetId, teamId: record.teamId || undefined, description: senderId + ' → ' + targetId + ' (' + entry.act + ' ' + entry.id + ')', detail: message });
   const pending = openObligations(agentRegistry(session), senderId);
   return {
     delivered: 'queued', from: senderId, to: targetId, status: record.status, id: entry.id, act: entry.act,
     ...(closes ? { closes } : {}),
+    ...(promiseTask ? { task: promiseTask } : {}),
+    ...(deliveredTask ? { completed_task: deliveredTask } : {}),
     ...(pending.owes.length ? { you_still_owe: pending.owes.map((item) => item.id + ' (' + item.act + ' from ' + item.from + ')') } : {}),
     message: 'Message ' + entry.id + ' queued for ' + targetId + '; it will be delivered at the recipient\'s next model step.'
       + (closes ? ' This discharges ' + closes + '.' : '')
-      + (entry.open ? (entry.act === 'commit' ? ' You now owe delivery: send it with reply_to ' + entry.id + '.' : ' ' + targetId + ' owes a reply to ' + entry.id + '.') : '')
+      + (deliveredTask ? ' ' + deliveredTask + ' is completed.' : '')
+      + (entry.open ? (entry.act === 'commit' ? ' You now owe delivery: send it with reply_to ' + entry.id + '.' + (promiseTask ? ' It is on the task board as ' + promiseTask + ', claimed by you.' : '') : ' ' + targetId + ' owes a reply to ' + entry.id + '.') : '')
   };
 }
 
@@ -625,15 +632,17 @@ export function lapseAgentDialogue(session, record) {
   const registry = agentRegistry(session);
   const lapsed = lapseObligations(registry, record.id);
   for (const item of lapsed) {
+    const reopened = item.act === 'commit' ? settleCommitment(session, item.id, { lapsed: true }) : '';
+    if (reopened) item.reopened = reopened;
     const waiterId = item.act === 'commit' ? item.to : item.from;
     const waiter = registry.agents.get(waiterId);
     if (waiter && waiter.status === 'running' && waiter.child) {
       const inbox = waiter.child.inbox || (waiter.child.inbox = []);
-      if (inbox.length < 100) inbox.push({ text: '[OASIS] Thread ' + item.id + ' lapsed: ' + describeLapse(item), senderId: 'oasis', kind: 'dialogue-lapse', messageId: item.id });
+      if (inbox.length < 100) inbox.push({ text: '[OASIS] Thread ' + item.id + ' lapsed: ' + describeLapse(item) + (reopened ? ' The work is back on the task board as ' + reopened + ' (pending); task_claim it to take it over.' : ''), senderId: 'oasis', kind: 'dialogue-lapse', messageId: item.id });
     }
     recordAgentEvent(session, 'agent.thread_lapsed', { agentId: record.id, teamId: record.teamId || undefined, description: item.act + ' ' + item.id + ' (' + item.from + ' → ' + item.to + ')', detail: item.text });
   }
-  return lapsed.map((item) => ({ id: item.id, act: item.act, from: item.from, to: item.to, text: item.text.slice(0, 200) }));
+  return lapsed.map((item) => ({ id: item.id, act: item.act, from: item.from, to: item.to, text: item.text.slice(0, 200), ...(item.reopened ? { reopened_task: item.reopened } : {}) }));
 }
 
 // Closes what a child session opened for itself: its browser, its computer-use

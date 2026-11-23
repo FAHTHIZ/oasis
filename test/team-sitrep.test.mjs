@@ -90,3 +90,17 @@ test('a worker calling team_status sees what it owes as its own item', () => {
   assert.equal(mine[0].kind, 'owed_by_you');
   assert.match(mine[0].do, /team_send_message to "agent_1" .*reply_to "m_1"/);
 });
+
+test('a promise whose author finished without delivering shows as an orphaned task', async () => {
+  const { createSharedTaskStore } = await import('../src/shared-tasks.mjs');
+  const { lapseAgentDialogue } = await import('../src/agent-tasks.mjs');
+  const main = { sharedTasks: createSharedTaskStore() };
+  const registry = agentRegistry(main);
+  const a = registerAgent(main, { type: 'general-purpose', description: 'writer', child: { inbox: [] } });
+  const b = registerAgent(main, { type: 'general-purpose', description: 'reviewer', child: { inbox: [] } });
+  sendTeamMessage({ agentTasks: registry, agentId: a.id, sharedTasks: main.sharedTasks }, { to: b.id, message: 'I will write the changelog entry', act: 'commit' });
+  lapseAgentDialogue(main, a);
+  const item = agentTeamStatus(main).sitrep.attention.find((entry) => entry.kind === 'orphaned_promise');
+  assert.equal(item.ref, 'task_1');
+  assert.match(item.what, /agent_1 promised agent_2 "I will write the changelog entry" \(m_1\)/);
+});

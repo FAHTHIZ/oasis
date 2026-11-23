@@ -220,6 +220,8 @@ Every message gets an id (`m_N`). The recipient's copy starts with a header such
 
 Open threads appear in `team_status` (`open_threads`, with `owed_by` and age), and a sender that still owes replies is reminded in its next `team_send_message` result (`you_still_owe`). When an agent finishes or fails with obligations outstanding, they lapse: each running agent left waiting gets a notice at its next step ("agent_2 finished without replying to your request m_4 ... do not wait for it"), and the parent's result lists them under `open_obligations`. Nobody waits on a reply that cannot come, and an unanswered challenge does not disappear quietly. The ledger keeps up to 500 messages per session, dropping closed ones first. Test: `test/agent-messaging-acts.test.mjs`.
 
+A `commit` is also work, so it goes on the shared task board as `Promised to agent_N: ...`. The task is claimed by the sender, in progress, and linked to the message (`promised` in `task_get`). The sender's delivery (any reply with `reply_to` the commit) completes the task. If the sender finishes without delivering, the task is released back to pending with a note, the waiting agent is told which task it is, and the sitrep lists it as an orphaned promise. The promised work becomes a ready task someone can claim instead of disappearing with the agent that promised it.
+
 ### Coordinator sitrep
 
 A coordinator's state is spread over the agent registry, the message threads, the knowledge board and the hypotheses matrix. `team_status` without `team_id` starts with a `sitrep` that combines them into one ranked list, each item with what is wrong and the next action:
@@ -229,6 +231,7 @@ A coordinator's state is spread over the agent registry, the message threads, th
 | 1 | `owed_by_you`: a request, proposal or challenge addressed to the caller, or a commit it made | the exact `team_send_message` reply, or deliver |
 | 1 | `failed_agent`: a worker failed or stalled, with its error | read `agent_status`, then retry, reassign or do it yourself |
 | 1 | `missing_hypothesis`: "none of these" leads an open question | add the missing explanation |
+| 2 | `orphaned_promise`: an agent finished without delivering a commit, so its task is unowned | assign the task, or tell the agent waiting for it |
 | 2 | `dispute`: two live findings contradict each other | check both against their sources and retract the wrong one |
 | 2 | `stalled_thread`: a reply owed for over 5 minutes while its owner keeps running | nudge the owner, or answer it |
 | 2 | `thin_lead`: a hypothesis leads on one agent's evidence or one source | get an independent check |

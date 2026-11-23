@@ -1,16 +1,17 @@
 // Coordinator sitrep: what needs the main agent's attention, ranked.
 //
-// A coordinator with five workers has state spread over four places: the
+// A coordinator with five workers has state spread over five places: the
 // agent registry (who is running, who failed), the dialogue ledger (who owes
-// whom a reply), the knowledge board (findings that contradict each other)
-// and the hypotheses matrix (questions not yet settled). Reading them one by
-// one is how a coordinator misses the failed worker or the request addressed
-// to it. team_status (without team_id) folds them into one ranked list:
+// whom a reply), the shared task board (promised work left unowned), the
+// knowledge board (findings that contradict each other) and the hypotheses
+// matrix (questions not yet settled). Reading them one by one is how a
+// coordinator misses the failed worker or the request addressed to it. team_status (without team_id) folds them into one ranked list:
 //
 //   1  act now     a request or challenge addressed to you, a failed worker,
 //                  "none of these" leading a question
 //   2  unblock     a dispute between findings, a thread stalled for minutes
-//                  while its owner keeps running, a question whose leader
+//                  while its owner keeps running, a promise whose author
+//                  finished without delivering it (now an unowned task), a question whose leader
 //                  rests on one agent's evidence
 //   3  next        close leaders with an informative test to run, untested
 //                  hypotheses
@@ -31,7 +32,7 @@ function clip(text, n = 120) {
 }
 
 /** Ranked attention items for the coordinator. */
-export function buildSitrep({ registry, board, self = 'main', now = Date.now() } = {}) {
+export function buildSitrep({ registry, board, tasks = null, self = 'main', now = Date.now() } = {}) {
   const items = [];
   const agents = registry && registry.agents instanceof Map ? [...registry.agents.values()] : [];
   const running = agents.filter((agent) => agent.status === 'running');
@@ -52,6 +53,11 @@ export function buildSitrep({ registry, board, self = 'main', now = Date.now() }
     if (thread.age_s >= STALL_SECONDS && owner && owner.status === 'running') {
       items.push({ priority: 2, kind: 'stalled_thread', ref: thread.id, what: thread.owed_by + ' has owed ' + thread.from + ' a reply to ' + thread.id + ' for ' + Math.round(thread.age_s / 60) + ' min: "' + clip(thread.text, 100) + '"', do: 'Nudge ' + thread.owed_by + ' with team_send_message, or answer it yourself if you know.' });
     }
+  }
+
+  for (const task of tasks && Array.isArray(tasks.tasks) ? tasks.tasks : []) {
+    if (!task.promise || !task.promise.lapsed || task.status !== 'pending' || task.claimedBy) continue;
+    items.push({ priority: 2, kind: 'orphaned_promise', ref: task.id, what: task.createdBy + ' promised ' + task.promise.to + ' "' + clip(task.description.split('\n[OASIS]')[0], 100) + '" (' + task.promise.message + ') and finished without delivering; ' + task.id + ' is unowned.', do: 'Assign ' + task.id + ' (dispatch_ready_tasks or a task with this description), or tell ' + task.promise.to + ' it will not come.' });
   }
 
   for (const conflict of board ? openConflicts(board) : []) {
