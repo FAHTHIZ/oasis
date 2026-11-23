@@ -64,6 +64,34 @@ MCP servers resolve a relative `cwd`, `./` commands and `${PLUGIN_ROOT}`
 against the plugin folder, as Codex does. Plugins that need their own
 dependencies or programs still need that setup.
 
+## Plugins from other agents
+
+`oasis add SOURCE` takes a plugin or marketplace written for any of these and
+runs it as an OASIS plugin. The approval lists what it brings and, under "Not
+carried over", anything OASIS will not run.
+
+| Format | Recognized by | What runs | Not carried over |
+| --- | --- | --- | --- |
+| OASIS | `.oasis-plugin/plugin.json`, `.oasis-plugin/marketplace.json` | Everything; same fields as Claude Code | Nothing |
+| Claude Code | `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` | Commands, agents, skills, hooks, MCP and LSP servers, options, monitors | Nothing known |
+| Codex | `.codex-plugin/plugin.json`, `.agents/plugins/marketplace.json` | Skills, MCP servers, hooks | App connectors |
+| Gemini CLI | `gemini-extension.json` | Commands (TOML), context file (as a skill), settings, hooks, MCP servers | Hook events with no counterpart |
+| Agent Plugins | root `plugin.json` with an `agent-plugins.org` `$schema` | Skills, MCP servers, hooks | Surface-specific extensions |
+| Cursor ([reference](https://cursor.com/docs/reference/plugins)) | `.cursor-plugin/plugin.json`, `.cursor-plugin/marketplace.json` | Rules (`.mdc`, as skills that state their globs and `alwaysApply`), skills, agents, commands, `mcp.json` servers, hooks under Claude Code event names | Cursor hooks (`beforeShellExecution` and others) and variables |
+| Copilot CLI ([reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference)) | `.plugin/plugin.json`, a bare `plugin.json`, `.github/plugin/plugin.json`, and `marketplace.json` in the same places | Agents, skills (and a root `SKILL.md`), commands, `.mcp.json` or `.github/mcp.json`, `lsp.json`, hooks under Claude Code event names | Copilot hooks (`preToolUse` and others) |
+| Kiro power ([reference](https://kiro.dev/docs/powers/create/)) | `POWER.md` | The guide and `steering/*.md` as one skill, `mcp.json` servers | Keyword-triggered activation (the skill description carries the keywords) |
+
+Cursor and Copilot hooks are not translated because their input and output
+differ from Claude Code's: a guessed translation could let a command run that
+the hook was written to stop. A plugin that also ships Claude Code hooks keeps
+those.
+
+Every hook, MCP server and LSP server gets the plugin's folders under each name
+these tools use: `OASIS_PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `PLUGIN_ROOT`;
+`OASIS_PLUGIN_DATA`, `CLAUDE_PLUGIN_DATA`, `PLUGIN_DATA` and
+`COPILOT_PLUGIN_DATA`; and `OASIS_PROJECT_DIR` and `CLAUDE_PROJECT_DIR`.
+`${NAME}` works for each in manifests, commands and skills.
+
 ## Cursor Cloud Agents API
 
 Scripts written for Cursor's [Cloud Agents API](https://cursor.com/docs/cloud-agent/api/endpoints) can call `oasis web` instead: it answers the v1 and v0 REST endpoints (agents, runs, follow-ups, steering, cancel, the run event stream, usage, conversation and signed `statusChange` webhooks) with the OASIS web access key as the API key, and runs the agent in the folder the server serves with any configured model. Cursor's Cloud Agents also clone repositories, create branches and open pull requests on hosted machines. OASIS does none of that: those fields return a 4xx naming the field. Details are in [Interfaces](INTERFACES.md#cursor-cloud-agents-api).

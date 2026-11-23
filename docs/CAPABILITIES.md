@@ -126,6 +126,7 @@ performance claim.
 | MCP client (stdio, HTTP, SSE, OAuth, elicitation, MCP Tasks) and the MCP Registry | Stable | [Extending OASIS](EXTENDING.md) |
 | 48 built-in app connectors with an in-chat Connect card | Released, lightly tested | [Extending OASIS](EXTENDING.md) |
 | Claude Code plugins, skills, hooks and settings; Codex plugins and Gemini CLI extensions converted on install | Stable for Claude Code plugins; others released, lightly tested | [Compatibility](COMPATIBILITY.md) |
+| OASIS's own plugin manifest (`.oasis-plugin/`); Cursor and Copilot CLI plugins and marketplaces and Kiro powers installed, with unsupported parts named | Unreleased | [Compatibility](COMPATIBILITY.md#plugins-from-other-agents) |
 | `generate_image`, `text_to_speech` through OpenAI-compatible APIs | Released, lightly tested | [Configuration](CONFIGURATION.md) |
 | Honcho user modeling, Home Assistant tools, `/personality` | Released, lightly tested | [Configuration](CONFIGURATION.md) |
 | Trajectory export for training (`--compress`, `--format hermes`) | Released, lightly tested | [Compatibility](COMPATIBILITY.md#imports-and-data-formats) |

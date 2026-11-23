@@ -402,7 +402,10 @@ export function analyzeExtensionCompatibility(treeEntries) {
     { id: 'agent-skills', label: 'Agent Skills', detected: portableSkillPaths.length > 0, evidence: portableSkillPaths.length ? portableSkillPaths.length + ' SKILL.md file(s)' : 'No standard skills detected' },
     { id: 'claude-code', label: 'Claude Code', detected: claudeLayout, evidence: claudeManifest ? '.claude-plugin/plugin.json' : (claudeLayout ? '.claude layout detected' : 'No Claude Code layout detected') },
     { id: 'codex', label: 'Codex', detected: codexLayout || codexSkillsLayout, evidence: codexManifest ? '.codex-plugin/plugin.json' : (codexLayout ? '.codex layout detected' : (codexSkillsLayout ? '.agents/skills layout detected' : 'No Codex layout detected')) },
-    { id: 'gemini-cli', label: 'Gemini CLI', detected: geminiLayout, evidence: geminiManifest ? 'gemini-extension.json' : (geminiLayout ? '.gemini layout detected' : 'No Gemini CLI layout detected') }
+    { id: 'gemini-cli', label: 'Gemini CLI', detected: geminiLayout, evidence: geminiManifest ? 'gemini-extension.json' : (geminiLayout ? '.gemini layout detected' : 'No Gemini CLI layout detected') },
+    // Formats `oasis add` installs as full plugins; reported here so the inspection names them.
+    ...[['oasis', 'OASIS plugin', ['.oasis-plugin/plugin.json', '.oasis-plugin/marketplace.json']], ['cursor', 'Cursor', ['.cursor-plugin/plugin.json', '.cursor-plugin/marketplace.json']], ['copilot-cli', 'Copilot CLI', ['.plugin/plugin.json', '.github/plugin/plugin.json', '.github/plugin/marketplace.json']], ['kiro', 'Kiro power', ['POWER.md']]]
+      .map(([id, label, files]) => { const hit = files.find((file) => has(file)); return { id, label, detected: Boolean(hit), evidence: hit || 'No ' + label + ' manifest detected' }; })
   ];
   const detected = formats.filter((item) => item.detected);
   const primaryFormat = detected.length ? detected.map((item) => item.label).join(' + ') : (promptFiles.length ? 'Generic Markdown agent/skill collection' : 'Unrecognized extension repository');
