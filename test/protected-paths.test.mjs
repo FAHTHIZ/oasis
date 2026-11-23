@@ -212,3 +212,25 @@ test('project agent files that can declare hooks and MCP servers are protected w
   assert.equal(protectedConfigPath('/work/repo', 'src/agents/x.md'), null);
   assert.equal(protectedConfigPath('/work/repo', 'docs/agents.md'), null);
 });
+
+test('Windows spellings of protected paths are protected too', () => {
+  // NTFS drops trailing dots and spaces, `::$INDEX_ALLOCATION` and `::$DATA`
+  // name the same folder or file, and GIT~1 is the 8.3 short name of .git.
+  for (const [raw, expected] of [
+    ['.git./hooks/pre-commit', '.git/hooks/pre-commit'],
+    ['.git::$INDEX_ALLOCATION/hooks/post-checkout', '.git/hooks/post-checkout'],
+    ['GIT~1/config', '.git/config'],
+    ['.oasis /settings.json', '.oasis/settings.json'],
+    ['.mcp.json.', '.mcp.json'],
+    ['.vscode\\tasks.json. ', '.vscode/tasks.json'],
+    ['.envrc::$DATA', '.envrc']
+  ]) {
+    const hit = protectedConfigPath('/w', raw);
+    assert.equal(hit && hit.path, expected, raw);
+    assert.ok(protectedShellWrite('echo x > ' + raw), raw);
+  }
+  for (const raw of ['.gitignore', 'src/app.js', 'docs/a.b./c', '.github/workflows/ci.yml', 'notes.txt:Zone.Identifier']) {
+    assert.equal(protectedConfigPath('/w', raw), null, raw);
+  }
+  assert.equal(protectedShellWrite('cat GIT~1/config'), null);
+});

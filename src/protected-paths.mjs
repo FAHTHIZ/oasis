@@ -87,7 +87,22 @@ function normalizeWorkspaceRelative(root, rawPath) {
   const absolute = path.resolve(root || process.cwd(), text);
   const relative = path.relative(path.resolve(root || process.cwd()), absolute);
   if (relative.startsWith('..') || path.isAbsolute(relative)) return null;
-  return relative.split(path.sep).join('/').replace(/\\/g, '/').toLowerCase();
+  return relative.split(path.sep).join('/').replace(/\\/g, '/').toLowerCase().split('/').map(windowsSegment).join('/');
+}
+
+// Windows resolves several spellings to the same file: trailing dots and
+// spaces are dropped (`.git.` is `.git`), `name::$INDEX_ALLOCATION` or
+// `name::$DATA` names the default stream of `name`, and `git~1` is the 8.3
+// short name of `.git`. Matching only the literal spelling let a model write
+// `.git./hooks/pre-commit` or `.oasis /settings.json` without the protected
+// edit prompt. Folding these on every platform costs at most an extra prompt
+// for an oddly named file on Linux or macOS.
+function windowsSegment(segment) {
+  if (segment === '.' || segment === '..') return segment;
+  let name = segment.replace(/:(?::?\$[a-z_]+|[^/]*)$/i, '');
+  name = name.replace(/[. ]+$/, '') || segment;
+  if (/^git~\d+$/.test(name)) return '.git';
+  return name;
 }
 
 /** Returns { path, reason } when rawPath is a protected config path, else null. */
@@ -170,6 +185,9 @@ export function protectedShellWrite(command) {
   // Empty and split quotes (.gi""t, .g'i't) spell the same path to the shell.
   const text = String(command || '').replace(/["']/g, '');
   if (GIT_CONFIG_EXEC.test(text)) return 'it sets a git config key that makes git run a command';
-  if ((SHELL_PROTECTED_PATH.test(text) || SHELL_CD_PROTECTED.test(text)) && SHELL_WRITE.test(text)) return 'it appears to write a protected configuration file (settings, hooks, plugins, MCP/LSP servers or git hooks/config), which could grant permissions or run commands on the next run';
+  // Windows spellings of the same folders (see windowsSegment): `.git.`,
+  // `.git::$INDEX_ALLOCATION`, `GIT~1`.
+  const folded = text.replace(/::?\$[A-Za-z_]+/g, '').replace(/(\.[A-Za-z]+)[. ]+(?=[\\/])/g, '$1').replace(/(^|[\s'"=:/\\(<>|;&])git~\d+(?=[\\/])/gi, '$1.git');
+  if ((SHELL_PROTECTED_PATH.test(text) || SHELL_CD_PROTECTED.test(text) || SHELL_PROTECTED_PATH.test(folded) || SHELL_CD_PROTECTED.test(folded)) && SHELL_WRITE.test(text)) return 'it appears to write a protected configuration file (settings, hooks, plugins, MCP/LSP servers or git hooks/config), which could grant permissions or run commands on the next run';
   return null;
 }
