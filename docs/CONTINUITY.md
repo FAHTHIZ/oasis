@@ -25,6 +25,17 @@ Content hashes, not modification times, decide: a `touch`, or a checkout that re
 
 `OASIS_WORLD_DRIFT=0` or `"worldDrift": false` in settings turns it off (nothing is recorded or compared).
 
+## Check memory
+
+A check (a test, build, lint or type-check command OASIS recognises) that finishes is remembered against a fingerprint of the working tree: the commit's tree plus the content of every uncommitted and untracked file that Git does not ignore. Records live in the OASIS directory (`check-memory/`), never in the repository, with secrets in the command line redacted (`src/check-memory.mjs`).
+
+- At the start of a session, checks already run on exactly the current files in earlier sessions are listed for the model with how they ended and when (`[OASIS check memory] These checks already ran on exactly the current files...`). It need not rerun one only to learn the result. Any edit changes the fingerprint, so a result is never offered for files it did not run on.
+- When a check ends differently from an earlier run on the same fingerprint (it passed on these files and now fails, or the reverse), the files cannot be the cause. The tool result says so and points at what is outside them: installed dependencies, ignored files such as `.env`, services, the clock or the machine. The start-of-session list marks such checks as giving different results.
+- Runs that cannot stand for the whole check are not remembered: unfinished or timed-out runs, an exit status hidden by a pipe, runs filtered to some tests, runs where no test ran, and runs that changed files.
+- Outside Git, or with more than 2,000 changed files, or when fingerprinting takes over 3 seconds, nothing is recorded. Nothing is written to `.git`.
+
+`OASIS_CHECK_MEMORY=0` or `"checkMemory": false` in settings turns it off. Build systems keep test results by input hash and rerun only what changed ([Bazel `--cache_test_results`](https://bazel.build/reference/command-line-reference), [Turborepo caching](https://turborepo.com/docs/crafting-your-repository/caching)); check memory brings the same footing to an agent, which otherwise reruns a suite in every new session, and uses a flip on identical inputs as a diagnosis rather than only a cache miss. Tests: `test/check-memory.test.mjs`.
+
 ## Prior art
 
 - Claude Code resume and checkpoints restore the conversation and the edits Claude made; manual and external changes are not tracked and not reported ([Claude Code checkpointing](https://code.claude.com/docs/en/checkpointing)).

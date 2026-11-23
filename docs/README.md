@@ -50,6 +50,7 @@ every guide.
 - [Receipts](RECEIPTS.md): signed, replayable proof of what an agent run did, checkable by anyone with `oasis receipt verify`.
 - [Effects](EFFECTS.md): predicted versus observed changes for shell commands, and rewinding them.
 - [World drift on resume](CONTINUITY.md): a resumed session is told which commits, branch changes and known files moved since it was saved (`OASIS_WORLD_DRIFT=0` to turn off).
+- [Check memory](CONTINUITY.md#check-memory): check results kept per exact working-tree content across sessions, and a flip on the same files flagged as not the files' doing (`OASIS_CHECK_MEMORY=0` to turn off).
 - [Command rehearsal](REHEARSAL.md): run a command in a throwaway overlay first and show its exact file changes in the approval prompt (`OASIS_REHEARSE=1`, `oasis rehearse`).
 - [Durable execution](DURABLE-EXECUTION.md): the intent journal and how in-doubt actions are reconciled after a crash.
 - [Reliability laboratory](RELIABILITY-LAB.md): fault injection (`OASIS_FAULTS`), the scenario scorecard, and live reconciliation of failed calls.

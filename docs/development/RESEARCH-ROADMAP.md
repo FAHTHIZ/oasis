@@ -140,6 +140,15 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - Acceptance: a page names a collector; a following `curl -d` with a composed value to it asks a person and is not run when declined; the exact link, a plain search phrase, short values, unrelated hosts and hosts the user named or allowed pass; a 100+ character value is caught. `test/egress-provenance.test.mjs`.
 - Limit: data in a URL path, or to a host the user also named, is not caught; the canary credential and secret shield still cover credentials.
 
+### Check memory
+
+- Commit: see `git log -- src/check-memory.mjs` ("Remember check results per exact working tree across sessions"). Docs: [Continuity](../CONTINUITY.md#check-memory).
+- Problem: the first slice of the cross-session claim store. Check results are the claims a coding agent rechecks most, and every new session reran the suite to learn what an earlier one already knew. A test that flips on unchanged code also sent agents editing code that was not at fault.
+- Prior art: build systems cache test results by input hash ([Bazel](https://bazel.build/reference/command-line-reference), [Turborepo](https://turborepo.com/docs/crafting-your-repository/caching)); they need declared inputs and a build graph, and treat a different outcome only as a rerun.
+- New: the key is the whole working tree's content as Git sees it (commit tree plus every changed and untracked file, ignored files excluded), with no build graph, and the record is advisory context for the model rather than a skipped run. Two outcomes on one fingerprint are turned into a diagnosis at the moment the agent sees the failure.
+- Acceptance: the fingerprint changes with tracked and untracked edits, returns when an edit is undone, and ignores ignored files; filtered, masked, unfinished, empty and file-changing runs are not kept; a later session is told the result, the same session is not, and an edit hides it; end to end, a second session is told `npm test` passed and, when an ignored file breaks it, the failing result names the flip. `test/check-memory.test.mjs`.
+- Limit: inputs outside the tracked files (dependencies, environment) are not in the key, which is exactly why results are offered as context and not used to skip runs.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |
@@ -165,7 +174,7 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### Experimental
 
-- Cross-session claim store: let claims settled in one session (with evidence) answer questions in the next, invalidated by file hashes. Acceptance: fewer repeated checks in multi-session evals with no stale answers.
+- Cross-session claim store beyond checks: check results now carry over (Check memory, above); citations and calculated numbers could follow, invalidated by page digests and file hashes. Acceptance: fewer repeated checks in multi-session evals with no stale answers.
 
 ### Long term
 
