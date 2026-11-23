@@ -306,6 +306,12 @@ async function doctorWorkspaceReport(root, status = {}) {
     stdout.write('  Permission mode: ' + settings.permissions.defaultMode + '; rules: ' + settings.permissions.allow.length + ' allow, ' + settings.permissions.ask.length + ' ask, ' + settings.permissions.deny.length + ' deny\n');
     const hookCount = Object.values(settings.hooks || {}).reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0);
     stdout.write('  Hooks: ' + hookCount + '\n');
+    // Hooks read in place from other agents' files (src/foreign-hooks.mjs).
+    const foreign = new Map();
+    for (const groups of Object.values(settings.hooks || {})) for (const group of Array.isArray(groups) ? groups : []) {
+      if ((group.source === 'user' || group.source === 'project') && /[\\/](?:\.codex|\.cursor|\.gemini|\.opencode|opencode|\.github[\\/]hooks)[\\/]/.test(group.sourceFile || '')) foreign.set(group.sourceFile, (foreign.get(group.sourceFile) || 0) + 1);
+    }
+    if (foreign.size) stdout.write('  Hooks from other agents: ' + [...foreign].map(([file, n]) => file + ' (' + n + ')').join(', ') + ' ("otherAgentHooks": false turns these off)\n');
     if (settings.ignoredUntrusted.length) problems.push('Untrusted workspace settings were ignored: ' + settings.ignoredUntrusted.join(', ') + '. Run oasis trust if you want them.');
   } catch (error) {
     stdout.write('  Settings: invalid (' + error.message + ')\n');
