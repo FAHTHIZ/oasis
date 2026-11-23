@@ -199,3 +199,18 @@ test('token-usage work is not a credentials risk, and standing-rule-only tasks g
   assert.equal(deriveTaskSpec('Rotate the GitHub token in .env').risk.reasons.includes('credentials'), true);
   assert.equal(taskBrief(spec), '');
 });
+
+test('removing content from a file is a change, removing a thing is an operation', async () => {
+  const { classifyIntent, deriveTaskSpec } = await import('../src/task-model.mjs');
+  // The remove-hardcoded-key eval task read as "operate", so its contract
+  // asked for a recorded side effect instead of a passing check, and a
+  // correct, tested fix came out "unverified".
+  const spec = deriveTaskSpec('src/config.mjs contains a hardcoded live API key, and src/logger.mjs prints the whole configuration. Read the key from the ACME_API_KEY environment variable instead, remove the literal key from every file in the repository. The existing test must still pass with `node --test`.');
+  assert.equal(spec.intent.kind, 'change');
+  assert.ok(spec.acceptance.some((item) => item.kind === 'check_passes'));
+  assert.equal(classifyIntent('Remove the debug logging from src/app.js'), 'change');
+  assert.equal(classifyIntent('Remove the second paragraph from the essay'), 'change');
+  assert.equal(classifyIntent('Remove node_modules'), 'operate');
+  assert.equal(classifyIntent('Delete old logs from the server'), 'operate');
+  assert.equal(classifyIntent('Remove the user from the database'), 'operate');
+});

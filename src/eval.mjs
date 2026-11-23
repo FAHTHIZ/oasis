@@ -21,7 +21,7 @@ import { verdictIsVerified } from './task-model.mjs';
 // whether it failed. Enough to see where a run's tokens and turns went
 // without storing file contents.
 const TRACE_LIMIT = 200;
-const TRACE_ARG_KEYS = ['path', 'command', 'pattern', 'query', 'url', 'name', 'old_path'];
+const TRACE_ARG_KEYS = ['path', 'command', 'pattern', 'query', 'url', 'name', 'old_path', 'action', 'description'];
 function traceStep(event) {
   const call = event && event.call;
   let args = {};

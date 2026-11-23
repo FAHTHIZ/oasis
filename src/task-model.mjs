@@ -111,8 +111,10 @@ const DOMAIN_SIGNALS = {
 
 const INTENT_SIGNALS = {
   plan: /\b(?:plan|roadmap|strategy|how should (?:i|we)|what should (?:i|we)|break (?:it|this) down|steps to|itinerary|prioriti[sz]e)\b/i,
-  operate: /\b(?:deploy|install|run|execute|send|post|publish|schedule|book|buy|purchase|pay|transfer|restart|start|stop|launch|release|merge|push|upload|download|delete|remove|clean up|migrate|open|log ?in|sign ?in|click|fill (?:in|out)|submit|navigate|automate|back ?up)\b/i,
-  change: /\b(?:fix|update|modify|change|edit|refactor|rename|move|upgrade|improve|optimi[sz]e|rewrite|repair|patch|correct|adjust|tweak|convert|port)\b/i,
+  // "Remove the key from config.mjs" edits a file's content; it is a change,
+  // not an operation, and is matched under change below.
+  operate: /\b(?:deploy|install|run|execute|send|post|publish|schedule|book|buy|purchase|pay|transfer|restart|start|stop|launch|release|merge|push|upload|download|(?:delete|remove)(?![^.;!?\n]{0,60}\bfrom\s+(?:the\s+|every\s+|each\s+|all\s+(?:the\s+)?|this\s+|that\s+|my\s+|our\s+)?(?:[\w./-]+\.[a-z]{1,5}\b|(?:source\s+)?(?:files?|code|codebase|repo(?:sitory)?|functions?|class(?:es)?|modules?|config(?:uration)?|documents?|text|lists?|readme|pages?|strings?|output|tests?|scripts?|paragraphs?|sections?|drafts?|essay|article|email|report)\b))|clean up|migrate|open|log ?in|sign ?in|click|fill (?:in|out)|submit|navigate|automate|back ?up)\b/i,
+  change: /\b(?:fix|update|modify|change|edit|refactor|rename|move|upgrade|improve|optimi[sz]e|rewrite|repair|patch|correct|adjust|tweak|convert|port|(?:delete|remove|strip)(?=[^.;!?\n]{0,60}\bfrom\s+(?:the\s+|every\s+|each\s+|all\s+(?:the\s+)?|this\s+|that\s+|my\s+|our\s+)?(?:[\w./-]+\.[a-z]{1,5}\b|(?:source\s+)?(?:files?|code|codebase|repo(?:sitory)?|functions?|class(?:es)?|modules?|config(?:uration)?|documents?|text|lists?|readme|pages?|strings?|output|tests?|scripts?|paragraphs?|sections?|drafts?|essay|article|email|report)\b)))\b/i,
   create: /\b(?:write|draft|create|build|make|generate|produce|implement|add|design|compose|prepare|set up)\b/i,
   investigate: /\b(?:research|investigate|find out|look into|look up|diagnose|audit|review|analy[sz]e|compare|evaluate|assess|check whether|verify|fact-?check|figure out|why does|why is|root cause)\b/i
 };
