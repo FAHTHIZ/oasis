@@ -3,7 +3,7 @@
 // pass" right after a failing run, after editing again, or from a piped
 // command whose real exit status was hidden. One reconcile nudge per turn.
 
-import { multilingualClaimsPassing } from './multilingual-signals.mjs';
+import { multilingualClaimsPassing, multilingualAdmitsUnverified, multilingualClaimsChange, multilingualAdmitsFailure } from './multilingual-signals.mjs';
 
 const POSITIVE = [
   /\b(?:all|the|every|both)?\s*(?:unit |integration |e2e )?(?:tests?|specs?|test suite|checks?|builds?|lint(?:ing)?|type-?checks?)\s+(?:now\s+|all\s+|still\s+)?(?:pass(?:es|ed|ing)?|succeed(?:s|ed)?|(?:is|are)\s+(?:passing|green|clean))\b/i,
@@ -95,7 +95,7 @@ export function appendUnverifiedNotice(text, issues, verification = {}, state = 
   const note = 'Not verified: ' + reason + '.' + contradiction + (command && !failed ? ' Run `' + command + '` to confirm.' : '');
   if (value.includes('Not verified: ')) return value;
   // The answer already admits the check did not run and makes no passing claim: no need to repeat it.
-  if (!claimed && !failed && !stale && ADMITS_UNVERIFIED.test(value)) return value;
+  if (!claimed && !failed && !stale && (ADMITS_UNVERIFIED.test(value) || multilingualAdmitsUnverified(value))) return value;
   return (value.trim() ? value.replace(/\s+$/, '') + '\n\n' : '') + note;
 }
 
@@ -125,8 +125,8 @@ function unsettled(state, text) {
     const name = baseName(file);
     if (!name || !value.includes(name)) return false;
     // Only sentences that name the file count; one that admits the failure settles it.
-    const sentences = value.split(/(?<=[.!?])\s+|\n+/).filter((sentence) => sentence.includes(name));
-    return sentences.some((sentence) => CLAIMS_CHANGE.test(sentence)) && !sentences.some((sentence) => ADMITS_FAILURE.test(sentence));
+    const sentences = value.split(/(?<=[.!?])\s+|(?<=[。！？।])\s*|\n+/u).filter((sentence) => sentence.includes(name));
+    return sentences.some((sentence) => CLAIMS_CHANGE.test(sentence) || multilingualClaimsChange(sentence)) && !sentences.some((sentence) => ADMITS_FAILURE.test(sentence) || multilingualAdmitsFailure(sentence));
   });
 }
 
