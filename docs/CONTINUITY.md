@@ -36,3 +36,5 @@ Only files the conversation touched through file tools are tracked; a file read 
 ## Acceptance
 
 `test/world-drift.test.mjs` (7 tests): no drift for an unchanged workspace, a touch, or same-bytes rewrite; changed, deleted and newly created known files named while unrelated files are ignored; new commits reported as `ahead` with subjects, branch switches, reset back (`behind`) and amended history (`other`) told apart; disabled by `OASIS_WORLD_DRIFT=0`; sanitizing of saved fingerprints; and an end-to-end save, external commit, resume and two turns where only the first model request carries the note.
+
+`/insights` counts resumed sessions that found the workspace changed.
