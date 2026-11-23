@@ -1,3 +1,4 @@
+import { sharedCalibrationLedger } from './calibration.mjs';
 import { splitThinking, visibleReply } from './think-tags.mjs';
 import { randomUUID } from 'node:crypto';
 import { scratchEnabled, scratchKey, scratchRelative, scratchPrompt, ensureScratch, isScratchPath, SCRATCH_ROOT } from './scratch.mjs';
@@ -4152,6 +4153,7 @@ export async function consultMixture(session, args = {}, options = {}) {
   const result = await runMixture({ chain: session.mixtureModels, baseConfig, aggregatorConfig, env }, { ...args, question }, {
     signal: options.signal,
     transcript: () => recentTranscript(session, options.maxChars || sideTranscriptChars(budget, question)),
+    calibration: (model) => { let ledger = null; try { ledger = session.calibrationLedger || sharedCalibrationLedger(session.modelEnv || process.env, session.settings); } catch {} return ledger ? ledger.records({ model }) : null; },
     request: (config, messages, signal) => requestCompletion({ budgetParent: session, config, toolDefinitions: [], providerEnv: session.providerEnv, permissions: session.permissions, root: session.root, messages }, { noTools: true, signal }),
     charge: (spent, model) => {
       const costUsd = chargeAuxiliaryUsage(session, spent, { env: options.env, model });
