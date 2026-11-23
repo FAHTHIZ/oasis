@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readFile, rm, writeFile, readdir } from 'node:fs/promises';
-import { exportPlugin, formatExportReport, commandToGeminiToml, geminiMatcher } from '../src/plugin-export.mjs';
+import { exportPlugin, formatExportReport, inspectPlugin, formatInspectReport, commandToGeminiToml, geminiMatcher } from '../src/plugin-export.mjs';
 import { detectForeignPlugin } from '../src/plugin-convert.mjs';
 import { validatePath } from '../src/claude-plugins.mjs';
 import { parse as parseToml } from 'smol-toml';
@@ -126,4 +126,32 @@ test('a marketplace exports every local plugin and a marketplace file per agent'
   const { detectForeignMarketplace } = await import('../src/plugin-convert.mjs');
   assert.equal((await detectForeignMarketplace(out)).plugins[0].path, path.join(out, 'plugins', 'kit'));
   assert.match(formatMarketplaceReport(result), /not exported \(not in this repository\): remote/);
+});
+
+test('inspect reports what a plugin becomes in OASIS and every other agent without writing anything', async (t) => {
+  const { base, src } = await fixture(t, plugin);
+  const before = await readdir(base);
+  const result = await inspectPlugin(src);
+  assert.equal(result.native, true);
+  assert.equal(result.format, 'Claude Code plugin');
+  assert.deepEqual(result.targets.map((x) => x.target), ['claude', 'codex', 'gemini', 'cursor', 'copilot']);
+  assert.equal(result.targets.find((x) => x.target === 'claude').full, true);
+  assert.equal(result.targets.find((x) => x.target === 'cursor').full, false);
+  assert.deepEqual(await readdir(base), before);
+  const text = formatInspectReport(result);
+  assert.match(text, /OASIS reads it natively/);
+  assert.match(text, /\[full\]\s+OASIS \/ Claude Code/);
+  assert.match(text, /\[partial\] Cursor/);
+
+  const gem = await fixture(t, {
+    'gemini-extension.json': { name: 'gx', version: '1.0.0', mcpServers: { s: { command: 'node', args: ['${extensionPath}/s.js'] } } },
+    'commands/hi.toml': 'description = "Say hi"\nprompt = "Say hi to {{args}}"\n',
+    's.js': '//\n'
+  });
+  const foreign = await inspectPlugin(gem.src);
+  assert.equal(foreign.native, false);
+  assert.equal(foreign.format, 'Gemini CLI extension');
+  assert.ok(foreign.contents.some((c) => /^1 command\b/.test(c)));
+  assert.match(formatInspectReport(foreign), /OASIS converts it on install/);
+  await assert.rejects(inspectPlugin(path.join(base, 'nope')), /No plugin folder/);
 });

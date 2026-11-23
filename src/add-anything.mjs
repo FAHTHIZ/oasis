@@ -342,7 +342,7 @@ export async function inspectAddonDirectory(dir) {
     const parts = [];
     for (const [label, test] of [['commands', /^commands\/.+\.md$/], ['agents', /^agents\/.+\.md$/], ['skills', /^skills\/[^/]+\/SKILL\.md$/i]]) {
       const found = await findFiles(dir, (rel) => test.test(rel), { depth: 3 });
-      if (found.length) parts.push(found.length + ' ' + label);
+      if (found.length) parts.push(found.length + ' ' + (found.length === 1 ? label.slice(0, -1) : label));
     }
     if (await exists(path.join(dir, 'hooks', 'hooks.json')) || claudePlugin.hooks) parts.push('hooks (they run commands on events)');
     if (await exists(path.join(dir, '.mcp.json')) || claudePlugin.mcpServers) parts.push('MCP servers (they run when sessions start)');

@@ -47,7 +47,7 @@ test('inspectAddonDirectory tells plugins, marketplaces, skills and MCP servers 
   assert.equal((await inspectAddonDirectory(path.join(dir, 'a'))).type, 'marketplace');
   const solo = await inspectAddonDirectory(path.join(dir, 'b'));
   assert.equal(solo.type, 'claude-plugin');
-  assert.deepEqual(solo.contents, ['1 commands']);
+  assert.deepEqual(solo.contents, ['1 command']);
   assert.deepEqual(await inspectAddonDirectory(path.join(dir, 'c')), { type: 'skills', skills: ['pdf'] });
   assert.equal((await inspectAddonDirectory(path.join(dir, 'd'))).type, 'mcp-server');
   assert.deepEqual(await inspectAddonDirectory(path.join(dir, 'e')), { type: 'mcp-collection', servers: [{ name: 'memory', npmName: '@x/server-memory' }] });
@@ -62,7 +62,7 @@ test('a local Claude Code plugin folder installs and enables in one step', async
   const asked = [];
   const result = await addAnything(plugin, { root: dir, env, approve: async (summary) => { asked.push(summary); return true; } });
   assert.equal(asked.length, 1);
-  assert.match(asked[0], /Claude Code plugin "hello".*1 commands/);
+  assert.match(asked[0], /Claude Code plugin "hello".*1 command\b/);
   assert.equal(result.kind, 'claude-plugin');
   assert.match(result.installed[0], /^hello@repo-/);
   assert.match(result.message, /Installed and enabled hello@/);
