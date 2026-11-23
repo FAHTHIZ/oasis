@@ -681,7 +681,7 @@ async function runShell(root, args, context, flavor = 'sh') {
   }
   if (!autoAllowed) {
     const ok = context.approval && await context.approval((install.approvalNote ? install.approvalNote + '\n' : '') + (hardRisk ? 'HIGH RISK: this command ' + hardRisk + '. Auto-approval does not apply.\n' : '') + (appRisk ? 'Warning: ' + appRisk + (/^it appears to write|^it sets a git config/.test(appRisk) ? '.\n' : '. Unsaved work in those apps could be lost.\n') : '') + 'Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + (sandbox.ssh.display || sandbox.ssh.host) + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.') + rehearsal.text, !sandbox || Boolean(appRisk) || Boolean(hardRisk));
-    if (!ok) return { approved: false, command, ...(rehearsal.summary ? { rehearsal: rehearsal.summary } : {}), message: 'Shell command was not approved. Nothing ran.' };
+    if (!ok) return { approved: false, command, ...(rehearsal.summary ? { rehearsal: rehearsal.summary } : {}), message: 'Shell command was not approved. ' + (rehearsal.summary ? 'It only ran as a rehearsal in a throwaway copy of the workspace, and nothing it did was kept.' : 'Nothing ran.') };
   }
   if (context.signal && context.signal.aborted) {
     return { approved: false, command, cancelled: true, message: 'Task was cancelled before the shell command started.' };
