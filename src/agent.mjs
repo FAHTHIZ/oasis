@@ -15,6 +15,7 @@ import { runsOutsideRoot, shellExitTarget } from './pipe-status.mjs';
 import { loadPins, savePins } from './mcp-trust.mjs';
 import { applyInjectionTaint, commandFetchesExternal, fetchedOutputPaths, guardExternalContent, guardJudgedOutput, guardJudgedRead, clearInjectionTurnFlag, injectionHoldReason, showHiddenCharacters, untrustedGuardEnabled } from './untrusted-content.mjs';
 import { maskSecrets, unmaskSecretsForTool, secretShieldEnabled, redactSecretText, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
+import { canaryTripwire } from './canary-credentials.mjs';
 import { followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
@@ -2709,6 +2710,13 @@ async function executeOneCallRaw(session, call, context, options) {
     }
     const outOfScope = scopeViolation(session, name, args);
     if (outOfScope) throw new Error(outOfScope);
+    // A decoy credential in the arguments means something is carrying the
+    // command environment out (src/canary-credentials.mjs).
+    const canary = canaryTripwire(session, name, args, { env: (context && context.env) || options.env || process.env });
+    if (canary) {
+      recordSessionEvent(session, { type: 'canary_tripped', tool: name, how: canary.how }, (context && context.env) || options.env || process.env);
+      throw new Error(canary.message);
+    }
     const gitWrite = unrequestedGitWrite(session.currentRequest, name, args, { settings: session.settings || {}, env: (context && context.env) || options.env || process.env });
     if (gitWrite) throw new Error(gitWrite);
     if (SESSION_TOOL_NAMES.has(name)) {

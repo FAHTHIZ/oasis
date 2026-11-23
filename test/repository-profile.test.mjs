@@ -49,7 +49,7 @@ test('contributor policies exist outside the installable npm package', async () 
   assert.ok(contributing.includes('npm run check'));
   assert.ok(security.includes('private vulnerability reporting'));
   assert.ok(support.includes('oasis doctor'));
-  assert.ok(changelog.includes('[1.1.0]'));
+  assert.ok(changelog.includes('## [0.2.0] (published as 1.1.0)'));
   assert.ok(!pkg.files.includes('CONTRIBUTING.md'));
   assert.ok(!pkg.files.includes('SECURITY.md'));
 });

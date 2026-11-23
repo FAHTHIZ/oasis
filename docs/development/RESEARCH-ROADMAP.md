@@ -122,6 +122,15 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - Commit: see `git log -- src/rehearsal-lister.mjs` ("Show which servers a rehearsed command tried to reach").
 - A refusing HTTP proxy on the rehearsal's loopback records CONNECT and absolute-URI targets; proxy variables, `PIP_PROXY`, `NODE_USE_ENV_PROXY` and git's `http.proxy` point at it. 6 of 6 common clients reported correctly in this sandbox, local servers unaffected, about 6 ms overhead. Building it showed that git settings in the environment carried a proxy password into rehearsals; those are now removed. Tests in `test/rehearsal.test.mjs`.
 
+### Canary credential
+
+- Commit: this entry's commit. Docs: [Security model](../SECURITY.md#controls-oasis-enforces).
+- Problem: OASIS removes real credentials from command environments and hides any it sees in output, so an injected page has nothing real to steal, but OASIS also had no way to notice that something tried. The injection guard flags text that reads like instructions; an attack phrased as ordinary data passed it silently.
+- Prior art: canary tokens plant decoy AWS keys and URLs that alert when used ([Thinkst Canarytokens](https://github.com/thinkst/canarytokens/)); Rebuff adds a canary word to prompts to detect prompt leakage ([Rebuff](https://github.com/protectai/rebuff)); red-team tools mint inert canaries and match them in an agent's tool calls in base64, hex or URL encoding during an assessment ([Dreadnode](https://docs.dreadnode.io/ai-red-teaming/how-to/honeytoken-probing/)); research on agent credential exfiltration explicitly leaves credentials in structured tool-call arguments out of scope ([arXiv 2606.04141](https://arxiv.org/html/2606.04141)).
+- New: the decoy is built into the runtime and checked inline at the tool-call boundary, before execution, on every call, rather than alerting after use or during a test. Because the real credentials are already scrubbed, the decoy is the only credential a command can see, so any dump of the environment includes it. A trip refuses the call and puts the rest of the turn under the existing injection hold, so it also stops attacks that read as data.
+- Acceptance: the decoy is found as written, reversed, percent-, hex-, base64- and base64url-encoded at all three byte alignments and split by separators; ordinary arguments, the variable's name alone and long base64 blobs are not flagged; end to end, a command prints the decoy and a following `fetch_url` that carries it base64url-encoded is refused and holds the turn; a repository's settings cannot turn it off. `test/canary-credentials.test.mjs`, `test/settings-keys.test.mjs`.
+- Limit: a single command that pipes the environment to the network never passes the value through OASIS; the sandbox network controls cover that.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |
