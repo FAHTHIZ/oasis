@@ -142,6 +142,8 @@ Compare systems using the same model, task set, provider settings and environmen
 
 Each OASIS trial also records `selfAssessment`: the verdict OASIS's own completion gate reached (`verified`, `rejected`, `evidenced` and so on, see [Task model](../TASK-MODEL.md)), reduced to a claim of success, failure or neither, before the hidden verifier ran. A run that ended with verification incomplete never counts as claiming success. The summary compares those claims with the verifier: `agreement`, `successPrecision` (of the trials OASIS called verified, how many passed), `overclaims` (OASIS said verified, the verifier failed it) and `underclaims` (OASIS said it failed, the verifier passed it); `evidenced` and `unverified` verdicts are counted as unsure. The score is still the verifier's alone. An overclaim is the error that matters most: it is OASIS certifying work that is wrong.
 
+Each OASIS trial keeps a compact `trace` of tool calls (tool, a short redacted argument, result size, and for a failed step its exit code and the last lines of the error), `requestTokens` per model request, and, when the completion gate sent the answer back, `nudges`: the kind of each round (`task-contract`, `empty`, `announced` and so on) and how many tool calls had run before it. Reply text is not kept.
+
 ## Latest results (12 November 2026)
 
 Measured on commit `c1396e7b`, Node 22, a 2-core Linux machine. Raw files are in [bench/results](../../bench/results).
