@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Added
 
+- `oasis mcp share [--to AGENTS] [--user] [--remove]` registers `oasis mcp serve` in Claude Code, Cursor, VS Code / Copilot, Gemini CLI, Codex, OpenCode, Zed and Copilot CLI settings, editing each file in place (comments and other servers kept).
 - `oasis mcp serve` is a universal plugin bridge: every slash command OASIS reads (any agent's format, plus installed plugins) is served as an MCP prompt and every skill through `list_skills` / `load_skill` / `read_skill_resource`, so Codex, Gemini CLI, Cursor, Copilot, Zed or Claude Desktop can use them without conversion. Inline shell runs only with `--allow-commands`; `--no-prompts` turns prompts off.
 - Continue prompt files (`.continue/prompts/*.prompt` and `*.md`, and `~/.continue/prompts`) are slash commands where they are: `{{{ input }}}` is the arguments, `@path` reads a file, and `oasis add` of a Continue repository converts `{{{ input }}}` to `$ARGUMENTS`.
 - `oasis plugin inspect [PATH]` reports what a plugin from any supported agent becomes: what OASIS reads, what will not run, and for OASIS, Claude Code, Codex, Gemini CLI, Cursor and Copilot CLI whether `oasis plugin export` carries it fully or what it leaves out. Nothing is written.

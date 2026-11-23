@@ -100,6 +100,10 @@ export async function manageMcp(rest, root = process.cwd(), { approve, askLine, 
     stdout.write('Configured MCP servers start when a new agent session begins; each tool call asks for approval by default.\n');
     return;
   }
+  if (action === 'share') {
+    await (await import('./mcp-share.mjs')).shareCli(root, rest.slice(1), (text) => stdout.write(text));
+    return;
+  }
   if (action === 'serve') {
     const { serveMcp } = await import('./mcp-serve.mjs');
     await serveMcp({ root, args: rest.slice(1), env: process.env });
