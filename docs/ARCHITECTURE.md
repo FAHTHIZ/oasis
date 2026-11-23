@@ -49,6 +49,7 @@ The model proposes responses and tool calls. OASIS owns the runtime decisions ar
 | Agent coordination | `src/subagents.mjs`, `src/agent-tasks.mjs`, `src/shared-tasks.mjs`, `src/worktrees.mjs` | Delegated agents, shared task state and isolated Git worktrees. |
 | Extensions | `src/mcp.mjs`, `src/plugins.mjs`, `src/hooks.mjs`, `src/skill-install.mjs`, `skills/` | MCP connections, plugins, lifecycle hooks and Agent Skills. |
 | Persistence and recovery | `src/sessions.mjs`, `src/checkpoints.mjs`, `src/memory.mjs`, `src/backups.mjs` | Session history, memory, checkpoints and recovery data. |
+| Effects and durable execution | `src/effect-contracts.mjs`, `src/intent-journal.mjs` | Predicted versus observed changes of shell commands (private-store snapshots feeding checkpoints), and the write-ahead intent journal reconciled when a crashed session resumes. See [EFFECTS.md](EFFECTS.md) and [DURABLE-EXECUTION.md](DURABLE-EXECUTION.md). |
 | Verification | `src/claim-check.mjs`, `src/diagnostics.mjs`, `src/test-tamper.mjs`, `src/change-guard.mjs`, `src/mutation-probe.mjs`, `src/bisect.mjs`, `src/flaky-check.mjs`, `src/minimize-repro.mjs`, `src/fault-localize.mjs` | Records check evidence, diagnoses problems, guards against unsafe or misleading edits, and tests the tests: planted bugs, history search for the breaking commit, flake detection, input minimization and fault localization. |
 
 ## A typical agent turn

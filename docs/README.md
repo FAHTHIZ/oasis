@@ -48,6 +48,8 @@ every guide.
 - [Provider transport](architecture/provider-transport.md): protocol-specific requests and streaming.
 - [Agent network](AGENT-NETWORK.md): how subagents are scheduled, budgeted, cancelled and checked.
 - [Receipts](RECEIPTS.md): signed, replayable proof of what an agent run did, checkable by anyone with `oasis receipt verify`.
+- [Effects](EFFECTS.md): predicted versus observed changes for shell commands, and rewinding them.
+- [Durable execution](DURABLE-EXECUTION.md): the intent journal and how in-doubt actions are reconciled after a crash.
 - [Task model](TASK-MODEL.md): the task contract every request is read into, its acceptance criteria and how outcomes are decided.
 - [Compatibility](COMPATIBILITY.md): the Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Goose and other agent files and protocols OASIS reads or speaks.
 

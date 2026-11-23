@@ -23,7 +23,9 @@ import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, 
 import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
 import { priceFor, estimateCostUsd, recordBudgetSpend, formatUsd, cloudModelBehindGateway } from './pricing.mjs';
 import { hasImages, fitImages } from './images.mjs';
-import { beginCheckpoint, captureBeforeChange, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
+import { beginCheckpoint, captureBeforeChange, captureFromPreimage, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
+import { beginEffectObservation, finishEffectObservation, preimagesFor, publicEffects } from './effect-contracts.mjs';
+import { applyReconciliation, journalDone, journalIntent, journalPathFor, readJournal, reconcileJournal, reconciliationNote } from './intent-journal.mjs';
 import { keywordRulesFor, nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, modelAllowed, modelDenied, modelRestrictionMessage } from './model-aliases.mjs';
 import { selectTaskModel } from './model-routing.mjs';
@@ -973,6 +975,20 @@ export async function createSession({ root, config, restore = null, permissionMo
     const recorded = restore.messages.find((message) => message && message.role === 'system' && typeof message.content === 'string');
     if (snapshotMode === 'on' && recorded) { session.freshSystemText = systemMessage.content; systemMessage.content = recorded.content; }
     session.messages = [systemMessage, ...restore.messages.filter((message) => message && message.role !== 'system')];
+    // Actions in flight when the session last stopped: decided from the world.
+    if (restore.journalId && !bare) {
+      try {
+        session.journalId = restore.journalId;
+        session.journalPath = journalPathFor(root, restore.journalId, env);
+        const records = await readJournal(session.journalPath);
+        session.journalSeq = records.reduce((max, record) => Math.max(max, Number(record.seq) || 0), 0);
+        const reconciliation = await reconcileJournal(root, session.journalPath, session.messages);
+        if (reconciliation.actions.length) {
+          applyReconciliation(session.messages, reconciliation);
+          session.journalReconciliation = reconciliation;
+        }
+      } catch { /* the journal is advisory; a damaged one cannot block a resume */ }
+    }
     if (restore.checkpointsDir && checkpointPersistenceEnabled(env)) {
       const saved = await loadCheckpoints(restore.checkpointsDir).catch(() => null);
       if (saved && saved.turns.length) session.checkpoints = saved;
@@ -1655,6 +1671,14 @@ const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
 const MAX_TOOL_BATCH = 64;
 
 const LIVE_OUTPUT_TOOLS = new Set(['run_command', 'run_shell', 'powershell']);
+const EFFECT_OBSERVED_TOOLS = new Set(['run_command', 'run_shell']);
+
+function commandIsReadOnly(session, name, args = {}) {
+  try {
+    if (name === 'run_command') return readOnlyArgv(args.command, args.args, { root: session.root });
+    return readOnlyShellLine(String(args.command || ''), { root: session.root });
+  } catch { return false; }
+}
 export const RESTRICTED_TOOL_NAMES = new Set(['run_command', 'powershell', 'monitor', 'command_output', 'kill_command', 'list_background', 'fetch_url', 'web_search', 'browser', 'computer', 'remote_agent', 'install_package', 'install_extension', 'install_plugin', 'add_extension', 'install_external_skill', 'configure_mcp_server', 'git_push', 'create_pull_request']);
 
 
@@ -2388,6 +2412,7 @@ async function executeMappedMcpToolWithKernel(session, name, args, context, opti
       // Only sessions that can wake when the result lands (interactive CLI,
       // streaming headless) background a task; one-shot runs keep waiting.
       if (typeof session.onBackgroundEvent === 'function') mcpOptions.onBackgroundTask = (task) => trackBackgroundMcpTask(session, task);
+      if (typeof options.prepare === 'function') await options.prepare({ input: validatedInput, context: mcpOptions });
       try {
         return await callMappedMcpTool(session, name, validatedInput, mcpOptions);
       } catch (error) {
@@ -2571,6 +2596,8 @@ async function executeOneCallRaw(session, call, context, options) {
   let lspVerificationPath = null;
   let lspBaselineDiagnostics = null;
   let fileMutationResult = null;
+  let effectHandle = null;
+  let journalEntry = null;
   let attemptedArgs = null;
   let callContext = null;
   let auth = null;
@@ -2685,8 +2712,14 @@ async function executeOneCallRaw(session, call, context, options) {
           args = authorization.args || args;
           callContext = authorization.context || context;
           attemptedArgs = args;
+        },
+        // MCP calls reach outside services; journal them so a crash mid-call
+        // is reported as in doubt instead of silently retried.
+        prepare: async ({ input: mcpArgs }) => {
+          if (!options.isSubagent) journalEntry = await journalIntent(session, { tool: String(name).startsWith('mcp__') ? name : 'mcp__' + name, args: mcpArgs, callId: call.id, env: options.env || process.env }).catch(() => null);
         }
       });
+      if (journalEntry) { await journalDone(session, journalEntry, result).catch(() => null); journalEntry = null; }
     } else {
       result = await executeRegisteredToolWithKernel(session, name, args, context, {
         ...options,
@@ -2707,6 +2740,14 @@ async function executeOneCallRaw(session, call, context, options) {
             lspBaselineDiagnostics = await activeLspBaseline(session, lspVerificationPath, authorizedContext, options);
           }
           if (FILE_CHANGING_TOOLS.has(name)) await captureBeforeChange(session, session.root, name, authorizedArgs).catch(() => {});
+          // Intent journal (src/intent-journal.mjs): a durable record that this
+          // call is starting, with probes to tell after a crash whether it ran.
+          if (!options.isSubagent) journalEntry = await journalIntent(session, { tool: name, args: authorizedArgs, callId: call.id, env: options.env || process.env }).catch(() => null);
+          // Effect contract (src/effect-contracts.mjs): snapshot the tree before a
+          // command that may write, so its real effects are observed afterwards.
+          if (EFFECT_OBSERVED_TOOLS.has(name) && !commandIsReadOnly(session, name, authorizedArgs)) {
+            effectHandle = await beginEffectObservation(session, { name, args: authorizedArgs, env: options.env || process.env }).catch(() => null);
+          }
           if (name === 'skill_propose') {
             const state = authorizedContext && authorizedContext.verification;
             const issues = state ? verificationIssues(state) : ['runtime verification state is unavailable'];
@@ -2720,6 +2761,16 @@ async function executeOneCallRaw(session, call, context, options) {
           }
         }
       });
+      if (effectHandle) {
+        const handle = effectHandle;
+        effectHandle = null;
+        const record = await finishEffectObservation(session, handle).catch(() => null);
+        if (record) {
+          for (const preimage of await preimagesFor(record).catch(() => [])) captureFromPreimage(session, preimage);
+          if (result && typeof result === 'object' && !Array.isArray(result)) result = { ...result, effects: publicEffects(record) };
+        }
+      }
+      if (journalEntry) { await journalDone(session, journalEntry, result).catch(() => null); journalEntry = null; }
       if (AUTO_LSP_EDIT_TOOLS.has(name) && successfulMutation(name, result)) fileMutationResult = result;
       if (name === 'load_skill' && !options.isSubagent && result && typeof result.content === 'string') {
         // The skill's track record (src/skill-record.mjs): how tasks that
@@ -2786,6 +2837,16 @@ async function executeOneCallRaw(session, call, context, options) {
     if (callContext && callContext.permissionHookDenial && !result.error.includes(callContext.permissionHookDenial)) result.error += ' (' + callContext.permissionHookDenial + ')';
     if (attemptedArgs && error.name !== 'AbortError') {
       result = applyFailureHookResult(result, await runToolFailureHooks(session, name, attemptedArgs, result.error, context).catch(() => ''));
+    }
+    if (journalEntry) { await journalDone(session, journalEntry, result).catch(() => null); journalEntry = null; }
+    // A command that failed or timed out may still have changed files.
+    if (effectHandle) {
+      const record = await finishEffectObservation(session, effectHandle).catch(() => null);
+      effectHandle = null;
+      if (record) {
+        for (const preimage of await preimagesFor(record).catch(() => [])) captureFromPreimage(session, preimage);
+        if (record.observedCount) result = { ...result, effects: publicEffects(record) };
+      }
     }
   }
   if (options.onToolResult) options.onToolResult({ name, result, call });
@@ -3270,6 +3331,10 @@ async function applyToolResults(session, options, turn) {
           context.edited = true;
           context.path = normalizeReviewPath(result.path);
         }
+        // Observed effects (src/effect-contracts.mjs) replace the guess: a
+        // command that changed nothing leaves earlier checks valid, and one
+        // that changed files makes them stale even if it looked read-only.
+        if (result.effects && typeof result.effects.changed === 'number' && !context.isCheck) context.mayEdit = result.effects.changed > 0;
         const event = evidenceFromToolResult(name, evidenceArgs, result, context);
         const recorded = event ? recordEvidence(sessionEvidence(session), event) : null;
         // New evidence can undo claims made earlier (a page that changed, a
@@ -3334,6 +3399,11 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     ? foldSteering(session.pendingSteering)
     : [];
   if (carriedSteering.length) userContent = steeringMessage(carriedSteering) + '\n\n' + userContent;
+  if (!options.isSubagent && session.journalReconciliation) {
+    const note = reconciliationNote(session.journalReconciliation);
+    if (note) userContent = note + '\n\n' + userContent;
+    session.journalReconciliation = null;
+  }
   if (!options.isSubagent && session.interruptedTurn) {
     userContent = interruptedTurnNote(session.interruptedTurn) + '\n\n' + userContent;
     session.interruptedTurn = null;

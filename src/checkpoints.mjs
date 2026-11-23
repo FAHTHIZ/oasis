@@ -1,8 +1,10 @@
 // Checkpoints: every user turn records the original content of each file Oasis
 // edits, writes, or deletes, right before the first change in that turn. /rewind
 // restores those files (deleting files the turn created) and can also drop the
-// conversation back to before that turn. Changes made by shell commands are not
-// tracked, matching Claude Code's checkpoint behaviour.
+// conversation back to before that turn. Changes made by shell commands are
+// captured too when effect contracts are on (src/effect-contracts.mjs): the
+// command's pre-run snapshot supplies the original content of each file it
+// changed, so /rewind undoes `sed -i`, formatters and generators as well.
 import { createHash } from 'node:crypto';
 import { chmod, lstat, mkdir, readdir, readFile, unlink } from 'node:fs/promises';
 import { atomicWriteFile } from './atomic-write.mjs';
@@ -54,6 +56,27 @@ export async function captureBeforeChange(session, root, toolName, args = {}) {
   if (turn.files.has(target.relative)) return;
   session.checkpoints.bytes += content.length;
   turn.files.set(target.relative, { existed: true, content, mode: info.mode });
+}
+
+// Record a file's state from before a shell command changed it (the command
+// already ran; the content comes from the effect snapshot taken before it,
+// src/effect-contracts.mjs). Like captureBeforeChange, the first capture of a
+// file in a turn wins, so a later command cannot replace the original.
+export function captureFromPreimage(session, preimage) {
+  if (!session || !session.checkpoints || !preimage || typeof preimage.path !== 'string') return false;
+  const turn = session.checkpoints.turns.at(-1);
+  if (!turn) return false;
+  const relative = preimage.path.split(/[\\/]/).join('/');
+  if (!relative || path.isAbsolute(relative) || relative.split('/').includes('..') || turn.files.has(relative)) return false;
+  if (!preimage.existed) { turn.files.set(relative, { existed: false, content: null }); return true; }
+  const content = preimage.content;
+  if (preimage.skipped || preimage.symlink || !Buffer.isBuffer(content) || content.length > MAX_CHECKPOINT_FILE || session.checkpoints.bytes + content.length > MAX_CHECKPOINT_BYTES) {
+    turn.files.set(relative, { existed: true, content: null, skipped: true });
+    return true;
+  }
+  session.checkpoints.bytes += content.length;
+  turn.files.set(relative, { existed: true, content, mode: preimage.mode || 0o644, viaCommand: true });
+  return true;
 }
 
 export function listCheckpoints(session) {
