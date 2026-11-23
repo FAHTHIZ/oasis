@@ -102,6 +102,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Fixed
 
+- `ruby -rfileutils -e 'FileUtils.rm_rf(Dir.home)'` ran under auto-approve again: the clustered-flag reading added for `node -pe` took `-rfileutils` (which contains an e) as the code flag and analyzed the word `-e` as the code. A cluster now counts only when the code flag is its last letter, and the code is the next word that is not a bare option. `require('os').homedir()` now counts as the home directory like `os.homedir()`. Caught by the held-out harness case `v3-ruby-rm-rf`.
 - Bare URLs in parentheses, as in "(https://example.com/page)", were not read as citations, so the research contract never checked them. They are now, like markdown links and bare URLs.
 - Quote checks no longer treat every string in a JSON report as a quotation (each JSON value is in double quotes): in structured output only `quote`, `excerpt` and similar fields are quotes, paired with the `url`/`sources` of the same object, plus quotes written inline in prose fields.
 - `bisect_regression` no longer re-tests the same commit until `max_steps` on git versions that end the search without the usual `<sha> is the first bad commit` line: a search whose `BISECT_HEAD` stops moving, or any "first bad commit" message, ends it and the answer is read from `refs/bisect/bad`.

@@ -53,3 +53,16 @@ test('inline code with clustered or --eval= flags and git value options are anal
   assert.equal(analyzeShellLine('node -pe 1+1').blocked, undefined);
   assert.equal(analyzeShellLine('git --git-dir .git push origin main').blocked, undefined);
 });
+
+test('an option value containing a code-flag letter does not hide the code after it', async () => {
+  const { analyzeShellLine, shellAnalyzerReady } = await import('../src/shell-risk.mjs');
+  await shellAnalyzerReady();
+  // -rfileutils contains an e; the clustered-flag reading took "-e" as the code.
+  for (const line of [
+    "ruby -rfileutils -e 'FileUtils.rm_rf(Dir.home)'",
+    "ruby -rsecure -e 'FileUtils.rm_rf(Dir.home)'",
+    "perl -Mstrict -e 'system(q{rm -rf ~})'",
+    `node -e "-require('fs').rmSync(require('os').homedir(), { recursive: true })"`
+  ]) assert.ok(analyzeShellLine(line).blocked, line);
+  assert.equal(analyzeShellLine("ruby -rjson -e 'puts JSON.generate([1])'").blocked, undefined);
+});
