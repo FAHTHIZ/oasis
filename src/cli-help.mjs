@@ -136,6 +136,7 @@ export function helpText() {
     '  oasis import [codex|gemini|cursor|claude|hermes|openclaw|opencode|antigravity|windsurf|cline] [--dry-run] [--yes]  Import MCP servers, instructions, commands, rules, skills and memories',
     '  oasis mcp remove NAME [--scope user|project]   Remove a configured server (user config first, then .mcp.json)',
     '  oasis mcp enable|disable NAME Turn a configured server on or off',
+    '  oasis mcp share [--to claude,cursor,vscode,gemini,codex,opencode,zed,copilot] [--user] [--remove]  Register oasis mcp serve in other agents\' MCP settings',
     '  oasis mcp serve [--allow-edits] [--allow-commands] [--no-prompts]  Serve Oasis tools, skills and every slash command (any agent\'s format) to other MCP clients over stdio',
     '  oasis gateway telegram        Chat with this workspace agent from Telegram (allowlisted chats only)',
     '  oasis gateway discord|slack   The same from a Discord bot or a Slack app (Socket Mode); allowlisted users only',

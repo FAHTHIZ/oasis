@@ -143,6 +143,15 @@ they all share the same commands and skills without converting anything.
 Inline shell in a command (`` !`cmd` ``) only runs with `--allow-commands`;
 `--no-prompts` serves tools alone.
 
+`oasis mcp share` does that registration for you. It adds an `oasis` server
+to `.mcp.json` (Claude Code), `.cursor/mcp.json`, `.vscode/mcp.json` (VS Code
+and Copilot), `.gemini/settings.json`, `.codex/config.toml`, `opencode.json`
+and `.zed/settings.json` in the project, keeping comments and other servers.
+`--user` writes the user-level files instead (Cursor, Gemini CLI, Codex,
+OpenCode, Zed and Copilot CLI's `~/.copilot/mcp-config.json`), `--to
+codex,gemini` picks agents, `--dry-run` shows what would change, an existing
+entry is kept unless `--force`, and `--remove` takes it out again.
+
 ### Exporting a plugin for other agents
 
 Run `oasis plugin inspect [PATH]` first to see, without writing anything,
