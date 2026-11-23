@@ -30,9 +30,14 @@ const stem = (source) => '(?<![' + L + '])(?:' + source + ')';
 // Substring: scripts without spaces, and Indic/Arabic stems with attached suffixes.
 const sub = (source) => '(?:' + source + ')';
 
+// Each table compiles on first use: building these Unicode case-insensitive
+// alternations took about 45 ms, paid by every process that loads the task
+// model even when no request or reply ever needs a given table.
 function compile(parts) {
-  return new RegExp(parts.join('|'), 'giu');
+  let pattern = null;
+  return () => (pattern ||= new RegExp(parts.join('|'), 'giu'));
 }
+const test = (table, value) => { const pattern = table(); pattern.lastIndex = 0; const hit = pattern.test(value); pattern.lastIndex = 0; return hit; };
 
 // Languages covered, by ISO 639-1 code: bn hi ur ar es pt fr de it ru tr id zh ja ko vi.
 export const MULTILINGUAL_LANGUAGES = Object.freeze(['bn', 'hi', 'ur', 'ar', 'es', 'pt', 'fr', 'de', 'it', 'ru', 'tr', 'id', 'zh', 'ja', 'ko', 'vi']);
@@ -227,18 +232,14 @@ function negated(text, index, length) {
   return NEG_AFTER.test(after) || NEG_AFTER_CJK.test(after);
 }
 
-function firstHit(pattern, text, { negatable = true } = {}) {
+function firstHit(table, text, { negatable = true } = {}) {
+  const pattern = table();
   pattern.lastIndex = 0;
   for (const match of text.matchAll(pattern)) {
     if (negatable && negated(text, match.index, match[0].length)) continue;
     return match;
   }
   return null;
-}
-
-/** True when the text contains letters outside basic Latin (a cheap gate before the tables run). */
-export function hasNonEnglishText(text) {
-  return /[^\u0000-\u024f\s\d\p{P}\p{S}]|[àâäãåçèéêëìíîïñòóôõöùúûüýÿßğışœ]/iu.test(String(text || ''));
 }
 
 /**
@@ -358,14 +359,7 @@ export function multilingualClaimsPassing(text) {
   const value = String(text || '');
   if (!value.trim()) return false;
   const sentences = value.replace(ZERO_FAILURES, ' ').split(/(?<=[.!?。！？।])\s*|\n+/u).filter((s) => s.trim());
-  return sentences.some((sentence) => {
-    CHECK_WORDS.lastIndex = 0; PASS_WORDS.lastIndex = 0; FAIL_WORDS.lastIndex = 0;
-    if (!CHECK_WORDS.test(sentence)) return false;
-    PASS_WORDS.lastIndex = 0;
-    if (!PASS_WORDS.test(sentence)) return false;
-    FAIL_WORDS.lastIndex = 0;
-    return !FAIL_WORDS.test(sentence);
-  });
+  return sentences.some((sentence) => test(CHECK_WORDS, sentence) && test(PASS_WORDS, sentence) && !test(FAIL_WORDS, sentence));
 }
 
 // ------------------------------------------------- admissions and change claims
@@ -408,7 +402,6 @@ const CHANGE_WORDS = compile([
   word('đã cập nhật|đã sửa|đã thay đổi|đã thêm|đã tạo|đã ghi|đã lưu')
 ]);
 
-const test = (pattern, value) => { pattern.lastIndex = 0; const hit = pattern.test(value); pattern.lastIndex = 0; return hit; };
 
 /** True when a reply in another language admits a check was not run or the work is unverified. */
 export function multilingualAdmitsUnverified(text) {
