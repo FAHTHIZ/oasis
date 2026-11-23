@@ -25,6 +25,7 @@ import { priceFor, estimateCostUsd, recordBudgetSpend, formatUsd, cloudModelBehi
 import { hasImages, fitImages } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, captureFromPreimage, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
 import { beginEffectObservation, finishEffectObservation, preimagesFor, publicEffects } from './effect-contracts.mjs';
+import { summaryDivergence } from './rehearsal.mjs';
 import { applyReconciliation, checkProbes, journalDone, journalIntent, journalPathFor, readJournal, reconcileJournal, reconciliationNote } from './intent-journal.mjs';
 import { keywordRulesFor, nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, modelAllowed, modelDenied, modelRestrictionMessage } from './model-aliases.mjs';
@@ -2799,6 +2800,14 @@ async function executeOneCallRaw(session, call, context, options) {
         if (record) {
           for (const preimage of await preimagesFor(record).catch(() => [])) captureFromPreimage(session, preimage);
           if (result && typeof result === 'object' && !Array.isArray(result)) result = { ...result, effects: publicEffects(record) };
+          // The person approved what the rehearsal showed; say so when the real run did more.
+          if (result && result.rehearsal && Array.isArray(record.observed)) {
+            const divergence = summaryDivergence(result.rehearsal, record.observed.map((entry) => entry.path));
+            if (divergence) {
+              result = { ...result, rehearsal: { ...result.rehearsal, divergence } };
+              recordSessionEvent(session, { type: 'rehearsal_divergence', tool: name, paths: divergence.unrehearsed.slice(0, 30) }, options.env || process.env);
+            }
+          }
         }
       }
       if (journalEntry && result && typeof result === 'object' && typeof result.error === 'string' && result.error) {

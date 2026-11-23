@@ -49,6 +49,7 @@ every guide.
 - [Agent network](AGENT-NETWORK.md): how subagents are scheduled, budgeted, cancelled and checked.
 - [Receipts](RECEIPTS.md): signed, replayable proof of what an agent run did, checkable by anyone with `oasis receipt verify`.
 - [Effects](EFFECTS.md): predicted versus observed changes for shell commands, and rewinding them.
+- [Command rehearsal](REHEARSAL.md): run a command in a throwaway overlay first and show its exact file changes in the approval prompt (`OASIS_REHEARSE=1`, `oasis rehearse`).
 - [Durable execution](DURABLE-EXECUTION.md): the intent journal and how in-doubt actions are reconciled after a crash.
 - [Reliability laboratory](RELIABILITY-LAB.md): fault injection (`OASIS_FAULTS`), the scenario scorecard, and live reconciliation of failed calls.
 - [Task model](TASK-MODEL.md): the task contract every request is read into, its acceptance criteria and how outcomes are decided.

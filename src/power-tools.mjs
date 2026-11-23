@@ -674,9 +674,14 @@ async function runShell(root, args, context, flavor = 'sh') {
   const readOnly = !leftSandbox && flavor !== 'powershell' && process.platform !== 'win32' && !hardRisk && !appRisk && !install.forceAsk && readOnlyCommandsEnabled(env0, (context.session && context.session.settings) || {}) && readOnlyShellLine(command, { root: path.resolve(root) });
   if (readOnly && /(^|[\s;&|])git\s/.test(command)) { const overlay = Object.create(context); overlay.env = readOnlyGitEnv(env0); context = overlay; }
   const autoAllowed = readOnly || (!hardRisk && !install.forceAsk && !(appRisk && !bypass) && (context.ruleAllowed || (sandbox && sandbox.autoAllowShellCommands === true) || (context.autoApprove && context.permissionMode === 'bypassPermissions')));
+  let rehearsal = { text: '', summary: null };
+  if (!autoAllowed && context.approval && flavor === 'sh' && process.platform === 'linux') {
+    const { rehearseForApproval } = await import('./rehearsal.mjs');
+    rehearsal = await rehearseForApproval({ root, line: command, env: env0, settings: (context.session && context.session.settings) || {}, sandbox, injectionHold });
+  }
   if (!autoAllowed) {
-    const ok = context.approval && await context.approval((install.approvalNote ? install.approvalNote + '\n' : '') + (hardRisk ? 'HIGH RISK: this command ' + hardRisk + '. Auto-approval does not apply.\n' : '') + (appRisk ? 'Warning: ' + appRisk + (/^it appears to write|^it sets a git config/.test(appRisk) ? '.\n' : '. Unsaved work in those apps could be lost.\n') : '') + 'Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + (sandbox.ssh.display || sandbox.ssh.host) + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.'), !sandbox || Boolean(appRisk) || Boolean(hardRisk));
-    if (!ok) return { approved: false, command, message: 'Shell command was not approved. Nothing ran.' };
+    const ok = context.approval && await context.approval((install.approvalNote ? install.approvalNote + '\n' : '') + (hardRisk ? 'HIGH RISK: this command ' + hardRisk + '. Auto-approval does not apply.\n' : '') + (appRisk ? 'Warning: ' + appRisk + (/^it appears to write|^it sets a git config/.test(appRisk) ? '.\n' : '. Unsaved work in those apps could be lost.\n') : '') + 'Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + (sandbox.ssh.display || sandbox.ssh.host) + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.') + rehearsal.text, !sandbox || Boolean(appRisk) || Boolean(hardRisk));
+    if (!ok) return { approved: false, command, ...(rehearsal.summary ? { rehearsal: rehearsal.summary } : {}), message: 'Shell command was not approved. Nothing ran.' };
   }
   if (context.signal && context.signal.aborted) {
     return { approved: false, command, cancelled: true, message: 'Task was cancelled before the shell command started.' };
@@ -774,7 +779,7 @@ async function runShell(root, args, context, flavor = 'sh') {
       cleanup();
       const condensed = flushCondensers();
       const note = benignExitNote(command, code) || sandboxLocalhostNote(sandbox, command, code);
-      resolve({ approved: true, command, exitCode: code, ...(note ? { note } : {}), stdout, ...condensed, stderr: flavor === 'powershell' ? stderr.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '') : stderr, timedOut, cancelled: cancelled || Boolean(context.signal && context.signal.aborted), ...(sandbox ? { sandboxed: sandbox.kind } : {}), signal, ...(safetySnapshot ? { safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : {}) });
+      resolve({ approved: true, command, exitCode: code, ...(note ? { note } : {}), ...(rehearsal.summary ? { rehearsal: rehearsal.summary } : {}), stdout, ...condensed, stderr: flavor === 'powershell' ? stderr.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '') : stderr, timedOut, cancelled: cancelled || Boolean(context.signal && context.signal.aborted), ...(sandbox ? { sandboxed: sandbox.kind } : {}), signal, ...(safetySnapshot ? { safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : {}) });
     });
   });
 }
