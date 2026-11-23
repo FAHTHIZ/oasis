@@ -77,3 +77,26 @@ test('a contested premise makes the conclusion shaky without undermining it', ()
   assert.deepEqual(item.premise_contested, ['k_1']);
   assert.equal(item.undermined, undefined);
 });
+
+test('hypotheses evidence that cites a retracted finding, or one it undermines, stops counting', async () => {
+  const { runHypothesisTool } = await import('../src/hypothesis-board.mjs');
+  const board = createKnowledgeBoard();
+  post(as('agent_1', board), 'The CI runner uses TZ=America/New_York.');
+  post(as('agent_2', board), 'Date parsing in the login test depends on the local timezone.', { builds_on: ['k_1'] });
+  runKnowledgeTool(as('main', board), 'hypotheses', { action: 'open', question: 'Why does login fail on CI?', hypotheses: ['Timezone difference', 'Race in session setup'] });
+  const hyp = (id, args) => runKnowledgeTool(as(id, board), 'hypotheses', args);
+  assert.throws(() => hyp('agent_2', { action: 'evidence', question: 'q_1', evidence: 'x', ratings: { h_1: '+' }, findings: ['k_9'] }), /Unknown finding k_9/);
+  const before = hyp('agent_2', { action: 'evidence', question: 'q_1', evidence: 'The runner timezone differs from local', sources: ['https://a.example.com/x'], findings: ['k_2'], ratings: { h_1: '++', h_2: '0' } });
+  const leaderBefore = before.hypotheses[0];
+  assert.equal(leaderBefore.id, 'h_1');
+  const retracted = runKnowledgeTool(as('agent_1', board), 'knowledge_post', { retract: 'k_1', reason: 'the runner is UTC' });
+  assert.deepEqual(retracted.voided_evidence, ['q_1/e_1']);
+  assert.match(retracted.note, /Hypotheses evidence that cited it no longer counts: q_1\/e_1/);
+  const after = hyp('main', { action: 'status', question: 'q_1' });
+  assert.equal(after.hypotheses[0].posterior, after.hypotheses[1].posterior, 'back to the prior');
+  assert.match(after.evidence[0].voided, /cites k_2, undermined by agent_1's retraction: builds on k_1 \(the runner is UTC\)/);
+  assert.match(after.advice.join(' '), /No longer counted: e_1 \(cites k_2, undermined\)/);
+  const saved = sanitizeKnowledgeBoard(JSON.parse(JSON.stringify(board)));
+  assert.equal(saved.hypotheses.questions[0].evidence[0].voided.undermined, true);
+  void runHypothesisTool;
+});

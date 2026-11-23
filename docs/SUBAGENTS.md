@@ -159,7 +159,7 @@ A conclusion is only as good as the findings it was drawn from. `knowledge_post`
 - Its author, if still running, gets a message at its next step naming the premise that fell.
 - The retraction result lists what it `undermines`, and the coordinator's sitrep (and its alerts) shows each one.
 
-An undermined finding is not deleted, because it may stand on other grounds. Its author retracts it or posts it again with evidence of its own. A premise that is only contested marks the conclusion with `premise_contested`. It is computed from the links each time, so it is never stale, and it survives a session save. This is a justification-based truth maintenance system (Doyle, 1979) shared across agents. Test: `test/knowledge-truth-maintenance.test.mjs`.
+The same holds on the hypotheses matrix. Evidence posted with `findings: ["k_N"]` stops counting when that finding is retracted or undermined, and the matrix's advice says which evidence dropped out and why. An undermined finding is not deleted, because it may stand on other grounds. Its author retracts it or posts it again with evidence of its own. A premise that is only contested marks the conclusion with `premise_contested`. It is computed from the links each time, so it is never stale, and it survives a session save. This is a justification-based truth maintenance system (Doyle, 1979) shared across agents. Test: `test/knowledge-truth-maintenance.test.mjs`.
 
 ### Calibrated confidence
 

@@ -70,6 +70,7 @@ export const HYPOTHESIS_TOOL_DEFINITION = { type: 'function', function: {
     hypothesis: { type: 'string', description: 'add: the new hypothesis. resolve: the id (h_N) found true, or "none"' },
     evidence: { type: 'string', description: 'evidence: what was observed, one item per call (max 600 characters)' },
     sources: { type: 'array', items: { type: 'string' }, description: 'evidence: URLs you fetched or files/commands it comes from' },
+    findings: { type: 'array', items: { type: 'string' }, description: 'evidence: knowledge-board findings (k_N) this evidence rests on; if one is retracted, the evidence stops counting' },
     ratings: { type: 'object', additionalProperties: { type: 'string', enum: ['++', '+', '0', '-', '--'] }, description: 'evidence: rating per hypothesis id: ++ strongly consistent, + consistent, 0 neutral, - inconsistent, -- strongly inconsistent. Rate every hypothesis; unrated ones count as 0' },
     reason: { type: 'string', description: 'resolve: why' },
     tests: { type: 'array', maxItems: 6, items: { type: 'object', properties: { test: { type: 'string', description: 'the check you could run or the thing you could look up' }, predictions: { type: 'object', additionalProperties: { type: 'string', enum: ['++', '+', '0', '-', '--'] }, description: 'per hypothesis id: how likely the test comes out positive if that hypothesis is true (++ almost surely, + likely, 0 either way, - unlikely, -- almost surely not)' } }, required: ['test', 'predictions'] }, description: 'plan: 1-6 candidate tests with predicted outcomes per hypothesis' }
@@ -100,7 +101,9 @@ export function sanitizeMatrix(value) {
       weight: Number.isFinite(e.weight) ? Math.min(MAX_WEIGHT, Math.max(0, e.weight)) : 1,
       ...(e.untrusted ? { untrusted: true } : {}),
       ...(clean(e.model, 120) ? { model: clean(e.model, 120) } : {}),
-      ...(clean(e.type, 80) ? { type: clean(e.type, 80) } : {})
+      ...(clean(e.type, 80) ? { type: clean(e.type, 80) } : {}),
+      ...(Array.isArray(e.findings) && e.findings.length ? { findings: e.findings.map((id) => clean(id, 20)).filter((id) => /^k_[1-9]\d{0,8}$/.test(id)).slice(0, 5) } : {}),
+      ...(e.voided && typeof e.voided === 'object' ? { voided: { finding: clean(e.voided.finding, 20), by: clean(e.voided.by, 100), ...(e.voided.undermined ? { undermined: true } : {}), reason: clean(e.voided.reason, 200) } } : {})
     }));
     out.questions.push({ id: raw.id, text: clean(raw.text, 300), by: clean(raw.by, 100) || 'main', hypotheses, evidence, ...(raw.resolved && typeof raw.resolved === 'object' ? { resolved: { hypothesis: clean(raw.resolved.hypothesis, 20), by: clean(raw.resolved.by, 100), reason: clean(raw.resolved.reason, 400) } } : {}) });
   }
@@ -142,6 +145,8 @@ export function scoreQuestion(question) {
   const tested = new Set();
   const diagnostic = [];
   for (const item of question.evidence) {
+    // Evidence whose cited finding was retracted no longer counts (truth maintenance).
+    if (item.voided) { diagnostic.push({ id: item.id, diagnosticity: 0 }); continue; }
     const values = listed.map((h) => RATINGS[item.ratings[h.id] || '0']);
     const contradictsAll = values.every((value) => value < 1);
     const spread = Math.max(...values) / Math.min(...values);
@@ -183,6 +188,8 @@ export function questionView(question) {
   if (untested.length) advice.push('Untested: ' + untested.map((h) => h.id).join(', ') + '. Look for evidence that would contradict them; disconfirming evidence is the most informative.');
   if (first && second && first.posterior - second.posterior < CLOSE_GAP) advice.push('Most informative next test: something ' + first.id + ' and ' + second.id + ' predict differently ("' + first.text.slice(0, 80) + '" vs "' + second.text.slice(0, 80) + '"). Evidence that fits both moves nothing. To choose among candidate tests, use action plan.');
   const nonDiagnostic = score.diagnostic.filter((item) => item.diagnosticity === 1).map((item) => item.id);
+  const voided = question.evidence.filter((item) => item.voided);
+  if (voided.length) advice.push('No longer counted: ' + voided.map((item) => item.id + ' (cites ' + item.voided.finding + ', ' + (item.voided.undermined ? 'undermined' : 'retracted') + ')').join(', ') + '. Re-test what it showed if it mattered.');
   if (nonDiagnostic.length) advice.push('Non-diagnostic (rated the same for every hypothesis, ignored): ' + nonDiagnostic.join(', ') + '.');
   let state = 'open';
   if (question.resolved) state = 'resolved';
@@ -193,7 +200,7 @@ export function questionView(question) {
     ...(state === 'leading' ? { leading: first.id } : {}),
     ...(question.resolved ? { resolved: question.resolved } : {}),
     hypotheses, none_of_these: round(score.other),
-    evidence: question.evidence.map((item, index) => ({ id: item.id, text: item.text.slice(0, 200), by: item.by, ratings: item.ratings, weight: item.weight, diagnosticity: score.diagnostic[index].diagnosticity, ...(item.untrusted ? { untrusted: true } : {}) })),
+    evidence: question.evidence.map((item, index) => ({ id: item.id, text: item.text.slice(0, 200), by: item.by, ratings: item.ratings, weight: item.weight, diagnosticity: score.diagnostic[index].diagnosticity, ...(item.findings ? { findings: item.findings } : {}), ...(item.voided ? { voided: 'cites ' + item.voided.finding + ', ' + (item.voided.undermined ? 'undermined by ' + item.voided.by + '\'s retraction' : 'retracted by ' + item.voided.by) + (item.voided.reason ? ': ' + item.voided.reason : '') } : {}), ...(item.untrusted ? { untrusted: true } : {}) })),
     ...(advice.length ? { advice } : {})
   };
 }
@@ -248,6 +255,12 @@ export function runHypothesisTool(session, board, args = {}, { actor = 'main', g
     }
     if (!Object.keys(ratings).length) throw new Error('Rate the evidence against the hypotheses (ratings).');
     const sources = (Array.isArray(args.sources) ? args.sources : []).map((item) => clean(item, 500)).filter(Boolean).slice(0, 10);
+    const findings = [...new Set((Array.isArray(args.findings) ? args.findings : args.findings ? [args.findings] : []).map((id) => clean(id, 20)).filter(Boolean))].slice(0, 5);
+    for (const id of findings) {
+      const finding = Array.isArray(board.entries) ? board.entries.find((entry) => entry.id === id) : null;
+      if (!finding) throw new Error('Unknown finding ' + id + '. knowledge_search lists the ids.');
+      if (finding.retracted) throw new Error(id + ' was retracted; it is not evidence.');
+    }
     const { issues, grounds } = ground(text, sources);
     if (issues.length) throw new Error('Not posted: ' + issues.map((issue) => issue.reason.replace(/^the report/, 'the evidence')).join('; ') + '. Fetch the page or run the check first.');
     const sites = [...new Set(sources.map((item) => normalizeUrl(item)).filter(Boolean).map(siteOf).filter(Boolean))];
@@ -261,7 +274,7 @@ export function runHypothesisTool(session, board, args = {}, { actor = 'main', g
     const track = raterTrack(ledger, clean(model, 120));
     if (track && track.factor !== 1) { weight *= track.factor; why.push(describeTrack(track)); }
     weight = Math.round(Math.min(MAX_WEIGHT, weight) * 1000) / 1000;
-    const item = { id: 'e_' + matrix.nextE++, text, by: actor, grounded: grounds.length > 0, sites, ratings, weight, ...(untrusted ? { untrusted: true } : {}), ...(clean(model, 120) ? { model: clean(model, 120) } : {}), ...(clean(type, 80) ? { type: clean(type, 80) } : {}) };
+    const item = { id: 'e_' + matrix.nextE++, text, by: actor, grounded: grounds.length > 0, sites, ratings, weight, ...(untrusted ? { untrusted: true } : {}), ...(clean(model, 120) ? { model: clean(model, 120) } : {}), ...(clean(type, 80) ? { type: clean(type, 80) } : {}), ...(findings.length ? { findings } : {}) };
     question.evidence.push(item);
     if (question.evidence.length > MAX_EVIDENCE) question.evidence.shift();
     const unrated = question.hypotheses.filter((h) => !(h.id in ratings)).map((h) => h.id);
@@ -345,6 +358,29 @@ export function planTests(question, tests) {
       ? 'None of these tests separates the hypotheses. Look for something the leading hypotheses predict differently.'
       : 'Run "' + best.test.slice(0, 120) + '" first (' + best.expected_bits + ' of ' + round(now) + ' bits expected). Then post what you saw with action evidence.'
   };
+}
+
+/**
+ * Truth maintenance for the matrix: evidence that cites a retracted finding
+ * (or one undermined by a retraction) stops counting on open questions.
+ * Returns the ids of the evidence voided.
+ */
+export function voidEvidenceCiting(board, findingIds, { by = 'main', reason = '', cause = '' } = {}) {
+  const ids = new Set(findingIds);
+  const matrix = board && board.hypotheses;
+  if (!ids.size || !matrix || !Array.isArray(matrix.questions)) return [];
+  const voided = [];
+  for (const question of matrix.questions) {
+    if (question.resolved) continue;
+    for (const item of question.evidence) {
+      if (item.voided || !Array.isArray(item.findings)) continue;
+      const hit = item.findings.find((id) => ids.has(id));
+      if (!hit) continue;
+      item.voided = { finding: hit, by: clean(by, 100), ...(cause && hit !== cause ? { undermined: true } : {}), reason: clean(hit === cause || !cause ? reason : 'builds on ' + cause + (reason ? ' (' + reason + ')' : ''), 200) };
+      voided.push(question.id + '/' + item.id);
+    }
+  }
+  return voided;
 }
 
 /**
