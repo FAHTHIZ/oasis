@@ -910,7 +910,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (Array.isArray(tools) || typeof tools === 'string') {
     const keep = new Set(allowedToolNames || []);
     // Coordination tools stay so the agent can finish or ask; everything else must be listed.
-    for (const name of ['exit_plan_mode', 'ask_user_question', 'team_send_message', ...SHARED_TASK_TOOL_NAMES, ...KNOWLEDGE_TOOL_NAMES, 'verify_quote']) keep.add(name);
+    for (const name of ['exit_plan_mode', 'ask_user_question', 'team_send_message', ...SHARED_TASK_TOOL_NAMES, ...KNOWLEDGE_TOOL_NAMES, 'verify_quote', 'source_independence']) keep.add(name);
     session.toolDefinitions = session.toolDefinitions.filter((tool) => keep.has(tool.function.name) || [...keep].some((rule) => rule.endsWith('*') && tool.function.name.startsWith(rule.slice(0, -1))));
   }
   if (!session.toolDefinitions.some((tool) => tool.function.name === 'workflow') && loadedSettings.workflowsEnabled !== false && env.OASIS_DISABLE_WORKFLOWS !== '1' && (!(Array.isArray(tools) || typeof tools === 'string') || (allowedToolNames || []).includes('workflow'))) session.toolDefinitions.push(WORKFLOW_TOOL_DEFINITION);
