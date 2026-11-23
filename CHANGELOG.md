@@ -4,6 +4,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+## [1.8.0] - 2026-11-23
+
 ### Added
 
 - Workflow agents are held to the report contracts. A workflow's `agent()` used to pass a subagent's report through even when OASIS had rejected it (an unfetched citation, a misquote, "tests pass" with no passing check), so bad claims reached the result. Now a rejected report is retried once with the reasons, and a report rejected twice fails that agent (`pipeline()` and `parallel()` give `null`). Citations and quotes are checked against the pages every agent of the run fetched, so a tool-less report writer can cite what its sibling agents read, but never a page nobody fetched or words the page does not contain.
