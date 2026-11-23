@@ -478,6 +478,9 @@ export function trackRecord(rows, { by = ['agentType', 'model', 'domain'] } = {}
     successLowerBound: wilsonLower(group.succeeded, group.decisive),
     avgTokens: group.runs ? Math.round(group.tokens / group.runs) : 0,
     avgCostUsd: group.runs ? group.costUsd / group.runs : 0,
+    // What one success really costs: every run's spend, failures included,
+    // over the runs that succeeded. null when nothing succeeded or cost is unknown.
+    costPerSuccessUsd: group.succeeded && group.costUsd > 0 ? group.costUsd / group.succeeded : null,
     avgDurationMs: group.runs ? Math.round(group.durationMs / group.runs) : 0
   })).sort((a, b) => b.runs - a.runs || b.lastAt - a.lastAt);
 }
@@ -543,7 +546,7 @@ export function formatTrackRecord(records, { now = Date.now() } = {}) {
   for (const item of records) {
     const label = [item.agentType, item.model, item.domain].filter(Boolean).join(' / ');
     lines.push(label);
-    lines.push('  ' + item.runs + ' runs, ' + pct(item.successRate) + ' verified of ' + item.decisive + ' decisive (' + item.unchecked + ' unchecked), ' + item.failed + ' failed, ' + item.rejected + ' rejected or unverified; avg ' + item.avgTokens.toLocaleString('en-US') + ' tokens, $' + item.avgCostUsd.toFixed(4) + ', ' + Math.round(item.avgDurationMs / 1000) + 's; last ' + age(item.lastAt, now));
+    lines.push('  ' + item.runs + ' runs, ' + pct(item.successRate) + ' verified of ' + item.decisive + ' decisive (' + item.unchecked + ' unchecked), ' + item.failed + ' failed, ' + item.rejected + ' rejected or unverified; avg ' + item.avgTokens.toLocaleString('en-US') + ' tokens, $' + item.avgCostUsd.toFixed(4) + ', ' + Math.round(item.avgDurationMs / 1000) + 's' + (item.costPerSuccessUsd !== null && item.costPerSuccessUsd !== undefined ? ', $' + item.costPerSuccessUsd.toFixed(4) + ' per verified result' : '') + '; last ' + age(item.lastAt, now));
   }
   return lines.join('\n');
 }
