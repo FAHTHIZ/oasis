@@ -1,0 +1,509 @@
+{
+  "label": "OASIS 1.8.0 (qwen2.5:1.5b-oasis)",
+  "sourceRevision": "be96bfbeda5bc12395d753ed3bb809457d313a21",
+  "runId": "2026-11-23T06-58-14-174Z-2387",
+  "startedAt": "2026-11-23T06:58:14.174Z",
+  "completedAt": "2026-11-23T07:09:36.366Z",
+  "taskCount": 7,
+  "taskIds": [
+    "archive-old-logs",
+    "conflicting-sources-answer",
+    "meeting-action-items",
+    "project-schedule-plan",
+    "release-notes-brief",
+    "remove-hardcoded-key",
+    "sales-region-report"
+  ],
+  "trialsPerTask": 1,
+  "timeoutSeconds": 1500,
+  "runtime": {
+    "node": "v22.21.1",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "passRate": 0,
+  "passed": 0,
+  "failed": 7,
+  "medianTimeMs": 76280,
+  "totalCostUSD": 0,
+  "costPerPassedTaskUSD": null,
+  "selfAssessment": {
+    "assessed": 7,
+    "notAssessed": 0,
+    "agreement": 1,
+    "successPrecision": null,
+    "overclaims": 0,
+    "underclaims": 0,
+    "truePositive": 0,
+    "trueNegative": 6,
+    "unsure": {
+      "passed": 0,
+      "failed": 1
+    },
+    "note": "OASIS verdicts recorded before the hidden verifier ran. Overclaim: OASIS said verified, the verifier failed it. Underclaim: OASIS said it failed, the verifier passed it."
+  },
+  "routing": {
+    "enabled": false
+  },
+  "provider": {
+    "model": "qwen2.5:1.5b-oasis",
+    "protocol": "openai-compatible",
+    "baseURL": "http://127.0.0.1:11434/v1",
+    "maxSteps": 30,
+    "maxOutputTokens": null
+  },
+  "pricing": {
+    "inputUsdPerMillionTokens": null,
+    "outputUsdPerMillionTokens": null,
+    "note": "Cost is a rough estimate from configured rates and does not distinguish cached tokens. Pass-rate differences under 10 percentage points are noisy with small task samples; run at least three trials per task when benchmarking."
+  },
+  "results": [
+    {
+      "taskId": "archive-old-logs",
+      "taskFingerprint": "c39f3c899d5277cf7ed1ec79d529e0dc787354b8c4d99c3585172d6321789a3a",
+      "category": "operations",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "failed",
+      "model": "qwen2.5:1.5b-oasis",
+      "requestedModel": "qwen2.5:1.5b-oasis",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "qwen2.5:1.5b-oasis",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:11434/v1",
+      "maxSteps": 30,
+      "maxOutputTokens": null,
+      "inputTokens": 11412,
+      "outputTokens": 129,
+      "totalTokens": 11541,
+      "costUSD": 0,
+      "strongModelCostUSD": 0,
+      "routingSavingsUSD": 0,
+      "costSource": "local model: no per-token API charge (hardware and power not counted)",
+      "wallTimeMs": 76280,
+      "finished": true,
+      "toolCalls": 1,
+      "trace": [
+        {
+          "tool": "run_command",
+          "arg": "node scripts/archive-logs.mjs --before 2026-11-05 --dir logs",
+          "resultChars": 988,
+          "failed": true,
+          "exitCode": 1,
+          "why": "} |  | Node.js v22.21.1"
+        }
+      ],
+      "requestTokens": [
+        [
+          3510,
+          63
+        ],
+        [
+          3881,
+          33
+        ],
+        [
+          4021,
+          33
+        ]
+      ],
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n\nAssertionError [ERR_ASSERTION]: app-2026-10-30.log left logs/\n    at file:///tmp/oasis-pinned/evals/tasks/archive-old-logs/verify.mjs:10:10\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {\n  generatedMessage: false,\n  code: 'ERR_ASSERTION',\n  actual: false,\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n\nNode.js v22.21.1\n"
+      },
+      "changes": [],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "rejected",
+        "claim": "failure"
+      }
+    },
+    {
+      "taskId": "conflicting-sources-answer",
+      "taskFingerprint": "5ccd58a4ab7a28253f136663354e864cccef2e4460f2449d7f5d6e6fb61d56f9",
+      "category": "research-synthesis",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "failed",
+      "model": "qwen2.5:1.5b-oasis",
+      "requestedModel": "qwen2.5:1.5b-oasis",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "qwen2.5:1.5b-oasis",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:11434/v1",
+      "maxSteps": 30,
+      "maxOutputTokens": null,
+      "inputTokens": 10385,
+      "outputTokens": 115,
+      "totalTokens": 10500,
+      "costUSD": 0,
+      "strongModelCostUSD": 0,
+      "routingSavingsUSD": 0,
+      "costSource": "local model: no per-token API charge (hardware and power not counted)",
+      "wallTimeMs": 60496,
+      "finished": true,
+      "toolCalls": 1,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "/tmp/oasis-eval-run-KjxJti/sources/official-api-docs.md",
+          "resultChars": 166,
+          "failed": true,
+          "why": "That path is outside the workspace. Use paths relative to the workspace (/tmp/oasis-eval-run-KjxJti/workspace); did you mean sources/official-api-docs.md?"
+        }
+      ],
+      "requestTokens": [
+        [
+          3345,
+          37
+        ],
+        [
+          3440,
+          50
+        ],
+        [
+          3600,
+          28
+        ]
+      ],
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:fs:441\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/tmp/oasis-eval-run-KjxJti/workspace/answer.md'\n    at readFileSync (node:fs:441:20)\n    at file:///tmp/oasis-pinned/evals/tasks/conflicting-sources-answer/verify.mjs:5:14\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/tmp/oasis-eval-run-KjxJti/workspace/answer.md'\n}\n\nNode.js v22.21.1\n"
+      },
+      "changes": [],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "rejected",
+        "claim": "failure"
+      }
+    },
+    {
+      "taskId": "meeting-action-items",
+      "taskFingerprint": "f4b490474e421bfde097dc6e03b3d225178d21bba285f3c66578ee22be4a63f3",
+      "category": "writing",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "failed",
+      "model": "qwen2.5:1.5b-oasis",
+      "requestedModel": "qwen2.5:1.5b-oasis",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "qwen2.5:1.5b-oasis",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:11434/v1",
+      "maxSteps": 30,
+      "maxOutputTokens": null,
+      "inputTokens": 16866,
+      "outputTokens": 199,
+      "totalTokens": 17065,
+      "costUSD": 0,
+      "strongModelCostUSD": 0,
+      "routingSavingsUSD": 0,
+      "costSource": "local model: no per-token API charge (hardware and power not counted)",
+      "wallTimeMs": 69518,
+      "finished": true,
+      "toolCalls": 1,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "/tmp/oasis-eval-run-Oau7PT/workspace/meeting.md",
+          "resultChars": 100,
+          "failed": true,
+          "why": "No such file or folder: meeting.md. Use glob_files or list_files to find the right path."
+        }
+      ],
+      "requestTokens": [
+        [
+          3261,
+          90
+        ],
+        [
+          3302,
+          32
+        ],
+        [
+          3343,
+          33
+        ],
+        [
+          3417,
+          22
+        ],
+        [
+          3543,
+          22
+        ]
+      ],
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:fs:441\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/tmp/oasis-eval-run-Oau7PT/workspace/notes/actions.json'\n    at readFileSync (node:fs:441:20)\n    at file:///tmp/oasis-pinned/evals/tasks/meeting-action-items/verify.mjs:5:26\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/tmp/oasis-eval-run-Oau7PT/workspace/notes/actions.json'\n}\n\nNode.js v22.21.1\n"
+      },
+      "changes": [],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "rejected",
+        "claim": "failure"
+      }
+    },
+    {
+      "taskId": "project-schedule-plan",
+      "taskFingerprint": "1033fd43becf6c92dea3b297ce53bd978c45aabb8569472789c0f1cf68f2b1a7",
+      "category": "planning",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "failed",
+      "model": "qwen2.5:1.5b-oasis",
+      "requestedModel": "qwen2.5:1.5b-oasis",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "qwen2.5:1.5b-oasis",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:11434/v1",
+      "maxSteps": 30,
+      "maxOutputTokens": null,
+      "inputTokens": 15212,
+      "outputTokens": 237,
+      "totalTokens": 15449,
+      "costUSD": 0,
+      "strongModelCostUSD": 0,
+      "routingSavingsUSD": 0,
+      "costSource": "local model: no per-token API charge (hardware and power not counted)",
+      "wallTimeMs": 81600,
+      "finished": true,
+      "toolCalls": 2,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "/tmp/oasis-eval-run-BrLIyN/workspace/project/tasks.json",
+          "resultChars": 1151
+        },
+        {
+          "tool": "todo_write",
+          "resultChars": 298,
+          "failed": true,
+          "why": "/ contains unsupported property \"fix\"; / contains unsupported property \"done\"; / contains unsupported property \"id\"; / contains unsupported property \"contract\"; / contains unsupported property \"check\""
+        }
+      ],
+      "requestTokens": [
+        [
+          3337,
+          34
+        ],
+        [
+          3768,
+          139
+        ],
+        [
+          3981,
+          40
+        ],
+        [
+          4126,
+          24
+        ]
+      ],
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:fs:441\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/tmp/oasis-eval-run-BrLIyN/workspace/project/plan.json'\n    at readFileSync (node:fs:441:20)\n    at file:///tmp/oasis-pinned/evals/tasks/project-schedule-plan/verify.mjs:6:25\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/tmp/oasis-eval-run-BrLIyN/workspace/project/plan.json'\n}\n\nNode.js v22.21.1\n"
+      },
+      "changes": [],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "rejected",
+        "claim": "failure"
+      }
+    },
+    {
+      "taskId": "release-notes-brief",
+      "taskFingerprint": "7da7a89a0731600fdab6351ba69d68aea00be996623393a086bf44fc2188a50a",
+      "category": "writing",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "failed",
+      "model": "qwen2.5:1.5b-oasis",
+      "requestedModel": "qwen2.5:1.5b-oasis",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "qwen2.5:1.5b-oasis",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:11434/v1",
+      "maxSteps": 30,
+      "maxOutputTokens": null,
+      "inputTokens": 11046,
+      "outputTokens": 368,
+      "totalTokens": 11414,
+      "costUSD": 0,
+      "strongModelCostUSD": 0,
+      "routingSavingsUSD": 0,
+      "costSource": "local model: no per-token API charge (hardware and power not counted)",
+      "wallTimeMs": 165300,
+      "finished": true,
+      "toolCalls": 1,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "/tmp/oasis-eval-run-5WCpD4/workspace/CHANGELOG.md",
+          "resultChars": 512
+        }
+      ],
+      "requestTokens": [
+        [
+          3299,
+          36
+        ],
+        [
+          3738,
+          166
+        ],
+        [
+          4009,
+          166
+        ]
+      ],
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:fs:441\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/tmp/oasis-eval-run-5WCpD4/workspace/RELEASE_NOTES.md'\n    at readFileSync (node:fs:441:20)\n    at file:///tmp/oasis-pinned/evals/tasks/release-notes-brief/verify.mjs:5:14\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/tmp/oasis-eval-run-5WCpD4/workspace/RELEASE_NOTES.md'\n}\n\nNode.js v22.21.1\n"
+      },
+      "changes": [],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "rejected",
+        "claim": "failure"
+      }
+    },
+    {
+      "taskId": "remove-hardcoded-key",
+      "taskFingerprint": "f901384a94d4368a09bc35c726cf2f14313213d90a7a8b3fbbb7c2286295639f",
+      "category": "secret-handling",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "failed",
+      "model": "qwen2.5:1.5b-oasis",
+      "requestedModel": "qwen2.5:1.5b-oasis",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "qwen2.5:1.5b-oasis",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:11434/v1",
+      "maxSteps": 30,
+      "maxOutputTokens": null,
+      "inputTokens": 10266,
+      "outputTokens": 156,
+      "totalTokens": 10422,
+      "costUSD": 0,
+      "strongModelCostUSD": 0,
+      "routingSavingsUSD": 0,
+      "costSource": "local model: no per-token API charge (hardware and power not counted)",
+      "wallTimeMs": 64111,
+      "finished": true,
+      "toolCalls": 1,
+      "trace": [
+        {
+          "tool": "edit_file",
+          "arg": "/tmp/oasis-eval-run-Syi3Y4/src/config.mjs",
+          "resultChars": 152,
+          "failed": true,
+          "why": "That path is outside the workspace. Use paths relative to the workspace (/tmp/oasis-eval-run-Syi3Y4/workspace); did you mean src/config.mjs?"
+        }
+      ],
+      "requestTokens": [
+        [
+          3359,
+          63
+        ],
+        [
+          3400,
+          57
+        ],
+        [
+          3507,
+          36
+        ]
+      ],
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n\nAssertionError [ERR_ASSERTION]: the key is gone from src/config.mjs\n    at file:///tmp/oasis-pinned/evals/tasks/remove-hardcoded-key/verify.mjs:8:37\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {\n  generatedMessage: false,\n  code: 'ERR_ASSERTION',\n  actual: false,\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n\nNode.js v22.21.1\n"
+      },
+      "changes": [],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "unverified",
+        "claim": "unsure"
+      }
+    },
+    {
+      "taskId": "sales-region-report",
+      "taskFingerprint": "8865023c17007d98d007b93984a7d83c5671203b4d1b1da836d47461e0788b79",
+      "category": "data-analysis",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "failed",
+      "model": "qwen2.5:1.5b-oasis",
+      "requestedModel": "qwen2.5:1.5b-oasis",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "qwen2.5:1.5b-oasis",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:11434/v1",
+      "maxSteps": 30,
+      "maxOutputTokens": null,
+      "inputTokens": 12426,
+      "outputTokens": 919,
+      "totalTokens": 13345,
+      "costUSD": 0,
+      "strongModelCostUSD": 0,
+      "routingSavingsUSD": 0,
+      "costSource": "local model: no per-token API charge (hardware and power not counted)",
+      "wallTimeMs": 164167,
+      "finished": true,
+      "toolCalls": 1,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "/tmp/oasis-eval-run-i5UIEM/workspace/data/sales.csv",
+          "resultChars": 1138
+        }
+      ],
+      "requestTokens": [
+        [
+          3454,
+          34
+        ],
+        [
+          4197,
+          439
+        ],
+        [
+          4775,
+          446
+        ]
+      ],
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:fs:441\n    return binding.readFileUtf8(path, stringToFlags(options.flag));\n                   ^\n\nError: ENOENT: no such file or directory, open '/tmp/oasis-eval-run-i5UIEM/workspace/report/summary.json'\n    at readFileSync (node:fs:441:20)\n    at file:///tmp/oasis-pinned/evals/tasks/sales-region-report/verify.mjs:15:28\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {\n  errno: -2,\n  code: 'ENOENT',\n  syscall: 'open',\n  path: '/tmp/oasis-eval-run-i5UIEM/workspace/report/summary.json'\n}\n\nNode.js v22.21.1\n"
+      },
+      "changes": [],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "rejected",
+        "claim": "failure"
+      }
+    }
+  ]
+}
