@@ -197,3 +197,28 @@ test('trusting a folder lists the other agents\' hooks it would run', async (t) 
   const effects = await trustEffects(root);
   assert.ok(effects.some((line) => line.startsWith(path.join('.github', 'hooks', 'policy.json') + ': preToolUse hook runs: ./scripts/policy.sh')), effects.join('\n'));
 });
+
+test('npm OpenCode plugins from opencode.json run from OpenCode\'s cache; local paths run in place', async (t) => {
+  const { root, home, env } = await setup(t);
+  const { openCodePackageName } = await import('../src/foreign-hooks.mjs');
+  assert.equal(openCodePackageName('opencode-guard@1.2.0'), 'opencode-guard');
+  assert.equal(openCodePackageName('@acme/oc-plugin@latest'), '@acme/oc-plugin');
+  assert.equal(openCodePackageName('./local.js'), '');
+  const pkg = path.join(home, '.cache', 'opencode', 'node_modules', '@acme', 'oc-guard');
+  await mkdir(path.join(pkg, 'dist'), { recursive: true });
+  await writeFile(path.join(pkg, 'package.json'), JSON.stringify({ name: '@acme/oc-guard', type: 'module', exports: { '.': { import: './dist/index.js' } } }));
+  await writeFile(path.join(pkg, 'dist', 'index.js'), "export { Guard } from './chunk.js';\n");
+  await writeFile(path.join(pkg, 'dist', 'chunk.js'), "export const Guard = async () => ({ 'tool.execute.before': async (input) => { if (input.tool === 'bash') throw new Error('npm guard says no'); } });\n");
+  await mkdir(path.join(home, '.config', 'opencode'), { recursive: true });
+  await writeFile(path.join(home, '.config', 'opencode', 'opencode.json'), JSON.stringify({ plugin: ['@acme/oc-guard@1.0.0', 'not-installed'] }));
+  await writeFile(path.join(root, 'local-plugin.js'), "export const L = async () => ({ event: async ({ event }) => { if (event.type === 'session.created') {} } });\n");
+  await writeFile(path.join(root, 'opencode.jsonc'), '// project\n{ "plugin": ["./local-plugin.js"], }\n');
+  const all = (await loadForeignHooks(root, { env, home, trusted: true })).filter((item) => item.protocol === 'opencode');
+  assert.deepEqual(all.map((item) => [item.scope, path.basename(item.file), Object.keys(item.hooks).sort().join()]), [['user', 'index.js', 'PreToolUse'], ['project', 'local-plugin.js', 'SessionStart']]);
+  const untrusted = (await loadForeignHooks(root, { env, home, trusted: false })).filter((item) => item.protocol === 'opencode');
+  assert.deepEqual(untrusted.map((item) => item.scope), ['user']);
+  const settings = await loadSettings(root, { env });
+  const denied = await runHooks('PreToolUse', { session_id: 's', cwd: root, tool_name: 'Bash', oasis_tool_name: 'run_shell', tool_name_oasis: 'run_shell', tool_input: { command: 'ls' } }, { hooks: settings.hooks, root });
+  assert.equal(denied.permissionDecision, 'deny');
+  assert.match(denied.reason, /npm guard says no/);
+});
