@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Added
 
+- `oasis plugin inspect [PATH]` reports what a plugin from any supported agent becomes: what OASIS reads, what will not run, and for OASIS, Claude Code, Codex, Gemini CLI, Cursor and Copilot CLI whether `oasis plugin export` carries it fully or what it leaves out. Nothing is written.
 - Hook protocol bridge. Cursor and Copilot CLI hooks in a plugin now run under OASIS instead of being left out. Each one is filed under the Claude Code event that fires at the same moment (Cursor `beforeShellExecution` on shell `PreToolUse`, Copilot `agentStop` on `Stop`, and so on); its stdin gets the fields that tool sends (`conversation_id`, `workspace_roots`, `command`; `toolName`, `toolArgs` as a JSON string) and its reply is read the way that tool reads it, so a deny, a rewritten call, extra context or a stop follow-up all work. Cursor's fail-closed rules (invalid JSON on a permission hook, `failClosed`) are kept. Only Cursor Tab hooks, `afterAgentThought`, `workspaceOpen` and Copilot's `userPromptTransformed` and `preMcpToolCall`, which have no OASIS moment, are still listed as not carried over. See [Compatibility](docs/COMPATIBILITY.md#hook-protocol-bridge).
 - MCP Bundles. `oasis add ./server.mcpb` (or an `.mcpb` download link, a folder or repository with an MCPB `manifest.json`) installs a Claude Desktop extension as a plugin: its server runs from the plugin folder, `user_config` becomes plugin options asked by `oasis plugin config`, and its prompts become commands.
 - VS Code / Copilot prompt files. `.github/prompts/*.prompt.md` and the prompt files in your VS Code profile are slash commands, with `${input:name}` filled from what you type after the command. Custom agents (`.github/agents/*.agent.md`) and chat modes are agents, with their VS Code tool lists mapped to OASIS tools.
@@ -14,6 +15,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- Install summaries say "1 command", "1 skill" and "1 agent" instead of "1 commands".
 - A converted plugin's hook script under a dot folder (`.cursor/hooks/fmt.sh`) pointed at `cursor/hooks/fmt.sh` in the plugin; only a leading `./` is dropped now.
 
 ## [0.10.0] - 2026-11-23

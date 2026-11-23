@@ -380,3 +380,58 @@ export async function exportCli(root, params, write) {
   }
   write(formatExportReport(await exportPlugin(source, { out, targets, force })));
 }
+
+/**
+ * Fidelity report for any plugin folder: what OASIS reads from it, what will
+ * not run here, and what each other agent would get from `plugin export`.
+ * Nothing is written outside a temporary folder.
+ */
+export async function inspectPlugin(source) {
+  const dir = path.resolve(source);
+  if (!(await stat(dir).catch(() => null))?.isDirectory()) throw new Error('No plugin folder at ' + source + '.');
+  const convert = await import('./plugin-convert.mjs');
+  let native = null;
+  for (const folder of ['.oasis-plugin', '.claude-plugin']) {
+    const manifest = await readJson(path.join(dir, folder, 'plugin.json'));
+    if (manifest && manifest.name) { native = { manifest, label: folder === '.oasis-plugin' ? 'OASIS plugin' : 'Claude Code plugin' }; break; }
+  }
+  let info = null;
+  if (!native) {
+    info = await convert.detectForeignPlugin(dir);
+    if (!info) info = await (await import('./config-packs.mjs')).detectConfigPack(dir);
+    if (!info) throw new Error(source + ' is not a plugin OASIS can read (no .claude-plugin/plugin.json, .oasis-plugin/plugin.json or another agent\'s plugin manifest).');
+  }
+  const contents = info ? await convert.describeForeignPlugin(dir, info) : [];
+  const unsupported = info ? await convert.unsupportedParts(dir, info) : [];
+  const temp = await mkdtemp(path.join(os.tmpdir(), 'oasis-inspect-'));
+  try {
+    const exported = await exportPlugin(dir, { out: path.join(temp, 'out') });
+    return {
+      name: exported.name || (native ? native.manifest.name : info.name),
+      format: native ? native.label : info.label,
+      native: Boolean(native),
+      contents,
+      unsupported,
+      targets: exported.report.map((r) => ({ target: r.target, label: r.label, carried: r.carried, translated: r.translated, dropped: r.dropped, full: !r.dropped.length }))
+    };
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+}
+
+export function formatInspectReport(result) {
+  const lines = [result.name + ' — ' + result.format];
+  if (result.native) lines.push('  OASIS reads it natively.');
+  else {
+    lines.push('  OASIS converts it on install' + (result.contents.length ? ': ' + result.contents.join(', ') : '') + '.');
+    if (result.unsupported.length) lines.push('  Will not run in OASIS: ' + result.unsupported.join('; ') + '.');
+  }
+  lines.push('', '  Exported with `oasis plugin export`:');
+  for (const t of result.targets) {
+    lines.push('    ' + (t.full ? '[full]    ' : '[partial] ') + t.label);
+    if (t.carried.length) lines.push('        runs as is: ' + t.carried.join(', '));
+    if (t.translated.length) lines.push('        translated: ' + t.translated.join(', '));
+    if (t.dropped.length) lines.push('        left out:   ' + t.dropped.join(', '));
+  }
+  return lines.join('\n') + '\n';
+}

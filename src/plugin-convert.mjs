@@ -277,9 +277,9 @@ export async function describeForeignPlugin(dir, info) {
   const commands = files.filter((f) => /^commands\/.+\.(toml|md)$/i.test(f)).length;
   const skills = files.filter((f) => /^skills\/[^/]+\/SKILL\.md$/i.test(f)).length;
   const agents = files.filter((f) => /^agents\/.+\.md$/i.test(f)).length;
-  if (commands) parts.push(commands + ' commands');
-  if (skills) parts.push(skills + ' skills');
-  if (agents) parts.push(agents + ' agents');
+  if (commands) parts.push(commands + ' command' + (commands === 1 ? '' : 's'));
+  if (skills) parts.push(skills + ' skill' + (skills === 1 ? '' : 's'));
+  if (agents) parts.push(agents + ' agent' + (agents === 1 ? '' : 's'));
   const servers = info.format === 'gemini' ? Object.keys(info.manifest.mcpServers || {}) : Object.keys(await foreignServers(dir, info));
   if (servers.length) parts.push(servers.length + ' MCP server' + (servers.length === 1 ? '' : 's') + ' (they run when sessions start)');
   if (info.format === 'cursor' || info.format === 'copilot') {

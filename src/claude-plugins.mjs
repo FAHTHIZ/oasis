@@ -1230,6 +1230,12 @@ export async function pluginCli(root, args = [], options = {}) {
     }
     return;
   }
+  if (action === 'inspect') {
+    const mod = await import('./plugin-export.mjs');
+    const result = await mod.inspectPlugin(path.resolve(root, params[0] || '.'));
+    out(params.includes('--json') ? JSON.stringify(result, null, 2) + '\n' : mod.formatInspectReport(result));
+    return;
+  }
   if (action === 'export') {
     await (await import('./plugin-export.mjs')).exportCli(root, [...params], out);
     return;
@@ -1257,5 +1263,5 @@ export async function pluginCli(root, args = [], options = {}) {
     for (const id of declaredUntrusted) out('[untrusted] ' + id + ' is enabled by this project; run oasis trust to allow project plugins\n');
     return;
   }
-  throw new Error('Usage: oasis plugin [list | install NAME@MARKET | show NAME | config NAME [KEY=VALUE] | uninstall NAME | enable NAME | disable NAME | update [NAME] | validate [PATH] | export [PATH] [--to claude,codex,gemini,cursor,copilot] --out DIR | marketplace add|list|update|remove] [--scope user|project|local]');
+  throw new Error('Usage: oasis plugin [list | install NAME@MARKET | show NAME | config NAME [KEY=VALUE] | uninstall NAME | enable NAME | disable NAME | update [NAME] | validate [PATH] | inspect [PATH] [--json] | export [PATH] [--to claude,codex,gemini,cursor,copilot] --out DIR | marketplace add|list|update|remove] [--scope user|project|local]');
 }
