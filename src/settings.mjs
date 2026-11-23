@@ -490,11 +490,16 @@ export async function loadSettings(root, options = {}) {
     if (typeof settings.includeGitInstructions === 'boolean') result.includeGitInstructions = settings.includeGitInstructions;
     // "claudeMdExcludes": instruction files to skip. Arrays merge from every file (skipping only tightens).
     if (Array.isArray(settings.claudeMdExcludes)) result.claudeMdExcludes = [...(result.claudeMdExcludes || []), ...settings.claudeMdExcludes.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 1000))];
+    // Neither loosens anything from a repository: both are safe before trust.
+    if (typeof settings.worldDrift === 'boolean') result.worldDrift = settings.worldDrift;
+    // Rehearsal runs a command (isolated, no network) before it is approved, so a repository
+    // cannot turn it on for you; it can still turn it off.
+    if (typeof settings.rehearse === 'boolean' && (settings.rehearse === false || ['user', 'flag', 'managed'].includes(scope))) result.rehearse = settings.rehearse;
     if (!trusted) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.subagentStatusLine || settings.fileSuggestion || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
       // Any other key is also skipped until trust; say so instead of dropping it silently.
-      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'personality', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'skillRecord', 'compactionReflection', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions', 'alwaysThinkingEnabled', 'skillOverrides', 'disableBundledSkills', 'disableSkillShellExecution', 'spinnerVerbs']);
+      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'personality', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'skillRecord', 'compactionReflection', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions', 'alwaysThinkingEnabled', 'skillOverrides', 'disableBundledSkills', 'disableSkillShellExecution', 'spinnerVerbs', 'worldDrift', 'rehearse']);
       const skipped = Object.keys(settings).filter((key) => !untrustedSafe.has(key));
       if (loosening || skipped.length) result.ignoredUntrusted.push(file);
       return;

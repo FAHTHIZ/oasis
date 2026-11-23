@@ -9,7 +9,9 @@ Rehearsal (network off, nothing kept): exit 0 in 89 ms.
   would create (3): generated/m0.py, generated/m1.py, generated/m2.py
 ```
 
-Turn it on with `OASIS_REHEARSE=1` or `"rehearse": true` in settings. It applies to `run_command` and `run_shell` calls that need approval. Linux only; elsewhere, and when bubblewrap cannot mount an overlay, prompts look as before.
+It is on by default when the OS sandbox runs on bubblewrap (`"sandbox": { "enabled": true }` on Linux): there the only commands that still prompt are the high-risk ones, where the exact change list matters most. Elsewhere turn it on with `OASIS_REHEARSE=1` or `"rehearse": true` in your own settings; `OASIS_REHEARSE=0` or `"rehearse": false` turns it off. A repository's settings can turn it off but not on, since a rehearsal starts the command before anyone approved it. It applies to `run_command` and `run_shell` calls that need approval. Linux only; elsewhere, and when bubblewrap cannot mount an overlay, prompts look as before.
+
+Under the sandbox, the rehearsal also hides the sandbox's own masks (`sandbox.filesystem.denyRead`), so it sees no more than the real run.
 
 ## How it works
 

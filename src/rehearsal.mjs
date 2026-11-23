@@ -64,11 +64,15 @@ export function rehearsalSupport() {
 export function resetRehearsalProbe() { probed = undefined; }
 
 /** OASIS_REHEARSE=1 (or settings.rehearse === true) rehearses commands before asking for approval. */
-export function rehearsalEnabled(env = process.env, settings = {}) {
+export function rehearsalEnabled(env = process.env, settings = {}, sandbox = null) {
   const value = String(env.OASIS_REHEARSE ?? '').trim().toLowerCase();
   if (['0', 'false', 'off', 'no'].includes(value)) return false;
   if (['1', 'true', 'on', 'yes', 'auto'].includes(value)) return true;
-  return Boolean(settings && settings.rehearse === true);
+  if (settings && typeof settings.rehearse === 'boolean') return settings.rehearse;
+  // Unset: on when the bubblewrap sandbox is already in use. Those users accepted bwrap,
+  // and under it the only commands still prompting are the high-risk ones, where seeing
+  // the exact file changes matters most.
+  return Boolean(sandbox && sandbox.available && sandbox.kind === 'bubblewrap');
 }
 
 function refuseRoot(root) {
@@ -89,7 +93,7 @@ function tail(text) {
  * changes: { created, modified, deleted, touched }, git, readOnlyWrites, ms, keep }.
  * Call disposeRehearsal(result) when done, or applyRehearsal(result) to keep its changes.
  */
-export async function rehearseCommand({ root, command, args = [], env = process.env, timeoutMs = REHEARSAL_TIMEOUT_MS, cwd = root, network = false } = {}) {
+export async function rehearseCommand({ root, command, args = [], env = process.env, timeoutMs = REHEARSAL_TIMEOUT_MS, cwd = root, network = false, masked = [] } = {}) {
   const started = Date.now();
   const support = rehearsalSupport();
   if (!support.available) return { status: 'unavailable', reason: support.reason, changes: emptyChanges(), ms: 0 };
@@ -126,6 +130,12 @@ export async function rehearseCommand({ root, command, args = [], env = process.
   // Toolchains installed under /tmp (and this Node binary) stay visible over the fresh /tmp.
   for (const dir of new Set([...tmpToolchainMounts(command, env), ...tmpToolchainMounts(process.execPath, env)])) {
     if (!pathContains(dir, lower) && !pathContains(lower, dir)) bwrapArgs.push('--ro-bind', dir, dir);
+  }
+  // The active sandbox's own masks too (its denyRead entries), when the caller passes them.
+  for (const item of masked) {
+    if (!item || typeof item.path !== 'string' || pathContains('/tmp', item.path) || pathContains(lower, item.path) || pathContains(item.path, lower) || pathContains(state, item.path)) continue;
+    if (item.type === 'directory') bwrapArgs.push('--tmpfs', item.path);
+    else if (item.type === 'file') bwrapArgs.push('--ro-bind', '/dev/null', item.path);
   }
   bwrapArgs.push('--overlay-src', lower, '--overlay', upper, work, lower);
   bwrapArgs.push('--ro-bind', upper, upper, '--bind', report, report, '--ro-bind', LISTER, LISTER);
@@ -374,12 +384,15 @@ export function rehearsalDivergence(result, observed) {
  */
 export async function rehearseForApproval({ root, command, args = [], line = null, env = process.env, settings = {}, sandbox = null, injectionHold = '' } = {}) {
   const skip = { text: '', summary: null };
-  if (!rehearsalEnabled(env, settings) || injectionHold) return skip;
+  if (!rehearsalEnabled(env, settings, sandbox) || injectionHold) return skip;
   if (sandbox && sandbox.available && sandbox.kind !== 'bubblewrap') return skip;
   try {
+    // rehearseCommand already scrubs the environment and hides the default credential paths;
+    // add the sandbox's own masks (denyRead) so the rehearsal sees no more than the real run.
+    const masked = sandbox && Array.isArray(sandbox.maskedPaths) ? sandbox.maskedPaths : [];
     const result = line === null
-      ? await rehearseCommand({ root, command, args, env })
-      : await rehearseCommand({ root, command: '/bin/sh', args: ['-c', line], env });
+      ? await rehearseCommand({ root, command, args, env, masked })
+      : await rehearseCommand({ root, command: '/bin/sh', args: ['-c', line], env, masked });
     await disposeRehearsal(result);
     if (result.status === 'unavailable') return skip;
     return { text: '\n' + formatRehearsal(result), summary: publicRehearsal(result) };

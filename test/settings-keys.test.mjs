@@ -53,3 +53,21 @@ test('untrusted project settings report skipped keys instead of dropping them si
   assert.deepEqual(safe.ignoredUntrusted, []);
   assert.equal(safe.theme, 'dark');
 });
+
+test('rehearse comes from your own settings only; worldDrift from any', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-keys-'));
+  const config = await mkdtemp(path.join(os.tmpdir(), 'oasis-keys-cfg-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(config, { recursive: true, force: true })]));
+  const env = { ...process.env, OASIS_CONFIG_DIR: config, OASIS_IGNORE_CLAUDE_SETTINGS: '1' };
+  await mkdir(path.join(root, '.oasis'));
+  await writeFile(path.join(root, '.oasis', 'settings.json'), JSON.stringify({ rehearse: true, worldDrift: false }));
+  let settings = await loadSettings(root, { env, skipPlugins: true });
+  assert.equal(settings.rehearse, undefined, 'a repository cannot make commands run before approval');
+  assert.equal(settings.worldDrift, false);
+  await writeFile(path.join(config, 'settings.json'), JSON.stringify({ rehearse: true }));
+  settings = await loadSettings(root, { env, skipPlugins: true });
+  assert.equal(settings.rehearse, true);
+  await writeFile(path.join(root, '.oasis', 'settings.json'), JSON.stringify({ rehearse: false }));
+  settings = await loadSettings(root, { env, skipPlugins: true });
+  assert.equal(settings.rehearse, false, 'a repository can turn it off');
+});
