@@ -408,7 +408,8 @@ export async function checkReceipt(result, root) {
     const verdict = await verifyReceipt(receipt, { root });
     const counts = receipt.claims && receipt.claims.counts || {};
     const claims = Object.entries(counts).filter(([, n]) => n).map(([kind, n]) => n + ' ' + kind).join(', ') || 'no checkable claims';
-    const line = 'Receipt: **' + verdict.status + '**: ' + receipt.evidence.count + ' evidence events, ' + (receipt.files || []).length + ' file(s), ' + claims + '. Signed by `' + safeVerificationText(receipt.signature && receipt.signature.keyId) + '`. Download the `oasis-receipt` artifact and check it with `oasis receipt verify FILE --replay`.';
+    const keyId = safeVerificationText(receipt.signature && receipt.signature.keyId);
+    const line = 'Receipt: **' + verdict.status + '**: ' + receipt.evidence.count + ' evidence events, ' + (receipt.files || []).length + ' file(s), ' + claims + '. Signed by `' + keyId + '`. Download the `oasis-receipt` artifact and check it with `oasis receipt verify FILE --trust ' + keyId + ' --replay`.';
     return { file, status: verdict.status, ok: verdict.ok, line };
   } catch (error) {
     return { file, status: 'error', line: 'Could not check the receipt: ' + safeVerificationText(error.message) };

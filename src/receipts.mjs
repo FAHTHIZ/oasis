@@ -100,6 +100,18 @@ export function receiptKeyFromPem(pem) {
   return { privateKey, publicKey: publicDer.toString('base64'), keyId: keyIdOf(publicDer), file: '' };
 }
 
+/**
+ * Key id of this machine's receipt key, or null when none exists yet. Unlike
+ * receiptKey() this never creates a key: verifying must not have side effects.
+ */
+export async function localReceiptKeyId({ env = process.env, directory = '' } = {}) {
+  const file = path.join(directory || path.join(getConfigDirectory(env), 'receipts'), 'signing-key.pem');
+  try {
+    const publicDer = createPublicKey(createPrivateKey(await readFile(file, 'utf8'))).export({ type: 'spki', format: 'der' });
+    return keyIdOf(publicDer);
+  } catch { return null; }
+}
+
 export function keyIdOf(publicDer) {
   return 'ed25519:' + createHash('sha256').update(Buffer.isBuffer(publicDer) ? publicDer : Buffer.from(String(publicDer), 'base64')).digest('hex').slice(0, 32);
 }
@@ -275,11 +287,18 @@ function runReplay(command, root, timeoutMs) {
  *   root        workspace to compare files and git state against (omit to check the receipt alone)
  *   replay      rerun the replay checks in `root` (runs commands: only for receipts you trust)
  *   trustedKeys key ids that may sign; empty means any valid signature
+ *   localKeyId  this machine's key id (default: read from the config directory)
  *   onReplay    called with each command before it runs
  * Returns { status, ok, checks, summary }.
- * status: verified | reproduced | drifted | unsupported | failed_replay | tampered | invalid
+ * status: verified | reproduced | drifted | unsupported | failed_replay | untrusted_signer | tampered | invalid
+ *
+ * The public key travels inside the receipt, so a valid signature alone only
+ * shows the receipt is unchanged since some key signed it: anyone can make
+ * one. Replay therefore runs commands only from a trusted signer (trustedKeys,
+ * or this machine's own key); a forged receipt with `curl ... | sh` in its
+ * replay plan must not run just because it signed itself.
  */
-export async function verifyReceipt(receipt, { root = '', replay = false, trustedKeys = [], onReplay = null, timeoutMs = REPLAY_TIMEOUT_MS } = {}) {
+export async function verifyReceipt(receipt, { root = '', replay = false, trustedKeys = [], localKeyId, env = process.env, onReplay = null, timeoutMs = REPLAY_TIMEOUT_MS } = {}) {
   const checks = [];
   if (!receipt || typeof receipt !== 'object' || receipt.format !== RECEIPT_FORMAT) {
     return { status: 'invalid', ok: false, checks: [check('format', false, 'not an ' + RECEIPT_FORMAT + ' receipt')], summary: 'Not an OASIS receipt.' };
@@ -294,9 +313,15 @@ export async function verifyReceipt(receipt, { root = '', replay = false, truste
     signed = sig.alg === 'Ed25519' && idMatches && edVerify(null, Buffer.from(canonicalJson(unsigned)), publicKey, Buffer.from(String(sig.value || ''), 'base64'));
   } catch { signed = false; }
   checks.push(check('signature', signed, signed ? 'valid Ed25519 signature by ' + sig.keyId : 'the signature does not match the contents: the receipt was altered or not signed'));
+  const ownKey = localKeyId === undefined ? await localReceiptKeyId({ env }) : localKeyId;
+  const fromThisMachine = signed && Boolean(ownKey) && sig.keyId === ownKey;
+  const trustedSigner = signed && (trustedKeys.includes(sig.keyId) || fromThisMachine);
   if (signed && trustedKeys.length) {
     const trusted = trustedKeys.includes(sig.keyId);
     checks.push(check('signer', trusted, trusted ? sig.keyId + ' is trusted' : sig.keyId + ' is not one of the trusted keys'));
+  } else if (signed) {
+    checks.push(check('signer', fromThisMachine, fromThisMachine ? 'signed by this machine\'s receipt key'
+      : sig.keyId + ' is not this machine\'s key and was not passed with --trust: the signature shows only that the receipt is unchanged since that key signed it, not who wrote it', { level: 'warning' }));
   }
   // 2. Evidence chain.
   const events = Array.isArray(receipt.evidence && receipt.evidence.events) ? receipt.evidence.events : [];
@@ -343,9 +368,11 @@ export async function verifyReceipt(receipt, { root = '', replay = false, truste
   }
   // 5. Replay: the recorded checks give the recorded outcome again.
   let replayFailed = false;
+  let replayRefused = false;
   let replayed = 0;
   if (replay) {
     if (!signed) checks.push(check('replay', false, 'refused: the receipt is not validly signed, so its commands are not run'));
+    else if (!trustedSigner) { replayRefused = true; checks.push(check('replay', false, 'refused: ' + sig.keyId + ' is not a trusted signer, so the receipt\'s commands are not run. Pass --trust ' + sig.keyId + ' if you know who holds that key')); }
     else if (!root) checks.push(check('replay', false, 'needs a workspace to run in'));
     else {
       const plan = Array.isArray(receipt.replay) ? receipt.replay.slice(0, MAX_REPLAY) : [];
@@ -361,8 +388,9 @@ export async function verifyReceipt(receipt, { root = '', replay = false, truste
       }
     }
   }
-  const tampered = !signed || !chainOk || dangling.length > 0 || falseObserved.length > 0 || checks.some((item) => item.name === 'signer' && !item.ok);
+  const tampered = !signed || !chainOk || dangling.length > 0 || falseObserved.length > 0 || checks.some((item) => item.name === 'signer' && item.level === 'error');
   const status = tampered ? 'tampered'
+    : replayRefused ? 'untrusted_signer'
     : replayFailed ? 'failed_replay'
     : drift ? 'drifted'
     : contradicted.length || unverified.length ? 'unsupported'
@@ -370,13 +398,16 @@ export async function verifyReceipt(receipt, { root = '', replay = false, truste
     : 'verified';
   const SUMMARY = {
     tampered: 'Do not trust this receipt: its contents do not match its signature or evidence chain.',
+    untrusted_signer: 'The receipt is intact, but its signer is not trusted here, so its commands were not run.',
     failed_replay: 'The receipt is genuine, but rerunning its checks did not give the recorded result.',
     drifted: 'The receipt is genuine, but the workspace has changed since it was issued.',
     unsupported: 'The receipt is genuine, but some claims in the reply are not backed by its evidence.',
     reproduced: 'Genuine, and every recorded check reproduced here.',
     verified: 'Genuine: signature and evidence chain hold, and every claim rests on recorded evidence.'
   };
-  return { status, ok: status === 'verified' || status === 'reproduced', checks, summary: SUMMARY[status] };
+  const summary = SUMMARY[status] + (signed && !trustedSigner && status !== 'tampered' && status !== 'untrusted_signer'
+    ? ' Its signer is not trusted here, so this shows only that it is unchanged since that key signed it; pass --trust ' + sig.keyId + ' if you know who holds that key.' : '');
+  return { status, ok: status === 'verified' || status === 'reproduced', checks, summary, trustedSigner };
 }
 
 /** Human-readable report for the terminal. */

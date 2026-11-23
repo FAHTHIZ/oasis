@@ -69,7 +69,7 @@ export async function receiptCommand(args, workspace, { write = (text) => proces
     const replay = rest.includes('--replay');
     const root = rest.includes('--no-workspace') ? '' : workspace;
     const verdict = await verifyReceipt(receipt, {
-      root, replay, trustedKeys,
+      root, replay, trustedKeys, env,
       onReplay: json ? null : (step) => write('[replay] ' + step.command + '\n')
     });
     write(json ? JSON.stringify(verdict) + '\n' : formatVerification(receipt, verdict) + '\n');
