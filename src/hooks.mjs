@@ -28,6 +28,7 @@ import stripAnsi from 'strip-ansi';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 
 import { parseRule, ruleMatches } from './permissions.mjs';
+import { runBridgedHook } from './hook-bridges.mjs';
 
 export const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PostToolBatch', 'PermissionRequest', 'PermissionDenied', 'UserPromptSubmit', 'UserPromptExpansion', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionStart', 'SessionEnd', 'PreCompact', 'PostCompact', 'Notification', 'CwdChanged', 'DirectoryAdded', 'InstructionsLoaded', 'TaskCreated', 'TaskCompleted', 'PreModelSwitch', 'PostModelSwitch', 'FileChanged', 'ConfigChange', 'WorktreeCreate', 'WorktreeRemove', 'TeammateIdle', 'Setup', 'Elicitation', 'ElicitationResult', 'MessageDisplay'];
 
@@ -358,7 +359,9 @@ function runOneHookInner(hook, payload, options) {
   if (hook.type === 'prompt') return runPromptHook({ ...hook, timeout }, payload, options);
   if (hook.type === 'agent') return runAgentHook({ ...hook, timeout }, payload, options);
   if (hook.type === 'mcp_tool') return runMcpToolHook({ ...hook, timeout }, payload, options);
-  return runHookCommand(hook.command, payload, { root: options.root, env: options.env, pluginEnv: hook.pluginEnv, timeout: hook.async && !hook.asyncRewake ? Infinity : timeout, args: hook.args, shell: hook.shell });
+  const commandOptions = { root: options.root, env: options.env, pluginEnv: hook.pluginEnv, timeout: hook.async && !hook.asyncRewake ? Infinity : timeout, args: hook.args, shell: hook.shell };
+  if (hook.protocol) return runBridgedHook(hook, payload, commandOptions, runHookCommand);
+  return runHookCommand(hook.command, payload, commandOptions);
 }
 
 export function describeHook(hook) {

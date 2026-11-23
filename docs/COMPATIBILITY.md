@@ -77,14 +77,48 @@ carried over", anything OASIS will not run.
 | Codex | `.codex-plugin/plugin.json`, `.agents/plugins/marketplace.json` | Skills, MCP servers, hooks | App connectors |
 | Gemini CLI | `gemini-extension.json` | Commands (TOML), context file (as a skill), settings, hooks, MCP servers | Hook events with no counterpart |
 | Agent Plugins | root `plugin.json` with an `agent-plugins.org` `$schema` | Skills, MCP servers, hooks | Surface-specific extensions |
-| Cursor ([reference](https://cursor.com/docs/reference/plugins)) | `.cursor-plugin/plugin.json`, `.cursor-plugin/marketplace.json` | Rules (`.mdc`, as skills that state their globs and `alwaysApply`), skills, agents, commands, `mcp.json` servers, hooks under Claude Code event names | Cursor hooks (`beforeShellExecution` and others) and variables |
-| Copilot CLI ([reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference)) | `.plugin/plugin.json`, a bare `plugin.json`, `.github/plugin/plugin.json`, and `marketplace.json` in the same places | Agents, skills (and a root `SKILL.md`), commands, `.mcp.json` or `.github/mcp.json`, `lsp.json`, hooks under Claude Code event names | Copilot hooks (`preToolUse` and others) |
+| Cursor ([reference](https://cursor.com/docs/reference/plugins)) | `.cursor-plugin/plugin.json`, `.cursor-plugin/marketplace.json` | Rules (`.mdc`, as skills that state their globs and `alwaysApply`), skills, agents, commands, `mcp.json` servers, hooks (Claude Code events natively; Cursor events through the [hook bridge](#hook-protocol-bridge)) | Tab hooks (`beforeTabFileRead`, `afterTabFileEdit`), `afterAgentThought`, `workspaceOpen`, variables |
+| Copilot CLI ([reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference)) | `.plugin/plugin.json`, a bare `plugin.json`, `.github/plugin/plugin.json`, and `marketplace.json` in the same places | Agents, skills (and a root `SKILL.md`), commands, `.mcp.json` or `.github/mcp.json`, `lsp.json`, hooks (Claude Code events natively; Copilot events through the [hook bridge](#hook-protocol-bridge)) | `userPromptTransformed`, `preMcpToolCall` |
 | Kiro power ([reference](https://kiro.dev/docs/powers/create/)) | `POWER.md` | The guide and `steering/*.md` as one skill, `mcp.json` servers | Keyword-triggered activation (the skill description carries the keywords) |
 
-Cursor and Copilot hooks are not translated because their input and output
-differ from Claude Code's: a guessed translation could let a command run that
-the hook was written to stop. A plugin that also ships Claude Code hooks keeps
-those.
+### Hook protocol bridge
+
+Cursor ([hooks](https://cursor.com/docs/agent/hooks)) and Copilot CLI
+([hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference))
+hooks are commands like Claude Code's, but with their own event names, stdin
+fields and reply fields. OASIS runs them unchanged: each one is filed under the
+Claude Code event that fires at the same moment, and when it runs the payload is
+rewritten into the fields that tool sends and the reply is read the way that tool
+reads it. A plugin that also ships Claude Code hooks keeps those as they are.
+
+| Hook | Runs on | Its reply |
+| --- | --- | --- |
+| Cursor `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `preToolUse` | `PreToolUse` for shell commands, MCP tools, file reads, any tool | `permission` allow, deny or ask; `agent_message` is the reason; `preToolUse` `updated_input` rewrites the call |
+| Cursor `afterShellExecution`, `afterMCPExecution`, `afterFileEdit`, `postToolUse`, `postToolUseFailure` | `PostToolUse` / `PostToolUseFailure` | `additional_context` reaches the model; `updated_mcp_tool_output` replaces an MCP result |
+| Cursor `beforeSubmitPrompt` | `UserPromptSubmit` | `continue: false` drops the prompt |
+| Cursor `stop`, `subagentStop` | `Stop`, `SubagentStop` | `followup_message` keeps the agent working |
+| Cursor `sessionStart`, `sessionEnd`, `subagentStart`, `preCompact`, `afterAgentResponse` | the matching event | `additional_context` where Cursor reads it |
+| Copilot `preToolUse` | `PreToolUse` (`toolArgs` is a JSON string, as in Copilot) | `permissionDecision`, `permissionDecisionReason`, `modifiedArgs` |
+| Copilot `permissionRequest` | `PermissionRequest` | `behavior` allow or deny; `interrupt` stops the agent |
+| Copilot `agentStop`, `subagentStop` | `Stop`, `SubagentStop` | `decision: "block"` keeps the agent working |
+| Copilot `postToolUse`, `postToolUseFailure`, `sessionStart`, `sessionEnd`, `userPromptSubmitted`, `errorOccurred`, `subagentStart`, `preCompact`, `notification` | the matching event | `additionalContext`; `postToolUse` `modifiedResult` |
+
+Exit codes keep each tool's meaning. Cursor: exit 2 denies or blocks; a
+permission hook whose reply is not JSON blocks the action, and `failClosed:
+true` makes a crash or timeout block too; other failures let the action go on.
+Copilot: exit 2 denies `preToolUse` and `permissionRequest`, turns stdout into
+recovery advice on `postToolUseFailure`, and is only a warning elsewhere; a
+`preToolUse` hook that exits non-zero for any other reason denies the call, and
+a timeout (30 seconds unless `timeoutSec` says otherwise) lets it go on.
+Copilot matchers are anchored (`^(?:PATTERN)$`), as in Copilot. Cursor tool
+names (`Shell`, `Read`, `Write`, `MCP:tool`) and Copilot ones (`bash`, `view`,
+`edit`, `create`) are what the hook sees and what its `matcher` is compared
+with. Hooks get `CURSOR_PROJECT_DIR` and `CURSOR_PLUGIN_ROOT` (Cursor) or
+`COPILOT_PLUGIN_ROOT` (Copilot), a Copilot hook's `env` and `cwd` are kept, and
+a relative script path runs from the plugin folder. A rewritten `run_command`
+line is used only when it is plain words, since a shell line cannot be split
+back into a program and arguments safely; otherwise the hook's message says it
+was ignored and the original call stands.
 
 Every hook, MCP server and LSP server gets the plugin's folders under each name
 these tools use: `OASIS_PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `PLUGIN_ROOT`;
