@@ -124,7 +124,7 @@ function clip(text, max = MAX_TEXT) {
 }
 
 // Only the fields a verifier needs; tool output itself stays out (its digest stands for it).
-const EVENT_FIELDS = ['seq', 'at', 'epoch', 'kind', 'tool', 'command', 'checkKind', 'exitCode', 'finished', 'passed', 'masked', 'noTests', 'filtered', 'mayEdit', 'url', 'finalUrl', 'query', 'path', 'changed', 'digest'];
+const EVENT_FIELDS = ['seq', 'at', 'epoch', 'kind', 'tool', 'command', 'checkKind', 'exitCode', 'finished', 'passed', 'masked', 'noTests', 'filtered', 'mayEdit', 'url', 'finalUrl', 'query', 'path', 'changed', 'rehearsal', 'unrehearsed', 'digest'];
 
 function receiptEvent(event) {
   const out = {};
@@ -352,6 +352,17 @@ export async function verifyReceipt(receipt, { root = '', replay = false, truste
   checks.push(check('claim basis', !dangling.length && !falseObserved.length, dangling.length ? dangling.length + ' claim(s) cite evidence that is not in the receipt' : falseObserved.length ? falseObserved.length + ' claim(s) marked observed without a passing check' : claims.length + ' claim(s), each backed by evidence in the chain'));
   if (contradicted.length) checks.push(check('claims', false, contradicted.length + ' claim(s) in the reply are contradicted by the evidence: ' + contradicted.slice(0, 3).map((claim) => '"' + claim.text.slice(0, 80) + '"').join('; '), { level: 'warning' }));
   else if (unverified.length) checks.push(check('claims', false, unverified.length + ' claim(s) in the reply are not backed by evidence', { level: 'warning' }));
+  // 3b. Rehearsals: which actions ran after a rehearsal the person saw, and whether the
+  // real run stayed inside it. Informational: a divergence is not tampering.
+  const rehearsed = events.filter((event) => typeof event.rehearsal === 'string');
+  if (rehearsed.length) {
+    const diverged = rehearsed.filter((event) => event.rehearsal === 'diverged');
+    const applied = rehearsed.filter((event) => event.rehearsal === 'applied').length;
+    const matched = rehearsed.filter((event) => event.rehearsal === 'matched').length;
+    checks.push(check('rehearsals', !diverged.length, diverged.length
+      ? diverged.length + ' of ' + rehearsed.length + ' rehearsed action(s) changed files the rehearsal did not show: ' + diverged.slice(0, 3).map((event) => (event.command || event.tool || 'event ' + event.seq).slice(0, 60) + ' (' + (event.unrehearsed || []).slice(0, 5).join(', ') + ')').join('; ')
+      : rehearsed.length + ' rehearsed action(s): ' + [applied ? applied + ' applied from the rehearsal' : '', matched ? matched + ' matched it' : '', rehearsed.length - applied - matched ? (rehearsed.length - applied - matched) + ' with an incomplete rehearsal' : ''].filter(Boolean).join(', '), { level: 'warning' }));
+  }
   // 4. The workspace in front of us is the one the receipt describes.
   let drift = false;
   if (root) {
