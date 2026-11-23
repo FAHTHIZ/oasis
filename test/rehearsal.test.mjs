@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, readdir, lstat, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { applyRehearsal, disposeRehearsal, formatRehearsal, rehearsalDivergence, rehearsalEnabled, rehearsalSupport, rehearseCommand, rehearseForApproval, summaryDivergence } from '../src/rehearsal.mjs';
+import { applyRehearsal, disposeRehearsal, formatRehearsal, rehearsalApplicable, rehearsalDivergence, rehearsalEnabled, withoutGitConfigCredentials, rehearsalSupport, rehearseCommand, rehearseForApproval, summaryDivergence } from '../src/rehearsal.mjs';
 import { runWorkspaceCommand } from '../src/tools.mjs';
 
 const support = rehearsalSupport();
@@ -418,4 +418,50 @@ test('an applied rehearsal is recorded as such in the evidence a receipt signs',
   await runAgentTurn(session, 'count twice', { env, approval: async (text, force, meta) => (++asked === 1 && meta && meta.rehearsal && meta.rehearsal.offer ? 'rehearsal' : true) });
   const runs = session.evidenceLedger.events.filter((event) => event.tool === 'run_command');
   assert.deepEqual(runs.map((event) => event.rehearsal), ['applied', 'matched']);
+});
+
+test('a rehearsal shows which servers a command tried to reach, and sends nothing', { skip }, async (t) => {
+  const root = await workspace();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  // A real listener on the host: if the rehearsal could reach the network, it would see a request.
+  const { createServer } = await import('node:http');
+  let reached = 0;
+  const server = createServer((req, res) => { reached += 1; res.end('ok'); });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const fetchLine = 'fetch("https://registry.example.test/pkg").then(() => {}, () => process.exit(1))';
+  const remote = await rehearseCommand({ root, command: process.execPath, args: ['-e', fetchLine] });
+  assert.equal(remote.status, 'failed');
+  assert.deepEqual(remote.contacts, [{ host: 'registry.example.test', port: 443 }]);
+  assert.match(formatRehearsal(remote), /It tried to reach registry\.example\.test \(refused: nothing was sent\)\./);
+  await disposeRehearsal(remote);
+  const plain = await rehearseCommand({ root, command: process.execPath, args: ['-e', 'require("http").get("http://mirror.example.test:8080/x", () => {}).on("error", () => process.exit(1))'] });
+  assert.deepEqual(plain.contacts, [{ host: 'mirror.example.test', port: 8080 }]);
+  assert.match(formatRehearsal(plain), /mirror\.example\.test:8080/);
+  await disposeRehearsal(plain);
+  // Loopback inside the rehearsal is its own; a local server a test starts still works.
+  const local = await rehearseCommand({ root, command: process.execPath, args: ['-e', 'const h=require("http");const s=h.createServer((q,r)=>r.end("hi")).listen(0,"127.0.0.1",()=>h.get("http://127.0.0.1:"+s.address().port,(r)=>{r.resume();r.on("end",()=>{require("fs").writeFileSync("local.txt",String(r.statusCode));s.close();})}))'] });
+  assert.equal(local.status, 'ok', local.stderr);
+  assert.deepEqual(local.contacts, []);
+  assert.deepEqual(local.changes.created, ['local.txt']);
+  await disposeRehearsal(local);
+  const host = await rehearseCommand({ root, command: process.execPath, args: ['-e', 'fetch("http://127.0.0.1:' + server.address().port + '/").then(() => {}, () => process.exit(1))'] });
+  assert.equal(reached, 0, 'the host listener saw nothing');
+  await disposeRehearsal(host);
+});
+
+test('a rehearsal that wanted the network is not offered for applying', () => {
+  const base = { status: 'ok', exitCode: 0, keep: {}, changes: { created: ['a'], modified: [], deleted: [] } };
+  assert.equal(rehearsalApplicable(base), true);
+  assert.equal(rehearsalApplicable({ ...base, contacts: [{ host: 'registry.npmjs.org', port: 443 }] }), false);
+});
+
+test('git config credentials in the environment are neutralised for rehearsals', () => {
+  const env = { GIT_CONFIG_COUNT: '4', GIT_CONFIG_KEY_0: 'http.https://github.com/.proxy', GIT_CONFIG_VALUE_0: 'https://x:SECRETPW@proxy.example', GIT_CONFIG_KEY_1: 'safe.directory', GIT_CONFIG_VALUE_1: '*', GIT_CONFIG_KEY_2: 'http.extraHeader', GIT_CONFIG_VALUE_2: 'X-Thing: 1', GIT_CONFIG_KEY_3: 'url.https://ghp_abc@github.com/.insteadOf', GIT_CONFIG_VALUE_3: 'https://github.com/' };
+  const out = withoutGitConfigCredentials(env);
+  assert.equal(out.GIT_CONFIG_VALUE_0, '');
+  assert.equal(out.GIT_CONFIG_KEY_0, 'oasis.rehearsalRedacted');
+  assert.equal(out.GIT_CONFIG_VALUE_1, '*', 'harmless settings stay');
+  assert.equal(out.GIT_CONFIG_VALUE_2, '');
+  assert.equal(out.GIT_CONFIG_KEY_3, 'oasis.rehearsalRedacted', 'a token in the key (insteadOf) counts too');
 });
