@@ -160,7 +160,7 @@ export async function rehearseCommand({ root, command, args = [], env = process.
   if (!network) bwrapArgs.push('--unshare-net');
   bwrapArgs.push('--chdir', path.resolve(cwd), '--', process.execPath, LISTER, upper, lower, path.join(report, 'merged.json'), '--', ...(filter ? [filter] : []), command, ...args);
   const { scrubEnvironment } = await import('./tools.mjs');
-  const child = spawn('bwrap', bwrapArgs, { env: { ...withoutGitConfigCredentials(scrubEnvironment(env)), OASIS_REHEARSAL: '1', ...(network ? {} : { OASIS_REHEARSAL_RECORD_NET: '1' }) }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn('bwrap', bwrapArgs, { env: rehearsalEnv(scrubEnvironment(env), network), stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (chunk) => { stdout = tail(stdout + chunk); });
@@ -198,6 +198,37 @@ export async function rehearseCommand({ root, command, args = [], env = process.
     keep: { state, upper, lower, entries: changes.entries, digests: changes.digests }
   };
   return result;
+}
+
+/**
+ * The rehearsed command's environment. Update checks (npm's update notifier and the
+ * many CLIs built on it) are switched off: they contact a registry on every run, so
+ * each npm script would list registry.npmjs.org as a server it tried to reach, be
+ * blamed on the network when it failed, and never be offered as "apply the rehearsal".
+ */
+export function rehearsalEnv(env, network = false) {
+  return {
+    ...withoutGitConfigCredentials(env),
+    OASIS_REHEARSAL: '1',
+    npm_config_update_notifier: 'false',
+    NO_UPDATE_NOTIFIER: '1',
+    ...(network ? {} : { OASIS_REHEARSAL_RECORD_NET: '1' })
+  };
+}
+
+// The line of a failed rehearsal's output most likely to say why: the first failing
+// test, else the last line that mentions failures or errors, else the last line.
+export function failureLine(result) {
+  const lines = (String(result && result.stdout || '') + '\n' + String(result && result.stderr || ''))
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, '')
+    .split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) return '';
+  // The first failing test names the problem better than the summary counts after it.
+  const first = lines.find((line) => /^(?:not ok\b|✖|✗|FAIL\b|FAILED\b|E\s{2,}\S)/.test(line));
+  const hit = first || [...lines].reverse().find((line) => /\b(?:fail(?:ed|ures?|ing)?|errors?|not ok|exception|cannot|could not|denied|refused)\b/i.test(line));
+  const line = hit || lines[lines.length - 1];
+  return line.length > 160 ? line.slice(0, 157) + '...' : line;
 }
 
 function emptyChanges() { return { created: [], modified: [], deleted: [], touched: [] }; }
@@ -372,7 +403,14 @@ export function formatRehearsal(result) {
     + (result.git ? '\n  It also changed ' + result.git + ' path(s) inside .git.' : '')
     + (result.readOnlyWrites ? '\n  It tried to write outside the workspace (refused in the rehearsal; the real run may succeed there).' : '')
     + (result.contacts && result.contacts.length ? '\n  It tried to reach ' + result.contacts.slice(0, 8).map(contactLabel).join(', ') + (result.contacts.length > 8 ? ', ...' : '') + ' (refused: nothing was sent).' : '')
-    + (result.status === 'failed' && !result.network ? '\n  It failed; it may need the network, which the rehearsal does not have.' : '');
+    + (result.status === 'failed' ? failedNote(result) : '');
+}
+
+function failedNote(result) {
+  if (result.contacts && result.contacts.length) return '\n  It failed; it may need those servers, which the rehearsal does not reach.';
+  const why = failureLine(result);
+  if (why) return '\n  It failed with: ' + JSON.stringify(why) + (result.network ? '' : ' (the rehearsal has no network, in case that matters).');
+  return result.network ? '\n  It failed.' : '\n  It failed; it may need the network, which the rehearsal does not have.';
 }
 
 /** Short form for tool results and the model. */

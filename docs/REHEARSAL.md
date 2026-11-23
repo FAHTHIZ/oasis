@@ -86,6 +86,18 @@ The rehearsal has no network, but it still shows where a command would have gone
 
 Measured in this repository's sandbox: `curl`, `git ls-remote`, Node's `fetch`, `pip download`, `npm install` and Python's `urllib` each reported the right host (6 of 6); a command that only used a local server reported none; a listener on the host saw no request. The proxy adds about 6 ms to a rehearsal (median of 12 runs of `true`: 35 ms before, 41 ms after).
 
+Update checks are switched off in the rehearsal (`npm_config_update_notifier=false`, `NO_UPDATE_NOTIFIER=1`). npm contacts its registry on every run to look for a newer npm, so before this every `npm test` or `npm run` rehearsal listed `registry.npmjs.org`, and because a contacted server rules out "apply the rehearsal", no npm script could ever be applied. That request says nothing about what the command does.
+
+When a rehearsal fails, the prompt quotes the line of output most likely to say why: the first failing test (`not ok`, `✖`, `FAIL`), else the last line that mentions a failure or error, else the last line. Found in a real recorded run, where `npm test` failed because a test failed and the prompt said only that it "may need the network":
+
+```
+Rehearsal (network off, nothing kept): exit 1 in 616 ms.
+  It changed no files in the workspace.
+  It failed with: "not ok 2 - total applies a 10% discount, then 5% tax" (the rehearsal has no network, in case that matters).
+```
+
+The network is named as the likely cause only when the command tried to reach a server or printed nothing.
+
 Not recorded: clients that ignore proxy variables and open sockets directly (raw TCP, some Go and Rust binaries, DNS lookups), and SOCKS (`ALL_PROXY` is removed). The request body is never seen, because nothing is sent: the record is where a command wanted to go, not what it would have said.
 
 Git settings passed in the environment (`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`) that carry credentials (a proxy URL with a password, an `extraHeader`, a token in an `insteadOf` URL) are removed for the rehearsal, so unapproved code cannot copy them into a file name.

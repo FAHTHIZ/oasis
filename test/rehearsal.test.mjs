@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, readdir, lstat, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { applyRehearsal, disposeRehearsal, formatRehearsal, rehearsalApplicable, rehearsalDivergence, rehearsalEnabled, withoutGitConfigCredentials, rehearsalSupport, rehearseCommand, rehearseForApproval, summaryDivergence } from '../src/rehearsal.mjs';
+import { applyRehearsal, disposeRehearsal, formatRehearsal, rehearsalApplicable, rehearsalDivergence, rehearsalEnabled, withoutGitConfigCredentials, rehearsalEnv, failureLine, rehearsalSupport, rehearseCommand, rehearseForApproval, summaryDivergence } from '../src/rehearsal.mjs';
 import { runWorkspaceCommand } from '../src/tools.mjs';
 
 const support = rehearsalSupport();
@@ -464,4 +464,26 @@ test('git config credentials in the environment are neutralised for rehearsals',
   assert.equal(out.GIT_CONFIG_VALUE_1, '*', 'harmless settings stay');
   assert.equal(out.GIT_CONFIG_VALUE_2, '');
   assert.equal(out.GIT_CONFIG_KEY_3, 'oasis.rehearsalRedacted', 'a token in the key (insteadOf) counts too');
+});
+
+test('a failed rehearsal says what failed instead of blaming the network', () => {
+  const base = { status: 'failed', exitCode: 1, ms: 640, changes: { created: [], modified: [], deleted: [] }, network: false, contacts: [] };
+  const tests = formatRehearsal({ ...base, stdout: 'TAP version 13\nnot ok 2 - total applies a 10% discount\n# pass 1\n# fail 1\n# duration_ms 72.3\n', stderr: '' });
+  assert.match(tests, /It failed with: "not ok 2 - total applies a 10% discount"/);
+  assert.equal(failureLine({ stdout: "# pass 1\n# fail 1\n", stderr: "" }), "# fail 1");
+  assert.doesNotMatch(tests, /it may need the network, which/);
+  assert.equal(failureLine({ stdout: '\u001b[31mError: Cannot find module x\u001b[0m\nat foo\n', stderr: '' }), 'Error: Cannot find module x');
+  assert.equal(failureLine({ stdout: 'building\ndone in 2s\n', stderr: '' }), 'done in 2s');
+  const servers = formatRehearsal({ ...base, stdout: 'fetch failed', contacts: [{ host: 'api.example.com', port: 443 }] });
+  assert.match(servers, /It tried to reach api\.example\.com .*\n {2}It failed; it may need those servers/);
+  assert.match(formatRehearsal({ ...base, stdout: '', stderr: '' }), /it may need the network, which the rehearsal does not have/);
+});
+
+test('rehearsals switch off update checks so npm scripts are not blamed on the registry', () => {
+  const env = rehearsalEnv({ PATH: '/usr/bin', GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'http.extraheader', GIT_CONFIG_VALUE_0: 'Authorization: Bearer abc' }, false);
+  assert.equal(env.npm_config_update_notifier, 'false');
+  assert.equal(env.NO_UPDATE_NOTIFIER, '1');
+  assert.equal(env.OASIS_REHEARSAL_RECORD_NET, '1');
+  assert.equal(env.GIT_CONFIG_VALUE_0, '', 'credential git config is still stripped');
+  assert.equal(rehearsalEnv({}, true).OASIS_REHEARSAL_RECORD_NET, undefined);
 });
