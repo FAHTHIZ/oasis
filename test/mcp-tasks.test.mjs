@@ -141,12 +141,14 @@ test('an interactive session gets the background MCP result in its inbox and is 
   process.env.OASIS_MCP_TASK_BACKGROUND_MS = '20';
   t.after(() => { if (prior === undefined) delete process.env.OASIS_MCP_TASK_BACKGROUND_MS; else process.env.OASIS_MCP_TASK_BACKGROUND_MS = prior; });
   const { session, requests } = await sessionWithServer(t, [toolCall('c1', 'mcp_jobs_slow', {}), { content: 'started it' }]);
-  const woke = new Promise((resolve) => { session.onBackgroundEvent = resolve; });
+  // Read the inbox when the wake fires: on a fast runner the task can finish
+  // while the turn is still running, and the turn then drains the inbox.
+  let notice;
+  const woke = new Promise((resolve) => { session.onBackgroundEvent = (event) => { notice = (session.inbox || []).find((entry) => entry.kind === 'mcp-task'); resolve(event); }; });
   await runAgentTurn(session, 'run the slow job', { autoApprove: true });
   assert.match(toolTexts(requests, 1)[0], /moved to the background/);
   const event = await woke;
   assert.equal(event.kind, 'mcp-task');
-  const notice = session.inbox.find((entry) => entry.kind === 'mcp-task');
   assert.match(notice.text, /Background MCP task task-\d+ \(jobs slow\) finished/);
   assert.match(notice.text, /slow-result after 3 polls/);
 });
