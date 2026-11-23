@@ -53,12 +53,19 @@ test('diagnose: close leaders get a discriminating test', async () => {
     'falsify H1': { verdict: 'weakened', observations: [{ what: 'Fails under load only', how: 'ran', source: 'load test', ratings: r({ H1: '+', H2: '0', H3: '+' }) }] },
     'falsify H2': { verdict: 'refuted', observations: [{ what: 'Passes with TZ=UTC', how: 'ran', source: 'TZ=UTC npm test', ratings: r({ H1: '0', H2: '--', H3: '0' }) }] },
     'falsify H3': { verdict: 'survived', observations: [] },
+    'propose tests': { tests: [
+      { test: 'Rerun CI', predictions: r({ H1: '+', H2: '+', H3: '+' }) },
+      { test: 'Print SESSION_SECRET length on CI', predictions: r({ H1: '+', H2: '+', H3: '--' }) }
+    ] },
     'discriminate H1 vs H3': { test: 'Run CI with SESSION_SECRET printed and --runInBand', observations: [{ what: 'SESSION_SECRET is empty on CI', how: 'ran', source: 'ci run 42', ratings: r({ H1: '-', H2: '0', H3: '++' }) }] }
   };
   const state = await runWorkflow({ source: SOURCE, args: { problem: PROBLEM, agents: 2 }, runAgent: scripted(prompts, overrides), structuredRetries: 1 });
   assert.equal(state.status, 'completed', state.error);
   assert.ok(prompts.some((item) => item.label === 'discriminate H1 vs H3'));
-  assert.match(state.result, /## Decisive test\n\nH1 vs H3: Run CI with SESSION_SECRET printed/);
+  assert.match(prompts.find((item) => item.label === 'propose tests').prompt, /WITHOUT running them yet/);
+  assert.match(prompts.find((item) => item.label === 'discriminate H1 vs H3').prompt, /Run this test, chosen because it is expected to separate the hypotheses most \(0\.\d\d bits\): Print SESSION_SECRET length on CI/);
+  assert.ok(state.logs.some((line) => /test plan: Print SESSION_SECRET length on CI \(0\.\d\d bits\); Rerun CI \(0\.0\d bits\)/.test(line)), state.logs.join('\n'));
+  assert.match(state.result, /## Decisive test\n\nH1 vs H3: Run CI with SESSION_SECRET printed[^\n]*\(chosen over 1 other candidate for the highest expected information, 0\.\d\d bits\)/);
   assert.match(state.result, /\*\*H3: A missing SESSION_SECRET env var on CI\*\*/);
   assert.match(state.result, /Leading explanation \(not settled\)/, 'one direct observation from one agent does not settle it');
 });
@@ -76,4 +83,18 @@ test('diagnose: when everything is contradicted it looks for the missing explana
 test('diagnose: usage without a problem', async () => {
   const state = await runWorkflow({ source: SOURCE, args: '', runAgent: async () => { throw new Error('no agents'); } });
   assert.match(state.result, /^Usage: \/diagnose/);
+});
+
+test('diagnose: with no informative candidate the runner designs its own test', async () => {
+  const prompts = [];
+  const overrides = {
+    'falsify H1': { verdict: 'weakened', observations: [{ what: 'Fails under load only', how: 'ran', source: 'load test', ratings: r({ H1: '+', H2: '0', H3: '+' }) }] },
+    'falsify H2': { verdict: 'refuted', observations: [{ what: 'Passes with TZ=UTC', how: 'ran', source: 'TZ=UTC npm test', ratings: r({ H1: '0', H2: '--', H3: '0' }) }] },
+    'falsify H3': { verdict: 'survived', observations: [] },
+    'propose tests': { tests: [{ test: 'Rerun CI', predictions: r({ H1: '+', H2: '+', H3: '+' }) }] },
+    'discriminate H1 vs H3': { test: 'Own test', observations: [] }
+  };
+  const state = await runWorkflow({ source: SOURCE, args: { problem: PROBLEM, agents: 2 }, runAgent: scripted(prompts, overrides), structuredRetries: 1 });
+  assert.equal(state.status, 'completed', state.error);
+  assert.match(prompts.find((item) => item.label === 'discriminate H1 vs H3').prompt, /Design the single test/);
 });
