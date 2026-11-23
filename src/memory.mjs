@@ -18,6 +18,7 @@
 //            "paths:" front-matter list scopes a rule to matching files
 // Lines starting with "@path" inside a memory file include that workspace file.
 import { cleanInstructionText } from './untrusted-content.mjs';
+import { pinnedInstructionText } from './instruction-pins.mjs';
 import { appendFile, lstat, mkdir, readFile, readdir, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -303,6 +304,8 @@ export async function loadMemory(root, options = {}) {
     try { content = await readFile(real, 'utf8'); } catch { continue; }
     if (!content.trim() || content.includes('\0')) continue;
     content = cleanInstructionText(path.basename(file.path), content, notices);
+    // New risky lines in project instruction files wait for the user (src/instruction-pins.mjs).
+    if (file.label !== 'user' && file.label !== 'parent' && file.label !== 'readme') content = await pinnedInstructionText(root, path.relative(path.resolve(root), file.path).split(path.sep).join('/'), content, { env: options.env || process.env, notices });
     // Many repositories keep identical copies (CLAUDE.md = AGENTS.md = GEMINI.md); load one.
     const fingerprint = content.replace(/\s+/g, ' ').trim();
     if (file.label !== 'readme' && seen.has('content:' + fingerprint)) continue;
@@ -326,7 +329,12 @@ export async function loadMemory(root, options = {}) {
     if (!fingerprint || seen.has('content:' + fingerprint)) continue;
     seen.add('content:' + fingerprint);
     const shown = rule.label.startsWith('.claude/rules/') || rule.label.startsWith('~/') ? rule.name : rule.label;
-    parts.push('--- ' + (rule.scope === 'user' ? 'User rule' : 'Project rule') + ': ' + shown + ' ---\n' + clipInstruction('rule ' + shown, cleanInstructionText('rule ' + shown, rule.body, notices), notices));
+    let body = cleanInstructionText('rule ' + shown, rule.body, notices);
+    if (rule.scope !== 'user' && rule.real) {
+      const relative = path.relative(await realpath(path.resolve(root)).catch(() => path.resolve(root)), rule.real);
+      if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) body = await pinnedInstructionText(root, 'rule:' + relative.split(path.sep).join('/'), body, { env, notices });
+    }
+    parts.push('--- ' + (rule.scope === 'user' ? 'User rule' : 'Project rule') + ': ' + shown + ' ---\n' + clipInstruction('rule ' + shown, body, notices));
   }
   if (requested.length) {
     parts.push('--- Rules available on request ---\nRead a rule with read_file when its description fits the task:\n' + requested.slice(0, 40).map((rule) => '- ' + rule.label + (rule.description ? ': ' + cleanInstructionText('rule ' + rule.label, rule.description, notices).replace(/\s+/g, ' ') : '')).join('\n'));

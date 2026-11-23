@@ -149,6 +149,14 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - Acceptance: the fingerprint changes with tracked and untracked edits, returns when an edit is undone, and ignores ignored files; filtered, masked, unfinished, empty and file-changing runs are not kept; a later session is told the result, the same session is not, and an edit hides it; end to end, a second session is told `npm test` passed and, when an ignored file breaks it, the failing result names the flip. `test/check-memory.test.mjs`.
 - Limit: inputs outside the tracked files (dependencies, environment) are not in the key, which is exactly why results are offered as context and not used to skip runs.
 
+### Instruction pins
+
+- Commit: see `git log -- src/instruction-pins.mjs` ("Withhold risky lines newly added to project instruction files"). Docs: [Security model](../SECURITY.md#controls-oasis-enforces).
+- Problem: instruction files are the most trusted text in the prompt and change without the user writing them. Hidden-character attacks ("Rules File Backdoor") were already stripped; plain-text additions were loaded with full authority, and an injected agent could persist itself by editing AGENTS.md.
+- Prior art: OASIS pins MCP tool definitions and asks again when one changes (`src/mcp-trust.mjs`), after the MCP "rug pull" reports; the Rules File Backdoor research covered hidden Unicode in rules files ([Pillar Security](https://www.pillar.security/blog/new-vulnerability-in-github-copilot-and-cursor-how-hackers-can-weaponize-code-agents)).
+- New: trust on first use applied to instruction files at line granularity: only lines added since the last accepted version are judged, so a project's existing instructions never trip it and a harmless edit causes no prompt; the risky new lines are withheld, not the file. Pins live outside the repository, and acceptance needs a person at a terminal.
+- Acceptance: the risk patterns flag piping to a shell, data sent out, credential reads, concealment, disabling controls and injection phrasing, and pass ordinary instructions; a planted line is withheld across loads while a harmless new line in the same change loads; trust loads it; a moved line is not new; `loadMemory` withholds lines planted in AGENTS.md and a project rule. `test/instruction-pins.test.mjs`.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |

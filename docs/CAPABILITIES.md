@@ -28,6 +28,7 @@ performance claim.
 | --- | --- | --- |
 | Agent turn loop, tool calls, streaming, compaction, checkpoints and `/rewind` | Stable | [Architecture](ARCHITECTURE.md) |
 | Permission modes (`plan` … `dont-ask`), shell-command risk analysis, protected paths, secret scanning | Stable | [Security model](SECURITY.md) |
+| Instruction pins: risky lines newly added to AGENTS.md, CLAUDE.md or project rules are withheld until you accept them | Unreleased | [Security model](SECURITY.md#controls-oasis-enforces) |
 | Check memory: check results kept per exact working-tree content across sessions; a different outcome on the same files is flagged as flaky or environmental | Unreleased | [Continuity](CONTINUITY.md#check-memory) |
 | Egress provenance: composed data sent to a host that only outside content named waits for a person; following links passes | Unreleased | [Security model](SECURITY.md#controls-oasis-enforces) |
 | Canary credential: a decoy token in every command environment; a tool call that carries it (also encoded) is refused and holds the turn's outbound actions | Unreleased | [Security model](SECURITY.md#controls-oasis-enforces) |
