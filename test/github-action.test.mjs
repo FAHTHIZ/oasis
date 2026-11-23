@@ -280,3 +280,53 @@ test('questions get an answer and no push', async (t) => {
   const skipped = await runAction({ env: { GITHUB_EVENT_NAME: 'issue_comment' }, root: work, event: comment('thanks'), request, sdk, log: () => {} });
   assert.equal(skipped.responded, false);
 });
+
+test('each action run leaves a checked receipt outside the checkout, signed with the secret key the agent never sees', async (t) => {
+  const { work } = await repoWithRemote(t);
+  const home = await tmp(t);
+  const runnerTemp = await tmp(t);
+  const { generateKeyPairSync } = await import('node:crypto');
+  const { createReceipt, writeReceipt, receiptKeyFromPem, readReceipt } = await import('../src/receipts.mjs');
+  const { createEvidenceLedger, recordEvidence } = await import('../src/evidence-ledger.mjs');
+  const pem = generateKeyPairSync('ed25519').privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const expectedKey = receiptKeyFromPem(pem).keyId;
+  const { calls, request } = fakeGitHub();
+  let seen = null;
+  const sdk = {
+    run: async (_prompt, options) => {
+      seen = { file: options.receipt, key: options.receiptKey, envKey: options.env.OASIS_RECEIPT_KEY, processKey: process.env.OASIS_RECEIPT_KEY };
+      const ledger = createEvidenceLedger();
+      recordEvidence(ledger, { kind: 'check', tool: 'run_shell', command: 'node -e "process.exit(0)"', checkKind: 'test', exitCode: 0, finished: true, passed: true, digest: 'x' });
+      const session = { root: options.cwd, evidenceLedger: ledger, config: { model: 'm' }, messages: [{ role: 'user', content: 'where is login?' }, { role: 'assistant', content: 'login() lives in login.js.' }] };
+      await writeReceipt(options.receipt, await createReceipt(session, { key: options.receiptKey }));
+      return { is_error: false, subtype: 'success', result: 'login() lives in login.js.', receipt: options.receipt };
+    }
+  };
+  const output = path.join(runnerTemp, 'out.txt');
+  const env = { ...gitEnv, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), GITHUB_EVENT_NAME: 'issue_comment', GITHUB_REPOSITORY: 'acme/app', GITHUB_RUN_ID: '42', RUNNER_TEMP: runnerTemp, GITHUB_OUTPUT: output, OASIS_RECEIPT_KEY: pem };
+  const outcome = await runAction({ env, root: work, event: comment('@oasis where is login?'), request, sdk, log: () => {} });
+  assert.equal(seen.file, path.join(runnerTemp, 'oasis-receipt-42-1.json'));
+  assert.ok(!seen.file.startsWith(work), 'the receipt is never inside the checkout');
+  assert.equal(seen.key.keyId, expectedKey);
+  assert.equal(seen.envKey, undefined, 'the agent environment has no signing key');
+  assert.equal(seen.processKey, undefined);
+  assert.equal(outcome.receipt.status, 'verified');
+  assert.equal((await readReceipt(seen.file)).signature.keyId, expectedKey);
+  assert.match(calls.at(-1).body.body, /Receipt: \*\*verified\*\*: 1 evidence events[\s\S]*Signed by `ed25519:[0-9a-f]{32}`/);
+  const { readFile } = await import('node:fs/promises');
+  const written = await readFile(output, 'utf8');
+  assert.match(written, /\nreceipt=.*oasis-receipt-42-1\.json\nreceipt_status=verified\n/);
+  // receipt: false turns it off.
+  let off = 'unset';
+  const quiet = { run: async (_prompt, options) => { off = options.receipt; return { is_error: false, subtype: 'success', result: 'ok' }; } };
+  await runAction({ env: { ...env, INPUT_RECEIPT: 'false' }, root: work, event: comment('@oasis where is login?'), request, sdk: quiet, log: () => {} });
+  assert.equal(off, undefined);
+});
+
+test('action.yml exposes every output from the step that sets it', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const yml = await readFile(new URL('../action.yml', import.meta.url), 'utf8');
+  for (const name of ['result', 'branch', 'pull_request', 'receipt', 'receipt_status']) assert.match(yml, new RegExp('\\n  ' + name + ':\\n    description: .*\\n    value: \\$\\{\\{ steps\\.oasis\\.outputs\\.' + name + ' \\}\\}'));
+  assert.match(yml, /INPUT_RECEIPT: \$\{\{ inputs\.receipt \}\}/);
+  assert.match(yml, /OASIS_RECEIPT_KEY: \$\{\{ inputs\.receipt_signing_key \}\}/);
+});

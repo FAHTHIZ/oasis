@@ -227,6 +227,8 @@ async function* runQuery({ prompt, options }, control) {
     maxTurns: options.maxTurns || null,
     planOnly: Boolean(options.planOnly),
     jsonSchema: options.jsonSchema || null,
+    receipt: typeof options.receipt === 'string' ? options.receipt : '',
+    receiptKey: options.receiptKey || null,
     persistence: { enabled: Boolean(options.persistSession), resumeId: options.resume || null },
     sessionOptions: {
       permissionMode: options.permissionMode || null,

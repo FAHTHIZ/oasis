@@ -62,23 +62,39 @@ inputs:
   git_email:
     description: Commit author email. Defaults to that person's GitHub noreply address.
     required: false
+  receipt:
+    description: Write a signed receipt of the run (evidence, claims, file digests, checks to replay), check it, report the verdict in the comment and upload it as the oasis-receipt artifact. Set to false to turn off.
+    default: 'true'
+  receipt_signing_key:
+    description: Ed25519 private key (PEM) to sign receipts with, from a secret, so reviewers can pin its key id with --trust. Without it each run signs with a new key. Create one with `oasis receipt key --new`.
+    required: false
   github_token:
     description: Token for comments, pushes, and pull requests.
     default: ${{ github.token }}
 outputs:
   result:
     description: Oasis's final summary.
+    value: ${{ steps.oasis.outputs.result }}
   branch:
     description: Branch that received the changes, if any.
+    value: ${{ steps.oasis.outputs.branch }}
   pull_request:
     description: URL of the pull request Oasis opened, if any.
+    value: ${{ steps.oasis.outputs.pull_request }}
+  receipt:
+    description: Path of the signed run receipt, if one was written.
+    value: ${{ steps.oasis.outputs.receipt }}
+  receipt_status:
+    description: Verdict of checking the receipt (verified, drifted, unsupported, tampered, ...).
+    value: ${{ steps.oasis.outputs.receipt_status }}
 runs:
   using: composite
   steps:
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: '22'
-    - shell: bash
+    - id: oasis
+      shell: bash
       run: node "$GITHUB_ACTION_PATH/src/github-action.mjs"
       env:
         GITHUB_TOKEN: ${{ inputs.github_token }}
@@ -104,3 +120,11 @@ runs:
         INPUT_APPEND_SYSTEM_PROMPT: ${{ inputs.append_system_prompt }}
         INPUT_GIT_NAME: ${{ inputs.git_name }}
         INPUT_GIT_EMAIL: ${{ inputs.git_email }}
+        INPUT_RECEIPT: ${{ inputs.receipt }}
+        OASIS_RECEIPT_KEY: ${{ inputs.receipt_signing_key }}
+    - if: always() && steps.oasis.outputs.receipt != ''
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: oasis-receipt
+        path: ${{ steps.oasis.outputs.receipt }}
+        if-no-files-found: ignore

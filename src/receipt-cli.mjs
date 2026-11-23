@@ -3,17 +3,19 @@
 //   oasis receipt verify FILE [--replay] [--trust KEY_ID]... [--no-workspace] [--json]
 //   oasis receipt show FILE [--json]
 //   oasis receipt key            print this machine's receipt key id and public key
+//   oasis receipt key --new      print a new private key (PEM) for a CI secret, and its key id
 //
 // verify exits 0 when the receipt is verified (or reproduced with --replay),
 // 1 otherwise, so it can gate CI.
 
-import { readReceipt, verifyReceipt, formatVerification, receiptKey } from './receipts.mjs';
+import { generateKeyPairSync } from 'node:crypto';
+import { readReceipt, verifyReceipt, formatVerification, receiptKey, receiptKeyFromPem } from './receipts.mjs';
 
 const USAGE = [
   'Usage:',
   '  oasis receipt verify FILE [--replay] [--trust KEY_ID] [--no-workspace] [--json]',
   '  oasis receipt show FILE [--json]',
-  '  oasis receipt key',
+  '  oasis receipt key [--new]',
   '',
   'Create a receipt with: oasis -p "task" --receipt receipt.json',
   '--replay reruns the checks recorded in the receipt in this workspace. Only replay receipts you trust,',
@@ -24,6 +26,16 @@ export async function receiptCommand(args, workspace, { write = (text) => proces
   const [sub, ...rest] = args;
   const json = rest.includes('--json');
   if (!sub || sub === '--help' || sub === '-h' || sub === 'help') { write(USAGE + '\n'); return 0; }
+  if (sub === 'key' && rest.includes('--new')) {
+    // For CI: store the PEM as a secret (gh secret set OASIS_RECEIPT_KEY) and
+    // pass it to the action's receipt_signing_key; reviewers pin the key id.
+    const pair = generateKeyPairSync('ed25519');
+    const pem = pair.privateKey.export({ type: 'pkcs8', format: 'pem' });
+    const keyId = receiptKeyFromPem(pem).keyId;
+    if (json) write(JSON.stringify({ keyId, privateKey: pem }) + '\n');
+    else write(pem + '# Key id: ' + keyId + '\n# Save the lines above as a secret, e.g. oasis receipt key --new | gh secret set OASIS_RECEIPT_KEY\n');
+    return 0;
+  }
   if (sub === 'key') {
     const key = await receiptKey({ env });
     if (json) write(JSON.stringify({ keyId: key.keyId, publicKey: key.publicKey }) + '\n');

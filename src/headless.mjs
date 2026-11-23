@@ -174,6 +174,8 @@ export async function runHeadless(options) {
     requireVerified = false,
     // --receipt FILE: write a signed, verifiable receipt of the run (src/receipts.mjs).
     receipt = '',
+    // In-memory signing key for the receipt (the GitHub Action's OASIS_RECEIPT_KEY).
+    receiptKey = null,
     // Text mode: one short line per step on stderr, so `oasis -p` is not
     // silent for minutes. On by default only when stderr is a terminal;
     // OASIS_PROGRESS=1 forces it on, OASIS_PROGRESS=0 turns it off.
@@ -574,7 +576,7 @@ export async function runHeadless(options) {
   if (session && receipt && (result || progressed)) {
     try {
       const { createReceipt, writeReceipt } = await import('./receipts.mjs');
-      receiptPath = await writeReceipt(path.resolve(root, receipt), await createReceipt(session, { result, request: rawPrompt, env }));
+      receiptPath = await writeReceipt(path.resolve(root, receipt), await createReceipt(session, { result, request: rawPrompt, env, key: receiptKey }));
     } catch (caught) { receiptError = String(caught && caught.message || caught); }
   }
   if (session) closeSession(session);
