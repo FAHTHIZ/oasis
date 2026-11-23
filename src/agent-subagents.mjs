@@ -436,6 +436,10 @@ export async function runSubagent(parent, args, context, options) {
     // environment, or a parent on a virtual screen, it starts its own virtual screen.
     ...(environment === 'desktop' || parent.computerDisplay === 'virtual' ? { computerDisplay: 'virtual' } : {}),
     agentEnvironment: environment,
+    // --restricted holds at every depth: without it a grandchild could be
+    // given a desktop environment (computer and browser tools), and the
+    // per-tool restricted checks would not apply to it.
+    ...(parent.restricted ? { restricted: true } : {}),
     projectContextText: parent.projectContextText || '',
     subagentMaxDepth: parent.subagentMaxDepth,
     subagentMaxParallel: parent.subagentMaxParallel,
