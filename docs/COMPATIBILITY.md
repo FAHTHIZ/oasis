@@ -128,6 +128,17 @@ these tools use: `OASIS_PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `PLUGIN_ROOT`;
 `COPILOT_PLUGIN_DATA`; and `OASIS_PROJECT_DIR` and `CLAUDE_PROJECT_DIR`.
 `${NAME}` works for each in manifests, commands and skills.
 
+### Bringing plugins from other agents
+
+`oasis plugin adopt --list` shows the plugins you already installed in Gemini
+CLI (`~/.gemini/extensions`), Codex (`~/.codex/plugins/cache`, newest cached
+version), Copilot CLI (`~/.copilot/installed-plugins`) and Cursor
+(`~/.cursor/plugins`). `oasis plugin adopt --yes` installs them all through
+`oasis add`, converted and audited like any other plugin; name some (`oasis
+plugin adopt greeter codex:linter --yes`) or use `--from gemini,codex` to
+choose. The other agents' folders are only read. Claude Code plugins need no
+adopting: OASIS reads Claude Code's own install record.
+
 ### Using everything from any MCP client
 
 `oasis mcp serve` turns OASIS into a bridge for agents that only speak MCP.

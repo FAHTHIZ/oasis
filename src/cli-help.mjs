@@ -167,6 +167,7 @@ export function helpText() {
     '  oasis plugins remove NAME     Remove a bundle and its owned skills',
     '  oasis plugin marketplace add OWNER/REPO|GIT-URL|PATH  Add a Claude Code plugin marketplace (list, update, remove)',
     '  oasis plugin install NAME@MARKETPLACE [--allow-risky]  Install a Claude Code plugin, audited first (uninstall, enable, disable, update, show, validate)',
+    '  oasis plugin adopt [NAME ...] [--from gemini,codex,copilot,cursor] [--list] [--yes]  Install the plugins you already have in other agents',
     '  oasis plugin inspect [PATH] [--json]  Show what a plugin from any agent becomes in OASIS, Claude Code, Codex, Gemini CLI, Cursor and Copilot CLI',
     '  oasis plugin export [PATH] --to all --out DIR  Write one plugin folder every one of those agents can load',
     '  oasis plugin eval DIR [--runs N] [--no-baseline] [--json]  Score a plugin or skill on its evals/evals.json cases against a no-plugin baseline',
