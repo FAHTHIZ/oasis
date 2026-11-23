@@ -22,7 +22,11 @@
 //     poster's own tool results do not back it (same grounding as the
 //     knowledge board), halved again when it repeats a source already used on
 //     this question (correlated evidence), and an agent's positive rating of
-//     its own hypothesis counts half (self-confirmation)
+//     its own hypothesis counts half (self-confirmation); and scaled by the
+//     rater's track record: once a model has 5+ resolved ratings, its new
+//     evidence weighs (held + 3) / (stated + 3), between 0.4 and 1.5, so a
+//     model whose evidence keeps pointing the wrong way stops moving the
+//     posterior as much as one that is reliably right (raterTrack)
 //   - status gives each hypothesis's posterior and ACH inconsistency score,
 //     and names the most informative next test: the two leading hypotheses
 //     when they are close, and hypotheses nobody has tested yet
@@ -35,6 +39,11 @@
 import { siteOf } from './source-independence.mjs';
 import { normalizeUrl } from './evidence-ledger.mjs';
 import { basePriors } from './hypothesis-history.mjs';
+
+const MAX_WEIGHT = 1.5;
+const MIN_TRACK = 5;
+const TRACK_PRIOR = 3;
+const MIN_TRACK_FACTOR = 0.4;
 
 const MAX_QUESTIONS = 20;
 const MAX_HYPOTHESES = 8;
@@ -83,7 +92,7 @@ export function sanitizeMatrix(value) {
       id: clean(e.id, 20), text: clean(e.text, 600), by: clean(e.by, 100) || 'main', grounded: e.grounded === true,
       sites: (Array.isArray(e.sites) ? e.sites : []).map((site) => clean(site, 200)).filter(Boolean).slice(0, 10),
       ratings: Object.fromEntries(Object.entries(e.ratings && typeof e.ratings === 'object' ? e.ratings : {}).filter(([id, rating]) => ids.has(id) && rating in RATINGS)),
-      weight: Number.isFinite(e.weight) ? Math.min(1, Math.max(0, e.weight)) : 1,
+      weight: Number.isFinite(e.weight) ? Math.min(MAX_WEIGHT, Math.max(0, e.weight)) : 1,
       ...(e.untrusted ? { untrusted: true } : {}),
       ...(clean(e.model, 120) ? { model: clean(e.model, 120) } : {}),
       ...(clean(e.type, 80) ? { type: clean(e.type, 80) } : {})
@@ -244,6 +253,9 @@ export function runHypothesisTool(session, board, args = {}, { actor = 'main', g
     if (!grounds.length) { weight *= 0.5; why.push('not backed by your own tool results'); }
     if (repeats) { weight *= 0.5; why.push('repeats a source already used on this question (' + sites.join(', ') + ')'); }
     if (untrusted) { weight *= 0.5; why.push('you read content that looked like a prompt injection'); }
+    const track = raterTrack(ledger, clean(model, 120));
+    if (track && track.factor !== 1) { weight *= track.factor; why.push(describeTrack(track)); }
+    weight = Math.round(Math.min(MAX_WEIGHT, weight) * 1000) / 1000;
     const item = { id: 'e_' + matrix.nextE++, text, by: actor, grounded: grounds.length > 0, sites, ratings, weight, ...(untrusted ? { untrusted: true } : {}), ...(clean(model, 120) ? { model: clean(model, 120) } : {}), ...(clean(type, 80) ? { type: clean(type, 80) } : {}) };
     question.evidence.push(item);
     if (question.evidence.length > MAX_EVIDENCE) question.evidence.shift();
@@ -275,6 +287,29 @@ export function runHypothesisTool(session, board, args = {}, { actor = 'main', g
     return { questions, open: questions.filter((q) => q.state === 'open').length, note: questions.length ? 'Posteriors are recomputed from the evidence each time; inconsistency counts how much evidence contradicts each hypothesis (lower is better, as in ACH).' : 'No questions yet. Open one with action open when several explanations are possible.' };
   }
   throw new Error('Unknown hypotheses action ' + action + '.');
+}
+
+/**
+ * A rater's track record on resolved questions (calibration ledger, kind
+ * "hypothesis"): how often the hypothesis its evidence favoured turned out to
+ * be the answer, against how sure the ratings were. factor scales the weight
+ * of its new evidence: (held + K) / (stated + K), so a thin record stays near
+ * 1, a model whose evidence keeps pointing the wrong way drops toward 0.4 and
+ * one that is reliably right rises toward 1.5. null until MIN_TRACK records.
+ */
+export function raterTrack(ledger, model) {
+  if (!ledger || typeof ledger.records !== 'function' || !model) return null;
+  let list = [];
+  try { list = ledger.records({ model }).filter((item) => item.kind === 'hypothesis'); } catch { return null; }
+  if (list.length < MIN_TRACK) return null;
+  const held = list.reduce((sum, item) => sum + item.o, 0);
+  const stated = list.reduce((sum, item) => sum + item.p, 0);
+  const factor = Math.round(Math.min(MAX_WEIGHT, Math.max(MIN_TRACK_FACTOR, (held + TRACK_PRIOR) / (stated + TRACK_PRIOR))) * 100) / 100;
+  return { model, n: list.length, held, factor };
+}
+
+function describeTrack(track) {
+  return (track.factor < 1 ? 'down-weighted' : 'up-weighted') + ' x' + track.factor + ': evidence from ' + track.model + ' pointed at the answer ' + track.held + ' of ' + track.n + ' times on resolved questions';
 }
 
 /**

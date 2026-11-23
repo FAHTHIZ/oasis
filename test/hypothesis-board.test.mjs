@@ -156,3 +156,29 @@ test('resolved questions become base rates for similar new questions', async () 
   runHypothesisTool({}, child, { action: 'resolve', question: 'q_1', hypothesis: 'h_1' }, { actor: 'agent_1', history });
   assert.equal(history.cases().length, 3);
 });
+
+test('evidence is weighted by the rater model\'s track record on resolved questions', async () => {
+  const { createCalibrationLedger } = await import('../src/calibration.mjs');
+  const { raterTrack } = await import('../src/hypothesis-board.mjs');
+  const ledger = createCalibrationLedger();
+  assert.equal(raterTrack(ledger, 'model-a'), null, 'no record, no adjustment');
+  for (let i = 0; i < 8; i++) {
+    ledger.record({ id: 'bad' + i, model: 'model-bad', p: 0.9, o: 0, kind: 'hypothesis' });
+    ledger.record({ id: 'good' + i, model: 'model-good', p: 0.6, o: 1, kind: 'hypothesis' });
+    ledger.record({ id: 'other' + i, model: 'model-other', p: 0.9, o: 0, kind: 'retracted' });
+  }
+  assert.equal(raterTrack(ledger, 'model-bad').factor, 0.4);
+  assert.ok(raterTrack(ledger, 'model-good').factor > 1.3);
+  assert.equal(raterTrack(ledger, 'model-other'), null, 'only hypothesis outcomes count');
+  const board = {};
+  open(board);
+  const bad = runHypothesisTool({}, board, { action: 'evidence', question: 'q_1', evidence: 'TZ=UTC fixes it', sources: ['https://a.example.com/1'], ratings: { h_1: '++', h_2: '-', h_3: '-' } }, { actor: 'agent_1', ground: grounded, model: 'model-bad', ledger });
+  assert.equal(bad.weight, 0.4);
+  assert.match(bad.weight_reason, /down-weighted x0.4: evidence from model-bad pointed at the answer 0 of 8 times/);
+  const good = runHypothesisTool({}, board, { action: 'evidence', question: 'q_1', evidence: 'Setup race visible in trace', sources: ['https://trace.example.org/1'], ratings: { h_1: '-', h_2: '++', h_3: '-' } }, { actor: 'agent_2', ground: grounded, model: 'model-good', ledger });
+  assert.ok(good.weight > 1.3 && good.weight <= 1.5);
+  const byId = Object.fromEntries(good.hypotheses.map((h) => [h.id, h]));
+  assert.ok(byId.h_2.posterior > byId.h_1.posterior, 'the reliable rater outweighs the unreliable one');
+  const restored = sanitizeMatrix(JSON.parse(JSON.stringify(board.hypotheses)));
+  assert.equal(restored.questions[0].evidence[1].weight, good.weight, 'weights above 1 survive a save');
+});
