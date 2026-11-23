@@ -186,3 +186,24 @@ test('Devin Desktop workflow folders in sub-folders load, below the workspace an
   const off = await loadCustomCommands(root, { env: { ...env, OASIS_OTHER_AGENT_RULES: '0' }, home });
   assert.equal(off.get('api-deploy'), undefined);
 });
+
+test('VS Code / Copilot prompt files become slash commands with ${input:...} filled from the arguments', async (t) => {
+  const { root, home, env } = await setup(t, {
+    '.github/prompts/explain.prompt.md': '---\ndescription: Explain code\n---\nExplain ${input:topic:what to explain} simply.',
+    '.github/prompts/pair.prompt.md': 'Compare ${input:a} with ${input:b}. ${selection}',
+    '.github/prompts/plain.prompt.md': 'Write tests.',
+    '.github/prompts/notes.md': 'not a prompt file',
+    '~/.config/Code/User/prompts/standup.prompt.md': 'Write my standup.'
+  });
+  const commands = await loadCustomCommands(root, { env: { ...env, XDG_CONFIG_HOME: path.join(home, '.config') }, home });
+  assert.equal(commands.get('explain').description, 'Explain code (VS Code)');
+  assert.equal(commands.get('explain').argumentHint, '<topic>');
+  assert.ok(!commands.has('notes'));
+  if (process.platform === 'linux') assert.ok(commands.has('standup'));
+  const one = await resolveCustomCommand(root, '/explain the event loop', { commands });
+  assert.equal(one.prompt, 'Explain the event loop simply.');
+  assert.equal((await resolveCustomCommand(root, '/explain', { commands })).prompt, 'Explain [what to explain] simply.');
+  const two = await resolveCustomCommand(root, '/pair react vue 3', { commands });
+  assert.equal(two.prompt, 'Compare react with vue 3. ${selection}');
+  assert.equal((await resolveCustomCommand(root, '/plain for utils.js', { commands })).prompt, 'Write tests.\n\nfor utils.js');
+});
