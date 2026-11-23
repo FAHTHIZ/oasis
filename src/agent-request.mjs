@@ -19,7 +19,7 @@ import { debugLog, debugEnabled } from './debug-log.mjs';
 import { TOOL_DEFINITIONS } from './tools.mjs';
 import { recordContextAnchor } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
-import { GENAI_TOKEN_BUCKETS, genAiErrorType, genAiProviderName, genAiServer, genAiSpanNames, getTelemetry } from './telemetry.mjs';
+import { GENAI_TOKEN_BUCKETS, currentTraceContext, genAiErrorType, genAiProviderName, genAiServer, genAiSpanNames, getTelemetry } from './telemetry.mjs';
 import { isAnthropicFamily, cloudEndpoint, cloudBody, cloudHeaders, cloudStreams } from './cloud-providers.mjs';
 import { assertZeroBudgetRoute, chargeRequestAttempt, recordTokenUsage } from './cost-policy.mjs';
 import { quotaRoute, assertRouteAvailable, recordSuccess as recordQuotaSuccess, recordFailure as recordQuotaFailure, recordTokens as recordQuotaTokens } from './quota-ledger.mjs';
@@ -441,6 +441,16 @@ async function requestCompletionRawInner(session, options = {}) {
       if (name === 'accept' || name === 'anthropic-version') continue;
       if ((name === 'authorization' || name === 'x-api-key') && (headers.authorization || headers['x-api-key'])) continue;
       headers[name] = value;
+    }
+  }
+  // W3C trace context names the model-call span, so a gateway or proxy that
+  // traces (LiteLLM, Envoy, a provider's own tracing) joins the same trace.
+  // Custom headers win if they set traceparent themselves.
+  {
+    const trace = currentTraceContext();
+    if (trace.traceparent && !headers.traceparent) {
+      headers.traceparent = trace.traceparent;
+      if (trace.tracestate && !headers.tracestate) headers.tracestate = trace.tracestate;
     }
   }
 

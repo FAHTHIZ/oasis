@@ -1,5 +1,6 @@
 import { readOnlyArgv, readOnlyCommandsEnabled, readOnlyGitEnv, repoFilterOverrides } from './read-only-commands.mjs';
 import { lineStats } from './line-stats.mjs';
+import { withTraceEnv } from './telemetry.mjs';
 import { credentialEnvName } from './credential-env.mjs';
 import { installSkillsFromSource, parseSkillSource } from './skill-install.mjs';
 import { securityWarning } from './security-patterns.mjs';
@@ -805,7 +806,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     let settled = false;
     let killTimer = null;
     let terminationRequested = false;
-    const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
+    const child = spawn(launch.command, launch.args, { cwd: root, env: withTraceEnv(env), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
     if (typeof launch.release === 'function') { child.once('close', launch.release); child.once('error', launch.release); }
     const live = typeof options.onOutput === 'function' ? options.onOutput : null;
     const append = (target, chunk) => {
@@ -939,7 +940,7 @@ async function runInstallPlan(plan, options) {
     let timedOut = false;
     let killTimer = null;
     let terminationRequested = false;
-    const child = spawn(plan.command, plan.args, { cwd: options.root, env, shell: false, windowsHide: true, stdio: 'inherit', ...processTreeSpawnOptions() });
+    const child = spawn(plan.command, plan.args, { cwd: options.root, env: withTraceEnv(env), shell: false, windowsHide: true, stdio: 'inherit', ...processTreeSpawnOptions() });
     const cleanup = () => {
       clearTimeout(timer);
       if (killTimer && !terminationRequested) clearTimeout(killTimer);
