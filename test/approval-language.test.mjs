@@ -131,3 +131,14 @@ test('a plan approval shows the whole plan; other long prompts say what was cut'
   assert.match(other.message, /\[2\d{3} characters in the middle not shown\]/);
   assert.match(other.message, /z{1000}$/);
 });
+
+test('a reworded command prompt keeps the rehearsal result and the high-risk reason', () => {
+  const prompt = 'Run this command in the workspace?\n  ./build.sh\nRehearsal (network off, nothing kept): exit 0 in 40 ms.\n  would create (1): dist/app.js\n  would delete (1): old.js\n  It also changed 2 path(s) inside .git.\nHIGH RISK: this command rewrites history. Auto-approval does not apply.\nCommands can change project files or execute project scripts. Oasis strips common secret environment variables from the child process.';
+  const { message, risky } = formatApprovalMessage(prompt, { tool: 'run_command', input: { command: './build.sh', args: [] } });
+  assert.equal(risky, true);
+  assert.match(message, /\n {2}\.\/build\.sh\n/);
+  assert.match(message, /\nRehearsal \(network off, nothing kept\): exit 0 in 40 ms\.\nWould create \(1\): dist\/app\.js\nWould delete \(1\): old\.js\nIt also changed 2 path\(s\) inside \.git\.\nHIGH RISK: this command rewrites history\./);
+  assert.doesNotMatch(message.split('\n').slice(3).join('\n'), /^ {2}/m, 'only the command line is indented (shown as code)');
+  const plain = formatApprovalMessage('Run this command in the workspace?\n  ls\nCommands can change project files.', { tool: 'run_command', input: { command: 'ls', args: [] } }).message;
+  assert.doesNotMatch(plain, /Rehearsal|HIGH RISK/);
+});

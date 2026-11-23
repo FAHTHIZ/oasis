@@ -82,6 +82,26 @@ export function formatApprovalDiff(toolName, input = {}) {
   return output;
 }
 
+// What the tool found out before asking, kept when the command prompt is reworded:
+// the rehearsal's result (what the command would create, modify or delete) and the
+// reason a command is high risk. Indented continuation lines are flattened so the
+// apps do not show them as code.
+function commandFacts(original) {
+  const lines = original.split(/\r?\n/);
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (/^Rehearsal\b/.test(line)) {
+      out.push(line);
+      for (let j = i + 1; j < lines.length && /^\s{2,}\S/.test(lines[j]) && out.length < 12; j++, i++) {
+        const body = lines[j].trim();
+        out.push(body.charAt(0).toUpperCase() + body.slice(1));
+      }
+    } else if (/^HIGH RISK:/.test(line)) out.push(line);
+  }
+  return out.length ? '\n' + headAndTail(out.join('\n'), 1500) : '';
+}
+
 export function formatApprovalMessage(prompt, meta = {}) {
   const original = redactApprovalSecrets(String(prompt == null ? '' : prompt).trim());
   const tool = String(meta && meta.tool || '').toLowerCase();
@@ -109,7 +129,7 @@ export function formatApprovalMessage(prompt, meta = {}) {
     const match = original.match(/^Run this command in the workspace\?\s*\n\s*([^\n]+)/i);
     const commandText = command || (match && match[1].trim()) || '';
     message = 'OASIS wants to run this command in your project:\n  ' + (commandText ? headAndTail(redactApprovalSecrets(commandText), 4000).replace(/\n(?! {2})/g, '\n  ') : '[command details shown below]') +
-      '\nCommands can change project files or run project scripts. Read the command before you approve it.';
+      '\nCommands can change project files or run project scripts. Read the command before you approve it.' + commandFacts(original);
     risky = /\b(?:sudo|su\s+-|rm\s+-rf|mkfs(?:\.|\s)|diskpart|format\s+[a-z]:|shutdown|reboot|drop\s+(?:database|table)|chmod\s+-R\s+777|curl\b[^\n]*\|\s*(?:sh|bash))\b/i.test(commandText);
     if (/HIGH RISK:/i.test(original)) risky = true;
   } else if (/^Install package\s+/i.test(original)) {

@@ -341,3 +341,65 @@ test('edits made while the approval prompt is open are not credited to the comma
   assert.ok(tool.effects, JSON.stringify(tool));
   assert.deepEqual(tool.effects.files, ['built.txt (added)']);
 });
+
+test('the app approval card can apply the rehearsal through the web server', { skip }, async (t) => {
+  const { startOasisWebServer } = await import('../src/web.mjs');
+  const { saveConfig } = await import('../src/config.mjs');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const root = await workspace();
+  const env = { ...process.env, OASIS_REHEARSE: '1', OASIS_CONFIG_DIR: path.join(root, '.cfg') };
+  const count = await script(root, 'count.sh', 'echo run >> count.txt');
+  const { config, requests } = await scriptedModel(t, [toolCall('c1', 'run_command', { command: count, args: [] }), { content: 'done' }]);
+  await saveConfig(config, { env });
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789' });
+  t.after(async () => { await app.close(); await rm(root, { recursive: true, force: true }); });
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const job = await (await fetch(base + '/api/chat', { method: 'POST', headers, body: JSON.stringify({ message: 'count' }) })).json();
+  const poll = async (predicate) => {
+    for (const deadline = Date.now() + 15000; Date.now() < deadline; await new Promise((resolve) => setTimeout(resolve, 25))) {
+      const snapshot = await (await fetch(base + '/api/jobs/' + job.jobId + '?after=0', { headers })).json();
+      if (predicate(snapshot)) return snapshot;
+    }
+    throw new Error('timed out');
+  };
+  let snapshot = await poll((s) => s.events.some((e) => e.type === 'approval_required') || ['completed', 'error'].includes(s.status));
+  const asked = snapshot.events.find((e) => e.type === 'approval_required');
+  assert.ok(asked, JSON.stringify(snapshot.events.map((e) => e.type)));
+  assert.equal(asked.data.rehearsal, true, 'the card is told it can offer "Apply rehearsal"');
+  assert.match(asked.data.prompt, /Rehearsal \(network off, nothing kept\).*\nWould create \(1\): count\.txt/s, 'the card shows what the rehearsal changed');
+  const answer = await (await fetch(base + '/api/jobs/' + job.jobId + '/approval', { method: 'POST', headers, body: JSON.stringify({ approvalId: asked.data.approvalId, approved: true, rehearsal: true }) })).json();
+  assert.equal(answer.rehearsal, true);
+  snapshot = await poll((s) => ['completed', 'error'].includes(s.status));
+  assert.equal(snapshot.status, 'completed', snapshot.error);
+  assert.equal(snapshot.events.find((e) => e.type === 'approval_resolved').data.rehearsal, true);
+  assert.equal(await readFile(path.join(root, 'count.txt'), 'utf8'), 'run\n', 'landed once, not run a second time');
+  assert.match(requests[1].messages.find((m) => m.role === 'tool').content, /"appliedRehearsal":true/);
+});
+
+test('the web server ignores a rehearsal answer when none was offered', async (t) => {
+  const { startOasisWebServer } = await import('../src/web.mjs');
+  const { saveConfig } = await import('../src/config.mjs');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-web-norehearse-'));
+  const env = { ...process.env, OASIS_REHEARSE: '0', OASIS_CONFIG_DIR: path.join(root, '.cfg') };
+  const { config } = await scriptedModel(t, [toolCall('c1', 'run_command', { command: process.execPath, args: ['-e', 'require("fs").appendFileSync("ran.txt","x")'] }), { content: 'done' }]);
+  await saveConfig(config, { env });
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789' });
+  t.after(async () => { await app.close(); await rm(root, { recursive: true, force: true }); });
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const job = await (await fetch(base + '/api/chat', { method: 'POST', headers, body: JSON.stringify({ message: 'go' }) })).json();
+  let snapshot;
+  for (const deadline = Date.now() + 10000; Date.now() < deadline; await new Promise((resolve) => setTimeout(resolve, 25))) {
+    snapshot = await (await fetch(base + '/api/jobs/' + job.jobId + '?after=0', { headers })).json();
+    if (snapshot.events.some((e) => e.type === 'approval_required')) break;
+  }
+  const asked = snapshot.events.find((e) => e.type === 'approval_required');
+  assert.equal(asked.data.rehearsal, undefined);
+  const answer = await (await fetch(base + '/api/jobs/' + job.jobId + '/approval', { method: 'POST', headers, body: JSON.stringify({ approvalId: asked.data.approvalId, approved: true, rehearsal: true }) })).json();
+  assert.equal(answer.rehearsal, undefined, 'falls back to a plain yes');
+  for (const deadline = Date.now() + 10000; Date.now() < deadline && !['completed', 'error'].includes(snapshot.status); await new Promise((resolve) => setTimeout(resolve, 25))) snapshot = await (await fetch(base + '/api/jobs/' + job.jobId + '?after=0', { headers })).json();
+  assert.equal(snapshot.status, 'completed', snapshot.error);
+  assert.equal(await readFile(path.join(root, 'ran.txt'), 'utf8'), 'x', 'the command ran for real');
+});
