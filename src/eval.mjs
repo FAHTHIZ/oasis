@@ -1425,8 +1425,6 @@ async function runClaudeCodeEval(config, options = {}) {
   if (stoppedEarly) output.write('Stopped early: the provider failed ' + PROVIDER_ERROR_STOP_AT + ' trials in a row (' + stoppedEarly.error + '). ' + (selectedDirs.length * config.trials - trials.length) + ' trials were not run.\n');
   output.write('Median time: ' + (summary.medianTimeMs === null ? 'n/a' : summary.medianTimeMs + ' ms') + '\n');
   output.write('Cost per passed trial: ' + (summary.costPerPassedTaskUSD === null ? 'n/a' : '$' + summary.costPerPassedTaskUSD.toFixed(6)) + '\n');
-  const selfLine = describeSelfAssessment(summary.selfAssessment);
-  if (selfLine) output.write(selfLine + '\n');
   return { ok: !stoppedEarly && trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
 }
 
@@ -1438,6 +1436,8 @@ async function runClaudeCodeEval(config, options = {}) {
  */
 export function trialSelfAssessment(agentResult) {
   const verdict = agentResult && agentResult.task && agentResult.task.outcome && agentResult.task.outcome.verdict || null;
+  // A run that ended without a reply told the user it had nothing to report.
+  if (!verdict && agentResult && agentResult.emptyReply) return { verdict: null, claim: 'failure', reason: 'empty reply' };
   if (!verdict) return { verdict: null, claim: 'none' };
   const claim = verdictIsVerified(verdict) && agentResult.finished !== false ? 'success'
     : ['failed', 'cancelled', 'incomplete', 'rejected'].includes(verdict) || agentResult.finished === false ? 'failure'
@@ -1791,6 +1791,8 @@ export async function runEvalCommand(args = [], options = {}) {
   if (stoppedEarly) output.write('Stopped early: the provider failed ' + PROVIDER_ERROR_STOP_AT + ' trials in a row (' + stoppedEarly.error + '). ' + (selectedDirs.length * config.trials - trials.length) + ' trials were not run. Fix the provider (oasis connect), then run again.\n');
   output.write('Median time: ' + (summary.medianTimeMs === null ? 'n/a' : summary.medianTimeMs + ' ms') + '\n');
   output.write('Cost per passed trial: ' + (summary.costPerPassedTaskUSD === null ? 'n/a' : '$' + summary.costPerPassedTaskUSD.toFixed(6)) + '\n');
+  const selfLine = describeSelfAssessment(summary.selfAssessment);
+  if (selfLine) output.write(selfLine + '\n');
   return { ok: !stoppedEarly && trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
 }
 

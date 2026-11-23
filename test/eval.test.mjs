@@ -512,6 +512,8 @@ test('model eval runs in a disposable copy and records result metrics as JSON', 
   assert.ok(result.results[0].costUSD > 0);
   assert.ok(result.results[0].selfAssessment, 'each trial records what OASIS concluded');
   assert.equal(typeof result.summary.selfAssessment.assessed, 'number');
+  assert.equal(result.summary.selfAssessment.assessed, 1, JSON.stringify(result.results[0].selfAssessment));
+  assert.match(output.text, /Self-assessment: 1 trial with an OASIS verdict/);
   assert.match(result.resultsPath, /eval-results/);
   const stored = JSON.parse(await readFile(result.resultsPath, 'utf8'));
   assert.equal(stored.provider.model, 'fixture-model');

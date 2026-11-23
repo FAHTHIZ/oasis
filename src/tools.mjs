@@ -22,7 +22,7 @@ import { fetchPublicUrl } from './public-fetch.mjs';
 import { gitVisibleFiles } from './git-visible-files.mjs';
 import { createHash } from 'node:crypto';
 import { readdir, readFile, mkdir, unlink, lstat, realpath, stat, open as openFile } from 'node:fs/promises';
-import { createReadStream, readdirSync } from 'node:fs';
+import { createReadStream, existsSync, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
 import os from 'node:os';
@@ -241,6 +241,21 @@ export function additionalDirectories(rootReal) {
   return ADDITIONAL_DIRECTORIES.get(rootReal) || [];
 }
 
+// A model that guessed the wrong absolute prefix ("/tmp/run/CHANGELOG.md"
+// for "/tmp/run/workspace/CHANGELOG.md") is told the relative path that does
+// exist, so it can recover instead of concluding the file is missing. Only
+// paths inside the workspace are suggested; nothing outside is probed.
+function workspacePathHint(rootReal, target) {
+  const parts = target.split(path.sep).filter(Boolean);
+  for (let take = Math.min(4, parts.length); take >= 1; take -= 1) {
+    const tail = parts.slice(parts.length - take);
+    if (tail.some((part) => part === '..' || part === '.')) continue;
+    const candidate = path.join(rootReal, ...tail);
+    if (inside(rootReal, candidate) && candidate !== rootReal && existsSync(candidate)) return ' Use paths relative to the workspace (' + rootReal + '); did you mean ' + tail.join('/') + '?';
+  }
+  return ' Use paths relative to the workspace (' + rootReal + ').';
+}
+
 export async function resolveWorkspacePath(root, rawPath, options = {}) {
   const rootReal = await realpath(root);
   const input = String(rawPath || '.');
@@ -251,7 +266,7 @@ export async function resolveWorkspacePath(root, rawPath, options = {}) {
     const extra = additionalDirectories(rootReal).find((dir) => inside(dir, target));
     if (extra) base = extra;
   }
-  if (!inside(base, target) || target === path.parse(base).root) throw new Error('That path is outside the workspace.');
+  if (!inside(base, target) || target === path.parse(base).root) throw new Error('That path is outside the workspace.' + workspacePathHint(rootReal, target));
   // Paths in extra directories are reported relative to the workspace (../other/file).
   const relative = path.relative(rootReal, target);
   const baseRelative = path.relative(base, target);

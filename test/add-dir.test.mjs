@@ -90,3 +90,13 @@ test('additional directories keep credential folders out and protect their git h
   assert.equal(existsSync(path.join(lib, '.mcp.json')), false, '.mcp.json written in an added directory');
   assert.equal(prompts.length, 2);
 });
+
+test('a wrong absolute prefix is answered with the workspace path that exists', async (t) => {
+  const parent = await realpath(await mkdtemp(path.join(os.tmpdir(), 'oasis-hint-')));
+  t.after(() => rm(parent, { recursive: true, force: true }));
+  const root = path.join(parent, 'workspace');
+  await mkdir(path.join(root, 'docs'), { recursive: true });
+  await writeFile(path.join(root, 'docs', 'CHANGELOG.md'), 'x');
+  await assert.rejects(resolveWorkspacePath(root, path.join(parent, 'docs', 'CHANGELOG.md')), (error) => /outside the workspace\. Use paths relative to the workspace \(.*\); did you mean docs\/CHANGELOG\.md\?/.test(error.message));
+  await assert.rejects(resolveWorkspacePath(root, path.join(parent, 'nothing-here.md')), (error) => /outside the workspace\. Use paths relative to the workspace \([^)]*\)\.$/.test(error.message));
+});
