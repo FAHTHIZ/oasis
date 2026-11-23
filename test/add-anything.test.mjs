@@ -288,6 +288,7 @@ test('"Add to Cursor" and "Install in VS Code" links install the server they des
   const redirect = c('https://insiders.vscode.dev/redirect/mcp/install?name=github&config=' + encodeURIComponent(JSON.stringify({ type: 'http', url: 'https://api.githubcopilot.com/mcp/' })));
   assert.equal(redirect.kind, 'remote-mcp'); assert.equal(redirect.name, 'github'); assert.equal(redirect.transport, 'http');
   assert.throws(() => c('cursor://anysphere.cursor-deeplink/mcp/install?name=x&config=%%%'), /no readable MCP server config/);
+  assert.throws(() => c('vscode:mcp/install?%E0%A4%A'), /no readable MCP server config/);
 });
 
 // A broken mcp.json used to be read as {} and replaced by a file holding only

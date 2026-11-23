@@ -77,3 +77,8 @@ test('no releases yet is not an error', async () => {
     : new Response(null, { status: 302, headers: { location: 'https://github.com/FAHTHIZ/oasis/releases' } });
   assert.equal(await fetchLatestRelease(REPO, { fetchImpl, env: {} }), null);
 });
+
+test('parseExpandedAssets skips a download link with a malformed escape', () => {
+  const html = '<a href="/o/r/releases/download/v1.0.0/ok.tgz">a</a><a href="/o/r/releases/download/v1.0.0/bad%E0.tgz">b</a>';
+  assert.deepEqual(parseExpandedAssets(html, 'o/r', 'v1.0.0').map((asset) => asset.name), ['ok.tgz']);
+});

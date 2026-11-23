@@ -8,7 +8,7 @@ import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { bypassesProxy, createProxyFetch, describeProxy, parseProxyUrl, proxyForUrl } from '../src/proxy.mjs';
+import { bypassesProxy, createProxyFetch, describeProxy, openTunnel, parseProxyUrl, proxyForUrl } from '../src/proxy.mjs';
 
 const proxyModule = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'proxy.mjs');
 
@@ -190,4 +190,23 @@ test('the fetch_url tool goes through the proxy but only to the address that pas
   assert.deepEqual([proxy.seen[0].type, proxy.seen[0].url], ['connect', '93.184.216.34:' + port], 'the proxy is given the vetted IP, not the host name');
   await assert.rejects(fetchPublicUrl('http://evil.example.com/', { lookupImpl: async () => [{ address: '10.0.0.5', family: 4 }], env: { HTTP_PROXY: proxy.url } }).then((r) => { if (r.error) throw new Error(r.error); return r; }), /private|blocked/i);
   assert.equal(proxy.seen.length, 1, 'a blocked address never reaches the proxy');
+});
+
+test('a proxy password with a literal percent sign is sent as written, not thrown on', async (t) => {
+  let header = '';
+  const server = net.createServer((socket) => {
+    socket.once('data', (chunk) => {
+      header = (/proxy-authorization: basic (\S+)/i.exec(chunk.toString('latin1')) || [])[1] || '';
+      socket.end('HTTP/1.1 200 Connection established\r\n\r\n');
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections?.(); server.close(); });
+  const sockets = new Set();
+  server.on('connection', (socket) => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
+  t.after(() => { for (const socket of sockets) socket.destroy(); });
+  const proxy = parseProxyUrl('http://user:p%ss@127.0.0.1:' + server.address().port);
+  const socket = await openTunnel(proxy, 'example.com', 443);
+  socket.destroy();
+  assert.equal(Buffer.from(header, 'base64').toString('utf8'), 'user:p%ss');
 });

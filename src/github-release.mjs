@@ -36,7 +36,8 @@ async function latestTagFromWeb(repository, { fetchImpl = fetch, timeoutMs, user
     if (response.status >= 300 && response.status < 400) return null;
     throw new Error('github.com returned HTTP ' + response.status + ' while looking up the latest release.');
   }
-  const tag = decodeURIComponent(match[1]);
+  let tag = '';
+  try { tag = decodeURIComponent(match[1]); } catch { return null; }
   return TAG.test(tag) ? tag : null;
 }
 
@@ -49,7 +50,8 @@ export function parseExpandedAssets(html, repository, tag) {
   while ((match = pattern.exec(String(html || '')))) {
     const href = match[1].replace(/&amp;/g, '&');
     if (!href.startsWith(prefix)) continue;
-    const name = decodeURIComponent(href.slice(prefix.length));
+    let name = '';
+    try { name = decodeURIComponent(href.slice(prefix.length)); } catch { continue; }
     if (!name || name.includes('/') || seen.has(name)) continue;
     seen.add(name);
     assets.push({ name, size: 0, browser_download_url: 'https://github.com' + prefix + encodeURIComponent(name) });
