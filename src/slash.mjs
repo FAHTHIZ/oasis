@@ -129,7 +129,7 @@ export const BUILTIN_COMMANDS = {
   copy: 'Copy the last reply (or the Nth most recent) to the clipboard (/copy [N])',
   fork: 'Fork the conversation: keep the original saved and continue in a copy (alias /branch)',
   branch: 'Fork the conversation (same as /fork)',
-  skills: 'List available skills',
+  skills: 'List available skills (record: how tasks that used them turned out)',
   recall: 'Search earlier saved conversations for this project (/recall QUERY, /recall --all QUERY for every project)',
   remember: 'Save what is worth keeping from this conversation to auto memory (/remember [focus])',
   learning: 'Review reusable skill proposals learned from verified work (/learning [list|show ID|approve ID|reject ID])',
@@ -1107,6 +1107,10 @@ export async function runBuiltinCommand(name, argument, state) {
       return { output: 'Forked the conversation. The original is saved as ' + original.id + ' (/resume ' + original.id + ' to go back); you are now in ' + copy.id + '.', forked: { from: original.id, to: copy.id } };
     }
     case 'skills': {
+      if (/^\s*record\b/i.test(String(argument || ''))) {
+        const { formatSkillRecordRows, skillRecordRows } = await import('./skill-record.mjs');
+        return { output: 'Skill track records (task outcomes OASIS checked, per current skill version):\n' + formatSkillRecordRows(skillRecordRows({ env })) };
+      }
       const { listAvailableSkills } = await import('./tools.mjs');
       const skills = await listAvailableSkills(root, { env }).catch(() => []);
       if (!skills.length) return { output: 'No skills found. Add one at .oasis/skills/NAME/SKILL.md (or .claude/skills/NAME/SKILL.md) with name and description front matter.' };

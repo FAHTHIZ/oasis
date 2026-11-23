@@ -145,6 +145,7 @@ export { EFFORT_LEVELS, applyEffort, claudeEffortFor, claudeThinkingMode, inline
 export { announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationEnabled, claimsUnmadeChange, detectProjectTestCommand, diffReviewComplete, failureSignature, fencedFileFromReply, givesUpEarly, isVerificationCommand, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, requestedNewFile, samplingTemperature, targetFileHint, unreviewedPaths, untestedNewCode, verificationIssues, wrongFileNudge } from './turn-guards.mjs';
 export { formatWait, isHardQuotaError, isMalformedGenerationError, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs } from './provider-retry.mjs';
 import { recordTaskReview } from './task-reviews.mjs';
+import { noteSkillUse, skillRecordEnabled, skillRecordNote, skillTrackRecord } from './skill-record.mjs';
 import { applyReviewToExperience } from './agent-experience.mjs';
 import { MAX_SPECIALIST_REVIEWS_PER_TASK, runSpecialistReview, isReadOnlyAgent, runWorkflowTool, runSubagent, runAgentTool } from './agent-subagents.mjs';
 export { SPECIALIST_MAX_STEPS } from './agent-subagents.mjs';
@@ -2714,6 +2715,17 @@ async function executeOneCallRaw(session, call, context, options) {
       });
       if (AUTO_LSP_EDIT_TOOLS.has(name) && successfulMutation(name, result)) fileMutationResult = result;
       if (name === 'load_skill' && !options.isSubagent && result && typeof result.content === 'string') {
+        // The skill's track record (src/skill-record.mjs): how tasks that
+        // followed this version of it turned out, checked by OASIS.
+        // The session's environment, not the scrubbed one tools run with.
+        const skillEnv = options.env || (context && context.env) || process.env;
+        if (!result.error && !Number(args.offset) && skillRecordEnabled(skillEnv, session.settings)) {
+          try {
+            noteSkillUse(session, String(args.name || ''), result.content);
+            const note = skillRecordNote(skillTrackRecord(String(args.name || ''), result.content, { env: skillEnv }));
+            if (note) result = { ...result, trackRecord: note };
+          } catch {}
+        }
         result = await maybeForkSkill(session, result, args, callContext, options);
       }
       if (name === 'load_skill' && session.pluginMonitorsEnabled && result && !result.error) {

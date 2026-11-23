@@ -18,6 +18,7 @@
 // an import cycle with agent.mjs.
 
 import { currentReviews } from './task-reviews.mjs';
+import { recordSkillOutcomes } from './skill-record.mjs';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
@@ -428,6 +429,8 @@ export async function runCompletionGates(turn, host) {
       const { items: _items, ...claimsSummary } = taskOutcome.claims;
       taskOutcome = { ...taskOutcome, claims: claimsSummary };
       session.task = { ...session.task, outcome: taskOutcome, updatedAt: Date.now() };
+      // Credit the outcome to the skills the task followed (src/skill-record.mjs).
+      await recordSkillOutcomes(session, taskOutcome, { env: options.env || process.env }).catch(() => []);
       recordSessionEvent(session, { type: 'task_outcome', task: session.task.id, verdict: taskOutcome.verdict, met: taskOutcome.acceptance.met, unmet: taskOutcome.acceptance.unmet, claimsChecked: taskOutcome.claims.checked, claimsSupported: taskOutcome.claims.supported, claimStatus: describeClaimCounts(taskOutcome.claims.byStatus) }, options.env);
     }
   }
