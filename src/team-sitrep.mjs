@@ -82,7 +82,7 @@ export function buildSitrep({ registry, board, tasks = null, self = 'main', now 
     if (first && first.posterior >= 0.85) {
       items.push({ priority: 2, kind: 'thin_lead', ref: question.id, what: label + ': ' + first.id + ' leads at ' + first.posterior + ' but not on two agents and two independent sources.', do: 'Have a different agent check ' + first.id + ' against an independent source.' });
     } else if (first && second && first.posterior - second.posterior < 0.3) {
-      items.push({ priority: 3, kind: 'close_call', ref: question.id, what: label + ': ' + first.id + ' (' + first.posterior + ') vs ' + second.id + ' (' + second.posterior + ').', do: 'Find evidence they predict differently ("' + clip(first.text, 50) + '" vs "' + clip(second.text, 50) + '").' });
+      items.push({ priority: 3, kind: 'close_call', ref: question.id, what: label + ': ' + first.id + ' (' + first.posterior + ') vs ' + second.id + ' (' + second.posterior + ').', do: 'Find evidence they predict differently ("' + clip(first.text, 50) + '" vs "' + clip(second.text, 50) + '"); rank candidate tests with hypotheses action plan before running them.' });
     }
     const untested = view.hypotheses.filter((h) => !h.tested);
     if (untested.length && view.evidence.length) items.push({ priority: 3, kind: 'untested', ref: question.id, what: label + ': no evidence yet on ' + untested.map((h) => h.id).join(', ') + '.', do: 'Look for evidence that would rule them out.' });

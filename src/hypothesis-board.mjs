@@ -30,6 +30,10 @@
 //   - status gives each hypothesis's posterior and ACH inconsistency score,
 //     and names the most informative next test: the two leading hypotheses
 //     when they are close, and hypotheses nobody has tested yet
+//   - plan ranks candidate tests before any are run, by expected information
+//     gain over the current posterior (Bayesian experimental design), so
+//     agents spend their next tool call on the test that separates the
+//     hypotheses most rather than the one that is easiest
 //   - a question settles itself as "leading" only with a clear posterior and
 //     evidence from at least two independent sources and two agents
 //
@@ -58,16 +62,17 @@ const H_ID = /^h_[1-9]\d{0,4}$/;
 
 export const HYPOTHESIS_TOOL_DEFINITION = { type: 'function', function: {
   name: 'hypotheses',
-  description: 'Shared competing-hypotheses matrix for this session (Analysis of Competing Hypotheses, scored as a Bayesian update). Use it when the team must explain something (why a test fails, what caused an outage, which claim is true) and several explanations are possible. open a question with every plausible hypothesis; rate each piece of evidence against ALL of them, because evidence that fits every hypothesis proves nothing; status shows posteriors, which hypothesis the evidence contradicts least, and the most informative next test. Evidence your own tool results do not back, evidence that repeats a source already used, and support for your own hypothesis count less. Every agent of the session sees the same matrix.',
+  description: 'Shared competing-hypotheses matrix for this session (Analysis of Competing Hypotheses, scored as a Bayesian update). Use it when the team must explain something (why a test fails, what caused an outage, which claim is true) and several explanations are possible. open a question with every plausible hypothesis; rate each piece of evidence against ALL of them, because evidence that fits every hypothesis proves nothing; status shows posteriors, which hypothesis the evidence contradicts least, and the most informative next test; before spending tool calls, plan ranks the tests you could run by how much each is expected to tell you. Evidence your own tool results do not back, evidence that repeats a source already used, and support for your own hypothesis count less. Every agent of the session sees the same matrix.',
   parameters: { type: 'object', properties: {
-    action: { type: 'string', enum: ['open', 'add', 'evidence', 'status', 'resolve'], description: 'open a question, add a hypothesis to one, post evidence, show status, or resolve a question' },
+    action: { type: 'string', enum: ['open', 'add', 'evidence', 'plan', 'status', 'resolve'], description: 'open a question, add a hypothesis to one, post evidence, plan: rank candidate tests by expected information before running any, show status, or resolve a question' },
     question: { type: 'string', description: 'open: the question (max 300 characters). Other actions: its id, q_N' },
     hypotheses: { type: 'array', items: { type: 'string' }, description: 'open: 2-8 mutually exclusive hypotheses' },
     hypothesis: { type: 'string', description: 'add: the new hypothesis. resolve: the id (h_N) found true, or "none"' },
     evidence: { type: 'string', description: 'evidence: what was observed, one item per call (max 600 characters)' },
     sources: { type: 'array', items: { type: 'string' }, description: 'evidence: URLs you fetched or files/commands it comes from' },
     ratings: { type: 'object', additionalProperties: { type: 'string', enum: ['++', '+', '0', '-', '--'] }, description: 'evidence: rating per hypothesis id: ++ strongly consistent, + consistent, 0 neutral, - inconsistent, -- strongly inconsistent. Rate every hypothesis; unrated ones count as 0' },
-    reason: { type: 'string', description: 'resolve: why' }
+    reason: { type: 'string', description: 'resolve: why' },
+    tests: { type: 'array', maxItems: 6, items: { type: 'object', properties: { test: { type: 'string', description: 'the check you could run or the thing you could look up' }, predictions: { type: 'object', additionalProperties: { type: 'string', enum: ['++', '+', '0', '-', '--'] }, description: 'per hypothesis id: how likely the test comes out positive if that hypothesis is true (++ almost surely, + likely, 0 either way, - unlikely, -- almost surely not)' } }, required: ['test', 'predictions'] }, description: 'plan: 1-6 candidate tests with predicted outcomes per hypothesis' }
   }, required: ['action'] }
 } };
 
@@ -176,7 +181,7 @@ export function questionView(question) {
   if (score.other > Math.max(0.3, first ? first.posterior : 0)) advice.push('"None of these" now leads (' + round(score.other) + '): the evidence contradicts every listed hypothesis. Add the hypothesis you are missing (action add).');
   const untested = hypotheses.filter((h) => !h.tested);
   if (untested.length) advice.push('Untested: ' + untested.map((h) => h.id).join(', ') + '. Look for evidence that would contradict them; disconfirming evidence is the most informative.');
-  if (first && second && first.posterior - second.posterior < CLOSE_GAP) advice.push('Most informative next test: something ' + first.id + ' and ' + second.id + ' predict differently ("' + first.text.slice(0, 80) + '" vs "' + second.text.slice(0, 80) + '"). Evidence that fits both moves nothing.');
+  if (first && second && first.posterior - second.posterior < CLOSE_GAP) advice.push('Most informative next test: something ' + first.id + ' and ' + second.id + ' predict differently ("' + first.text.slice(0, 80) + '" vs "' + second.text.slice(0, 80) + '"). Evidence that fits both moves nothing. To choose among candidate tests, use action plan.');
   const nonDiagnostic = score.diagnostic.filter((item) => item.diagnosticity === 1).map((item) => item.id);
   if (nonDiagnostic.length) advice.push('Non-diagnostic (rated the same for every hypothesis, ignored): ' + nonDiagnostic.join(', ') + '.');
   let state = 'open';
@@ -281,12 +286,65 @@ export function runHypothesisTool(session, board, args = {}, { actor = 'main', g
     }
     return { ...questionView(question), ...(scored ? { calibration: scored + ' evidence rating' + (scored === 1 ? '' : 's') + ' scored against the answer (oasis agents calibration)' } : {}), ...(top && choice !== top.id ? { warning: 'Resolved against the evidence: ' + top.id + ' had the highest posterior (' + top.posterior + '). Say why in your report.' } : {}) };
   }
+  if (action === 'plan') {
+    const question = findQuestion(matrix, args.question);
+    if (question.resolved) throw new Error(question.id + ' is resolved.');
+    return planTests(question, args.tests);
+  }
   if (action === 'status') {
     if (args.question) return questionView(findQuestion(matrix, args.question));
     const questions = matrix.questions.map(questionView);
     return { questions, open: questions.filter((q) => q.state === 'open').length, note: questions.length ? 'Posteriors are recomputed from the evidence each time; inconsistency counts how much evidence contradicts each hypothesis (lower is better, as in ACH).' : 'No questions yet. Open one with action open when several explanations are possible.' };
   }
   throw new Error('Unknown hypotheses action ' + action + '.');
+}
+
+// Bayesian experimental design. Before anyone spends a tool call, each
+// candidate test is scored by its expected information gain about the
+// question: the entropy of the current posterior (listed hypotheses plus
+// "none of these") minus the expected entropy after seeing the outcome. A
+// prediction is P(positive | hypothesis); "none of these" is 0.5. A test every
+// hypothesis predicts the same way scores 0 bits however much work it is.
+const PREDICT = { '++': 0.95, '+': 0.75, '0': 0.5, '-': 0.25, '--': 0.05 };
+
+function entropy(ps) {
+  return -ps.reduce((sum, p) => sum + (p > 0 ? p * Math.log2(p) : 0), 0);
+}
+
+export function planTests(question, tests) {
+  const list = (Array.isArray(tests) ? tests : []).slice(0, 6);
+  if (!list.length) throw new Error('plan needs tests: [{ test, predictions: { h_1: "+", h_2: "--" } }].');
+  const score = scoreQuestion(question);
+  const ids = question.hypotheses.map((h) => h.id);
+  const prior = [...ids.map((id) => score.posterior.get(id)), score.other];
+  const now = entropy(prior);
+  const round = (value, digits = 3) => Math.round(value * 10 ** digits) / 10 ** digits;
+  const label = (index) => index < ids.length ? ids[index] : 'none of these';
+  const ranked = list.map((raw, index) => {
+    const test = clean(raw && raw.test, 300);
+    if (!test) throw new Error('Test ' + (index + 1) + ' needs a description.');
+    const predictions = raw.predictions && typeof raw.predictions === 'object' ? raw.predictions : {};
+    for (const id of Object.keys(predictions)) if (!ids.includes(id)) throw new Error('Unknown hypothesis ' + id + ' for ' + question.id + '.');
+    const likely = [...ids.map((id) => PREDICT[normalizeRating(predictions[id]) || '0']), 0.5];
+    const pPositive = prior.reduce((sum, p, i) => sum + p * likely[i], 0);
+    const after = (positive) => {
+      const joint = prior.map((p, i) => p * (positive ? likely[i] : 1 - likely[i]));
+      const total = joint.reduce((sum, value) => sum + value, 0) || 1;
+      return joint.map((value) => value / total);
+    };
+    const pos = after(true);
+    const neg = after(false);
+    const gain = Math.max(0, now - (pPositive * entropy(pos) + (1 - pPositive) * entropy(neg)));
+    const leader = (post) => { const i = post.indexOf(Math.max(...post)); return label(i) + ' ' + round(post[i], 2); };
+    return { test, expected_bits: round(gain), p_positive: round(pPositive, 2), if_positive: leader(pos), if_negative: leader(neg), ...(gain < 0.01 ? { note: 'Every hypothesis predicts the same outcome; running it moves nothing.' } : {}) };
+  }).sort((a, b) => b.expected_bits - a.expected_bits);
+  const best = ranked[0];
+  return {
+    question: question.id, uncertainty_bits: round(now), tests: ranked,
+    advice: best.expected_bits < 0.05
+      ? 'None of these tests separates the hypotheses. Look for something the leading hypotheses predict differently.'
+      : 'Run "' + best.test.slice(0, 120) + '" first (' + best.expected_bits + ' of ' + round(now) + ' bits expected). Then post what you saw with action evidence.'
+  };
 }
 
 /**
