@@ -19,7 +19,7 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { gunzipSync } from 'node:zlib';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -174,8 +174,4 @@ export async function downloadVerifiedRelease(latest, { fetchImpl = fetch, exec,
     await rm(dir, { recursive: true, force: true }).catch(() => {});
     throw error;
   }
-}
-
-export async function readInstalledPackageVersion(appRoot) {
-  try { return String(JSON.parse(await readFile(path.join(appRoot, 'package.json'), 'utf8')).version || ''); } catch { return ''; }
 }

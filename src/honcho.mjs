@@ -229,8 +229,6 @@ export async function honchoContextPrompt(state, { fetchImpl, signal, timeoutMs 
 }
 
 export const HONCHO_TOOL_NAMES = ['honcho_profile', 'honcho_search', 'honcho_context', 'honcho_reasoning', 'honcho_conclude'];
-export const HONCHO_READ_ONLY_TOOLS = ['honcho_search', 'honcho_context', 'honcho_reasoning'];
-
 export const HONCHO_TOOL_DEFINITIONS = [
   { type: 'function', function: {
     name: 'honcho_profile',

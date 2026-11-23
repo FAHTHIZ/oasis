@@ -85,9 +85,6 @@ async function removeState(dir) {
   removeStateSync(dir);
 }
 
-/** For tests. */
-export function resetRehearsalProbe() { probed = undefined; }
-
 /** OASIS_REHEARSE=1 (or settings.rehearse === true) rehearses commands before asking for approval. */
 export function rehearsalEnabled(env = process.env, settings = {}, sandbox = null) {
   const value = String(env.OASIS_REHEARSE ?? '').trim().toLowerCase();

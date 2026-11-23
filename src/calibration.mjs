@@ -147,10 +147,6 @@ export function sharedCalibrationLedger(env = process.env, settings = null) {
   return shared.get(file);
 }
 
-export function resetCalibrationLedgers() {
-  shared.clear();
-}
-
 /** Brier score, log loss, mean stated p, hit rate and overconfidence of a set of forecasts. */
 export function scoreForecasts(records) {
   const list = Array.isArray(records) ? records.filter((item) => item && Number.isFinite(item.p) && (item.o === 0 || item.o === 1)) : [];

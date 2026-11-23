@@ -173,11 +173,6 @@ export async function unsupportedParts(dir, info) {
 }
 
 /** Plugins listed in a Codex marketplace that live inside the repository. */
-export async function detectCodexMarketplace(dir) {
-  const found = await detectForeignMarketplace(dir);
-  return found && found.format === 'codex' ? found : null;
-}
-
 // Where other agents keep a marketplace file, in the order each checks them.
 const MARKETPLACES = [
   { format: 'codex', label: 'Codex marketplace', rel: ['.agents', 'plugins', 'marketplace.json'] },
