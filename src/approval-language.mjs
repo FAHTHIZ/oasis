@@ -83,8 +83,9 @@ export function formatApprovalDiff(toolName, input = {}) {
 }
 
 // What the tool found out before asking, kept when the command prompt is reworded:
-// the rehearsal's result (what the command would create, modify or delete) and the
-// reason a command is high risk. Indented continuation lines are flattened so the
+// the rehearsal's result (what the command would create, modify or delete), the reason
+// a command is high risk, package-vetting warnings (likely typos of popular packages),
+// apps it may disturb, and where it runs (over SSH, in the OS sandbox, or without one). Indented continuation lines are flattened so the
 // apps do not show them as code.
 function commandFacts(original) {
   const lines = original.split(/\r?\n/);
@@ -97,7 +98,7 @@ function commandFacts(original) {
         const body = lines[j].trim();
         out.push(body.charAt(0).toUpperCase() + body.slice(1));
       }
-    } else if (/^HIGH RISK:/.test(line)) out.push(line);
+    } else if (/^(?:HIGH RISK:|Package check:|Warning: (?!this request contains)|It will run (?:on|inside|in) |This runs through a real shell)/.test(line)) out.push(line);
   }
   return out.length ? '\n' + headAndTail(out.join('\n'), 1500) : '';
 }
