@@ -102,6 +102,11 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - Commit: see `git log -- docs/CONTINUITY.md` ("Tell resumed chats and subagents what moved").
 - Gateway `/resume` replies append the drift summary; subagent transcripts store a per-agent world fingerprint (captured in the agent's own root) and the first message after a resume starts with `<workspace-drift>`. `test/agent-transcript-resume.test.mjs` fails without the resume change (the note is missing) and passes with it; `test/gateway-resume.test.mjs` covers the chat core and Telegram.
 
+### Apply the rehearsal from the app, and the rehearsal shown at all
+
+- Commit: see `git log -- app/index.html` ("Show the rehearsal in approvals and offer it in the app").
+- Building the app button exposed that `formatApprovalMessage` (shared by the terminal and the web server) rewrote command prompts down to the command line, so no person had ever seen a rehearsal's file list or a high-risk reason. Fixed and tested in `test/approval-language.test.mjs`; the end-to-end web test in `test/rehearsal.test.mjs` checks the card text, the `rehearsal` flag, the answer and that the command landed once.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |
@@ -117,7 +122,7 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### Immediate improvements
 
-- Approval answer "apply the rehearsal" in the app's approval cards (the terminal has it).
+- None open; see Ready for implementation.
 
 ### Ready for implementation
 

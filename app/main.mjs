@@ -3598,6 +3598,7 @@ async function requestApproval({ name, args, runtime = false }) {
   $('allowAllButton').textContent = 'Allow all edits';
   $('allowAllButton').hidden = !['write_file', 'edit_file'].includes(name) || settings.mode !== 'ask';
   approvalAlways = null;
+  $('rehearsalButton').hidden = true;
   // The "what to do instead" note goes to a running task. Approvals that no
   // task is waiting on (opening the terminal panel) hide it, so typing meant
   // for the terminal cannot land in it and deny with Enter.
@@ -3627,6 +3628,8 @@ async function requestApproval({ name, args, runtime = false }) {
       $('allowAllButton').textContent = alwaysAllowLabel(args.suggestion);
       $('allowAllButton').title = 'Adds the rule ' + String(args.suggestion).slice(0, 200) + ' to this project';
     }
+    // The command already ran once in a throwaway copy: offer to keep exactly those changes.
+    $('rehearsalButton').hidden = !args.rehearsal;
     openSheet('approvalSheet');
     markWaitingTools(true);
     if (navigator.vibrate) try { navigator.vibrate(12); } catch { /* not supported */ }
@@ -3690,6 +3693,7 @@ function answerApproval(value) {
   if (resolve) resolve(value);
 }
 $('allowButton').addEventListener('click', () => answerApproval(true));
+$('rehearsalButton').addEventListener('click', () => answerApproval('rehearsal'));
 // Deny with a reason: the reason goes to the running task as a note, so the
 // agent changes course instead of guessing why it was stopped.
 $('denyButton').addEventListener('click', () => {
