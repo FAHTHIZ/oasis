@@ -257,6 +257,21 @@ function workspacePathHint(rootReal, target) {
   return ' Use paths relative to the workspace (' + rootReal + ').';
 }
 
+// Files a session created with write_file, by the digest of what it wrote.
+function noteAgentCreatedFile(session, absolute, created, content) {
+  if (!session || typeof session !== 'object') return;
+  // Not saved with the session: after a resume, deletions ask again.
+  if (!(session.agentCreatedFiles instanceof Map)) Object.defineProperty(session, 'agentCreatedFiles', { value: new Map(), enumerable: false, configurable: true, writable: true });
+  if (created) session.agentCreatedFiles.set(absolute, createHash('sha256').update(String(content)).digest('hex'));
+  else session.agentCreatedFiles.delete(absolute);
+}
+
+function agentCreatedFileIntact(session, absolute, current) {
+  const digest = session && session.agentCreatedFiles instanceof Map ? session.agentCreatedFiles.get(absolute) : null;
+  if (!digest || current === null || current === undefined) return false;
+  return createHash('sha256').update(Buffer.isBuffer(current) ? current : String(current)).digest('hex') === digest;
+}
+
 // Nobody can answer an approval in an unattended run (oasis eval, -p without a
 // terminal, background agents), so "tell the user" is a dead end. Say why the
 // command needed a person and what runs without one; the check itself stands.
@@ -2129,6 +2144,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       // teammates can read them; only secret-looking files are created owner-only.
       // Overwriting a UTF-16 file keeps it UTF-16; new files are UTF-8.
       await atomicWriteFile(target.absolute, encodeText(content, previousEncoding), { encoding: 'utf8', mode: sensitivePath(target.relative) ? 0o600 : 0o666 });
+      noteAgentCreatedFile(context.session, target.absolute, previousContent === null || agentCreatedFileIntact(context.session, target.absolute, previousContent), content);
       await clientMirrorWrite(context, target.absolute, content);
       await recordFileState(context, target.absolute);
       const docWarning = backedUpExistingFile ? '' : unrequestedDocWarning(writeDisplayPath, context.session && context.session.currentRequest);
@@ -2143,7 +2159,11 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       const protectedHit = protectedEditsAllowed(context.env || process.env) || (context.autoApprove && context.permissionMode === 'bypassPermissions') ? null : protectedConfigPath(target.root, target.real);
       const deletePrompt = (protectedHit ? 'Warning: ' + target.relative + ' is a protected configuration file — ' + protectedHit.reason + '. Deleting it can remove deny rules or safety hooks.\n' : '') +
         'Delete the workspace file ' + target.relative + '? Its current contents will be backed up first.';
-      if (!context.approval || !(await context.approval(deletePrompt, Boolean(protectedHit)))) {
+      // Under auto-approval, a file this session created and nobody has changed
+      // since can be removed like any other undo of its own write (a model that
+      // wrote "report" as a file before making report/ a folder). Anything else asks.
+      const ownFile = Boolean(context.autoApprove) && !protectedHit && agentCreatedFileIntact(context.session, target.absolute, await readFile(target.absolute).catch(() => null));
+      if (!ownFile && (!context.approval || !(await context.approval(deletePrompt, Boolean(protectedHit))))) {
         return { approved: false, path: target.relative, message: 'Deletion was not approved. No file was removed.' };
       }
       await snapshotFile(target.root, target.absolute, 'before-agent-delete');
