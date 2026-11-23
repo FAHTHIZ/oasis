@@ -212,6 +212,8 @@ const FORMATTER_WRITE = /^(?:--write|-w|--fix|-i|--in-place|format|fmt|-a|--auto
 const PACKAGE_MANAGERS = { npm: ['package.json', 'package-lock.json', 'node_modules/'], pnpm: ['package.json', 'pnpm-lock.yaml', 'node_modules/'], yarn: ['package.json', 'yarn.lock', 'node_modules/', '.yarn/'], bun: ['package.json', 'bun.lockb', 'bun.lock', 'node_modules/'], pip: [], pip3: [], uv: ['uv.lock', 'pyproject.toml', '.venv/'], poetry: ['poetry.lock', 'pyproject.toml'], cargo: ['Cargo.lock', 'Cargo.toml', 'target/'], go: ['go.mod', 'go.sum'], bundle: ['Gemfile.lock'], composer: ['composer.json', 'composer.lock', 'vendor/'] };
 const PM_WRITES = /^(?:install|i|add|remove|rm|uninstall|update|upgrade|up|ci|sync|lock|get|tidy|mod|dedupe|prune|audit)$/;
 const GIT_WRITES = /^(?:checkout|switch|restore|reset|stash|apply|am|merge|rebase|pull|cherry-pick|revert|clean|mv|rm|commit|init|clone|worktree|submodule)$/;
+const PACKAGE_SCRIPT = /^(?:run|run-script|rum|urn|test|tst|t|start|restart|stop|rebuild|pack|prepare|exec|x|dlx|create|init)$/;
+const PM_READS = /^(?:info|list|ls|why|outdated|view|show|config|bin|root|whoami|help|-v|--version|-h|--help|licenses|explain|audit|search|cache|store|env|dir)$/;
 const BUILDERS = /^(?:make|cmake|ninja|tsc|webpack|vite|rollup|esbuild|gradle|gradlew|mvn|bazel|cargo|go|dotnet|swift|xcodebuild|next|nuxt)$/;
 
 function unquote(word) { return String(word || '').replace(/^(['"])(.*)\1$/, '$2'); }
@@ -292,7 +294,28 @@ export function predictCommandEffects(rawTokens) {
       break;
     case 'sed': case 'perl': case 'gsed':
       if (flags.some((flag) => /^-[a-zA-Z]*i|^--in-place/.test(flag))) add(...args.slice(1));
+      else if (name === 'perl') { broad = true; reasons.push('perl runs a program that can write anywhere'); }
       break;
+    case 'find': {
+      // Start points come before the first expression word; -delete stays inside them,
+      // -exec and friends run another program on every match.
+      const expression = tokens.findIndex((token, index) => index > 0 && (/^-/.test(token) || ['(', '!', '\\('].includes(token)));
+      const starts = (expression < 0 ? tokens.slice(1) : tokens.slice(1, expression)).map(unquote);
+      const rest = expression < 0 ? [] : tokens.slice(expression);
+      if (rest.some((token) => /^-(?:exec|execdir|ok|okdir)$/.test(token))) { broad = true; reasons.push('find -exec runs a command on every file it matches'); }
+      else if (rest.some((token) => /^-(?:delete|fprint0?|fprintf|fls)$/.test(token))) add(...(starts.length ? starts : ['.']));
+      break;
+    }
+    case 'xargs': {
+      // The inner command's operands arrive on stdin, so its targets are unknown here.
+      const inner = tokens.slice(1);
+      while (inner.length && /^-/.test(inner[0])) inner.splice(0, /^-(?:[aEdILnPs]|-(?:arg-file|eof|delimiter|max-args|max-procs|max-chars|replace))$/.test(inner[0]) ? 2 : 1);
+      if (inner.length) {
+        const effect = predictCommandEffects(inner);
+        if (effect.broad || effect.paths.length || /^(?:sed|gsed|perl|rm|mv|cp|chmod|chown|touch|truncate|tee|ln|install)$/.test(path.basename(inner[0]))) { broad = true; reasons.push('xargs runs ' + path.basename(inner[0]) + ' on files known only at run time'); }
+      }
+      break;
+    }
     case 'patch': case 'git-apply':
       broad = true; reasons.push(name + ' changes the files named in the patch');
       break;
@@ -313,6 +336,8 @@ export function predictCommandEffects(rawTokens) {
         const files = args.filter((arg) => !FORMATTER_WRITE.test(arg));
         if (files.length && files.every((arg) => !/[*?]/.test(arg) && arg !== '.')) add(...files);
         else { broad = true; reasons.push(name + ' rewrites files in place'); }
+      } else if (/^(?:npm|pnpm|yarn|bun)$/.test(name) && PACKAGE_SCRIPT.test(args[0] || '') || (/^(?:yarn|pnpm)$/.test(name) && args[0] && !PM_WRITES.test(args[0]) && !PM_READS.test(args[0]))) {
+        broad = true; reasons.push(name + ' ' + (args[0] || '') + ' runs a package script');
       } else if (PACKAGE_MANAGERS[name] && args.some((arg) => PM_WRITES.test(arg))) {
         add(...PACKAGE_MANAGERS[name]);
         if (!PACKAGE_MANAGERS[name].length) { broad = true; reasons.push(name + ' installs packages'); }

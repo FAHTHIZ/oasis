@@ -3910,6 +3910,7 @@ async function main() {
     stdout.write(insightsSummaryText(stats) + (file ? '\nReport: ' + file : '') + '\n');
     return;
   }
+  if (command === 'rehearse') { const { rehearseCliCommand } = await import('./rehearse-cli.mjs'); process.exitCode = await rehearseCliCommand(rest, workspace); return; }
   if (command === 'receipt' || command === 'receipts') { const { receiptCommand } = await import('./receipt-cli.mjs'); const code = await receiptCommand(rest, workspace); if (code) process.exitCode = code; return; }
   if (command === 'backups') return await showBackups(workspace);
   if (command === 'restore') return await restoreOne(workspace, rest[0]);

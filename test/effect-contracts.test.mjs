@@ -44,6 +44,20 @@ test('the shadow predicts which paths a command line will write', () => {
   assert.deepEqual(predictArgvEffects('touch', ['new.md']).paths, ['new.md']);
 });
 
+test('find, xargs and package scripts are not predicted to change nothing', () => {
+  // Found by scripts/rehearsal-bench.mjs: these were predicted as no effects at all.
+  assert.deepEqual(predictShellEffects('find . -name "*.log" -delete'), { paths: ['.'], broad: false, reasons: [] });
+  assert.deepEqual(predictShellEffects('find src build -name "*.tmp" -delete').paths, ['src', 'build']);
+  assert.equal(predictShellEffects('find src -type f -exec sed -i s/a/b/ {} +').broad, true);
+  assert.deepEqual(predictShellEffects('find . -name x -print'), { paths: [], broad: false, reasons: [] });
+  assert.equal(predictShellEffects('git ls-files | xargs sed -i s/a/b/').broad, true);
+  assert.equal(predictShellEffects('git ls-files | xargs -n 1 rm').broad, true);
+  assert.equal(predictShellEffects('git ls-files | xargs grep foo').broad, false);
+  for (const line of ['npm run build', 'npm test', 'yarn build', 'pnpm run gen', 'bun run gen', 'perl tool.pl']) assert.equal(predictShellEffects(line).broad, true, line);
+  for (const line of ['npm ls', 'yarn info react', 'pnpm why x']) assert.equal(predictShellEffects(line).broad, false, line);
+  assert.deepEqual(predictShellEffects('yarn install').paths, ['package.json', 'yarn.lock', 'node_modules/', '.yarn/']);
+});
+
 test('snapshots observe exactly what a command changed, without touching the index', async (t) => {
   const root = await repo(t, { 'a.txt': 'one\n', 'b.txt': 'two\n', '.gitignore': 'ignored/\n' });
   await writeFile(path.join(root, 'staged.txt'), 'staged\n');

@@ -746,12 +746,18 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   const readOnly = !leftSandbox && !highRisk && !options.interactive && options.readOnlyCommands !== false && readOnlyCommandsEnabled(options.env || process.env) && readOnlyArgv(command, args, { root: path.resolve(root) });
   if (readOnly && command === 'git') options = { ...options, env: readOnlyGitEnv(options.env || process.env) };
   const needsApproval = highRisk ? true : !(options.autoApprove || options.ruleAllowed || sandboxAutoAllowed || readOnly);
+  let rehearsal = { text: '', summary: null };
+  if (needsApproval && approval && !options.interactive && !options.background) {
+    const { rehearseForApproval } = await import('./rehearsal.mjs');
+    rehearsal = await rehearseForApproval({ root, command, args, env: options.env || process.env, settings: options.settings || {}, sandbox, injectionHold: options.injectionHold });
+    if (options.rehearsalSink && rehearsal.summary) options.rehearsalSink.summary = rehearsal.summary;
+  }
   if (needsApproval) {
-    const ok = approval && await approval('Run this command in the workspace?\n  ' + command + ' ' + args.map((arg) => JSON.stringify(arg)).join(' ') +
+    const ok = approval && await approval('Run this command in the workspace?\n  ' + command + ' ' + args.map((arg) => JSON.stringify(arg)).join(' ') + rehearsal.text +
       (highRisk ? '\nHIGH RISK: ' + (configRisk ? configRisk : 'this command ' + highRisk) + '. Auto-approval does not apply.' : '') +
       '\nCommands can change project files or execute project scripts. ' + (typeof options.clientTerminal === 'function' && !(sandbox && sandbox.available) ? 'It will run in the editor\'s terminal, with the editor\'s environment.' : 'Oasis strips common secret environment variables from the child process.') +
       (sandbox && sandbox.available ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + (sandbox.ssh.display || sandbox.ssh.host) + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : ''), Boolean(highRisk));
-    if (!ok) return { approved: false, command, args, message: 'Command was not approved. No process was started. Do not retry it or ask for approval again this turn; finish what you can without it and tell the user the exact command to run.' };
+    if (!ok) return { approved: false, command, args, ...(rehearsal.summary ? { rehearsal: rehearsal.summary } : {}), message: 'Command was not approved. No process was started. Do not retry it or ask for approval again this turn; finish what you can without it and tell the user the exact command to run.' };
   }
   if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before the command started.' };
   const baseEnv = scrubEnvironment(options.env || process.env);
@@ -2137,6 +2143,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       const { snapshotScriptedEdit, noOpEditWarning } = await import('./inplace-edit-check.mjs');
       const editSnapshot = args.run_in_background === true || args.interactive === true ? null
         : await snapshotScriptedEdit(root, [args.command].concat(Array.isArray(args.args) ? args.args.map((arg) => /\s/.test(arg) ? JSON.stringify(arg) : arg) : []).join(' '), env).catch(() => null);
+      const rehearsalSink = {};
       const commandResult = await runWorkspaceCommand(root, args.command, args.args || [], {
         approval,
         autoApprove: Boolean(context.autoApprove) && !install.forceAsk,
@@ -2147,6 +2154,8 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         ruleAllowed: Boolean(context.ruleAllowed) && !install.forceAsk,
         bypassPermissions: Boolean(context.autoApprove && context.permissionMode === 'bypassPermissions'),
         readOnlyCommands: readOnlyCommandsEnabled(env, (context.session && context.session.settings) || {}),
+        settings: (context.session && context.session.settings) || {},
+        rehearsalSink,
         background: args.run_in_background === true,
         interactive: args.interactive === true,
         ptyManager: context.session && (context.session.ptyManager ||= new PtySessionManager()),
@@ -2161,6 +2170,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         ...(typeof context.onOutput === 'function' && args.run_in_background !== true && args.interactive !== true ? { onOutput: context.onOutput } : {})
       }).catch(async (error) => { await gitSafety.dropSnapshot(snapshot); throw error; });
       if (install.warnings && commandResult && typeof commandResult === 'object') commandResult.packageWarnings = install.warnings;
+      if (rehearsalSink.summary && commandResult && typeof commandResult === 'object' && !commandResult.rehearsal) commandResult.rehearsal = rehearsalSink.summary;
       if (commandResult && typeof commandResult === 'object' && typeof commandResult.exitCode === 'number') {
         const flagNote = commandFlagWarning([args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '));
         if (flagNote) commandResult.commandWarning = flagNote;
