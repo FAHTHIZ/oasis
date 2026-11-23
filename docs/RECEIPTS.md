@@ -42,6 +42,7 @@ oasis receipt key                                # this machine's signing key id
 | `drifted` | The receipt is genuine, but files in the workspace changed after it was written |
 | `unsupported` | The receipt is genuine, but the reply claims something its own evidence contradicts, such as "all tests pass" after a failing run |
 | `failed_replay` | A replayed check no longer gives the recorded result |
+| `untrusted_signer` | `--replay` was asked for, but the signer is neither this machine's key nor passed with `--trust`, so no command ran |
 | `tampered` | The signature or the evidence chain does not match, or the signer is not trusted |
 | `invalid` | Not an `oasis.receipt/v1` file |
 
@@ -106,9 +107,18 @@ let read your config directory.
 ## Replay safety
 
 `--replay` runs commands from the receipt in your workspace, with a time limit
-for each. It refuses to run anything from a receipt whose signature fails.
-Replay receipts only from signers you trust, and preferably in a clean checkout
-or a container.
+for each. The public key travels inside the receipt, so anyone can make a
+receipt with a valid signature: a valid signature alone shows only that the
+receipt has not changed since that key signed it. Replay therefore runs
+commands only when the signer is trusted, either because it is this machine's
+own receipt key or because you named it with `--trust KEY_ID`. Otherwise the
+status is `untrusted_signer` and nothing runs. It also refuses to run anything
+from a receipt whose signature fails. Even for trusted signers, prefer a clean
+checkout or a container: the commands run with your environment.
+
+Without `--trust`, a receipt signed by a key other than this machine's still
+verifies, but `verify` shows a `signer` warning and says that the signer is not
+trusted.
 
 ## Sessions
 

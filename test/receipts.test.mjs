@@ -119,7 +119,7 @@ test('replay reruns the recorded checks and compares the outcome', async (t) => 
   const { root, env, session } = await fixture(t);
   const receipt = await createReceipt(session, { env });
   const seen = [];
-  const verdict = await verifyReceipt(receipt, { root, replay: true, onReplay: (step) => seen.push(step.command) });
+  const verdict = await verifyReceipt(receipt, { root, replay: true, env, onReplay: (step) => seen.push(step.command) });
   assert.equal(verdict.status, 'reproduced', formatVerification(receipt, verdict));
   assert.deepEqual(seen, [PASS]);
   // The same receipt replayed where the check now fails.
@@ -127,7 +127,7 @@ test('replay reruns the recorded checks and compares the outcome', async (t) => 
   failing[0].command = FAIL;
   const body = await buildReceipt(session);
   const forgedReplay = await signReceipt({ ...body, replay: failing }, { env });
-  assert.equal((await verifyReceipt(forgedReplay, { root, replay: true })).status, 'failed_replay');
+  assert.equal((await verifyReceipt(forgedReplay, { root, replay: true, env })).status, 'failed_replay');
 });
 
 test('replay refuses to run commands from an unsigned or altered receipt', async (t) => {
@@ -138,6 +138,49 @@ test('replay refuses to run commands from an unsigned or altered receipt', async
   const verdict = await verifyReceipt(receipt, { root, replay: true });
   assert.equal(verdict.status, 'tampered');
   await assert.rejects(readFile(marker), { code: 'ENOENT' });
+});
+
+test('replay refuses commands from a validly self-signed receipt whose signer is not trusted', async (t) => {
+  const { root, env, session } = await fixture(t);
+  const marker = path.join(root, 'pwned.txt');
+  const body = await buildReceipt(session);
+  body.replay = [{ command: 'node -e "require(\'fs\').writeFileSync(\'pwned.txt\', \'x\')"', expect: 'pass' }];
+  // An attacker signs with their own key: the signature is valid, the key is theirs.
+  const attacker = await mkdtemp(path.join(os.tmpdir(), 'oasis-receipt-attacker-'));
+  t.after(() => rm(attacker, { recursive: true, force: true }));
+  const forged = await signReceipt(body, { env: { ...process.env, OASIS_CONFIG_DIR: attacker } });
+  const verdict = await verifyReceipt(forged, { root, replay: true, env });
+  assert.equal(verdict.status, 'untrusted_signer', formatVerification(forged, verdict));
+  assert.ok(!verdict.ok);
+  await assert.rejects(readFile(marker), { code: 'ENOENT' });
+  // Without replay it is still reported, but never as plainly genuine.
+  const plain = await verifyReceipt(forged, { root, env });
+  assert.match(plain.summary, /not trusted here/);
+  assert.ok(plain.checks.some((item) => item.name === 'signer' && item.level === 'warning'));
+  // Trusting the key explicitly runs it.
+  const trusted = await verifyReceipt(forged, { root, replay: true, env, trustedKeys: [forged.signature.keyId] });
+  assert.equal(trusted.status, 'reproduced', formatVerification(forged, trusted));
+  assert.equal(await readFile(marker, 'utf8'), 'x');
+});
+
+test('receipt verify --replay on the CLI refuses an untrusted signer and verifying creates no key', async (t) => {
+  const { root, env, session } = await fixture(t);
+  const marker = path.join(root, 'pwned.txt');
+  const body = await buildReceipt(session);
+  body.replay = [{ command: 'node -e "require(\'fs\').writeFileSync(\'pwned.txt\', \'x\')"', expect: 'pass' }];
+  const attacker = await mkdtemp(path.join(os.tmpdir(), 'oasis-receipt-attacker-'));
+  const fresh = await mkdtemp(path.join(os.tmpdir(), 'oasis-receipt-fresh-'));
+  t.after(() => Promise.all([rm(attacker, { recursive: true, force: true }), rm(fresh, { recursive: true, force: true })]));
+  const forged = await signReceipt(body, { env: { ...process.env, OASIS_CONFIG_DIR: attacker } });
+  const file = path.join(root, 'forged.json');
+  await writeFile(file, JSON.stringify(forged));
+  let out = '';
+  const code = await receiptCommand(['verify', file, '--replay'], root, { write: (text) => { out += text; }, env: { ...process.env, OASIS_CONFIG_DIR: fresh } });
+  assert.equal(code, 1);
+  assert.match(out, /UNTRUSTED_SIGNER/);
+  await assert.rejects(readFile(marker), { code: 'ENOENT' });
+  await assert.rejects(readFile(path.join(fresh, 'receipts', 'signing-key.pem')), { code: 'ENOENT' });
+  void env;
 });
 
 test('replay plan keeps the latest run of each check after the last edit', () => {
