@@ -7,6 +7,9 @@
 //   Cursor plugin          .cursor-plugin/plugin.json, rules/*.mdc, mcp.json, skills/, agents/
 //   Copilot CLI plugin     .plugin/plugin.json, .github/plugin/plugin.json or a bare plugin.json
 //   Kiro power             POWER.md, mcp.json, steering/*.md
+//   MCP Bundle             manifest.json (manifest_version / dxt_version), .mcpb / .dxt
+//   Config pack            VS Code / Copilot, Continue, Cursor, Windsurf, Cline,
+//                          OpenCode, Antigravity and Gemini project files (config-packs.mjs)
 //   Marketplaces           .agents/plugins/ (Codex), .cursor-plugin/, .github/plugin/, .plugin/
 //                          or a root marketplace.json (Copilot CLI and Agent Plugins)
 //
@@ -22,6 +25,7 @@ import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { bridgeHookDoc } from './hook-bridges.mjs';
+import { detectMcpBundle, describeMcpBundle, bundleUnsupported, convertMcpBundle, describeConfigPack, convertConfigPack } from './config-packs.mjs';
 import { geminiCommandToMarkdown } from './importers.mjs';
 
 const NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -65,6 +69,8 @@ export async function detectForeignPlugin(dir) {
       return { format: 'copilot', label: 'Copilot CLI plugin', name: slug(copilot.name), description: String(copilot.description || ''), version: String(copilot.version || ''), manifest: copilot, manifestFile: rel.join('/') };
     }
   }
+  const bundle = await detectMcpBundle(dir);
+  if (bundle) return bundle;
   const power = await readFile(path.join(dir, 'POWER.md'), 'utf8').catch(() => '');
   if (power) {
     const front = frontmatter(power);
@@ -141,7 +147,8 @@ function bridgedHooks(dir, info, doc) {
 
 /** What a foreign plugin has that will not run under OASIS, in plain words. */
 export async function unsupportedParts(dir, info) {
-  if (info.format === 'gemini') return [];
+  if (info.format === 'gemini' || info.format === 'config-pack') return [];
+  if (info.format === 'mcp-bundle') return bundleUnsupported(dir, info);
   const out = [];
   if (info.format === 'cursor' || info.format === 'copilot') {
     const doc = await hookDoc(dir, info);
@@ -262,6 +269,8 @@ function normalizeServers(doc) {
 
 /** A short list of what the plugin brings, for the approval summary. */
 export async function describeForeignPlugin(dir, info) {
+  if (info.format === 'mcp-bundle') return describeMcpBundle(dir, info);
+  if (info.format === 'config-pack') return describeConfigPack(info);
   const files = await walk(dir);
   const parts = [];
   const commands = files.filter((f) => /^commands\/.+\.(toml|md)$/i.test(f)).length;
@@ -318,7 +327,13 @@ export async function convertToClaudePlugin(srcDir, destDir, info) {
   const m = info.manifest;
   const name = NAME.test(info.name) ? info.name : slug(info.name);
   const manifest = { name, ...(info.version ? { version: info.version } : {}), ...(info.description ? { description: info.description.slice(0, 500) } : {}) };
-  if (info.format === 'gemini') {
+  if (info.format === 'mcp-bundle') await convertMcpBundle(destDir, info, manifest);
+  else if (info.format === 'config-pack') {
+    // Copied VS Code agent files (agents/*.agent.md) would load as agents under
+    // the wrong names; the converted copies replace them.
+    for (const rel of files.filter((f) => /^agents\/[^/]+\.(agent|chatmode)\.md$/i.test(f))) await rm(path.join(destDir, rel), { force: true });
+    await convertConfigPack(destDir, info, manifest, writeSkill);
+  } else if (info.format === 'gemini') {
     const settings = geminiSettings(m);
     const servers = {};
     for (const [key, raw] of Object.entries(m.mcpServers || {})) { const server = geminiServer(raw, settings); if (server) servers[key] = server; }
