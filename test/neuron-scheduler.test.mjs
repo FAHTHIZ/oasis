@@ -122,6 +122,21 @@ test('a parent blocked on foreground children gives up its slot until the last r
   assert.equal(scheduler.snapshot().running, 0);
 });
 
+test('a ticket released while its unpark still waits gives back no phantom slot', async () => {
+  const scheduler = createNeuronScheduler({ globalCap: 1 });
+  const parent = await scheduler.acquire({ id: 'p' });
+  parent.park();
+  const other = await scheduler.acquire({ id: 'o' });
+  const resumed = parent.unpark();
+  assert.equal(scheduler.snapshot().queued, 1);
+  parent.release();
+  await resumed;
+  assert.equal(scheduler.snapshot().queued, 0, 'the queued resume is dropped');
+  other.release();
+  await tick();
+  assert.equal(scheduler.snapshot().running, 0, 'no slot is held once everything is released');
+});
+
 test('limits and provider keys are parsed defensively', () => {
   assert.equal(createNeuronScheduler().globalCap, NETWORK_RUNNING_CAP);
   assert.equal(createNeuronScheduler({ globalCap: '3' }).globalCap, 3);

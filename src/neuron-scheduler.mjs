@@ -109,6 +109,7 @@ export function createNeuronScheduler(options = {}) {
     let released = false;
     let parks = 0;
     let resuming = null;
+    let pending = null; // the queued request of an unpark still waiting for a slot
     const ticket = {
       id: request.id,
       waitedFor,
@@ -117,6 +118,11 @@ export function createNeuronScheduler(options = {}) {
       release() {
         if (released) return;
         released = true;
+        // Released while an unpark still waits: drop the queued request, or
+        // the next pump would grant it a slot that nothing ever gives back.
+        const index = pending ? queue.indexOf(pending) : -1;
+        if (index >= 0) { queue.splice(index, 1); pending.cleanup(); pending.resolve(); }
+        pending = null;
         held.delete(request.key);
         pump();
       },
@@ -131,7 +137,8 @@ export function createNeuronScheduler(options = {}) {
         if (--parks > 0) return resuming || Promise.resolve();
         const again = makeRequest(request);
         again.key = request.key;
-        resuming = wait(again, signal, null).then(() => { resuming = null; }, (error) => { resuming = null; released = true; throw error; });
+        pending = again;
+        resuming = wait(again, signal, null).then(() => { resuming = null; pending = null; }, (error) => { resuming = null; pending = null; released = true; throw error; });
         return resuming;
       }
     };
