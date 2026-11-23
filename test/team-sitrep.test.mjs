@@ -104,3 +104,23 @@ test('a promise whose author finished without delivering shows as an orphaned ta
   assert.equal(item.ref, 'task_1');
   assert.match(item.what, /agent_1 promised agent_2 "I will write the changelog entry" \(m_1\)/);
 });
+
+test('sitrep alerts reach the coordinator once per new item, and skip disputes it took part in', async () => {
+  const { sitrepAlerts } = await import('../src/team-sitrep.mjs');
+  const main = { knowledgeBoard: createKnowledgeBoard() };
+  agentRegistry(main);
+  assert.equal(sitrepAlerts(main), '', 'no agents, no questions: nothing to compute');
+  const a = registerAgent(main, { type: 'general-purpose', description: 'limits researcher', child: { inbox: [] } });
+  const b = registerAgent(main, { type: 'general-purpose', description: 'docs reader', child: { inbox: [] } });
+  const board = main.knowledgeBoard;
+  runKnowledgeTool(poster(a.id, board, ['https://a.com/limits']), 'knowledge_post', { claim: 'The API allows 500 requests per minute.', sources: ['https://a.com/limits'] });
+  runKnowledgeTool(poster(b.id, board, ['https://b.com/limits']), 'knowledge_post', { claim: 'The API allows 1000 requests per minute.', sources: ['https://b.com/limits'] });
+  const first = sitrepAlerts(main);
+  assert.match(first, /^<system-reminder>OASIS sitrep: 1 new item needs your attention\.\n- k_1 \(agent_1/);
+  assert.match(first, /Next: Check both against their sources/);
+  assert.equal(sitrepAlerts(main), '', 'told once');
+  assert.equal(sitrepAlerts(main, { env: { OASIS_SITREP_ALERTS: '0' } }), '');
+  runKnowledgeTool(poster('', board, ['https://c.com/limits']), 'knowledge_post', { claim: 'The API allows 750 requests per minute.', sources: ['https://c.com/limits'] });
+  const later = sitrepAlerts(main);
+  assert.doesNotMatch(later, /main:/, 'the coordinator\'s own dispute was reported by knowledge_post');
+});

@@ -1,3 +1,4 @@
+import { sitrepAlerts } from './team-sitrep.mjs';
 import { sharedCalibrationLedger } from './calibration.mjs';
 import { splitThinking, visibleReply } from './think-tags.mjs';
 import { randomUUID } from 'node:crypto';
@@ -3529,7 +3530,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         crossSessionNotice = incoming.map((message) => messaging.formatSessionMessage(message)).join('\n\n');
       } catch { /* Messaging is optional; a storage failure must not break an ordinary coding turn. */ }
     }
-    const notice = [step > 0 ? drainInbox(session) : '', crossSessionNotice, pendingTruncationNotice].filter(Boolean).join('\n\n');
+    const notice = [step > 0 ? drainInbox(session) : '', step > 0 && !options.isSubagent ? sitrepAlerts(session, { env: options.env || process.env }) : '', crossSessionNotice, pendingTruncationNotice].filter(Boolean).join('\n\n');
     pendingTruncationNotice = '';
     if (notice) {
       const last = session.messages[session.messages.length - 1];

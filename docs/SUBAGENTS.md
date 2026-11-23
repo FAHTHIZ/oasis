@@ -238,7 +238,9 @@ A coordinator's state is spread over the agent registry, the message threads, th
 | 2 | `thin_lead`: a hypothesis leads on one agent's evidence or one source | get an independent check |
 | 3 | `close_call`, `untested`, `ready_to_resolve` | run the test the leaders disagree on, look for disconfirming evidence, or resolve |
 
-A worker that calls `team_status` gets the same view with itself as the caller, so its own owed replies come first. The `summary` line counts running, finished and failed agents, open threads, disputes and open questions; at most 12 items are listed. Test: `test/team-sitrep.test.mjs`.
+A worker that calls `team_status` gets the same view with itself as the caller, so its own owed replies come first. The `summary` line counts running, finished and failed agents, open threads, disputes and open questions; at most 12 items are listed.
+
+The coordinator does not have to poll for this. Before each of its model steps, new items of the kinds that need it (a dispute between workers, an orphaned promise, "none of these" leading, a stalled thread, a reply it owes) arrive once as a short `OASIS sitrep` reminder with the next action. Failed workers are left out because their failure notice already arrives, and so are disputes the coordinator took part in, since `knowledge_post` already reported them. `OASIS_SITREP_ALERTS=0` turns the reminders off. Test: `test/team-sitrep.test.mjs`.
 
 ## Safety boundaries
 
