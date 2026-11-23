@@ -108,3 +108,26 @@ test('the matrix is shared through the knowledge board, saved with it and shown 
   assert.match(hypothesisPromptLines(saved), /q_1 Which library is faster\?: h_1 libA \(0\.45\)/);
   assert.match(knowledgePromptSection({ knowledgeBoard: saved }, 'benchmark'), /Open questions on the hypotheses matrix/);
 });
+
+test('resolving by the coordinator scores each evidence rating as a forecast', async () => {
+  const { createCalibrationLedger } = await import('../src/calibration.mjs');
+  const { raterForecasts } = await import('../src/hypothesis-board.mjs');
+  const ledger = createCalibrationLedger();
+  const board = { uid: 'abcdef0123' };
+  open(board);
+  const post = (actor, model, ratings) => runHypothesisTool({}, board, { action: 'evidence', question: 'q_1', evidence: 'obs by ' + actor, ratings }, { actor, model, type: 'researcher', ground: grounded, ledger });
+  post('agent_1', 'good-model', { h_1: '--', h_2: '++', h_3: '-' });
+  post('agent_2', 'bad-model', { h_1: '++', h_2: '-', h_3: '0' });
+  post('agent_3', 'bad-model', { h_1: '+', h_2: '+', h_3: '+' });
+  const forecasts = raterForecasts(board.hypotheses.questions[0], 'h_2');
+  assert.deepEqual(forecasts.map((item) => [item.by, item.favoured, item.o]), [['agent_1', 'h_2', 1], ['agent_2', 'h_1', 0]]);
+  assert.equal(forecasts[0].p, 0.842);
+  // A subagent resolving does not score anyone.
+  const copy = JSON.parse(JSON.stringify(board));
+  runHypothesisTool({}, copy, { action: 'resolve', question: 'q_1', hypothesis: 'h_2' }, { actor: 'agent_1', ledger });
+  assert.equal(ledger.records().length, 0);
+  const result = runHypothesisTool({}, board, { action: 'resolve', question: 'q_1', hypothesis: 'h_2' }, { actor: 'main', ledger });
+  assert.match(result.calibration, /2 evidence ratings scored/);
+  assert.deepEqual(ledger.records({ model: 'bad-model' }).map((item) => [item.o, item.kind, item.type]), [[0, 'hypothesis', 'researcher']]);
+  assert.equal(ledger.records({ model: 'good-model' })[0].o, 1);
+});

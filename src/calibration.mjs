@@ -36,7 +36,7 @@ const MAX_RECORDS = 5000;
 const PRIOR_WEIGHT = 4;
 const BANDWIDTH = 0.12;
 const MIN_FOR_ADJUST = 5;
-const OUTCOME_KINDS = new Set(['corroborated', 'won-dispute', 'supported', 'withdrawn', 'retracted', 'lost-dispute', 'verified', 'refuted']);
+const OUTCOME_KINDS = new Set(['corroborated', 'won-dispute', 'supported', 'withdrawn', 'retracted', 'lost-dispute', 'verified', 'refuted', 'hypothesis']);
 
 export function calibrationEnabled(env = process.env, settings = null) {
   if (settings && settings.calibration === false) return false;
