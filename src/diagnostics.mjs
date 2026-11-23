@@ -417,7 +417,10 @@ export async function runDiagnostics(root, args = {}, options = {}) {
   const paths = [];
   for (const item of rawPaths) {
     const target = await resolveWorkspacePath(root, item);
-    paths.push((path.relative(target.root, target.absolute) || '.').split(path.sep).join('/'));
+    const relative = (path.relative(target.root, target.absolute) || '.').split(path.sep).join('/');
+    // Paths go on checker command lines; a file named like an option
+    // (--config=x.mjs, -c x) would be parsed as one and could load code.
+    paths.push(relative.startsWith('-') ? './' + relative : relative);
   }
   const workspace = (await resolveWorkspacePath(root, '.')).root;
   const timeoutSeconds = Math.max(10, Math.min(600, Number.parseInt(args.timeoutSeconds, 10) || 180));
