@@ -116,3 +116,36 @@ test('mcp serve refuses edits to protected config such as git hooks', async (t) 
   const opted = await allowed({ jsonrpc: '2.0', id: 10, method: 'tools/call', params: { name: 'write_file', arguments: { path: '.mcp.json', content: '{}' } } });
   assert.equal(opted.result.isError, false, 'OASIS_ALLOW_CONFIG_EDITS opts in');
 });
+
+test('mcp serve bridges commands from any agent format as MCP prompts and skills as tools', async (t) => {
+  const { mkdir } = await import('node:fs/promises');
+  const root = await tmp(t);
+  const home = await tmp(t);
+  const files = {
+    '.gemini/commands/git/explain.toml': 'description = "Explain a change"\nprompt = "Explain {{args}} plainly."\n',
+    '.github/prompts/tests.prompt.md': '---\ndescription: Write tests\n---\nWrite tests for ${input:target}.',
+    '.continue/prompts/review.prompt': 'description: Review code\n---\nReview {{{ input }}} now.',
+    '.claude/commands/danger.md': '---\ndescription: Shell\n---\nStatus: !`echo ran-shell`',
+    '.claude/skills/house-style/SKILL.md': '---\nname: house-style\ndescription: Our house style\n---\nUse tabs.\n'
+  };
+  for (const [rel, body] of Object.entries(files)) { await mkdir(path.dirname(path.join(root, rel)), { recursive: true }); await writeFile(path.join(root, rel), body); }
+  const env = { HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), XDG_CONFIG_HOME: path.join(home, '.config'), PATH: process.env.PATH };
+  const handle = createMcpServeHandler({ root, env });
+  t.after(() => handle.close());
+  const init = await handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'codex', version: '1' } } });
+  assert.ok(init.result.capabilities.prompts);
+  await handle({ jsonrpc: '2.0', method: 'notifications/initialized' });
+  const listed = (await handle({ jsonrpc: '2.0', id: 2, method: 'prompts/list' })).result.prompts;
+  const names = listed.map((p) => p.name);
+  for (const name of ['git.explain', 'tests', 'review', 'danger']) assert.ok(names.includes(name), name + ' in ' + names.join(','));
+  const get = async (id, name, args) => (await handle({ jsonrpc: '2.0', id, method: 'prompts/get', params: { name, arguments: args } }));
+  assert.equal((await get(3, 'git.explain', { arguments: 'HEAD~1' })).result.messages[0].content.text, 'Explain HEAD~1 plainly.');
+  assert.equal((await get(4, 'tests', { arguments: 'the parser' })).result.messages[0].content.text, 'Write tests for the parser.');
+  assert.equal((await get(5, 'review', { arguments: 'src/a.js' })).result.messages[0].content.text, 'Review src/a.js now.');
+  assert.equal((await get(6, 'danger', {})).result.messages[0].content.text, 'Status: [shell command execution disabled by policy]');
+  assert.ok((await get(7, 'nope', {})).error);
+  const tools = (await handle({ jsonrpc: '2.0', id: 8, method: 'tools/list' })).result.tools.map((x) => x.name);
+  assert.ok(tools.includes('list_skills') && tools.includes('load_skill'));
+  const skill = await handle({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'load_skill', arguments: { name: 'house-style' } } });
+  assert.match(skill.result.content[0].text, /Use tabs/);
+});

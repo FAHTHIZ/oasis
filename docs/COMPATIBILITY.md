@@ -128,6 +128,21 @@ these tools use: `OASIS_PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `PLUGIN_ROOT`;
 `COPILOT_PLUGIN_DATA`; and `OASIS_PROJECT_DIR` and `CLAUDE_PROJECT_DIR`.
 `${NAME}` works for each in manifests, commands and skills.
 
+### Using everything from any MCP client
+
+`oasis mcp serve` turns OASIS into a bridge for agents that only speak MCP.
+Every slash command OASIS reads in the workspace and your user folders, in
+whatever format it was written (Claude Code plugins, Gemini CLI TOML, Cursor,
+VS Code prompt files, Continue, OpenCode, Windsurf workflows), is served as an
+MCP prompt (namespaces use `.`, so `/git:commit` is `git.commit`, and the
+typed text goes in the `arguments` argument). Skills from every folder OASIS
+reads are served through the `list_skills`, `load_skill` and
+`read_skill_resource` tools. Register it once in Codex, Gemini CLI, Cursor,
+Copilot, Zed or Claude Desktop (`command: oasis`, `args: [mcp, serve]`) and
+they all share the same commands and skills without converting anything.
+Inline shell in a command (`` !`cmd` ``) only runs with `--allow-commands`;
+`--no-prompts` serves tools alone.
+
 ### Exporting a plugin for other agents
 
 Run `oasis plugin inspect [PATH]` first to see, without writing anything,
