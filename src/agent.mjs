@@ -2533,7 +2533,7 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
         budget.used += 1;
         const specialistResult = await runSpecialistReview(session, validatedInput, executionContext, executionOptions, budget);
         // A separate read-only session's verdict on the current task (src/task-reviews.mjs).
-        const recordedReview = recordTaskReview(session, { by: specialistResult.specialist, text: specialistResult.review, finished: specialistResult.finished, toolCalls: specialistResult.toolCalls, limitReached: specialistResult.verificationIncomplete });
+        const recordedReview = recordTaskReview(session, { by: specialistResult.specialist, model: specialistResult.model, authorModel: session.config && session.config.model, text: specialistResult.review, finished: specialistResult.finished, toolCalls: specialistResult.toolCalls, limitReached: specialistResult.verificationIncomplete });
         if (recordedReview) applyReviewToExperience(session, recordedReview, { env: runtime.env });
         return recordedReview ? { ...specialistResult, verdict: recordedReview.verdict, verdictReason: recordedReview.detail } : specialistResult;
       }

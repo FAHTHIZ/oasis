@@ -57,11 +57,13 @@ test('reviews combine: any fail fails, an inconclusive review neither passes nor
 // The parent edits a file, runs its test, then asks the built-in code-review
 // agent to review. The reviewer reads the file and passes it; the turn's task
 // outcome is independently verified. A parent edit after the review voids it.
-async function reviewedTurn(t, { editAfterReview = false, reviewerReply }) {
+async function reviewedTurn(t, { editAfterReview = false, reviewerReply, model = 'fixture', settings = null }) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-task-review-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const configDir = path.join(root, '.config-oasis');
   await mkdir(configDir, { recursive: true });
+  if (settings) await writeFile(path.join(configDir, 'settings.json'), JSON.stringify(settings));
+  const models = [];
   await writeFile(path.join(root, 'sum.mjs'), 'export const sum = (a, b) => a - b;\n');
   await writeFile(path.join(root, 'sum.test.mjs'), "import test from 'node:test';\nimport assert from 'node:assert';\nimport { sum } from './sum.mjs';\ntest('sum', () => assert.equal(sum(2, 3), 5));\n");
   const call = (id, name, args) => ({ role: 'assistant', content: null, tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
@@ -82,7 +84,7 @@ async function reviewedTurn(t, { editAfterReview = false, reviewerReply }) {
     for await (const chunk of req) body += chunk.toString();
     const payload = JSON.parse(body);
     let message;
-    if (/SUBAGENT MODE/.test(String(payload.messages[0].content))) message = childScript[Math.min(childStep++, childScript.length - 1)];
+    if (/SUBAGENT MODE/.test(String(payload.messages[0].content))) { models.push(payload.model); message = childScript[Math.min(childStep++, childScript.length - 1)]; }
     else {
       const tool = payload.messages.filter((m) => m.role === 'tool').find((m) => m.tool_call_id === 'p3');
       if (tool && !taskResult) taskResult = JSON.parse(tool.content);
@@ -95,18 +97,33 @@ async function reviewedTurn(t, { editAfterReview = false, reviewerReply }) {
   t.after(() => server.close());
   const env = { ...process.env, OASIS_CONFIG_DIR: configDir, OASIS_SUBAGENT_EFFORT: '', CLAUDE_CODE_SUBAGENT_EFFORT: '' };
   delete env.NODE_TEST_CONTEXT;
-  const session = await createSession({ root, env, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'fixture', apiKey: '', maxSteps: 10 } });
+  const session = await createSession({ root, env, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model, apiKey: '', maxSteps: 10 } });
   const result = await runAgentTurn(session, 'Fix the bug in sum.mjs so the test passes, and have the fix independently reviewed.', { autoApprove: true, env });
-  return { session, result, taskResult };
+  return { session, result, taskResult, models };
 }
 
-test('a passing built-in review of the current files makes the task independently verified', async (t) => {
+test('a passing built-in review on the author\'s own model is a second look, not independent verification', async (t) => {
   const { session, result, taskResult } = await reviewedTurn(t, { reviewerReply: 'Read sum.mjs: the operator is now +, matching the test.\nVERDICT: PASS' });
   assert.equal(taskResult.review_verdict, 'pass');
   assert.equal(session.taskReviews.length, 1);
+  assert.equal(session.taskReviews[0].model, 'fixture');
   const outcome = (result.task && result.task.outcome) || (session.task && session.task.outcome);
   assert.ok(outcome, 'the turn carries the task outcome');
   assert.equal(outcome.independent.passed, true);
+  assert.equal(outcome.independent.selfReview, true);
+  assert.equal(outcome.verdict, 'verified');
+});
+
+test('a passing built-in review on another model lineage makes the task independently verified', async (t) => {
+  const { session, result, models } = await reviewedTurn(t, {
+    model: 'claude-opus-4-5',
+    settings: { modelRouting: { reviewers: 'diverse', reviewerModels: ['gpt-5.1'] } },
+    reviewerReply: 'Read sum.mjs: the operator is now +, matching the test.\nVERDICT: PASS'
+  });
+  assert.ok(models.length && models.every((item) => item === 'gpt-5.1'), 'the reviewer ran on the routed model: ' + models.join(','));
+  assert.deepEqual(session.taskReviews[0].authors, ['claude-opus-4-5']);
+  const outcome = (result.task && result.task.outcome) || (session.task && session.task.outcome);
+  assert.equal(outcome.independent.diversity.diverse, true);
   assert.equal(outcome.verdict, 'independently_verified');
 });
 
@@ -156,6 +173,12 @@ test('the experience store amends a judged run: fail rejects, pass verifies a cl
   assert.equal(rows.agent_2.outcome, 'verified');
   assert.equal(rows.agent_2.verdict, 'independently_verified');
   assert.equal(rows.agent_3.outcome, 'failed');
+  // A pass from the run's own model verifies the run but not independently.
+  store.record({ sessionId: 's1', agentId: 'agent_4', agentType: 'general-purpose', outcome: 'clean', task: 'y' });
+  assert.equal(store.amend({ sessionId: 's1', agentId: 'agent_4', verdict: 'pass', selfReview: true }), 1);
+  const own = store.runs().find((row) => row.agentId === 'agent_4');
+  assert.equal(own.outcome, 'verified');
+  assert.equal(own.verdict, 'verified');
 });
 
 test('a delegated fix that fails review is recorded as rejected in the agent\'s track record', async (t) => {

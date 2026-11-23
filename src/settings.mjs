@@ -750,7 +750,7 @@ export async function loadSettings(root, options = {}) {
       }
       if (!result.modelRouting.easyModel && !(mode === 'capability' && result.modelRouting.routes)) result.modelRouting.enabled = false;
       // Subagent model choice from the experience track record works with routing on or off.
-      for (const key of ['subagents', 'subagentModels', 'subagentMinRuns']) {
+      for (const key of ['subagents', 'subagentModels', 'subagentMinRuns', 'reviewers', 'reviewerModels']) {
         if (routing[key] !== undefined) result.modelRouting[key] = routing[key];
         else if (earlier && earlier[key] !== undefined) result.modelRouting[key] = earlier[key];
       }
