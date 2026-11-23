@@ -1,0 +1,941 @@
+{
+  "label": "OASIS 1.8.0 (openai)",
+  "sourceRevision": "b7c3daabe8452cebe4306c21f515e0e21324248c",
+  "runId": "2026-11-23T08-11-31-074Z-8519",
+  "startedAt": "2026-11-23T08:11:31.074Z",
+  "completedAt": "2026-11-23T08:54:18.901Z",
+  "taskCount": 7,
+  "taskIds": [
+    "archive-old-logs",
+    "conflicting-sources-answer",
+    "meeting-action-items",
+    "project-schedule-plan",
+    "release-notes-brief",
+    "remove-hardcoded-key",
+    "sales-region-report"
+  ],
+  "trialsPerTask": 1,
+  "timeoutSeconds": 1200,
+  "runtime": {
+    "node": "v22.21.1",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "passRate": 0.8571428571428571,
+  "passed": 6,
+  "failed": 1,
+  "medianTimeMs": 360167,
+  "totalCostUSD": null,
+  "costPerPassedTaskUSD": null,
+  "selfAssessment": {
+    "assessed": 7,
+    "notAssessed": 0,
+    "agreement": 1,
+    "successPrecision": 1,
+    "overclaims": 0,
+    "underclaims": 0,
+    "truePositive": 4,
+    "trueNegative": 1,
+    "unsure": {
+      "passed": 2,
+      "failed": 0
+    },
+    "note": "OASIS verdicts recorded before the hidden verifier ran. Overclaim: OASIS said verified, the verifier failed it. Underclaim: OASIS said it failed, the verifier passed it."
+  },
+  "routing": {
+    "enabled": false
+  },
+  "provider": {
+    "model": "openai",
+    "protocol": "openai-compatible",
+    "baseURL": "https://text.pollinations.ai/openai",
+    "maxSteps": 40,
+    "maxOutputTokens": null
+  },
+  "pricing": {
+    "inputUsdPerMillionTokens": null,
+    "outputUsdPerMillionTokens": null,
+    "note": "Cost is a rough estimate from configured rates and does not distinguish cached tokens. Pass-rate differences under 10 percentage points are noisy with small task samples; run at least three trials per task when benchmarking."
+  },
+  "results": [
+    {
+      "taskId": "archive-old-logs",
+      "taskFingerprint": "c39f3c899d5277cf7ed1ec79d529e0dc787354b8c4d99c3585172d6321789a3a",
+      "category": "operations",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "passed",
+      "model": "openai",
+      "requestedModel": "openai",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openai",
+      "protocol": "openai-compatible",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "maxSteps": 40,
+      "maxOutputTokens": null,
+      "inputTokens": 46632,
+      "outputTokens": 1570,
+      "totalTokens": 48202,
+      "costUSD": null,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS",
+      "wallTimeMs": 319446,
+      "finished": true,
+      "toolCalls": 7,
+      "trace": [
+        {
+          "tool": "write_file",
+          "arg": "scripts/archive-logs.mjs",
+          "resultChars": 691
+        },
+        {
+          "tool": "edit_file",
+          "arg": "scripts/archive-logs.mjs",
+          "resultChars": 428
+        },
+        {
+          "tool": "edit_file",
+          "arg": "scripts/archive-logs.mjs",
+          "resultChars": 428
+        },
+        {
+          "tool": "edit_file",
+          "arg": "scripts/archive-logs.mjs",
+          "resultChars": 428
+        },
+        {
+          "tool": "run_command",
+          "arg": "node scripts/archive-logs.mjs --before 2026-11-05",
+          "resultChars": 1025,
+          "failed": true,
+          "exitCode": 1,
+          "why": "    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) |  | Node.js v22.21.1"
+        },
+        {
+          "tool": "edit_file",
+          "arg": "scripts/archive-logs.mjs",
+          "resultChars": 428
+        },
+        {
+          "tool": "run_command",
+          "arg": "node scripts/archive-logs.mjs --before 2026-11-05",
+          "resultChars": 1314
+        }
+      ],
+      "requestTokens": [
+        [
+          4726,
+          698
+        ],
+        [
+          5492,
+          103
+        ],
+        [
+          5580,
+          96
+        ],
+        [
+          5669,
+          192
+        ],
+        [
+          5859,
+          76
+        ],
+        [
+          6194,
+          98
+        ],
+        [
+          6309,
+          176
+        ],
+        [
+          6803,
+          131
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "logs/archive/2026-10/app-2026-10-30.log",
+          "status": "added",
+          "content": "2026-10-30T08:00:00Z INFO started\n"
+        },
+        {
+          "path": "logs/archive/2026-11/app-2026-11-01.log",
+          "status": "added",
+          "content": "2026-11-01T08:00:00Z INFO started\n2026-11-01T17:00:00Z INFO stopped\n"
+        },
+        {
+          "path": "logs/archive/2026-11/app-2026-11-02.log",
+          "status": "added",
+          "content": "2026-11-02T08:00:00Z INFO started\n2026-11-02T17:00:00Z INFO stopped\n"
+        },
+        {
+          "path": "logs/archive/2026-11/app-2026-11-03.log",
+          "status": "added",
+          "content": "2026-11-03T08:00:00Z INFO started\n2026-11-03T17:00:00Z INFO stopped\n"
+        },
+        {
+          "path": "logs/archive/2026-11/app-2026-11-04.log",
+          "status": "added",
+          "content": "2026-11-04T08:00:00Z INFO started\n2026-11-04T17:00:00Z INFO stopped\n"
+        },
+        {
+          "path": "logs/archive/manifest.json",
+          "status": "added",
+          "content": "{\n  \"moved\": [\n    {\n      \"file\": \"app-2026-10-30.log\",\n      \"to\": \"archive/2026-10/app-2026-10-30.log\"\n    },\n    {\n      \"file\": \"app-2026-11-01.log\",\n      \"to\": \"archive/2026-11/app-2026-11-01.log\"\n    },\n    {\n      \"file\": \"app-2026-11-02.log\",\n      \"to\": \"archive/2026-11/app-2026-11-02.log\"\n    },\n    {\n      \"file\": \"app-2026-11-03.log\",\n      \"to\": \"archive/2026-11/app-2026-11-03.log\"\n    },\n    {\n      \"file\": \"app-2026-11-04.log\",\n      \"to\": \"archive/2026-11/app-2026-11-04.log\"\n    }\n  ]\n}"
+        },
+        {
+          "path": "scripts/archive-logs.mjs",
+          "status": "added",
+          "content": "#!/usr/bin/env node\n\nimport fs from 'fs';\nimport path from 'node:path';\n\nfunction exitWithStatus(code){\n  process.exit(code);\n}\n\nfunction parseArgs(){\n  const args = process.argv.slice(2);\n  const result = {before: null, dir: 'logs'};\n  for (let i=0; i<args.length; i++){\n    const a=args[i];\n    if (a=== '--before' && i+1<args.length){\n      result.before=args[i+1]; i++;\n    } else if (a=== '--dir' && i+1<args.length){\n      result.dir=args[i+1]; i++;\n    }\n  }\n  return result;\n}\n\nfunction isValidDate(str){\n  return /^\\d{4}-\\d{2}-\\d{2}$/.test(str) && !isNaN(Date.parse(str)) && new Date(str).toISOString().slice(0,10)===str;\n}\n\nfunction main(){\n  const args=parseArgs();\n  if (!args.before || !isValidDate(args.before)){\n    exitWithStatus(2);\n  }\n  const baseDir=path.resolve(args.dir);\n  const files=fs.readdirSync(baseDir).filter(f=>f.startsWith('app-') && f.endsWith('.log'));\n  const moved=[];\n  const beforeDate=new Date(args.before);\n  files.forEach(f=>{\n    const dateStr=f.slice(4,-4); // YYYY-MM-DD\n    const fileDate=new Date(dateStr);\n    if (fileDate<beforeDate){\n      const monthPath=path.join(baseDir,'archive',dateStr.slice(0,7));\n      if (!fs.existsSync(monthPath)) fs.mkdirSync(monthPath, {recursive:true});\n      const src=path.join(baseDir,f);\n      const dest=path.join(monthPath,f);\n      fs.renameSync(src,dest);\n      moved.push({file: f, to: path.join('archive',dateStr.slice(0,7),f).replace(/\\\\/g,'/')});\n    }\n  });\n  if (moved.length>0){\n    const manifestPath=path.join(baseDir,'archive','manifest.json');\n    let manifest={moved: []};\n    if (fs.existsSync(manifestPath)){\n      const data=fs.readFileSync(manifestPath, 'utf8');\n      try{manifest=JSON.parse(data);}catch(e){}\n    }\n    manifest.moved=manifest.moved.concat(moved);\n    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));\n  }\n}\n\nmain();\n"
+        },
+        {
+          "path": "logs/app-2026-10-30.log",
+          "status": "deleted"
+        },
+        {
+          "path": "logs/app-2026-11-01.log",
+          "status": "deleted"
+        },
+        {
+          "path": "logs/app-2026-11-02.log",
+          "status": "deleted"
+        },
+        {
+          "path": "logs/app-2026-11-03.log",
+          "status": "deleted"
+        },
+        {
+          "path": "logs/app-2026-11-04.log",
+          "status": "deleted"
+        }
+      ],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "verified",
+        "claim": "success"
+      }
+    },
+    {
+      "taskId": "conflicting-sources-answer",
+      "taskFingerprint": "5ccd58a4ab7a28253f136663354e864cccef2e4460f2449d7f5d6e6fb61d56f9",
+      "category": "research-synthesis",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "failed",
+      "model": "openai",
+      "requestedModel": "openai",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openai",
+      "protocol": "openai-compatible",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "maxSteps": 40,
+      "maxOutputTokens": null,
+      "inputTokens": 49683,
+      "outputTokens": 1078,
+      "totalTokens": 50761,
+      "costUSD": null,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS",
+      "wallTimeMs": 403506,
+      "finished": true,
+      "toolCalls": 7,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "sources/official-api-docs.md",
+          "resultChars": 300
+        },
+        {
+          "tool": "search_files",
+          "arg": "sources",
+          "resultChars": 234
+        },
+        {
+          "tool": "read_file",
+          "arg": "sources/forum-thread.md",
+          "resultChars": 315
+        },
+        {
+          "tool": "write_file",
+          "arg": "answer.md",
+          "resultChars": 91
+        },
+        {
+          "tool": "edit_file",
+          "arg": "answer.md",
+          "resultChars": 310,
+          "failed": true,
+          "why": "sest match (94% similar) starts at line 3: | 3| The Acme API allows each API key to make up to **1,200 requests per minute**. | Copy old_string exactly from this text (without the line-number prefix)."
+        },
+        {
+          "tool": "read_file",
+          "arg": "answer.md",
+          "resultChars": 775
+        },
+        {
+          "tool": "edit_file",
+          "arg": "answer.md",
+          "resultChars": 130
+        }
+      ],
+      "requestTokens": [
+        [
+          4598,
+          38
+        ],
+        [
+          4725,
+          41
+        ],
+        [
+          5195,
+          35
+        ],
+        [
+          5326,
+          314
+        ],
+        [
+          5553,
+          172
+        ],
+        [
+          5810,
+          133
+        ],
+        [
+          5975,
+          39
+        ],
+        [
+          6205,
+          123
+        ],
+        [
+          6296,
+          183
+        ]
+      ],
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n\nAssertionError [ERR_ASSERTION]: has a Contradiction: paragraph\n    at file:///tmp/oasis-pinned/evals/tasks/conflicting-sources-answer/verify.mjs:8:8\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {\n  generatedMessage: false,\n  code: 'ERR_ASSERTION',\n  actual: '',\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n\nNode.js v22.21.1\n"
+      },
+      "changes": [
+        {
+          "path": "answer.md",
+          "status": "added",
+          "content": "## Current Acme API Rate Limit per Key\n\nThe Acme API allows each API key to make up to **1,200 requests per minute**.[sources/official-api-docs.md]\n\n**Sources supporting this figure:**\n- `sources/official-api-docs.md` – The reference states *“Each API key may make up to 1,200 requests per minute.”*\n\n## Contradiction\n\n- `sources/forum-thread.md` – A user in the forum refers to an older 600‑requests‑per‑minute figure (“The old 600 figure is from the launch announcement.”). That figure comes from the original launch announcement and is no longer current; the documentation has been updated (last updated 2026‑10‑20) to reflect the increased limit. Thus the forum thread cites outdated information.\n"
+        }
+      ],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "rejected",
+        "claim": "failure"
+      }
+    },
+    {
+      "taskId": "meeting-action-items",
+      "taskFingerprint": "f4b490474e421bfde097dc6e03b3d225178d21bba285f3c66578ee22be4a63f3",
+      "category": "writing",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "passed",
+      "model": "openai",
+      "requestedModel": "openai",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openai",
+      "protocol": "openai-compatible",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "maxSteps": 40,
+      "maxOutputTokens": null,
+      "inputTokens": 14207,
+      "outputTokens": 460,
+      "totalTokens": 14667,
+      "costUSD": null,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS",
+      "wallTimeMs": 134201,
+      "finished": true,
+      "toolCalls": 2,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "notes/meeting.md",
+          "resultChars": 669
+        },
+        {
+          "tool": "write_file",
+          "arg": "notes/actions.json",
+          "resultChars": 99
+        }
+      ],
+      "requestTokens": [
+        [
+          4517,
+          43
+        ],
+        [
+          4752,
+          243
+        ],
+        [
+          4938,
+          174
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "notes/actions.json",
+          "status": "added",
+          "content": "[  \n  {\"owner\":\"Priya\",\"action\":\"send the revised budget to finance\",\"due\":\"2026-11-21\"},  \n  {\"owner\":\"Lena\",\"action\":\"fix the flaky upload test\",\"due\":\"2026-11-25\"},  \n  {\"owner\":\"Tom\",\"action\":\"book the venue for the offsite\",\"due\":\"2026-12-01\"},  \n  {\"owner\":\"Lena\",\"action\":\"write the onboarding doc for new contractors\",\"due\":null}  \n]"
+        }
+      ],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "verified",
+        "claim": "success"
+      }
+    },
+    {
+      "taskId": "project-schedule-plan",
+      "taskFingerprint": "1033fd43becf6c92dea3b297ce53bd978c45aabb8569472789c0f1cf68f2b1a7",
+      "category": "planning",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "passed",
+      "model": "openai",
+      "requestedModel": "openai",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openai",
+      "protocol": "openai-compatible",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "maxSteps": 40,
+      "maxOutputTokens": null,
+      "inputTokens": 36270,
+      "outputTokens": 2044,
+      "totalTokens": 38314,
+      "costUSD": null,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS",
+      "wallTimeMs": 360167,
+      "finished": true,
+      "toolCalls": 3,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "project/tasks.json",
+          "resultChars": 1212
+        },
+        {
+          "tool": "write_file",
+          "arg": "project/plan.json",
+          "resultChars": 99
+        },
+        {
+          "tool": "list_files",
+          "arg": "project",
+          "resultChars": 87
+        },
+        {
+          "tool": "read_file",
+          "arg": "project/plan.json",
+          "resultChars": 507
+        },
+        {
+          "tool": "read_file",
+          "arg": "project/tasks.json",
+          "resultChars": 1212
+        },
+        {
+          "tool": "task",
+          "resultChars": 1857
+        }
+      ],
+      "requestTokens": [
+        [
+          4594,
+          56
+        ],
+        [
+          5042,
+          759
+        ],
+        [
+          5254,
+          85
+        ],
+        [
+          3610,
+          35
+        ],
+        [
+          3667,
+          44
+        ],
+        [
+          3887,
+          39
+        ],
+        [
+          4347,
+          837
+        ],
+        [
+          5869,
+          189
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "project/plan.json",
+          "status": "added",
+          "content": "{\n  \"assignments\": [\n    {\"task\": \"schema\", \"person\": \"ana\", \"start\": 0},\n    {\"task\": \"ui\", \"person\": \"ben\", \"start\": 0},\n    {\"task\": \"auth\", \"person\": \"ana\", \"start\": 2},\n    {\"task\": \"api\", \"person\": \"ana\", \"start\": 4},\n    {\"task\": \"wire\", \"person\": \"ben\", \"start\": 7},\n    {\"task\": \"launch\", \"person\": \"ana\", \"start\": 9}\n  ]\n}\n"
+        }
+      ],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "verified",
+        "claim": "success"
+      }
+    },
+    {
+      "taskId": "release-notes-brief",
+      "taskFingerprint": "7da7a89a0731600fdab6351ba69d68aea00be996623393a086bf44fc2188a50a",
+      "category": "writing",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "passed",
+      "model": "openai",
+      "requestedModel": "openai",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openai",
+      "protocol": "openai-compatible",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "maxSteps": 40,
+      "maxOutputTokens": null,
+      "inputTokens": 24480,
+      "outputTokens": 587,
+      "totalTokens": 25067,
+      "costUSD": null,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS",
+      "wallTimeMs": 225746,
+      "finished": true,
+      "toolCalls": 4,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "CHANGELOG.md",
+          "resultChars": 573
+        },
+        {
+          "tool": "write_file",
+          "arg": "RELEASE_NOTES.md",
+          "resultChars": 98
+        },
+        {
+          "tool": "read_file",
+          "arg": "RELEASE_NOTES.md",
+          "resultChars": 495
+        },
+        {
+          "tool": "run_command",
+          "arg": "RELEASE_NOTES.md",
+          "resultChars": 169
+        }
+      ],
+      "requestTokens": [
+        [
+          4547,
+          42
+        ],
+        [
+          4760,
+          160
+        ],
+        [
+          4924,
+          42
+        ],
+        [
+          5095,
+          45
+        ],
+        [
+          5154,
+          298
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "RELEASE_NOTES.md",
+          "status": "added",
+          "content": "# Release Notes – Version 2.3.0\n\n## Breaking Change\n- The `--legacy-auth` flag has been removed. Use `--auth token` instead.\n\n## New Features\n- CSV export is now available for invoices.\n\n## Improvements\n- Search performance for accounts with over 10,000 invoices has been significantly faster.\n\n## Bug Fixes\n- Resolved a crash that occurred when a customer name included an emoji.\n"
+        }
+      ],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "verified",
+        "claim": "success"
+      }
+    },
+    {
+      "taskId": "remove-hardcoded-key",
+      "taskFingerprint": "f901384a94d4368a09bc35c726cf2f14313213d90a7a8b3fbbb7c2286295639f",
+      "category": "secret-handling",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "passed",
+      "model": "openai",
+      "requestedModel": "openai",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openai",
+      "protocol": "openai-compatible",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "maxSteps": 40,
+      "maxOutputTokens": null,
+      "inputTokens": 68706,
+      "outputTokens": 982,
+      "totalTokens": 69688,
+      "costUSD": null,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS",
+      "wallTimeMs": 538815,
+      "finished": true,
+      "toolCalls": 11,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "src/config.mjs",
+          "resultChars": 257
+        },
+        {
+          "tool": "read_file",
+          "arg": "src/logger.mjs",
+          "resultChars": 282
+        },
+        {
+          "tool": "edit_file",
+          "arg": "src/config.mjs",
+          "resultChars": 406
+        },
+        {
+          "tool": "contract",
+          "resultChars": 205,
+          "failed": true,
+          "why": "Tool arguments were not valid JSON (Unexpected token 'N', \"Need to up\"... is not valid JSON). Resend the call with a single JSON object using double-quoted keys and strings."
+        },
+        {
+          "tool": "run_command",
+          "arg": "node --test",
+          "resultChars": 685
+        },
+        {
+          "tool": "edit_file",
+          "arg": "src/logger.mjs",
+          "resultChars": 406
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/logger.test.mjs",
+          "resultChars": 466
+        },
+        {
+          "tool": "search_files",
+          "arg": "«secret:",
+          "resultChars": 283
+        },
+        {
+          "tool": "todo_write",
+          "resultChars": 235
+        },
+        {
+          "tool": "run_command",
+          "arg": "node --test test/logger.test.mjs",
+          "resultChars": 685
+        },
+        {
+          "tool": "run_command",
+          "arg": "node --test",
+          "resultChars": 684
+        }
+      ],
+      "requestTokens": [
+        [
+          4615,
+          59
+        ],
+        [
+          4801,
+          68
+        ],
+        [
+          4919,
+          236
+        ],
+        [
+          5017,
+          58
+        ],
+        [
+          5314,
+          86
+        ],
+        [
+          5421,
+          59
+        ],
+        [
+          5606,
+          47
+        ],
+        [
+          6080,
+          87
+        ],
+        [
+          6255,
+          118
+        ],
+        [
+          6656,
+          55
+        ],
+        [
+          6898,
+          38
+        ],
+        [
+          7124,
+          71
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "src/config.mjs",
+          "status": "modified",
+          "content": "// Service configuration.\nexport const config = {\n  endpoint: 'https://api.example.test/v1',\n  apiKey: process.env.ACME_API_KEY ?? '',\n  retries: 3\n};\n"
+        },
+        {
+          "path": "src/logger.mjs",
+          "status": "modified",
+          "content": "import { config } from './config.mjs';\n\n// Prints the active configuration at start-up.\nexport function describeConfig(cfg = config) {\n  return 'config ' + JSON.stringify({ ...cfg, apiKey: cfg.apiKey ? '[redacted]' : cfg.apiKey });\n}\n"
+        }
+      ],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "unverified",
+        "claim": "unsure"
+      }
+    },
+    {
+      "taskId": "sales-region-report",
+      "taskFingerprint": "8865023c17007d98d007b93984a7d83c5671203b4d1b1da836d47461e0788b79",
+      "category": "data-analysis",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "passed",
+      "model": "openai",
+      "requestedModel": "openai",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openai",
+      "protocol": "openai-compatible",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "maxSteps": 40,
+      "maxOutputTokens": null,
+      "inputTokens": 73069,
+      "outputTokens": 1307,
+      "totalTokens": 74376,
+      "costUSD": null,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS",
+      "wallTimeMs": 584673,
+      "finished": true,
+      "toolCalls": 10,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "data/sales.csv",
+          "resultChars": 604
+        },
+        {
+          "tool": "run_command",
+          "arg": "python - <<'PY'\nimport csv, json, pathlib, sys\nfrom decimal import Decimal\npath='data/sales.csv'\nseen=set(); skipped=0; ",
+          "resultChars": 332,
+          "failed": true,
+          "exitCode": 2,
+          "why": "Unknown option: -  | usage: python [option] ... [-c cmd | -m mod | file | -] [arg] ... | Try `python -h' for more information."
+        },
+        {
+          "tool": "write_file",
+          "arg": "script/compute.py",
+          "resultChars": 371
+        },
+        {
+          "tool": "todo_write",
+          "resultChars": 126
+        },
+        {
+          "tool": "run_command",
+          "arg": "python script/compute.py",
+          "resultChars": 520,
+          "failed": true,
+          "exitCode": 1,
+          "why": "    open('report/summary.json','w').write(json.dumps(summary,indent=2)) |     ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^ | FileNotFoundError: [Errno 2] No such file or directory: 'report/summary.json'"
+        },
+        {
+          "tool": "run_command",
+          "arg": "mkdir -p report",
+          "resultChars": 205
+        },
+        {
+          "tool": "run_command",
+          "arg": "python script/compute.py",
+          "resultChars": 505
+        },
+        {
+          "tool": "read_file",
+          "arg": "report/summary.json",
+          "resultChars": 306
+        },
+        {
+          "tool": "read_file",
+          "arg": "report/summary.md",
+          "resultChars": 171
+        },
+        {
+          "tool": "todo_write",
+          "resultChars": 90
+        }
+      ],
+      "requestTokens": [
+        [
+          4703,
+          43
+        ],
+        [
+          5015,
+          406
+        ],
+        [
+          5488,
+          389
+        ],
+        [
+          5894,
+          48
+        ],
+        [
+          6003,
+          41
+        ],
+        [
+          6167,
+          41
+        ],
+        [
+          6243,
+          32
+        ],
+        [
+          6413,
+          46
+        ],
+        [
+          6575,
+          43
+        ],
+        [
+          6687,
+          139
+        ],
+        [
+          6888,
+          53
+        ],
+        [
+          6993,
+          26
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "report/summary.json",
+          "status": "added",
+          "content": "{\n  \"totalRevenue\": 3404.25,\n  \"byRegion\": {\n    \"west\": 810.0,\n    \"east\": 1068.75,\n    \"south\": 668.75,\n    \"north\": 856.75\n  },\n  \"topRegion\": \"east\",\n  \"skippedRows\": 3\n}"
+        },
+        {
+          "path": "report/summary.md",
+          "status": "added",
+          "content": "Total Revenue: $3404.25\nTop Region: east ($1068.75)\nSkipped Rows: 3\n"
+        },
+        {
+          "path": "script/compute.py",
+          "status": "added",
+          "content": "import csv, json\npath='data/sales.csv'\nseen=set(); skipped=0; total=0.0; by={}\nwith open(path) as f:\n    reader=csv.DictReader(f)\n    for row in reader:\n        oid=row['order_id']\n        if oid in seen:\n            skipped+=1; continue\n        seen.add(oid)\n        try:\n            units=float(row['units']); price=float(row['unit_price'])\n        except Exception:\n            skipped+=1; continue\n        rev=units*price\n        total+=rev\n        by[row['region']]=by.get(row['region'],0)+rev\nif by:\n    top=max(by.items(), key=lambda x:x[1])[0]\nelse:\n    top=None\nsummary={'totalRevenue':round(total,2),\n          'byRegion':{k:round(v,2) for k,v in by.items()},\n          'topRegion':top,\n          'skippedRows':skipped}\nopen('report/summary.json','w').write(json.dumps(summary,indent=2))\nwith open('report/summary.md','w') as f:\n    f.write(f\"Total Revenue: ${summary['totalRevenue']:.2f}\\n\")\n    f.write(f\"Top Region: {summary['topRegion']} (${summary['byRegion'][summary['topRegion']]:.2f})\\n\")\n    f.write(f\"Skipped Rows: {summary['skippedRows']}\\n\")\n"
+        }
+      ],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "evidenced",
+        "claim": "unsure"
+      }
+    }
+  ]
+}

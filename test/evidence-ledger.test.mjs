@@ -10,7 +10,7 @@ const record = (ledger, name, args, result, context) => recordEvidence(ledger, e
 
 test('events come from tool results only, with digests and sequence numbers', () => {
   const ledger = createEvidenceLedger();
-  assert.equal(record(ledger, 'read_file', { path: 'a.js' }, { path: 'a.js', content: 'x' }), null, 'a read is not evidence');
+  assert.equal(record(ledger, 'read_file', { path: 'a.js' }, { error: 'not found' }), null, 'a failed read is not evidence');
   assert.equal(record(ledger, 'run_command', { command: 'npm', args: ['test'] }, { approved: false }, { isCheck: true }), null, 'a denied call is not evidence');
   const check = record(ledger, 'run_command', { command: 'npm', args: ['test'] }, { approved: true, exitCode: 0, stdout: 'ok 3' }, { isCheck: true, checkKind: 'test' });
   assert.equal(check.kind, 'check');
@@ -19,8 +19,11 @@ test('events come from tool results only, with digests and sequence numbers', ()
   assert.match(check.digest, /^[0-9a-f]{16}$/);
   const again = evidenceFromToolResult('run_command', { command: 'npm', args: ['test'] }, { approved: true, exitCode: 0, stdout: 'ok 3' }, { isCheck: true });
   assert.equal(again.digest, check.digest, 'same result, same digest');
+  // A read records the path only (local sources a research answer rests on).
+  const read = record(ledger, 'read_file', { path: 'a.js' }, { path: 'a.js', content: 'x' });
+  assert.deepEqual([read.kind, read.path, read.seq, 'content' in read], ['read', 'a.js', 2, false]);
   // The model's own words never reach the ledger: there is no API for them.
-  assert.equal(ledger.events.length, 1);
+  assert.equal(ledger.events.length, 2);
 });
 
 test('an edit after a check makes the check stale, like claim-check', () => {

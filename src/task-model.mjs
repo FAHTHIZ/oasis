@@ -52,7 +52,7 @@
 import { noteLabel, noteEnd } from './runtime-notes.mjs';
 import { multilingualRisk, multilingualIntent } from './multilingual-signals.mjs';
 import path from 'node:path';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { assessReport } from './verification-contracts.mjs';
 import { buildClaims } from './claim-ledger.mjs';
 import { digestOf, fetchedUrls } from './evidence-ledger.mjs';
@@ -289,6 +289,55 @@ export function lengthLimits(text) {
   return limits;
 }
 
+/**
+ * Folders the request confines the answer to ("using only the files in
+ * sources/", "based on the documents in notes"). An answer drawn from such
+ * a folder should rest on every file in it, not the first two.
+ */
+export function sourceFolders(text) {
+  const value = stripContext(text);
+  const out = [];
+  const pattern = /\b(?:using|use|based on|from|draw(?:ing)? on|rely(?:ing)? on|with)\s+(?:only\s+)?(?:the\s+|all\s+(?:the\s+)?)?(?:files?|documents?|docs|sources|notes|materials?|transcripts?|reports?|articles?|pages)\s+(?:in|under|inside|within|from)\s+(?:the\s+)?[`'"]?([\w][\w.-]*(?:\/[\w.-]+)*)\/?[`'"]?(?:\s+(?:folder|directory|dir))?(?=[\s,.;:!?)]|$)/gi;
+  for (const match of value.matchAll(pattern)) {
+    const dir = match[1].replace(/\.$/, '');
+    if (!dir || dir.includes('..') || /\.(?:md|txt|csv|json|pdf|html?)$/i.test(dir) || /^(?:it|this|that|there|here|them|my|your|our)$/i.test(dir)) continue;
+    if (!out.includes(dir)) out.push(dir);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
+/**
+ * Literal openings the request asks for ("a paragraph that begins with
+ * \"Contradiction:\"", "start the email with 'Hi team'"). Exact wording
+ * is something the runtime can check; a heading close to it is not it.
+ */
+export function requiredOpenings(text) {
+  const value = stripContext(text);
+  const out = [];
+  for (const match of value.matchAll(/\b(?:begins?|beginning|starts?|starting|opens?|opening)\s+with\s+["“'`]([^"”'`\n]{2,60})["”'`]/gi)) {
+    const before = value.slice(Math.max(0, match.index - 80), match.index);
+    // "lines that begin with '#'" describes data to select, not text to write.
+    if (/\b(?:files?|names?|lines|rows?|entries|keys?|words|values?|strings?|records?|columns?|items|urls?|paths?|messages|emails)\s+(?:that\s+|which\s+|whose\s+\w+\s+)?$/i.test(before) || /\b(?:if|when|whether|where)\s+(?:it\s+|they\s+)?$/i.test(before)) continue;
+    if (!/\b(?:paragraph|section|line|sentence|heading|answer|reply|response|email|letter|message|note|summary|report|document|memo|post|bullet|it|each|every)\b/i.test(before)) continue;
+    const marker = match[1].trim();
+    if (marker && !out.includes(marker)) out.push(marker);
+    if (out.length >= 5) break;
+  }
+  return out;
+}
+
+/** Whether some line of `body` opens with `marker`, ignoring Markdown markup. */
+export function hasOpening(body, marker) {
+  const want = String(marker || '').toLowerCase();
+  if (!want) return false;
+  for (const raw of String(body || '').split('\n')) {
+    const line = raw.replace(/[*_`]/g, '').replace(/^\s*(?:>\s*)*(?:#{1,6}\s+)?(?:[-+•]\s+|\d+[.)]\s+)?/, '').trimStart().toLowerCase();
+    if (line.startsWith(want)) return true;
+  }
+  return false;
+}
+
 /** Constraint sentences: prohibitions and restrictions, as written. */
 export function constraintsIn(text) {
   const value = stripContext(text);
@@ -388,11 +437,13 @@ function criteriaFor(text, { intent, domains, deliverables, evidence }) {
     if (limit.max !== undefined) parts.push('at most ' + limit.max);
     add('word_limit', (file ? file.path : 'The reply') + ': ' + parts.join(' and ') + ' ' + limit.unit + 's', { unit: limit.unit, ...(limit.min !== undefined ? { min: limit.min } : {}), ...(limit.max !== undefined ? { max: limit.max } : {}), target: file ? file.path : 'reply' });
   }
+  for (const marker of requiredOpenings(text)) add('opening', (file ? file.path : 'The reply') + ' has a line that begins with "' + marker + '"', { marker, target: file ? file.path : 'reply' });
+  for (const dir of sourceFolders(text)) add('sources_read', 'Every file in ' + dir + '/ was read before answering', { dir });
   if (evidence.includes('check')) add('check_passes', 'A relevant test, build or check passes after the last edit');
   const all = [domains.primary, ...domains.secondary];
   if (all.includes('research') && /\b(?:sources?|cit(?:e|es|ed|ing)|citations?|references?|links?|evidence|fact-?check|verify)\b/i.test(stripContext(text))) {
     const many = /\b(?:multiple|several|independent|at least (?:two|2|three|3)|cross-?check|corroborat\w*)\b/i.test(stripContext(text));
-    add('cites_sources', 'Claims cite pages that were actually read' + (many ? ', from at least two independent sources' : ''), { min: many ? 2 : 1, independent: many });
+    add('cites_sources', 'Claims cite pages that were actually read' + (many ? ', from at least two independent sources' : ''), { min: many ? 2 : 1, independent: many, ...(file ? { target: file.path } : {}) });
   }
   if (all.includes('research') || all.includes('analysis') || intent === 'investigate') add('claims_supported', 'Every citation, quote and computed number in the result is backed by evidence the runtime observed');
   if (evidence.includes('side_effect')) add('side_effect', 'The requested action shows up in a tool result, not only in the reply');
@@ -528,6 +579,63 @@ function readSmall(file) {
   } catch { return null; }
 }
 
+const MAX_SOURCE_FILES = 40;
+
+function targetText(root, target) {
+  if (!target || target === 'reply') return '';
+  const file = insideRoot(root, target);
+  const read = file && existsSync(file) ? readSmall(file) : null;
+  return read && read.text !== null ? read.text.slice(0, 200000) : '';
+}
+
+// Workspace files a text names by path (sources/forum-thread.md), that exist.
+function citedWorkspaceFiles(text, root) {
+  if (!root) return [];
+  const out = [];
+  for (const match of String(text || '').matchAll(/(?<![\w/:.-])((?:[\w.-]+\/)*[\w.-]+\.(?:md|markdown|txt|csv|tsv|json|jsonl|pdf|html?|xml|ya?ml|log|rst|docx?))(?![\w/-])/gi)) {
+    const file = match[1].replace(/^\.\//, '');
+    if (file.includes('..') || out.includes(file)) continue;
+    const full = insideRoot(root, file);
+    if (full && existsSync(full)) out.push(file);
+    if (out.length >= 40) break;
+  }
+  return out;
+}
+
+// Files under `dir` as workspace-relative paths, or null past MAX_SOURCE_FILES.
+function listFiles(dir, base) {
+  const out = [];
+  const walk = (current, depth) => {
+    let entries;
+    try { entries = readdirSync(current, { withFileTypes: true }); } catch { return true; }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) { if (depth < 3 && !walk(full, depth + 1)) return false; continue; }
+      if (!entry.isFile()) continue;
+      out.push(path.relative(base, full).split(path.sep).join('/'));
+      if (out.length > MAX_SOURCE_FILES) return false;
+    }
+    return true;
+  };
+  return walk(dir, 0) ? out.sort() : null;
+}
+
+// Read with read_file, or printed whole by a shell command that names it
+// (cat, head, grep over the folder's files).
+const READS_FILES = /^(?:cat|head|tail|less|more|type|bat|grep|rg|egrep|awk|sed|nl|wc|python3?|node)\b/i;
+function fileWasRead(file, events) {
+  for (const event of events) {
+    if (event.kind === 'read' && event.path === file) return true;
+    if ((event.kind === 'command' || event.kind === 'execution') && event.exitCode === 0 && typeof event.command === 'string' && READS_FILES.test(event.command.trim())) {
+      const command = event.command;
+      const dir = path.posix.dirname(file);
+      if (command.includes(file) || command.includes(dir + '/*') || (/^(?:grep|rg|egrep)\b/i.test(command.trim()) && new RegExp('(?:^|\\s)' + dir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/?(?:\\s|$)').test(command))) return true;
+    }
+  }
+  return false;
+}
+
 /** Counts of words, sentences, bullets, paragraphs, lines and characters in text. */
 export function measureText(text) {
   const value = String(text || '').replace(/```[\s\S]*?```/g, ' ');
@@ -594,11 +702,46 @@ export function evaluateAcceptance(spec, { events = [], reply = '', root = '', r
         if (criterion.params.max !== undefined && count > criterion.params.max) return set('unmet', where + ' has ' + count + ' ' + unit + ', more than ' + criterion.params.max);
         return set('met', where + ' has ' + count + ' ' + unit);
       }
+      case 'opening': {
+        let body = reply;
+        let where = 'the reply';
+        if (criterion.params.target && criterion.params.target !== 'reply') {
+          const file = insideRoot(root, criterion.params.target);
+          const read = file && existsSync(file) ? readSmall(file) : null;
+          if (!read || read.text === null) return set('unknown', criterion.params.target + ' could not be read');
+          body = read.text;
+          where = criterion.params.target;
+        }
+        if (hasOpening(body, criterion.params.marker)) return set('met', where + ' has a line beginning with "' + criterion.params.marker + '"');
+        return set('unmet', where + ' has no line that begins with "' + criterion.params.marker + '" (the exact words were asked for; a heading or paraphrase is not the same)');
+      }
+      case 'sources_read': {
+        const dir = insideRoot(root, criterion.params.dir);
+        if (!dir || !existsSync(dir)) return set('unknown', criterion.params.dir + '/ is not in the workspace');
+        const files = listFiles(dir, path.resolve(root));
+        if (files === null) return set('unknown', criterion.params.dir + '/ holds too many files to check one by one');
+        if (!files.length) return set('unknown', criterion.params.dir + '/ is empty');
+        const unread = files.filter((file) => !fileWasRead(file, events));
+        if (unread.length) return set('unmet', 'not read before answering: ' + unread.slice(0, 8).join(', ') + (unread.length > 8 ? ' and ' + (unread.length - 8) + ' more' : ''));
+        return set('met', 'all ' + files.length + ' file(s) in ' + criterion.params.dir + '/ were read', events.filter((event) => event.kind === 'read' && files.includes(event.path)).slice(-10).map((event) => event.seq));
+      }
       case 'cites_sources': {
         const cited = (assessed.claims.citations.checked);
         const readCited = [...fetched].filter((url) => reply.includes(url) || reply.includes(url.replace(/\/$/, '')));
         const min = criterion.params.min || 1;
-        if (!cited) return set('unmet', 'the result cites no sources');
+        if (!cited) {
+          // Sources in the workspace ("cite the file path of each source"):
+          // paths named in the reply or the written file, each one read.
+          const written = new Set(events.filter((event) => event.kind === 'edit').map((event) => event.path));
+          const local = citedWorkspaceFiles([reply, targetText(root, criterion.params.target)].join('\n'), root).filter((file) => file !== criterion.params.target && !written.has(file));
+          if (local.length) {
+            const unread = local.filter((file) => !fileWasRead(file, events));
+            if (unread.length) return set('unmet', 'cited but never read: ' + unread.slice(0, 6).join(', '));
+            if (local.length < min) return set('unmet', 'fewer than ' + min + ' sources cited');
+            return set('met', local.length + ' cited workspace file(s), all read', events.filter((event) => event.kind === 'read' && local.includes(event.path)).slice(-10).map((event) => event.seq));
+          }
+          return set('unmet', 'the result cites no sources');
+        }
         if (assessed.claims.citations.supported < cited) return set('unmet', (cited - assessed.claims.citations.supported) + ' cited URL(s) were never fetched');
         if (criterion.params.independent) {
           const groups = independentSources(readCited.length ? readCited : [...fetched]).independent;

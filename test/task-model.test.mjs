@@ -29,7 +29,7 @@ test('intake reads intent, domain and complexity across kinds of work', () => {
   assert.ok(domains(research).includes('writing'));
   assert.deepEqual(kinds(research), ['file_exists', 'word_limit', 'cites_sources', 'claims_supported']);
   const cites = research.acceptance.find((item) => item.kind === 'cites_sources');
-  assert.deepEqual(cites.params, { min: 2, independent: true });
+  assert.deepEqual(cites.params, { min: 2, independent: true, target: 'report.md' });
   const words = research.acceptance.find((item) => item.kind === 'word_limit');
   assert.equal(words.params.target, 'report.md', 'the limit applies to the file the user asked for');
   assert.ok(words.params.min < 500 && words.params.max > 500, 'an approximate length gets a tolerance band');

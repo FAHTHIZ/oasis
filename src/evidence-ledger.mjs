@@ -14,7 +14,7 @@
 
 import { createHash } from 'node:crypto';
 
-export const EVIDENCE_KINDS = Object.freeze(['check', 'command', 'execution', 'fetch', 'search', 'edit', 'side_effect', 'tamper']);
+export const EVIDENCE_KINDS = Object.freeze(['check', 'command', 'execution', 'fetch', 'search', 'edit', 'side_effect', 'tamper', 'read']);
 const MAX_EVENTS = 2000;
 const MAX_NUMBERS_PER_EVENT = 400;
 const MAX_URLS_PER_EVENT = 50;
@@ -85,6 +85,12 @@ export function changesFiles(event) {
 
 export function recordEvidence(ledger, event) {
   if (!ledger || !event || !EVIDENCE_KINDS.includes(event.kind)) return null;
+  // Rereading a file that has not changed adds nothing; keep the ledger for
+  // checks and fetches in long sessions.
+  if (event.kind === 'read') {
+    const same = ledger.events.find((item) => item.kind === 'read' && item.path === event.path && item.digest === event.digest);
+    if (same) return same;
+  }
   if (changesFiles(event)) ledger.epoch += 1;
   const entry = { seq: ++ledger.seq, at: Date.now(), epoch: ledger.epoch, ...event };
   ledger.events.push(entry);
@@ -96,7 +102,7 @@ const EXECUTION_COMMAND = /^(?:python3?|py|Rscript|julia|node|deno|bun|ruby|perl
 
 /**
  * Builds the event for one tool result, or null when it shows nothing worth
- * recording (a read, a denied call). `context` carries what the agent loop
+ * recording (a listing, a denied call). `context` carries what the agent loop
  * already worked out: whether a command is a check (`isCheck`, `checkKind`)
  * and whether its exit status was hidden by a pipe (`masked`).
  */
@@ -228,6 +234,11 @@ export function evidenceFromToolResult(name, args = {}, result = {}, context = {
   if (name === 'web_search') {
     const urls = (Array.isArray(result.results) ? result.results : []).map((item) => normalizeUrl(item && item.url)).filter(Boolean).slice(0, MAX_URLS_PER_EVENT);
     return { kind: 'search', tool: name, query: String(args.query || '').slice(0, 200), urls, digest };
+  }
+  // A workspace file that was read: local sources a research answer may
+  // rest on ("using only the files in sources/"). Only the path is kept.
+  if (name === 'read_file' && typeof result.error !== 'string' && typeof result.path === 'string' && result.path) {
+    return { kind: 'read', tool: name, path: result.path.replace(/\\/g, '/').replace(/^\.\//, '').slice(0, 400), digest };
   }
   if (context.edited && context.path) {
     return { kind: 'edit', tool: name, path: String(context.path).slice(0, 400), digest };
