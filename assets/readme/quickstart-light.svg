@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="250" viewBox="0 0 1280 250" role="img" aria-labelledby="t d">
+<title id="t">Quick start in three steps</title>
+<desc id="d">Three cards light up in turn. 01 Install: curl the install script, oasis doctor reports ready. 02 Connect a model: oasis connect, tested with a real tool call. 03 Ask in plain words: oasis, checked and ready for review.</desc>
+<defs></defs>
+<style>
+@media (prefers-reduced-motion: no-preference) {
+.ty0{animation:ty0 12s infinite}
+@keyframes ty0{0%,6.67%{transform:translateX(0);opacity:1;animation-timing-function:steps(28,end)}18.33%,24.17%{transform:translateX(280px);opacity:1}24.58%,100%{transform:translateX(280px);opacity:0}}
+.ty0c{animation:ty0c 12s steps(1,end) infinite}
+@keyframes ty0c{0%,23.33%{opacity:1}23.75%,100%{opacity:0}}
+.cd0{animation:cd0 12s ease-in-out infinite}@keyframes cd0{0%,3.33%{stroke:#D5E5DA}5.83%,22.5%{stroke:#0A7846}25.83%,100%{stroke:#D5E5DA}}
+.o0{animation:o0 12s linear infinite}
+@keyframes o0{0%,20%{opacity:0;transform:translateY(5px)}22.92%,92.5%{opacity:1;transform:none}96.67%,100%{opacity:0;transform:none}}
+.ar0{animation:ar0 12s linear infinite}@keyframes ar0{0%,20%{transform:translateX(0);opacity:0}20.83%{opacity:1}25%{transform:translateX(40px);opacity:1}25.83%,100%{transform:translateX(40px);opacity:0}}
+.ty1{animation:ty1 12s infinite}
+@keyframes ty1{0%,28.33%{transform:translateX(0);opacity:1;animation-timing-function:steps(13,end)}33.75%,39.58%{transform:translateX(131px);opacity:1}40%,100%{transform:translateX(131px);opacity:0}}
+.ty1c{animation:ty1c 12s steps(1,end) infinite}
+@keyframes ty1c{0%,38.75%{opacity:1}39.17%,100%{opacity:0}}
+.cd1{animation:cd1 12s ease-in-out infinite}@keyframes cd1{0%,25%{stroke:#D5E5DA}27.5%,44.17%{stroke:#0A7846}47.5%,100%{stroke:#D5E5DA}}
+.o1{animation:o1 12s linear infinite}
+@keyframes o1{0%,35.42%{opacity:0;transform:translateY(5px)}38.33%,92.5%{opacity:1;transform:none}96.67%,100%{opacity:0;transform:none}}
+.ar1{animation:ar1 12s linear infinite}@keyframes ar1{0%,41.67%{transform:translateX(0);opacity:0}42.5%{opacity:1}46.67%{transform:translateX(40px);opacity:1}47.5%,100%{transform:translateX(40px);opacity:0}}
+.ty2{animation:ty2 12s infinite}
+@keyframes ty2{0%,50%{transform:translateX(0);opacity:1;animation-timing-function:steps(5,end)}54.17%,60%{transform:translateX(52px);opacity:1}60.42%,100%{transform:translateX(52px);opacity:0}}
+.ty2c{animation:ty2c 12s steps(1,end) infinite}
+@keyframes ty2c{0%,59.17%{opacity:1}59.58%,100%{opacity:0}}
+.cd2{animation:cd2 12s ease-in-out infinite}@keyframes cd2{0%,46.67%{stroke:#D5E5DA}49.17%,65.83%{stroke:#0A7846}69.17%,100%{stroke:#D5E5DA}}
+.o2{animation:o2 12s linear infinite}
+@keyframes o2{0%,53.75%{opacity:0;transform:translateY(5px)}56.67%,92.5%{opacity:1;transform:none}96.67%,100%{opacity:0;transform:none}}
+}
+</style>
+<g><rect class="cd0" x="1" y="1" width="387.3333333333333" height="248" rx="20" fill="#FFFFFF" stroke="#D5E5DA" stroke-width="1.5"/>
+  <text x="28" y="46" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" font-weight="700" fill="#0A7846" letter-spacing="2">01</text>
+  <text x="28" y="88" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="26" font-weight="800" fill="#0B1A10">Install</text>
+  <rect x="24" y="118" width="341.3333333333333" height="48" rx="12" fill="#F2FBF4" stroke="#D5E5DA"/>
+  <text x="34" y="150" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="700" fill="#0A7846">$</text>
+  <text x="52" y="150" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="400" fill="#0B1A10" xml:space="preserve">curl -fsSL …/install.sh | sh</text>
+<g class="ty0"><rect x="51" y="134" width="296" height="23" fill="#F2FBF4"/><rect class="ty0c" x="52" y="136" width="9" height="18" fill="#0A7846" opacity=".9"/></g>
+  <g class="o0"><text x="28" y="204" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="15" fill="#18A957">✓ oasis doctor: ready</text></g></g>
+<path d="M397.3333333333333 125 H437.3333333333333" stroke="#D5E5DA" stroke-width="2" stroke-dasharray="4 5"/><path d="M431.3333333333333 119 L438.3333333333333 125 L431.3333333333333 131" fill="none" stroke="#71877A" stroke-width="2" stroke-linecap="round"/>
+<circle class="ar0" cx="397.3333333333333" cy="125" r="5" fill="#0A7846"/>
+<g><rect class="cd1" x="446.3333333333333" y="1" width="387.3333333333333" height="248" rx="20" fill="#FFFFFF" stroke="#D5E5DA" stroke-width="1.5"/>
+  <text x="473.3333333333333" y="46" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" font-weight="700" fill="#0A7846" letter-spacing="2">02</text>
+  <text x="473.3333333333333" y="88" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="26" font-weight="800" fill="#0B1A10">Connect a model</text>
+  <rect x="469.3333333333333" y="118" width="341.3333333333333" height="48" rx="12" fill="#F2FBF4" stroke="#D5E5DA"/>
+  <text x="479.3333333333333" y="150" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="700" fill="#0A7846">$</text>
+  <text x="497.3333333333333" y="150" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="400" fill="#0B1A10" xml:space="preserve">oasis connect</text>
+<g class="ty1"><rect x="496.3333333333333" y="134" width="147" height="23" fill="#F2FBF4"/><rect class="ty1c" x="497.3333333333333" y="136" width="9" height="18" fill="#0A7846" opacity=".9"/></g>
+  <g class="o1"><text x="473.3333333333333" y="204" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="15" fill="#18A957">✓ tested with a real tool call</text></g></g>
+<path d="M842.6666666666666 125 H882.6666666666666" stroke="#D5E5DA" stroke-width="2" stroke-dasharray="4 5"/><path d="M876.6666666666666 119 L883.6666666666666 125 L876.6666666666666 131" fill="none" stroke="#71877A" stroke-width="2" stroke-linecap="round"/>
+<circle class="ar1" cx="842.6666666666666" cy="125" r="5" fill="#0A7846"/>
+<g><rect class="cd2" x="891.6666666666666" y="1" width="387.3333333333333" height="248" rx="20" fill="#FFFFFF" stroke="#D5E5DA" stroke-width="1.5"/>
+  <text x="918.6666666666666" y="46" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" font-weight="700" fill="#0A7846" letter-spacing="2">03</text>
+  <text x="918.6666666666666" y="88" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="26" font-weight="800" fill="#0B1A10">Ask in plain words</text>
+  <rect x="914.6666666666666" y="118" width="341.3333333333333" height="48" rx="12" fill="#F2FBF4" stroke="#D5E5DA"/>
+  <text x="924.6666666666666" y="150" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="700" fill="#0A7846">$</text>
+  <text x="942.6666666666666" y="150" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="400" fill="#0B1A10" xml:space="preserve">oasis</text>
+<g class="ty2"><rect x="941.6666666666666" y="134" width="68" height="23" fill="#F2FBF4"/><rect class="ty2c" x="942.6666666666666" y="136" width="9" height="18" fill="#0A7846" opacity=".9"/></g>
+  <g class="o2"><text x="918.6666666666666" y="204" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="15" fill="#18A957">✓ checked · ready for review</text></g></g>
+
+</svg>

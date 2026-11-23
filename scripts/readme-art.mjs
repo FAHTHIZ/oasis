@@ -10,6 +10,7 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tagline, stats, quickstart, capability, CARD_KINDS, providers, orbit, footer } from './readme-scenes.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'assets', 'readme');
@@ -222,8 +223,14 @@ function divider(theme) {
 `;
 }
 
-const files = { 'hero.svg': hero(), 'architecture.svg': architecture() };
+const files = { 'hero.svg': hero(), 'architecture.svg': architecture(), 'footer.svg': footer() };
 for (const theme of ['dark', 'light']) {
+  files[`tagline-${theme}.svg`] = tagline(theme);
+  files[`stats-${theme}.svg`] = stats(theme);
+  files[`quickstart-${theme}.svg`] = quickstart(theme);
+  files[`providers-${theme}.svg`] = providers(theme);
+  files[`orbit-${theme}.svg`] = orbit(theme);
+  for (const kind of CARD_KINDS) files[`card-${kind}-${theme}.svg`] = capability(kind, theme);
   files[`pipeline-${theme}.svg`] = pipeline(theme);
   files[`divider-${theme}.svg`] = divider(theme);
   for (const kind of ['models', 'plugins', 'verified', 'hosted', 'agents', 'safety']) files[`icon-${kind}-${theme}.svg`] = icon(kind, theme);

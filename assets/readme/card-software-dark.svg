@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-labelledby="t d">
+<title id="t">SOFTWARE: Fixes it, then proves it</title>
+<desc id="d">A diff in cart.mjs: the line return total minus pct is removed and return total times one minus pct over 100 is typed in. Then npm test runs, a progress bar fills, and chips read 2 passed and checkpoint, rewind ready.</desc>
+<defs><linearGradient id="rim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7CFF5E" stop-opacity=".55"/><stop offset=".45" stop-color="#1F2E23"/><stop offset="1" stop-color="#1F2E23"/></linearGradient>
+<radialGradient id="spot" cx="0" cy="0" r="1"><stop offset="0" stop-color="#7CFF5E" stop-opacity=".10"/><stop offset="1" stop-color="#7CFF5E" stop-opacity="0"/></radialGradient></defs>
+<style>
+@media (prefers-reduced-motion: no-preference) {
+.dl{animation:dl 10s linear infinite}
+@keyframes dl{0%,9%{opacity:0;transform:translateY(5px)}12.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.al{animation:al 10s linear infinite}
+@keyframes al{0%,15%{opacity:0;transform:translateY(5px)}18.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.ta{animation:ta 10s infinite}
+@keyframes ta{0%,17%{transform:translateX(0);opacity:1;animation-timing-function:steps(31,end)}29%,36%{transform:translateX(291px);opacity:1}36.5%,100%{transform:translateX(291px);opacity:0}}
+.tc{animation:tc 10s infinite}
+@keyframes tc{0%,33%{transform:translateX(0);opacity:1;animation-timing-function:steps(8,end)}37.5%,44.5%{transform:translateX(77px);opacity:1}45%,100%{transform:translateX(77px);opacity:0}}
+.pb{animation:pb 10s linear infinite}
+@keyframes pb{0%,39%{opacity:0;transform:translateY(5px)}42.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.pass{animation:pass 10s linear infinite}
+@keyframes pass{0%,54%{opacity:0;transform:translateY(5px)}57.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.ckp{animation:ckp 10s linear infinite}
+@keyframes ckp{0%,60%{opacity:0;transform:translateY(5px)}63.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.fill{transform-box:fill-box;transform-origin:left;animation:fill 10s ease-in-out infinite}@keyframes fill{0%,40%{transform:scaleX(0)}53%,100%{transform:scaleX(1)}}
+}
+</style>
+<rect x="1" y="1" width="638" height="358" rx="22" fill="#0E1510" stroke="url(#rim)" stroke-width="1.5"/>
+<rect x="1" y="1" width="638" height="358" rx="22" fill="url(#spot)"/>
+<text x="32" y="46" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" letter-spacing="2.5" fill="#7CFF5E">SOFTWARE</text>
+<text x="32" y="84" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="27" font-weight="800" fill="#E6F5EA">Fixes it, then proves it</text>
+<g transform="translate(32 116)" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<rect x="0" y="0" width="576" height="128" rx="12" fill="#121B15" stroke="#1F2E23"/>
+<text x="16" y="24" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#5E7064">src/cart.mjs</text>
+<text x="16" y="52" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="15" fill="#8FA597" xml:space="preserve">  const total = price * qty;</text>
+<g class="dl"><rect x="1" y="61" width="574" height="24" fill="#3A1B1B"/><text x="16" y="78" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="15" fill="#FF7A7A" xml:space="preserve">-</text><text x="40" y="78" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="15" fill="#FF7A7A">return total - pct;</text></g>
+<g class="al"><rect x="1" y="87" width="574" height="24" fill="#14361F"/><text x="16" y="104" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="15" fill="#7CFF5E" xml:space="preserve">+</text><text x="40" y="104" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="15" font-weight="400" fill="#E6F5EA" xml:space="preserve">return total * (1 - pct / 100);</text>
+<g class="ta"><rect x="39" y="89" width="307" height="22" fill="#14361F"/><rect x="40" y="91" width="8" height="17" fill="#7CFF5E" opacity=".9"/></g></g>
+<text x="16" y="175" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="15" font-weight="700" fill="#7CFF5E">$</text><text x="34" y="175" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="15" font-weight="400" fill="#E6F5EA" xml:space="preserve">npm test</text>
+<g class="tc"><rect x="33" y="160" width="93" height="22" fill="#0E1510"/><rect x="34" y="162" width="8" height="17" fill="#7CFF5E" opacity=".9"/></g>
+<g class="pb"><rect x="130" y="164" width="190" height="10" rx="5" fill="#121B15" stroke="#1F2E23"/><rect class="fill" x="130" y="164" width="190" height="10" rx="5" fill="#32E07A"/></g>
+<g class="pass"><rect x="340" y="154" width="112" height="30" rx="15" fill="#123A1F"/><text x="354" y="174" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" font-weight="700" fill="#7CFF5E">✓ 2 passed</text></g>
+<g class="ckp"><rect x="0" y="190" width="231" height="30" rx="15" fill="#121B15" stroke="#1F2E23"/><text x="14" y="210" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#8FA597">checkpoint · /rewind ready</text></g>
+</g>
+</svg>
