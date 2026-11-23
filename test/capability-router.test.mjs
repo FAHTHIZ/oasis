@@ -51,6 +51,22 @@ test('task classes are named only when the signals are clear', () => {
   assert.equal(classifyTaskClass('Add a stats command.'), '');
 });
 
+test('work that is not code is classed by its task-model domain', () => {
+  assert.equal(classifyTaskClass('Analyze data/sales.csv: compute revenue by region, find the top region and chart the trend.'), 'data-analysis');
+  assert.equal(classifyTaskClass('Draft release notes for customers, under 120 words, with a summary of each change.'), 'writing');
+  assert.equal(classifyTaskClass('Using only the sources in sources/, research the current rate limit and cite each source.'), 'research-synthesis');
+  // Code wording keeps a request in the code classes.
+  assert.notEqual(classifyTaskClass('Write a function in src/report.mjs that summarizes sales, and add unit tests.'), 'writing');
+  assert.notEqual(classifyTaskClass('Harden `loadMcpServers()` in `src/mcp.mjs` against oversized configuration files with too many server entries; add tests.'), 'operations');
+  const detail = classifyTaskClass('Draft release notes for customers, under 120 words, with a summary of each change.', { detail: true });
+  assert.equal(detail.via, 'domain');
+});
+
+test('non-code classes are routable', () => {
+  assert.deepEqual(sanitizeRoutes({ writing: 'vendor/cheap', 'data-analysis': 'vendor/mid', planning: 'p', operations: 'o', 'research-synthesis': 'r' }),
+    { writing: 'vendor/cheap', 'data-analysis': 'vendor/mid', planning: 'p', operations: 'o', 'research-synthesis': 'r' });
+});
+
 test('capability mode routes by class, falls back to the overall route, and keeps pins', () => {
   const routing = { enabled: true, mode: 'capability', strongModel: 'vendor/strong', routes: { 'secret-handling': 'vendor/cheap', overall: 'vendor/mid' } };
   const secret = selectTaskModel('Redact API keys and credentials from log output; scrub the secrets.', 'vendor/strong', routing);

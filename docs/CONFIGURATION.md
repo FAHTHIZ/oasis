@@ -381,9 +381,14 @@ A task goes to the route for its class, or to `overall` when its class is
 unclear. Security-sensitive and hard-hinted tasks stay on the strong model, and
 a routed run that gets stuck moves to the strong model as in cascade mode.
 
-Limits, stated plainly: the class is guessed from the task text with keyword
-rules. On the 52 eval task prompts it names a class for 33 and gets 23 of
-those right; the rest use `overall`. The cost gate (cost drops with
+Work that is not code (data analysis, writing, research synthesis, planning,
+operations) is classed by the task model's domain, the same reading planning
+and verification use (see [Task model](TASK-MODEL.md)), and only when code
+wording is absent or far behind. Code tasks are classed by keyword rules.
+
+Limits, stated plainly: the class is a guess from the task text. On the 59
+eval task prompts it names a class for 37 and gets 27 of those right; the rest
+use `overall`. Every miss is between two code classes. The cost gate (cost drops with
 no class falling more than 2 points on the harness) has not been measured, so
 this mode is off unless you turn it on.
 
