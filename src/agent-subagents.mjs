@@ -31,6 +31,25 @@ import { unsupportedChildClaim } from './claim-check.mjs';
 import { applyInjectionTaint, injectionTaint, judgedPathsFor, taintNotice } from './untrusted-content.mjs';
 import { evidenceSince, evidenceSummary, sessionEvidence } from './evidence-ledger.mjs';
 import { checkReport } from './verification-contracts.mjs';
+
+/** Symbol key on runSubagent results: the run's evidence and contract issues (never serialized). */
+export const REPORT_EVIDENCE = Symbol.for('oasis.reportEvidence');
+
+/**
+ * The contract issues that stand for one workflow agent's report. Research
+ * issues (citations, quotes) are rechecked against what every agent of the
+ * run fetched so far, since the run shares one body of evidence; code and
+ * analysis issues stand as they were. Adds this agent's fetches and searches
+ * to `runEvidence`.
+ */
+export function workflowReportIssues(checked, report, runEvidence) {
+  if (!checked) return [];
+  const own = Array.isArray(checked.events) ? checked.events : [];
+  const original = Array.isArray(checked.issues) ? checked.issues : [];
+  const research = original.some((issue) => issue.domain === 'research') ? checkReport(checked.text || report, [...runEvidence, ...own]).filter((issue) => issue.domain === 'research') : [];
+  for (const event of own) if ((event.kind === 'fetch' || event.kind === 'search') && runEvidence.length < 5000) runEvidence.push(event);
+  return [...original.filter((issue) => issue.domain !== 'research'), ...research];
+}
 import { RESEARCH_TOOL_NAMES } from './research-tools.mjs';
 import { recoveryPlan, waitForRecovery } from './agent-recovery.mjs';
 import { defineSessionAgent } from './session-agents.mjs';
@@ -186,13 +205,22 @@ export async function runWorkflowTool(session, args, context, options) {
   const run = { id, name, scriptPath, status: 'running', startedAt: Date.now(), controller, state: { agents: [], phases: [], logs: [], calls: [] }, agentIds: [], background };
   session.workflowRuns.set(id, run);
   const persist = async (state) => { await atomicWriteFile(path.join(dir, id + '.state.json'), JSON.stringify({ id, name, scriptPath, status: run.status, calls: state.calls }, null, 2)).catch(() => {}); };
+  // Evidence gathered by this run's agents. A workflow agent may cite and
+  // quote pages a sibling fetched (deep-research's report writer has no
+  // tools), so its research claims are rechecked against the whole run; any
+  // other rejected claim fails the call instead of flowing into the result.
+  const runEvidence = [];
   const runAgent = async ({ prompt, label, agentType, model, isolation, signal }) => {
     if (signal && signal.aborted) return null;
     const subOptions = background ? { ...options, approval: async () => false, signal, onToolStart: undefined, onToolResult: undefined, onToolOutput: undefined, onDelta: undefined } : { ...options, signal };
     // In auto mode, a script-computed prompt is not the user's request.
     const outcome = await runSubagent(session, { prompt, description: label, subagent_type: agentType || 'general-purpose', ...(isolation ? { isolation } : {}), ...(model ? { model } : {}) }, context, subOptions);
     if (outcome && outcome.id) run.agentIds.push(outcome.id);
-    return outcome && typeof outcome.report === 'string' ? outcome.report : '';
+    const report = outcome && typeof outcome.report === 'string' ? outcome.report : '';
+    const checked = outcome && outcome[REPORT_EVIDENCE];
+    const issues = workflowReportIssues(checked, report, runEvidence);
+    if (issues.length) throw Object.assign(new Error('OASIS rejected this agent\'s report: ' + issues.map((issue) => issue.reason).join('; ')), { verification: true });
+    return report;
   };
   const onEvent = (event, state) => {
     run.state = state;
@@ -771,6 +799,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     ...(record.modelRoute && child.config && (child.config.model !== parent.config.model || record.escalatedFrom) ? { model: child.config.model, model_route: record.modelRoute } : {}),
     toolCalls: Math.max(0, Number(outcome.toolCalls) || 0),
     tokensUsed: Math.max(0, Number(outcome.tokensUsed) || 0),
+    [REPORT_EVIDENCE]: { events: evidence, issues: record.verificationIssues || [], text: outcome.text },
     ...(record.usage && record.usage.requests ? { usage: { requests: record.usage.requests, inputTokens: record.usage.inputTokens, outputTokens: record.usage.outputTokens, costUsd: Number(Number(record.usage.costUsd || 0).toFixed(6)) } } : {})
   };
 }
