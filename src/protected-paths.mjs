@@ -158,7 +158,14 @@ export function ruleNamesProtectedPath(rule) {
   const match = String(rule || '').match(/^[A-Za-z0-9_.-]+\((.+)\)$/s);
   if (!match) return false;
   const target = match[1].trim().replace(/^\.\//, '').replace(/\\/g, '/').toLowerCase();
-  return /^\.(?:oasis|claude|git|vscode|cursor|gemini|codex|continue|husky|devcontainer)\b|^\.mcp\.json|^\.lsp\.json|^\.envrc|^\.pre-commit-config|^\.npmrc|^\.yarnrc|^\.pnpmfile|^lefthook/.test(target);
+  if (/^\.(?:oasis|claude|git|vscode|cursor|gemini|codex|continue|husky|devcontainer)\b|^\.mcp\.json|^\.lsp\.json|^\.envrc|^\.pre-commit-config|^\.npmrc|^\.yarnrc|^\.pnpmfile|^lefthook/.test(target)) return true;
+  // Any other protected path (opencode.json, .aider.conf.yml, .agents/agents/,
+  // .opencode/commands/ ...): the literal part of the rule before its first
+  // glob must itself be, or be a folder of, a protected path. A broad rule
+  // such as write_file(**) has no literal part and never counts.
+  const literal = target.split(/[*?[{]/)[0].replace(/\/+$/, '');
+  if (!literal || literal.startsWith('/') || literal.split('/').includes('..')) return false;
+  return Boolean(protectedConfigPath('/', literal) || protectedConfigPath('/', literal + '/x'));
 }
 
 export function protectedEditsAllowed(env = process.env) {
