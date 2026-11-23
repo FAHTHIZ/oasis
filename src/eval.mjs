@@ -1609,6 +1609,9 @@ export async function runEvalCommand(args = [], options = {}) {
         let usage = { inputTokens: 0, outputTokens: 0 };
         let agentResult = null;
         const trace = [];
+        // Completion-gate rounds (task contract, action nudges) by kind, so a
+        // trace shows when the answer was sent back and why.
+        const nudges = [];
         const requestTokens = [];
         let errorText = null;
         let verification = { exitCode: 1, output: 'Agent did not complete.' };
@@ -1644,6 +1647,7 @@ export async function runEvalCommand(args = [], options = {}) {
           agentResult = await agentRunner(session, task.taskText, {
             autoApprove: true,
             onToolResult: (event) => recordTraceStep(trace, event),
+            onActionNudge: (nudge) => { if (nudges.length < TRACE_LIMIT) nudges.push({ kind: String(nudge && nudge.kind || '?'), afterStep: trace.length }); },
             env: evalAgentEnvironment(process.env),
             maxSteps: provider.maxSteps,
             signal: timeoutController.signal,
@@ -1722,7 +1726,7 @@ export async function runEvalCommand(args = [], options = {}) {
           costUSD, strongModelCostUSD, routingSavingsUSD, costSource,
           wallTimeMs: elapsedMs, finished: Boolean(agentResult && agentResult.finished),
           toolCalls: agentResult ? agentResult.toolCalls : 0,
-          trace, requestTokens,
+          trace, ...(nudges.length ? { nudges } : {}), requestTokens,
           verification: { exitCode: verification.exitCode, output: verification.output },
           changes,
           gitBaseline,

@@ -100,3 +100,31 @@ test('OASIS_TASK_MODEL=0 turns the contract off', async (t) => {
   assert.equal(requests.length, 1);
   assert.equal(result.task, undefined);
 });
+
+test('a new miss after the first nudge gets its own nudge, and the same miss never loops', async (t) => {
+  // Live run (conflicting-sources-answer): the first nudge was spent on the
+  // missing file; the file then came back with "## Contradiction" where a
+  // paragraph beginning "Contradiction:" was asked for, and nothing said so.
+  const prompt = 'Write answer.md: one paragraph on the project status, and a paragraph that begins with "Risks:" listing the risks.';
+  const { root, result, requests } = await run(t, [
+    { content: 'The project is on track. Risks: none.' },
+    toolCall('w1', 'write_file', { path: 'answer.md', content: 'The project is on track.\n\n## Risks\n\nNone known.\n' }),
+    { content: 'I wrote answer.md.' },
+    toolCall('w2', 'write_file', { path: 'answer.md', content: 'The project is on track.\n\nRisks: none known.\n' }),
+    { content: 'I wrote answer.md.' }
+  ], prompt);
+  assert.match(String(lastUser(requests[1]).content), /answer\.md does not exist/);
+  assert.match(String(lastUser(requests[3]).content), /begins with "Risks:"/);
+  assert.equal(await readFile(path.join(root, 'answer.md'), 'utf8'), 'The project is on track.\n\nRisks: none known.\n');
+  assert.equal(requests.length, 5);
+  assert.notEqual(result.task.outcome.verdict, 'rejected', JSON.stringify(result.task.outcome));
+
+  const again = await run(t, [
+    { content: 'The project is on track.' },
+    toolCall('w1', 'write_file', { path: 'answer.md', content: '## Risks\nNone.\n' }),
+    { content: 'I wrote answer.md.' },
+    { content: 'I wrote answer.md.' }
+  ], prompt);
+  assert.equal(again.requests.length, 4, 'the opening miss is sent back once, then reported');
+  assert.match(again.result.text, /Not verified: .*Risks:/);
+});

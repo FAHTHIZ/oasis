@@ -58,6 +58,11 @@ export function stopHookMessage(text) {
   return value.slice(0, head) + '\n[' + (value.length - head - tail) + ' characters omitted]\n' + value.slice(-tail);
 }
 
+const MAX_TASK_NUDGES = 2;
+// A problem's identity across replies: the criterion, not its changing detail
+// ("has 130 words" then "has 125 words" is the same miss).
+function problemKey(item) { return String(item.kind) + '\u0000' + String(item.description || ''); }
+
 export function newGateState() {
   return {
     unknownToolNudges: 0,
@@ -415,8 +420,15 @@ export async function runCompletionGates(turn, host) {
       taskOutcome = assessOutcome(session.task, { events, reply: text, root: session.root, ...reviewContext(session) });
       taskProblems = admitsShortfall(text) ? [] : gateProblems(taskOutcome);
     } catch { taskOutcome = null; taskProblems = []; }
-    if (taskProblems.length && !g.taskNudged) {
+    // Each problem goes back once. A new one that appears after the first
+    // nudge (the file now exists but lacks the opening the user asked for)
+    // gets its own chance, up to MAX_TASK_NUDGES; the same one never loops.
+    const sentBefore = g.taskNudgedProblems || (g.taskNudgedProblems = new Set());
+    const fresh = taskProblems.filter((item) => !sentBefore.has(problemKey(item)));
+    if (fresh.length && (g.taskNudges || 0) < MAX_TASK_NUDGES) {
       g.taskNudged = true;
+      g.taskNudges = (g.taskNudges || 0) + 1;
+      for (const item of taskProblems) sentBefore.add(problemKey(item));
       if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind: 'task-contract' }); } catch {} }
       if (options.onText) await emitDisplayText(session, options, text);
       session.messages.push({ role: 'user', content: taskGateNudge(taskProblems) });
