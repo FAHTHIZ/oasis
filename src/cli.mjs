@@ -1081,6 +1081,38 @@ export async function trustEffects(root) {
   return effects;
 }
 
+// Lines added to project instruction files that OASIS withheld
+// (src/instruction-pins.mjs). Accepting them needs a person at a terminal:
+// there is no --yes, so an agent that planted a line cannot accept it with a
+// command, and a command OASIS runs (which carries its decoy credential) is
+// refused outright.
+async function instructionsCommand(root, rest) {
+  const { withheldInstructions, trustInstructions } = await import('./instruction-pins.mjs');
+  const { CANARY_ENV_NAME } = await import('./canary-credentials.mjs');
+  const pending = await withheldInstructions(root);
+  if (rest[0] !== 'trust') {
+    if (!pending.length) { stdout.write('No withheld instruction lines in ' + root + '.\n'); return 0; }
+    for (const item of pending) {
+      stdout.write(item.name + ' (' + item.lines.length + ' withheld line' + (item.lines.length === 1 ? '' : 's') + '):\n');
+      for (const entry of item.lines) stdout.write('  - ' + entry.reason + ': ' + entry.line.trim().slice(0, 300) + '\n');
+    }
+    stdout.write('Run `oasis instructions trust` in a terminal to load them.\n');
+    return 0;
+  }
+  if (!pending.length) { stdout.write('No withheld instruction lines to trust.\n'); return 0; }
+  if (process.env[CANARY_ENV_NAME] || !stdin.isTTY || !stdout.isTTY) {
+    stdout.write('Not trusted: accepting withheld instruction lines needs you at a terminal, not a script or an agent command.\n');
+    return 1;
+  }
+  const names = rest.slice(1).filter((item) => !item.startsWith('-'));
+  const shown = pending.filter((item) => !names.length || names.includes(item.name));
+  const text = 'These lines will be loaded into every OASIS request in this project as instructions:\n' + shown.map((item) => item.lines.map((entry) => '  ' + item.name + ': ' + entry.line.trim().slice(0, 300) + '  (' + entry.reason + ')').join('\n')).join('\n') + '\nTrust them?';
+  if (!(await approve(text, true, false))) { stdout.write('Not trusted. They stay withheld.\n'); return 1; }
+  const done = await trustInstructions(root, { names });
+  stdout.write(done.length ? 'Trusted: ' + done.join(', ') + '.\n' : 'Nothing matched.\n');
+  return 0;
+}
+
 async function manageTrust(root, rest, { approve: approveTrust } = {}) {
   const revoke = rest.includes('--revoke');
   if (!revoke) {
@@ -2981,7 +3013,7 @@ async function startWebWorkspace(root, args) {
 
 
 // Top-level commands, for the typo hint (`oasis doctr` -> doctor).
-const TYPO_COMMANDS = ['a2a', 'control-room', 'acp', 'agents', 'app', 'auth', 'backups', 'batch', 'config', 'connect', 'diagnostics', 'doctor', 'eval', 'extensions', 'gateway', 'help', 'ide', 'import', 'init', 'insights', 'install', 'mcp', 'memory', 'models', 'permissions', 'plugins', 'purge', 'quota', 'restore', 'sessions', 'setup', 'skills', 'trust', 'ultrareview', 'uninstall', 'update', 'watch', 'web', 'completion', 'cloud', 'computer-use', 'daytona', 'modal', 'honcho', 'schedule', 'routines', 'exec', 'diff', 'deploy', 'profile', 'attempts', 'rehearse'];
+const TYPO_COMMANDS = ['a2a', 'control-room', 'acp', 'agents', 'app', 'auth', 'backups', 'batch', 'config', 'connect', 'diagnostics', 'doctor', 'eval', 'extensions', 'gateway', 'help', 'ide', 'import', 'init', 'insights', 'install', 'mcp', 'memory', 'models', 'permissions', 'plugins', 'purge', 'quota', 'restore', 'sessions', 'setup', 'skills', 'trust', 'ultrareview', 'uninstall', 'update', 'watch', 'web', 'completion', 'cloud', 'computer-use', 'daytona', 'modal', 'honcho', 'schedule', 'routines', 'exec', 'diff', 'deploy', 'profile', 'attempts', 'rehearse', 'instructions'];
 // One-word tasks that sit close to a command name but are real requests.
 const ONE_WORD_TASKS = new Set(['lint', 'test', 'tests', 'build', 'run', 'fix', 'format', 'review', 'explain', 'commit', 'refactor', 'deploy', 'debug', 'docs', 'start', 'stop', 'clean', 'check', 'plan', 'status', 'resume']);
 // Chat controls that only make sense inside a session (`oasis undo` used to
@@ -3926,6 +3958,7 @@ async function main() {
     stdout.write(insightsSummaryText(stats) + (file ? '\nReport: ' + file : '') + '\n');
     return;
   }
+  if (command === 'instructions') { process.exitCode = await instructionsCommand(workspace, rest); return; }
   if (command === 'rehearse') { const { rehearseCliCommand } = await import('./rehearse-cli.mjs'); process.exitCode = await rehearseCliCommand(rest, workspace); return; }
   if (command === 'receipt' || command === 'receipts') { const { receiptCommand } = await import('./receipt-cli.mjs'); const code = await receiptCommand(rest, workspace); if (code) process.exitCode = code; return; }
   if (command === 'backups') return await showBackups(workspace);

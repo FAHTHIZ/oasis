@@ -184,6 +184,7 @@ export function helpText() {
     '  oasis backups                 List snapshots made before file changes',
     '  oasis restore BACKUP_ID       Restore one file snapshot after confirmation',
     '  oasis rehearse -- CMD         Run CMD in a throwaway copy of the workspace and list what it would change (--apply keeps it)',
+    '  oasis instructions [trust]    List lines added to AGENTS.md, CLAUDE.md or project rules that were withheld; trust loads them',
     '  oasis receipt verify FILE     Check a work receipt: signature, evidence chain, claims, files (--replay reruns its checks)',
     '  oasis receipt create          Write a signed receipt for a saved session (--session ID, --last, -o FILE)',
     '  oasis eval --validate         Validate evaluation tasks and reference patches',
