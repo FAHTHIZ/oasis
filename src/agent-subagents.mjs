@@ -13,7 +13,7 @@ import { atomicWriteFile } from './atomic-write.mjs';
 import { extractJson, validateJsonSchema } from './json-schema.mjs';
 import { subagentMaxDepth, subagentDefinitionContext, withoutProjectInstructions, agentScopedHooks, agentMcpSpec, connectAgentMcp, closeAgentMcp, backgroundUsageSink, subagentStepLimit, watchForStall, verifyResumeWorktree } from './subagent-support.mjs';
 import { SHARED_TASK_TOOL_NAMES, runSharedTaskTool, releaseAgentLeases } from './shared-tasks.mjs';
-import { ensureKnowledgeBoard, knowledgePromptSection, KNOWLEDGE_TOOL_NAMES } from './knowledge-board.mjs';
+import { ensureKnowledgeBoard, knowledgePromptSection, KNOWLEDGE_TOOL_NAMES, openConflicts } from './knowledge-board.mjs';
 import { createWorktree, removeWorktree, finishWorktree, isCommitIntegrated } from './worktrees.mjs';
 import { worktreeSetupSummary } from './worktree-setup.mjs';
 import { modelAllowed, modelRestrictionMessage } from './model-aliases.mjs';
@@ -745,6 +745,8 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   const codeIssue = record.verificationIssues.find((issue) => issue.domain === 'code');
   record.unverifiedClaim = (codeIssue && codeIssue.reason) || (record.verificationIssues.length ? null : unsupportedChildClaim(outcome)) || null;
   if (record.verificationIssues.length) recordAgentEvent(parent, 'agent.report_rejected', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: record.verificationIssues.map((issue) => issue.domain + ': ' + issue.reason).join('; ').slice(0, 600) });
+  // Disputes this agent opened or was drawn into on the knowledge board.
+  const disputes = parent.knowledgeBoard ? openConflicts(parent.knowledgeBoard, { author: record.id }).slice(0, 5) : [];
   // Long reports go to a scratch file; the parent gets a preview and the path (src/report-handoff.mjs).
   const handoff = record.outputSchema ? null : await handOffReport({ root: parent.root, scratchDir: parent.scratchDir, agentId: record.id, run: record.runs, text: record.report, env: options.env || process.env });
   record.reportFile = handoff ? handoff.file : null;
@@ -760,6 +762,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     ...(handoff ? { report_file: handoff.file, report_chars: handoff.chars } : {}),
     ...(orphans.length ? { stopped_unfinished_agents: orphans, note_on_agents: 'This agent finished while agents it had started were still running; they were stopped. Ask it (send_message) to wait for them with agent_status if their results are needed.' } : {}),
     ...(record.verificationIssues && record.verificationIssues.length ? { report_status: 'rejected', verification_issues: record.verificationIssues.map(({ domain, reason }) => ({ domain, reason })), note_on_rejection: 'OASIS rejected parts of this report: ' + record.verificationIssues.map((issue) => issue.reason).join('; ') + '. Do not repeat those claims as facts; check them yourself or ask the agent (send_message) to produce the evidence.' } : {}),
+    ...(disputes.length ? { knowledge_conflicts: disputes, note_on_conflicts: 'Findings on the knowledge board disagree (' + disputes.map((item) => item.findings.join(' vs ')).join('; ') + '). Do not pick one silently: check the sources yourself or start a fact-checker agent, then retract the wrong finding with knowledge_post retract, or report both sides.' } : {}),
     ...(record.injectionTaint ? { untrusted_input: taintNotice(record.injectionTaint) } : {}),
     ...(record.unverifiedClaim ? { unverified_claim: record.unverifiedClaim, note_on_report: 'OASIS did not observe a passing check behind this report (' + record.unverifiedClaim + '). Treat its test or build results as unverified; run the check yourself before relying on it.' } : {}),
     ...(outcome.limitReached ? { partial: true, note: 'The agent hit its ' + (record.maxTurns ? 'maxTurns (' + record.maxTurns + ')' : 'step') + ' limit; the report may be incomplete. send_message resumes it.' } : {}),

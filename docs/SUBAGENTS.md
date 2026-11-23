@@ -144,6 +144,12 @@ Each post is checked against the poster's own tool results with the same contrac
 
 When a second agent posts the same finding, it is recorded as corroboration instead of a duplicate. Each finding shows how many [independent sources](AGENT-NETWORK.md#source-independence) back it, so a corroboration that cites a syndicated copy of a source already on the finding does not count as new evidence; the author can refine its own finding by posting it again. The author or the main agent can withdraw one with `knowledge_post` and `retract: "k_N"`. The board holds up to 200 findings, is saved with the session and comes back on resume. It is not durable memory: the main agent decides what to keep with `memory_save`. Findings are written by agents, so they are shown as leads, never as instructions.
 
+### Disagreements
+
+A finding that disagrees with another agent's finding is never merged into it. When two posts are about the same thing (60% word overlap once figures are set aside) and one gives a different figure or version, negates the other, or swaps an opposite word ("increased"/"decreased", "enabled"/"disabled", "supported"/"deprecated"), the second is posted as its own finding that contradicts the first. Figures are normalized first (`1,000`, `1k` and `1000` are equal), and two claims with different years are treated as a change over time rather than a dispute. Agents can also link findings themselves: `contradicts: ["k_3"]` or `supports: ["k_3"]` on `knowledge_post`.
+
+Both sides of a dispute show `contested_by` (with the detected reason, such as `500 vs 1000`) in `knowledge_search`, `status: "contested"` lists them, and a subagent's starting prompt marks them `CONTESTED by k_N`, so nobody builds on one side without knowing. A subagent whose posts opened or joined a dispute returns `knowledge_conflicts` in its result, and the parent is asked to check the sources or start a fact-checker rather than pick one silently. Retracting either side (by its author or the main agent) resolves the dispute. Test: `test/claim-conflict.test.mjs`.
+
 ## Background agents and teams
 
 - `run_in_background: true` returns an id immediately. The parent is notified when the agent finishes.
