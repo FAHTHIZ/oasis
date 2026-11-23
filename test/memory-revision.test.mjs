@@ -140,3 +140,29 @@ test('revision metadata survives the file format and plain additions still appen
   assert.match(again.content, /Svelte[\s\S]*|Vite[\s\S]*Svelte/);
   assert.doesNotMatch(again.content, /React/);
 });
+
+test('a memory saved from a finding is revised when the finding is retracted or undermined', async (t) => {
+  const { settledMemoryRevisions } = await import('../src/knowledge-board.mjs');
+  const { root, env } = await setup(t);
+  const board = createKnowledgeBoard();
+  const ledger = createEvidenceLedger();
+  recordEvidence(ledger, { kind: 'fetch', tool: 'fetch_url', url: 'https://example.com/config' });
+  const worker = { agentId: 'agent_1', knowledgeBoard: board, evidenceLedger: ledger, calibrationLedger: null };
+  const main = { agentId: '', knowledgeBoard: board, evidenceLedger: ledger, calibrationLedger: null };
+  const premise = runKnowledgeTool(worker, 'knowledge_post', { claim: 'The service reads its config from /etc/svc.yaml.', sources: ['https://example.com/config'] });
+  const conclusion = runKnowledgeTool(main, 'knowledge_post', { claim: 'Editing /etc/svc.yaml requires a service restart.', sources: ['https://example.com/config'], builds_on: [premise.posted] });
+  const direct = await runMemoryTool('memory_save', { name: 'Service config path', from_finding: premise.posted }, { root, env, session: main });
+  const derived = await runMemoryTool('memory_save', { name: 'Config edits need restart', from_finding: conclusion.posted, category: 'project' }, { root, env, session: main });
+  assert.deepEqual(board.entries.find((entry) => entry.id === premise.posted).savedAs, [direct.id]);
+
+  const retracted = runKnowledgeTool(main, 'knowledge_post', { retract: premise.posted, reason: 'it reads /opt/svc/config.yaml' });
+  assert.deepEqual(retracted.revised_memories.map((item) => item.status), ['outdated', 'uncertain']);
+  assert.match(retracted.note, /Durable memories saved from it marked .* outdated, .* uncertain/);
+  await settledMemoryRevisions(board);
+  const old = await findMemory(root, direct.id, { env });
+  assert.equal(old.verificationStatus, 'outdated');
+  assert.match(old.verificationNote, /Saved from knowledge board finding k_1, which main retracted: it reads \/opt\/svc\/config\.yaml/);
+  const shaky = await findMemory(root, derived.id, { env });
+  assert.equal(shaky.verificationStatus, 'uncertain');
+  assert.match(shaky.verificationNote, /builds on k_1 that main retracted/);
+});

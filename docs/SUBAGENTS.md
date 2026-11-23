@@ -161,6 +161,8 @@ A conclusion is only as good as the findings it was drawn from. `knowledge_post`
 
 The same holds on the hypotheses matrix. Evidence posted with `findings: ["k_N"]` stops counting when that finding is retracted or undermined, and the matrix's advice says which evidence dropped out and why. An undermined finding is not deleted, because it may stand on other grounds. Its author retracts it or posts it again with evidence of its own. A premise that is only contested marks the conclusion with `premise_contested`. It is computed from the links each time, so it is never stale, and it survives a session save. This is a justification-based truth maintenance system (Doyle, 1979) shared across agents. Test: `test/knowledge-truth-maintenance.test.mjs`.
 
+It reaches durable memory too. A memory saved with `memory_save from_finding: "k_N"` stays linked to that finding. If the finding is retracted, the memory is marked outdated, so it leaves the index and recall. If the finding is only undermined (a premise under it fell), the memory is marked uncertain. Either way the memory's verification note names the finding and the reason, and the retraction result lists them under `revised_memories`. A later session does not keep recalling what this one found to be wrong.
+
 ### Calibrated confidence
 
 `knowledge_post` takes an optional `confidence` (0 to 1, or a percentage). OASIS keeps score of it. A finding is settled by what happens to it on the board, never by its author saying so:
