@@ -4,6 +4,10 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ## Unreleased
 
+### Added
+
+- Canary credential. Commands already get no real credentials; now they get one decoy, `OASIS_SERVICE_TOKEN`, with a random value nothing uses. A tool call that carries it (a fetch URL, a command line, a file write, a message to another agent), as written or reversed, upper-cased, percent-, hex-, base64- or base64url-encoded or split by separators, is refused before it runs, the turn's outbound actions then need a person, and the session log records `canary_tripped`. Ordinary work never needs the decoy, so a trip means injected instructions are trying to take data out. Your own settings can turn it off (`"canaryCredentials": false`, or `OASIS_CANARY=0`); a repository's cannot. See [Security model](docs/SECURITY.md#controls-oasis-enforces).
+
 ## [0.10.0] - 2026-11-23
 
 First release under the 0.x numbers. Versions 1.0.0 through 1.8.0 are renumbered 0.1.0 through 0.9.0 (minor plus one), and an install that still reports a 1.x version updates normally; see [Version numbers](docs/RELEASES.md#version-numbers).

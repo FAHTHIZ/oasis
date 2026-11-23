@@ -7,6 +7,7 @@ import { securityWarning } from './security-patterns.mjs';
 import { argvSleepSeconds, longSleepError } from './sleep-guard.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { injectionHoldReason } from './untrusted-content.mjs';
+import { withCanary } from './canary-credentials.mjs';
 import * as gitSafety from './git-safety.mjs';
 import { frontMatterValue, splitFrontMatter } from './frontmatter.mjs';
 import { argvShellSyntaxWarning, commandFlagWarning } from './command-hints.mjs';
@@ -816,7 +817,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     if (!ok) return { approved: false, command, args, ...(rehearsal.summary ? { rehearsal: rehearsal.summary } : {}), message: 'Command was not approved. ' + (rehearsal.summary ? 'It only ran as a rehearsal in a throwaway copy of the workspace, and nothing it did was kept.' : 'No process was started.') + ' Do not retry it or ask for approval again this turn; finish what you can without it and tell the user the exact command to run.' };
   }
   if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before the command started.' };
-  const baseEnv = scrubEnvironment(options.env || process.env);
+  const baseEnv = withCanary(scrubEnvironment(options.env || process.env), { settings: options.settings, source: options.env || process.env });
   const env = options.interactive ? baseEnv : nonInteractiveEnvironment(baseEnv, options.env || process.env);
   if (options.interactive) {
     if (options.background) throw new Error('Choose either interactive=true or run_in_background=true, not both.');

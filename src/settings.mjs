@@ -494,6 +494,9 @@ export async function loadSettings(root, options = {}) {
     if (typeof settings.worldDrift === 'boolean') result.worldDrift = settings.worldDrift;
     // Rehearsal runs a command (isolated, no network) before it is approved, so a repository
     // cannot turn it on for you; it can still turn it off.
+    // The canary credential is a security control: only your own settings, --settings
+    // or policy can turn it off, never a repository (src/canary-credentials.mjs).
+    if (settings.canaryCredentials === false && ['user', 'flag', 'managed'].includes(scope)) result.canaryCredentials = false;
     if (typeof settings.rehearse === 'boolean' && (settings.rehearse === false || ['user', 'flag', 'managed'].includes(scope))) result.rehearse = settings.rehearse;
     if (!trusted) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
