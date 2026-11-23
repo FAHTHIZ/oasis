@@ -95,3 +95,22 @@ test('OpenCode and Kilo Code agents defined inline in opencode.json / kilo.jsonc
   const off = await loadAgentDefinitions(root, { env: { ...env, OASIS_OTHER_AGENT_RULES: '0' } });
   assert.equal(off['code-reviewer'], undefined);
 });
+
+test('VS Code / Copilot custom agents and chat modes become OASIS agents', async (t) => {
+  const { root, env } = await fixture(t, {
+    '.github/agents/planner.agent.md': '---\nname: Plan Mode\ndescription: Plans before coding\ntools: [search, "search/codebase", fetch, "github/*"]\nmodel: GPT-5\n---\nPlan the work; do not edit files.',
+    '.github/agents/fixer.agent.md': '---\ndescription: Fixes bugs\ntools: [edit, runCommands]\ninfer: false\n---\nFix it.',
+    '.github/agents/notes.md': '---\ndescription: not an agent file\n---\nx',
+    '.github/chatmodes/explain.chatmode.md': '---\ndescription: Explains code\n---\nExplain.'
+  });
+  const agents = await loadAgentDefinitions(root, { env });
+  assert.equal(agents.planner.origin, 'VS Code');
+  assert.equal(agents.planner.description, 'Plans before coding');
+  for (const tool of ['fetch_url', 'glob_files', 'grep', 'read_file']) assert.ok(agents.planner.tools.includes(tool), tool);
+  assert.ok(!agents.planner.tools.includes('edit_file') && !agents.planner.tools.includes('run_command'));
+  assert.ok(agents.fixer.tools.includes('edit_file') && agents.fixer.tools.includes('run_command'));
+  assert.equal(agents.fixer.subagentAllowed, false);
+  assert.ok(agents.explain);
+  assert.ok(!agents.notes);
+  assert.doesNotMatch(taskToolDefinition(agents).function.description, /- fixer:/);
+});
