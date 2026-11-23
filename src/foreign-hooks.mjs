@@ -7,8 +7,8 @@
 // Codex hooks (.codex/hooks.json and [hooks] in .codex/config.toml, and the
 // same under ~/.codex) already use Claude Code's events and replies, so they
 // load as they are, with Codex's apply_patch matcher read as the edit tools.
-// OpenCode plugins (.opencode/plugins/*.{js,ts}, ~/.config/opencode/plugins)
-// are JavaScript modules; each runs through opencode-plugin-host.mjs on the
+// OpenCode plugins (.opencode/plugins/*.{js,ts}, ~/.config/opencode/plugins,
+// and npm plugins listed under "plugin" in opencode.json) are JavaScript modules; each runs through opencode-plugin-host.mjs on the
 // events it handles.
 // They are read in place and run through the protocol bridge
 // (hook-bridges.mjs): each hook is filed under the Claude Code event that
@@ -154,11 +154,70 @@ export function openCodeUnsupported(file, text) {
   return '';
 }
 
-// Which OASIS events a plugin needs, read from its source so the host only runs
-// where the plugin has something to do.
-async function openCodePlugin(file, scope) {
+// npm plugins named in opencode.json's "plugin" list. OpenCode installs them
+// under its cache (~/.cache/opencode/node_modules/NAME); local paths and
+// file: URLs are read in place. Returns plugin entry files.
+export function openCodePackageName(spec) {
+  const text = String(spec || '').trim();
+  if (!text || /^(?:file:|\.|\/|[A-Za-z]:[\\/])/.test(text)) return '';
+  const at = text.indexOf('@', text.startsWith('@') ? 1 : 0);
+  const name = at > 0 ? text.slice(0, at) : text;
+  return /^(?:@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/i.test(name) ? name : '';
+}
+
+async function packageEntry(dir) {
+  const pkg = await readJson(path.join(dir, 'package.json'));
+  const exp = pkg && pkg.exports;
+  const dot = exp && typeof exp === 'object' && !Array.isArray(exp) && exp['.'] !== undefined ? exp['.'] : exp;
+  const fromExports = typeof dot === 'string' ? dot : dot && typeof dot === 'object' ? [dot.import, dot.default, dot.node].find((v) => typeof v === 'string') : null;
+  const candidates = [fromExports, pkg && pkg.module, pkg && pkg.main, 'index.js', 'index.mjs', 'dist/index.js', 'index.ts', 'src/index.ts'].filter((v) => typeof v === 'string');
+  return candidates.map((rel) => path.resolve(dir, rel)).find((file) => file.startsWith(dir + path.sep) && existsSync(file)) || null;
+}
+
+export async function openCodeConfigPlugins({ openCodeHome, cacheHome, root, trusted }) {
+  const configs = [['user', openCodeHome], ...(root && trusted ? [['project', path.resolve(root)], ['project', path.join(path.resolve(root), '.opencode')]] : [])];
+  const out = [];
+  const seen = new Set();
+  for (const [scope, dir] of configs) {
+    for (const name of ['opencode.json', 'opencode.jsonc']) {
+      const doc = await readJson(path.join(dir, name));
+      const list = doc && (Array.isArray(doc.plugin) ? doc.plugin : Array.isArray(doc.plugins) ? doc.plugins : []);
+      for (const raw of list || []) {
+        const spec = Array.isArray(raw) ? raw[0] : raw;
+        if (typeof spec !== 'string') continue;
+        let file = null;
+        const pkg = openCodePackageName(spec);
+        if (pkg) {
+          for (const base of [path.join(cacheHome, 'node_modules', pkg), path.join(dir, 'node_modules', pkg)]) { if (existsSync(base)) { file = await packageEntry(base); if (file) break; } }
+        } else {
+          const local = spec.startsWith('file:') ? decodeURIComponent(spec.replace(/^file:(?:\/\/)?/, '')) : path.resolve(dir, spec);
+          file = existsSync(local) && !/\.(?:m?js|ts)$/.test(local) ? await packageEntry(local) : existsSync(local) ? local : null;
+        }
+        if (file && !seen.has(file)) { seen.add(file); out.push({ scope, file, spec }); }
+      }
+    }
+  }
+  return out;
+}
+
+// The source text a plugin's events are read from: its entry file and, for a
+// package, the other scripts beside it (bundles split into chunks).
+async function pluginText(file, packaged) {
   let text = '';
   try { text = await readFile(file, 'utf8'); } catch { return null; }
+  if (!packaged || openCodeEvents(text).size) return text;
+  const dir = path.dirname(file);
+  let names = [];
+  try { names = (await readdir(dir)).filter((name) => /\.(?:m?js|ts)$/.test(name)).slice(0, 40); } catch {}
+  for (const name of names) { try { const more = await readFile(path.join(dir, name), 'utf8'); if (more.length < 2 * 1024 * 1024) text += '\n' + more; } catch {} }
+  return text;
+}
+
+// Which OASIS events a plugin needs, read from its source so the host only runs
+// where the plugin has something to do.
+async function openCodePlugin(file, scope, packaged = false) {
+  const text = await pluginText(file, packaged);
+  if (text === null) return null;
   const why = openCodeUnsupported(file, text);
   if (why) return { scope, file, protocol: 'opencode', hooks: {}, dropped: [why] };
   return { scope, file, protocol: 'opencode', hooks: openCodePluginHooks(text, file, path.basename(file)), dropped: [] };
@@ -198,6 +257,12 @@ export async function loadForeignHooks(root, { env = process.env, home = env.HOM
       const item = await openCodePlugin(file, scope);
       if (item && (Object.keys(item.hooks).length || item.dropped.length)) out.push(item);
     }
+  }
+  const cacheHome = path.join(env.XDG_CACHE_HOME ? path.resolve(env.XDG_CACHE_HOME) : path.join(home, '.cache'), 'opencode');
+  for (const { scope, file } of await openCodeConfigPlugins({ openCodeHome, cacheHome, root, trusted })) {
+    if (out.some((item) => item.file === file)) continue;
+    const item = await openCodePlugin(file, scope, true);
+    if (item && (Object.keys(item.hooks).length || item.dropped.length)) out.push(item);
   }
   for (const source of sources) {
     const doc = await readJson(source.file);

@@ -156,7 +156,11 @@ used on Windows, and `[features] hooks = false` turns a layer off. Codex-only
 events (`PreModelRequest`, `PostModelRequest`, `Interrupt`) are skipped.
 OpenCode plugins run too: JavaScript or TypeScript files (and package folders)
 in `.opencode/plugins/` or `.opencode/plugin/` (trusted workspace) and in
-`~/.config/opencode/plugins/`. A small host (`src/opencode-plugin-host.mjs`)
+`~/.config/opencode/plugins/`, plus the npm plugins listed under `"plugin"` in
+`~/.config/opencode/opencode.json(c)` (and, in a trusted workspace, the
+project's `opencode.json(c)` or `.opencode/opencode.json(c)`), loaded from
+OpenCode's cache (`~/.cache/opencode/node_modules/NAME`) or, for a local path
+or `file:` entry, in place. A small host (`src/opencode-plugin-host.mjs`)
 loads the plugin, calls its exported functions with `project`, `directory`,
 `worktree`, `$` (commands through the system shell) and a `client` whose calls
 resolve to empty results, and runs its hooks on the matching OASIS events:
