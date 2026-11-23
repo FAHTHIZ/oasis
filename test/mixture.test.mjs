@@ -64,3 +64,25 @@ test('setMixture adds and removes the tool and checks the model policy', () => {
   const limited = { config: base, toolDefinitions: [], availableModels: ['a', 'b'], modelPolicy: {} };
   assert.throws(() => setMixture(limited, 'a,z'));
 });
+
+test('the aggregator sees each proposer\'s stated and calibrated confidence', async () => {
+  const { statedConfidence } = await import('../src/mixture.mjs');
+  assert.equal(statedConfidence('answer\nConfidence: 85%'), 0.85);
+  assert.equal(statedConfidence('answer\n**Confidence:** 0.6'), 0.6);
+  assert.equal(statedConfidence('no line here'), null);
+  const seen = [];
+  const request = async (config, messages) => {
+    seen.push({ model: config.model, user: messages[1].content });
+    if (messages[0].content === AGGREGATOR_SYSTEM) return { content: 'merged' };
+    return { content: 'answer from ' + config.model + '\nConfidence: 95%' };
+  };
+  // "a" has a record of being overconfident at 0.95; "b" has no record.
+  const history = { a: Array.from({ length: 20 }, (_, index) => ({ p: 0.95, o: index < 8 ? 1 : 0 })) };
+  const result = await runMixture({ chain: parseMixtureModels('a,b'), baseConfig: base, aggregatorConfig: { ...base, model: 'judge' } }, { question: 'q', include_transcript: false }, { request, calibration: (model) => history[model] || [] });
+  const merge = seen.find((item) => item.model === 'judge').user;
+  assert.match(merge, /Answer 1 \(a, stated confidence 0\.95, calibrated 0\.\d+ from 20 settled claims\)/);
+  assert.match(merge, /Answer 2 \(b, stated confidence 0\.95\)/);
+  assert.equal(result.confidence.a.stated, 0.95);
+  assert.ok(result.confidence.a.calibrated < 0.6);
+  assert.deepEqual(result.confidence.b, { stated: 0.95 });
+});
