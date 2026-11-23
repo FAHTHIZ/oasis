@@ -82,12 +82,13 @@ export function formatApprovalDiff(toolName, input = {}) {
   return output;
 }
 
-// What the tool found out before asking, kept when the command prompt is reworded:
+// What the tool found out before asking, kept when a file, package or command prompt is reworded:
 // the rehearsal's result (what the command would create, modify or delete), the reason
 // a command is high risk, package-vetting warnings (likely typos of popular packages),
-// apps it may disturb, and where it runs (over SSH, in the OS sandbox, or without one). Indented continuation lines are flattened so the
+// apps it may disturb, where it runs (over SSH, in the OS sandbox, or without one), and
+// protected-configuration warnings on edits and deletes. Indented continuation lines are flattened so the
 // apps do not show them as code.
-function commandFacts(original) {
+function keptNotes(original) {
   const lines = original.split(/\r?\n/);
   const out = [];
   for (let i = 0; i < lines.length; i++) {
@@ -119,25 +120,25 @@ export function formatApprovalMessage(prompt, meta = {}) {
   } else if (tool === 'delete_file' || /^delete (?:the workspace )?file\b/i.test(original)) {
     const match = original.match(/^Delete the workspace file\s+(.+?)\?\s*/i);
     const target = path || (match && match[1]) || '';
-    message = 'OASIS wants to delete the file ' + safeLabel(target) + '. A backup will be made first, but the file will be removed from your project. Approve only if that is what you intended.';
+    message = 'OASIS wants to delete the file ' + safeLabel(target) + '. A backup will be made first, but the file will be removed from your project. Approve only if that is what you intended.' + keptNotes(original);
     risky = true;
   } else if (tool === 'write_file' || tool === 'edit_file' || tool === 'multi_edit' || /^(?:write|edit|update|replace) (?:the )?(?:workspace )?file\b/i.test(original)) {
     const match = original.match(/^(?:write|edit|update|replace) (?:the )?(?:workspace )?file\s+(.+?)(?:\?|$)/i);
     const target = path || (match && match[1]) || '';
     const action = tool === 'write_file' ? 'create or replace' : 'change';
-    message = 'OASIS wants to ' + action + ' the file ' + safeLabel(target) + '. Review the proposed change before approving it.';
+    message = 'OASIS wants to ' + action + ' the file ' + safeLabel(target) + '. Review the proposed change before approving it.' + keptNotes(original);
   } else if (tool === 'run_command' || tool === 'run_shell' || tool === 'powershell' || /^Run this command in the workspace\?/i.test(original)) {
     const match = original.match(/^Run this command in the workspace\?\s*\n\s*([^\n]+)/i);
     const commandText = command || (match && match[1].trim()) || '';
     message = 'OASIS wants to run this command in your project:\n  ' + (commandText ? headAndTail(redactApprovalSecrets(commandText), 4000).replace(/\n(?! {2})/g, '\n  ') : '[command details shown below]') +
-      '\nCommands can change project files or run project scripts. Read the command before you approve it.' + commandFacts(original);
+      '\nCommands can change project files or run project scripts. Read the command before you approve it.' + keptNotes(original);
     risky = /\b(?:sudo|su\s+-|rm\s+-rf|mkfs(?:\.|\s)|diskpart|format\s+[a-z]:|shutdown|reboot|drop\s+(?:database|table)|chmod\s+-R\s+777|curl\b[^\n]*\|\s*(?:sh|bash))\b/i.test(commandText);
     if (/HIGH RISK:/i.test(original)) risky = true;
   } else if (/^Install package\s+/i.test(original)) {
     const match = original.match(/^Install package\s+(.+?)\s+using\s+(.+?)(?:\n|$)/i);
     message = 'OASIS wants to install package ' + safeLabel(match && match[1]) +
       (match && match[2] ? ' by running ' + safeLabel(match[2]) : '') +
-      '. This changes your environment and may run third-party installer code. Approve only if you trust the package and source.';
+      '. This changes your environment and may run third-party installer code. Approve only if you trust the package and source.' + keptNotes(original);
     risky = true;
   } else if (/^Install(?:\/update)? Oasis\b/i.test(original) || /^Install the reviewed Oasis plugin bundle\b/i.test(original)) {
     message = 'OASIS wants to install or update project software. This changes files or dependencies and may run code. Review the source and the requested action before approving it.';
