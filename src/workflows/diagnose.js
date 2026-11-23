@@ -74,6 +74,24 @@ const score = () => {
   return { ranked, other: Math.exp(other - top) / total, nonDiagnostic }
 }
 
+// Expected information gain (bits) of each candidate test over the current
+// posterior; P(positive | hypothesis) from the predicted rating, 0.5 for
+// "none of these".
+const P = { '++': 0.95, '+': 0.75, '0': 0.5, '-': 0.25, '--': 0.05 }
+const entropy = (ps) => -ps.reduce((sum, p) => sum + (p > 0 ? p * Math.log2(p) : 0), 0)
+const rankTests = (tests, current) => {
+  const prior = [...H.map((h) => current.ranked.find((item) => item.id === h.id).posterior), current.other]
+  const now = entropy(prior)
+  return (Array.isArray(tests) ? tests : []).filter((item) => item && String(item.test || '').trim()).slice(0, 4).map((item) => {
+    const predicted = {}
+    for (const entry of Array.isArray(item.predictions) ? item.predictions : []) if (ids.has(String(entry.hypothesis).trim()) && Object.hasOwn(P, entry.rating)) predicted[String(entry.hypothesis).trim()] = entry.rating
+    const likely = [...H.map((h) => P[predicted[h.id] || '0']), 0.5]
+    const pos = prior.reduce((sum, p, i) => sum + p * likely[i], 0)
+    const post = (yes) => { const joint = prior.map((p, i) => p * (yes ? likely[i] : 1 - likely[i])); const total = joint.reduce((a, b) => a + b, 0) || 1; return joint.map((value) => value / total) }
+    return { test: String(item.test).slice(0, 300), bits: Math.max(0, now - (pos * entropy(post(true)) + (1 - pos) * entropy(post(false)))) }
+  }).sort((a, b) => b.bits - a.bits)
+}
+
 // -------------------------------------------------------------- Falsify
 // One agent per hypothesis, whose job is to refute it, rating everything it
 // observes against all hypotheses. Disconfirming evidence is the informative
@@ -88,8 +106,9 @@ let state = score()
 log(`${observations.length} observations; leader ${state.ranked[0].id} at ${Math.round(state.ranked[0].posterior * 100)}%` + (state.nonDiagnostic.length ? `; ${state.nonDiagnostic.length} non-diagnostic` : ''))
 
 // --------------------------------------------------------- Discriminate
-// When the two leaders are close, or nothing listed survives, one more agent
-// runs the test that separates them (or looks for the missing explanation).
+// When the two leaders are close, candidate tests are ranked by expected
+// information and an agent runs the best one; when nothing listed survives,
+// an agent looks for the missing explanation.
 phase('Discriminate')
 const [first, second] = state.ranked
 let decisive = null
@@ -100,11 +119,21 @@ if (state.other > first.posterior) {
   )
   if (extra) decisive = { kind: 'missing', hypothesis: String(extra.hypothesis).slice(0, 300), support: String(extra.support || '').slice(0, 400), how: extra.how || 'reasoned', source: String(extra.source || '').slice(0, 200) }
 } else if (first.posterior - second.posterior < 0.3) {
+  // Bayesian experimental design: candidate tests are proposed with predicted
+  // outcomes per hypothesis, and the one with the highest expected
+  // information gain over the current posterior is the one that gets run.
+  const candidates = await agent(
+    `Two explanations of a problem remain close: ${first.id} and ${second.id}. Propose 2 to 4 different tests you could run or things you could look up, WITHOUT running them yet. For each, predict per hypothesis how likely the test comes out positive if that hypothesis is true: ++ almost surely, + likely, 0 either way, - unlikely, -- almost surely not.\n\nProblem:\n"""\n${problem.slice(0, 4000)}\n"""\n\nHypotheses:\n${list()}\n\nEvidence so far:\n${observations.map((item) => `- ${item.id}: ${item.what}`).join('\n')}`,
+    { label: 'propose tests', schema: { type: 'object', required: ['tests'], properties: { tests: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'object', required: ['test', 'predictions'], properties: { test: { type: 'string' }, predictions: ratingSchema } } } } } },
+  )
+  const plan = rankTests(candidates && candidates.tests, state)
+  if (plan.length) log('test plan: ' + plan.map((item) => `${item.test.slice(0, 60)} (${item.bits.toFixed(2)} bits)`).join('; '))
+  const chosen = plan.length && plan[0].bits >= 0.05 ? plan[0] : null
   const result = await agent(
-    `Two explanations of a problem remain close. Design the single test whose result ${first.id} and ${second.id} predict differently, run it, and report what you observed.\n\nProblem:\n"""\n${problem.slice(0, 4000)}\n"""\n\nHypotheses:\n${list()}\n\nEvidence so far:\n${observations.map((item) => `- ${item.id}: ${item.what}`).join('\n')}\n\nRate what you observe against EVERY hypothesis (++ + 0 - --). ${RULES}`,
+    (chosen ? `Two explanations of a problem remain close. Run this test, chosen because it is expected to separate the hypotheses most (${chosen.bits.toFixed(2)} bits): ${chosen.test}. Report what you observed.` : `Two explanations of a problem remain close. Design the single test whose result ${first.id} and ${second.id} predict differently, run it, and report what you observed.`) + `\n\nProblem:\n"""\n${problem.slice(0, 4000)}\n"""\n\nHypotheses:\n${list()}\n\nEvidence so far:\n${observations.map((item) => `- ${item.id}: ${item.what}`).join('\n')}\n\nRate what you observe against EVERY hypothesis (++ + 0 - --). ${RULES}`,
     { label: 'discriminate ' + first.id + ' vs ' + second.id, schema: { type: 'object', required: ['test', 'observations'], properties: { test: { type: 'string' }, observations: observationSchema } } },
   )
-  if (result) { take(result.observations, 'discriminating test'); decisive = { kind: 'test', test: String(result.test || '').slice(0, 300), between: [first.id, second.id] }; state = score() }
+  if (result) { take(result.observations, 'discriminating test'); decisive = { kind: 'test', test: String(result.test || (chosen && chosen.test) || '').slice(0, 300), between: [first.id, second.id], ...(chosen ? { bits: chosen.bits, alternatives: plan.length - 1 } : {}) }; state = score() }
 } else log(`${first.id} leads clearly; no discriminating test needed`)
 
 // ----------------------------------------------------------- Conclusion
@@ -120,7 +149,7 @@ lines.push('', '| Hypothesis | Posterior | Evidence against | Falsifier |', '| -
 for (const h of state.ranked) lines.push(`| ${h.id}: ${h.text.replace(/\|/g, '/')} | ${pct(h.posterior)} | ${Math.round(h.against * 10) / 10} | ${h.verdict || '-'}${h.note ? ': ' + h.note.replace(/\|/g, '/').replace(/\s+/g, ' ') : ''} |`)
 lines.push(`| none of these | ${pct(state.other)} | | |`)
 lines.push('', '## Evidence', '', ...observations.map((item) => `- ${item.id} (${item.how}${item.source ? ', ' + item.source : ''}; ${item.by}${state.nonDiagnostic.includes(item.id) ? '; non-diagnostic, ignored' : ''}): ${item.what.replace(/\s+/g, ' ')} [${H.map((h) => h.id + ' ' + (item.ratings[h.id] || '0')).join(', ')}]`))
-if (decisive && decisive.kind === 'test') lines.push('', '## Decisive test', '', `${decisive.between.join(' vs ')}: ${decisive.test}`)
+if (decisive && decisive.kind === 'test') lines.push('', '## Decisive test', '', `${decisive.between.join(' vs ')}: ${decisive.test}` + (decisive.bits !== undefined ? ` (chosen over ${decisive.alternatives} other candidate${decisive.alternatives === 1 ? '' : 's'} for the highest expected information, ${decisive.bits.toFixed(2)} bits)` : ''))
 const runnerUp = state.ranked[1]
 if (runnerUp) lines.push('', '## What would change this conclusion', '', `${runnerUp.id} (${pct(runnerUp.posterior)}) predicts: ${runnerUp.prediction}. Observing that would overturn the ranking.`)
 lines.push('', `Method: ${proposals.filter(Boolean).length} agents proposed explanations without seeing each other's; they were merged into ${H.length} mutually exclusive hypotheses, each assigned an agent that tried to refute it. Every observation was rated against all hypotheses and scored as a Bayesian update (++ 4, + 2, 0 1, - 0.5, -- 0.25 relative likelihood; reasoned observations count half; observations that fit every hypothesis equally are ignored; "none of these" starts at 10% and rises when everything listed is contradicted).`)
