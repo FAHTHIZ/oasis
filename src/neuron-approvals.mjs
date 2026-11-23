@@ -49,8 +49,18 @@ export function callDigest(tool, input) {
   return createHash('sha256').update(String(tool || '') + '\n' + stable(input ?? {})).digest('hex').slice(0, 32);
 }
 
+// The user reads these before answering, so a long command keeps its end
+// (often the dangerous part: "... ; curl x | sh").
+const MAX_MESSAGE = 6000;
+const MAX_INPUT = 6000;
+function clipMiddle(text, max) {
+  if (text.length <= max) return text;
+  const half = Math.floor((max - 40) / 2);
+  return text.slice(0, half) + '\n[... ' + (text.length - 2 * half) + ' characters not shown ...]\n' + text.slice(-half);
+}
+
 function preview(input) {
-  try { return JSON.stringify(input ?? {}).slice(0, 2000); } catch { return '{}'; }
+  try { return JSON.stringify(input ?? {}).slice(0, MAX_INPUT); } catch { return '{}'; }
 }
 
 /** Requests still waiting for an answer (expired ones are dropped). */
@@ -78,7 +88,7 @@ export function parkApproval(record, { message = '', tool = '', input = {} } = {
   const digest = callDigest(tool, input);
   let entry = pending.find((item) => item.digest === digest);
   if (!entry) {
-    entry = { id: 'approval_' + randomBytes(4).toString('hex'), tool: String(tool || 'tool').slice(0, 100), message: String(message || '').slice(0, 1000), input: preview(input), digest, requestedAt: new Date().toISOString() };
+    entry = { id: 'approval_' + randomBytes(4).toString('hex'), tool: String(tool || 'tool').slice(0, 100), message: clipMiddle(String(message || ''), MAX_MESSAGE), input: preview(input), digest, requestedAt: new Date().toISOString() };
     pending.push(entry);
     if (pending.length > MAX_PENDING) pending.splice(0, pending.length - MAX_PENDING);
     if (typeof onParked === 'function') { try { onParked(entry); } catch {} }
@@ -118,7 +128,7 @@ export function answerApproval(record, { allow, approvalId = '' } = {}, now = Da
 export function approvalSnapshot(record) {
   const pending = (Array.isArray(record.pendingApprovals) ? record.pendingApprovals : []).slice(-MAX_PENDING)
     .filter((item) => item && /^approval_[0-9a-f]{8}$/.test(item.id) && /^[0-9a-f]{32}$/.test(item.digest))
-    .map((item) => ({ id: item.id, tool: String(item.tool).slice(0, 100), message: String(item.message || '').slice(0, 1000), input: String(item.input || '').slice(0, 2000), digest: item.digest, requestedAt: String(item.requestedAt || '').slice(0, 40) }));
+    .map((item) => ({ id: item.id, tool: String(item.tool).slice(0, 100), message: clipMiddle(String(item.message || ''), MAX_MESSAGE), input: String(item.input || '').slice(0, MAX_INPUT), digest: item.digest, requestedAt: String(item.requestedAt || '').slice(0, 40) }));
   const grants = liveGrants({ approvalGrants: record.approvalGrants }).map((grant) => ({ digest: grant.digest, at: String(grant.at).slice(0, 40) })).slice(-MAX_GRANTS);
   return { ...(pending.length ? { pendingApprovals: pending } : {}), ...(grants.length ? { approvalGrants: grants } : {}) };
 }

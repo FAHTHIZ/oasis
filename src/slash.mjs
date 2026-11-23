@@ -1,3 +1,4 @@
+import { formatApprovalMessage } from './approval-language.mjs';
 import { waitingApprovals } from './neuron-approvals.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 // Built-in interactive slash commands (Claude Code style). Each handler returns
@@ -2148,12 +2149,13 @@ export async function runBuiltinCommand(name, argument, state) {
         const { recordAgentEvent } = await import('./agent-tasks.mjs');
         recordAgentEvent(session, answer.allow ? 'agent.approval_granted' : 'agent.approval_denied', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: answer.entry.id + ' ' + answer.entry.tool });
         const verdict = (answer.allow ? 'Approved ' : 'Denied ') + answer.entry.tool + ' for ' + id + ' (' + answer.entry.id + ')';
+        const request = '\n' + shownParkedRequest(answer.entry);
         if (record.status === 'running' && record.child) {
           (record.child.inbox || (record.child.inbox = [])).push({ text: answer.message });
-          return { output: verdict + '; it sees the answer at its next step.' };
+          return { output: verdict + '; it sees the answer at its next step.' + request };
         }
         if (!record.child && !record.restoredTranscript) return { output: verdict + ', but its conversation was not saved, so it cannot be resumed. Start a new task from its report: /tasks ' + id };
-        return { prompt: 'Call send_message with id ' + JSON.stringify(id) + ' and exactly this message, then reply in one short sentence that it was sent. Do nothing else.\nMessage: ' + JSON.stringify(answer.message) };
+        return { output: verdict + '; resuming it with the answer.' + request, prompt: 'Call send_message with id ' + JSON.stringify(id) + ' and exactly this message, then reply in one short sentence that it was sent. Do nothing else.\nMessage: ' + JSON.stringify(answer.message) };
       }
       if (session && words[0] && session.agentTasks && session.agentTasks.agents.has(words[0])) {
         const info = summarizeAgent(getAgent(session, words[0]), { full: true });
@@ -2164,8 +2166,15 @@ export async function runBuiltinCommand(name, argument, state) {
       const mcpTasks = session && session.mcpBackgroundTasks ? [...session.mcpBackgroundTasks.entries()] : [];
       if (!agents.length && !procs.length && !mcpTasks.length) return { output: 'No subagents, background processes or MCP tasks in this session.' };
       const lines = [];
+      // The request itself, worded and made safe like the interactive prompt:
+      // the user approves a call they can read, not just a tool name.
+      const waitingDetail = (id) => {
+        const record = getAgent(session, id);
+        if (!record) return '';
+        return waitingApprovals(record).map((item) => '\n      ' + item.id + ':\n' + shownParkedRequest(item)).join('');
+      };
       const waitingFor = (id) => { const record = getAgent(session, id); return record ? waitingApprovals(record).map((item) => item.tool).join(', ') : ''; };
-      const agentLine = (agent) => '  ' + agent.id.padEnd(9) + ' ' + agent.status.padEnd(10) + ' ' + (agent.background ? 'bg ' : 'fg ') + agent.agent + ': ' + agent.description + '  (' + agent.elapsed + ', ' + agent.toolCalls + ' tool calls' + (budgetOf(agent.id) ? ', ' + budgetOf(agent.id) : '') + (agent.status === 'running' && agent.recentTools ? ', now: ' + agent.recentTools[agent.recentTools.length - 1] : '') + ')' + (waitingFor(agent.id) ? '  waiting for approval: ' + waitingFor(agent.id) + ' (/tasks approve|deny ' + agent.id + ')' : '');
+      const agentLine = (agent) => '  ' + agent.id.padEnd(9) + ' ' + agent.status.padEnd(10) + ' ' + (agent.background ? 'bg ' : 'fg ') + agent.agent + ': ' + agent.description + '  (' + agent.elapsed + ', ' + agent.toolCalls + ' tool calls' + (budgetOf(agent.id) ? ', ' + budgetOf(agent.id) : '') + (agent.status === 'running' && agent.recentTools ? ', now: ' + agent.recentTools[agent.recentTools.length - 1] : '') + ')' + (waitingFor(agent.id) ? '  waiting for approval: ' + waitingFor(agent.id) + ' (/tasks approve|deny ' + agent.id + ')' + waitingDetail(agent.id) : '');
       const running = agents.filter((agent) => agent.status === 'running');
       const earlier = agents.filter((agent) => agent.status !== 'running');
       // subagentStatusLine may replace (or, with "", hide) the rows it is shown.
@@ -2505,4 +2514,12 @@ export function formatInterval(ms) {
   if (ms % 3600000 === 0) return ms / 3600000 + 'h';
   if (ms % 60000 === 0) return ms / 60000 + 'm';
   return Math.round(ms / 1000) + 's';
+}
+
+// A parked subagent request as the user should read it before answering.
+export function shownParkedRequest(item) {
+  let input = {};
+  try { const parsed = JSON.parse(String(item && item.input || '{}')); if (parsed && typeof parsed === 'object') input = parsed; } catch {}
+  const { message } = formatApprovalMessage(item && item.message || String(item && item.tool || 'tool') + ' ' + String(item && item.input || ''), { tool: item && item.tool, input });
+  return message.split('\n').map((line) => '        ' + line).join('\n');
 }
