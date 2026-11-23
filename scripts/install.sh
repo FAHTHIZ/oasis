@@ -92,6 +92,13 @@ async function resolveFromPublicReleasePage() {
   if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("The public release page and tag Atom feed did not include its exact commit SHA.");
   return { tag, sha };
 }
+// OASIS 1.0.0-1.8.0 were renumbered to 0.1.0-0.9.0 (docs/RELEASES.md#version-numbers);
+// the 1.x major is retired, so a 1.x tag sorts as its 0.x equivalent.
+function lineageRank(tag) {
+  const parts = tag.slice(1).split(".").map(Number);
+  return parts[0] === 1 ? [0, parts[1] + 1, parts[2]] : parts;
+}
+
 async function resolveFromGitTags() {
   const result = spawnSync("git", [
     "ls-remote", "--tags",
@@ -118,8 +125,8 @@ async function resolveFromGitTags() {
     sha: peeled.get(tag) || sha
   })).filter((entry) => /^[0-9a-f]{40}$/.test(entry.sha));
   candidates.sort((left, right) => {
-    const a = left.tag.slice(1).split(".").map(Number);
-    const b = right.tag.slice(1).split(".").map(Number);
+    const a = lineageRank(left.tag);
+    const b = lineageRank(right.tag);
     for (let i = 0; i < 3; i += 1) {
       if (a[i] !== b[i]) return b[i] - a[i];
     }
@@ -140,8 +147,8 @@ async function resolveFromStableTags() {
     /^[0-9a-f]{40}$/.test(entry.sha)
   );
   candidates.sort((left, right) => {
-    const a = left.tag.slice(1).split(".").map(Number);
-    const b = right.tag.slice(1).split(".").map(Number);
+    const a = lineageRank(left.tag);
+    const b = lineageRank(right.tag);
     for (let i = 0; i < 3; i += 1) {
       if (a[i] !== b[i]) return b[i] - a[i];
     }
