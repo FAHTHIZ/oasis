@@ -15,6 +15,8 @@ test('a trial self-assessment reduces the OASIS verdict to a claim', () => {
   assert.equal(trialSelfAssessment(result('verified', false)).claim, 'failure');
   assert.deepEqual(trialSelfAssessment({ finished: true }), { verdict: null, claim: 'none' });
   assert.deepEqual(trialSelfAssessment(null), { verdict: null, claim: 'none' });
+  // An empty reply is OASIS reporting that it has nothing, not a silent pass.
+  assert.deepEqual(trialSelfAssessment({ finished: true, emptyReply: true }), { verdict: null, claim: 'failure', reason: 'empty reply' });
 });
 
 test('self-assessment counts overclaims and underclaims against the hidden verifier', () => {
