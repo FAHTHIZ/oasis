@@ -78,3 +78,32 @@ test('end to end: a command sees the decoy, and sending it out is refused before
   assert.equal(session.canaryTrips, 1);
   assert.match(injectionHoldReason(session), /decoy credential/);
 });
+
+test('under bubblewrap, masked ~/.aws and ~/.ssh hold decoys instead of the real files', async (t) => {
+  const { spawnSync } = await import('node:child_process');
+  const { mkdir, writeFile, realpath } = await import('node:fs/promises');
+  const { wrapCommand, detectSandbox } = await import('../src/sandbox.mjs');
+  const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'oasis-canary-root-')));
+  const home = await realpath(await mkdtemp(path.join(os.tmpdir(), 'oasis-canary-home-')));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]));
+  await mkdir(path.join(home, '.aws'));
+  await writeFile(path.join(home, '.aws', 'credentials'), 'REALSECRETVALUE\n');
+  await mkdir(path.join(home, '.ssh'));
+  await writeFile(path.join(home, '.ssh', 'id_ed25519'), 'REALKEYVALUE\n');
+  const base = { enabled: true, available: true, kind: 'bubblewrap', network: false, writable: [root], maskedPaths: [{ path: path.join(home, '.aws'), type: 'directory' }, { path: path.join(home, '.ssh'), type: 'directory' }] };
+  const args = wrapCommand('true', [], { ...base, canary: true }, root).args;
+  assert.ok(args.includes(path.join(home, '.aws', 'credentials')), 'the decoy is bound over the mask');
+  const off = wrapCommand('true', [], { ...base, canary: false }, root).args;
+  assert.ok(!off.includes(path.join(home, '.aws', 'credentials')), 'no decoy when the canary is off');
+  const probe = detectSandbox ? detectSandbox() : null;
+  if (!probe || probe.kind !== 'bubblewrap' || !probe.available) return t.skip('bubblewrap not available');
+  const wrapped = wrapCommand('/bin/sh', ['-c', 'cat "$0/.aws/credentials" "$0/.ssh/id_ed25519"', home], { ...base, canary: true }, root);
+  const run = spawnSync(wrapped.command, wrapped.args, { encoding: 'utf8' });
+  if (run.status !== 0 && /setting up uid map|Operation not permitted|No permissions/i.test(run.stderr)) return t.skip('bubblewrap cannot start here: ' + run.stderr.trim());
+  assert.equal(run.status, 0, run.stderr);
+  assert.doesNotMatch(run.stdout, /REALSECRETVALUE|REALKEYVALUE/);
+  assert.ok(run.stdout.includes('aws_secret_access_key = ' + canaryValue()));
+  assert.equal(findCanary({ body: run.stdout }), 'as written');
+  const key = /-----BEGIN OPENSSH PRIVATE KEY-----\n(\S+)/.exec(run.stdout)[1];
+  assert.equal(findCanary({ body: key }), 'base64-encoded', 'the decoy key carries the value too');
+});
