@@ -14,6 +14,10 @@ test('tutorial-style replies and announced-but-unexecuted steps are recognized',
   assert.ok(announcesNextStep('The file does not exist. I need to create this function and then add it to the file.'));
   assert.ok(announcesNextStep('Let me fix that:'));
   assert.ok(!announcesNextStep('Created src/lib.mjs; npm test passed.'));
+  // From a live qwen2.5 1.5B run: a file name in the announced step used to hide it.
+  assert.ok(announcesNextStep("None of the previous steps were relevant to the task at hand. I'll proceed directly to writing the notes/actions.json file with the specified content."));
+  assert.ok(announcesNextStep('I will now update src/config.mjs.'));
+  assert.ok(!announcesNextStep('I updated src/config.mjs. The test passed.'));
 });
 
 test('giving up after a tool error is recognized', async () => {

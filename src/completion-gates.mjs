@@ -196,6 +196,9 @@ export async function runCompletionGates(turn, host) {
   }
   if (!text && assistant.echoedToolResponse && g.echoNudges < 2) {
     g.echoNudges++;
+    // The stripped reply is empty (content null, no calls). Keeping it would
+    // replay an assistant turn with null content, which Ollama rejects (HTTP 400).
+    if (session.messages[session.messages.length - 1] === assistantMessage) session.messages.pop();
     session.messages.push({ role: 'user', content: '<system-reminder>You wrote a tool result yourself instead of replying. Tool results come only from OASIS. Continue the task: call a tool, or give your final answer to the user in plain text.</system-reminder>' });
     return CONTINUE;
   }
