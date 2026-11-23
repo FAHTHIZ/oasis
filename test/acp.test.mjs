@@ -5,7 +5,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createAcpServer, promptFromBlocks, toolKind, ACP_PROTOCOL_VERSION } from '../src/acp.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
@@ -423,4 +423,17 @@ test('ACP model changes run PreModelSwitch with source "sdk"; a blocking hook re
   assert.equal(input.from_model, 'fixture');
   const allowed = await client.call('session/set_config_option', { sessionId, configId: 'model', value: 'claude-sonnet-5' });
   assert.equal(allowed.result.configOptions.find((option) => option.id === 'model').currentValue, 'claude-sonnet-5');
+});
+
+test('resource links with malformed escapes or unusual file names do not break the prompt', () => {
+  const root = path.resolve('/w');
+  const url = (relative) => pathToFileURL(path.join(root, relative)).href;
+  // A malformed escape is a plain link, not a thrown URIError.
+  assert.match(promptFromBlocks([{ type: 'resource_link', uri: 'file:///w/a%E0.txt', name: 'a' }], root).text, /^\[a\]\(file:\/\/\/w\/a%E0\.txt\)$/);
+  // Plain names are @mentions; names a mention cannot carry keep their workspace path.
+  assert.equal(promptFromBlocks([{ type: 'resource_link', uri: url('src/app.js') }], root).text, '@src/app.js');
+  assert.match(promptFromBlocks([{ type: 'resource_link', uri: url('my file.txt'), name: 'my file.txt' }], root).text, /\(workspace file: my file\.txt\)$/);
+  // Outside the workspace (including a "..name" sibling check) stays a link.
+  assert.match(promptFromBlocks([{ type: 'resource_link', uri: pathToFileURL(path.resolve('/etc/passwd')).href, name: 'p' }], root).text, /^\[p\]\(file:/);
+  assert.equal(promptFromBlocks([{ type: 'resource_link', uri: url('..notes.md') }], root).text, '@..notes.md');
 });
