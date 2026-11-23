@@ -113,3 +113,19 @@ test('an .mcpb download link installs as a bundle, not as a remote MCP server', 
   const { plugins } = await install('http://127.0.0.1:' + server.address().port + '/weather.mcpb', root, env);
   assert.deepEqual(plugins.map((p) => p.name), ['weather-bundle']);
 });
+
+test('repository hooks from Copilot and Cursor run through the bridge', async (t) => {
+  const { src, root, env } = await fixture(t, {
+    '.github/hooks/guard.json': { version: 1, hooks: { preToolUse: [{ type: 'command', bash: './scripts/guard.sh', timeoutSec: 5 }] } },
+    '.cursor/hooks.json': { version: 1, hooks: { afterFileEdit: [{ command: '.cursor/hooks/fmt.sh' }] } },
+    'scripts/guard.sh': '#!/bin/sh\n', '.cursor/hooks/fmt.sh': '#!/bin/sh\n'
+  });
+  const { asked, plugins } = await install(src, root, env);
+  assert.match(asked[0], /2 hook events/);
+  const { pluginHooks } = await import('../src/claude-plugins.mjs');
+  const hooks = Object.assign({}, ...(await pluginHooks(plugins, { env })).map((h) => h.hooks));
+  const pre = hooks.PreToolUse.flatMap((g) => g.hooks);
+  assert.ok(pre.some((h) => h.protocol === 'copilot' && h.command.includes('/scripts/guard.sh')), JSON.stringify(pre));
+  const post = hooks.PostToolUse.flatMap((g) => g.hooks);
+  assert.ok(post.some((h) => h.protocol === 'cursor' && h.command.includes('/.cursor/hooks/fmt.sh')), JSON.stringify(post));
+});
