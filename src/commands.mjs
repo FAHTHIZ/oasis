@@ -25,7 +25,9 @@
 // .windsurf/workflows (workspace and parents up to the git root) and
 // ~/.codeium/windsurf/global_workflows, Antigravity .agents/workflows,
 // .agent/workflows and ~/.gemini/config/workflows, Cline .clinerules/workflows,
-// Roo Code .roo/commands and ~/.roo/commands (their `mode:` is not applied).
+// Roo Code .roo/commands and ~/.roo/commands (their `mode:` is not applied),
+// VS Code / Copilot prompt files .github/prompts/*.prompt.md and the VS Code
+// profile's User/prompts (see renderVscodePrompt).
 // Their files are plain prompts: inline shell and allowed-tools are not honoured.
 // OpenCode .opencode/commands (and command/), ~/.config/opencode/commands and opencode.json
 // "commands" keep OpenCode's $ARGUMENTS/$N and !`cmd` rules (see renderOpencodeTemplate).
@@ -104,6 +106,32 @@ async function scanWorkflowSubfolders(workspace) {
   return found.sort((a, b) => b.depth - a.depth || a.dir.localeCompare(b.dir)).map((item) => item.dir);
 }
 
+// VS Code keeps user prompt files in its profile folder (Code and Code - Insiders).
+function vscodeUserPromptDirs(env, home) {
+  const bases = process.platform === 'darwin' ? [path.join(home, 'Library', 'Application Support')]
+    : process.platform === 'win32' ? [env.APPDATA || path.join(home, 'AppData', 'Roaming')]
+      : [env.XDG_CONFIG_HOME || path.join(home, '.config')];
+  return bases.flatMap((base) => ['Code', 'Code - Insiders'].map((app) => path.join(base, app, 'User', 'prompts')));
+}
+
+// VS Code prompt files (*.prompt.md): ${input:name} and ${input:name:placeholder}
+// take the typed arguments (one input gets all of them; several take one word
+// each, the last the rest). Editor variables (${selection}, ${file}, ...) have
+// no value outside the editor and stay as written.
+export function renderVscodePrompt(body, argumentText = '') {
+  const args = String(argumentText || '').trim();
+  const names = [];
+  for (const match of String(body).matchAll(/\$\{input:([A-Za-z0-9_-]+)(?::[^}]*)?\}/g)) if (!names.includes(match[1])) names.push(match[1]);
+  if (!names.length) return { text: String(body), usedArguments: false };
+  const words = args ? args.split(/\s+/) : [];
+  const value = (name) => {
+    if (names.length === 1) return args;
+    const index = names.indexOf(name);
+    return index === names.length - 1 ? words.slice(index).join(' ') : (words[index] || '');
+  };
+  return { text: String(body).replace(/\$\{input:([A-Za-z0-9_-]+)(?::([^}]*))?\}/g, (m, name, placeholder) => value(name) || (placeholder ? '[' + placeholder + ']' : '')), usedArguments: true };
+}
+
 /** Command and workflow folders of other coding agents, lowest precedence first. */
 export async function foreignCommandDirectories(root, env = process.env, home = os.homedir()) {
   if (env.OASIS_OTHER_AGENT_RULES === '0') return [];
@@ -114,6 +142,7 @@ export async function foreignCommandDirectories(root, env = process.env, home = 
     { dir: path.join(home, '.codeium', 'windsurf', 'global_workflows'), scope: 'user', foreign: 'Windsurf' },
     { dir: path.join(home, '.cursor', 'commands'), scope: 'user', foreign: 'Cursor' },
     { dir: path.join(home, '.roo', 'commands'), scope: 'user', foreign: 'Roo Code' },
+    ...vscodeUserPromptDirs(env, home).map((dir) => ({ dir, scope: 'user', foreign: 'VS Code', vscode: true })),
     { dir: path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'opencode', 'command'), scope: 'user', foreign: 'OpenCode', opencode: true },
     { dir: path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'opencode', 'commands'), scope: 'user', foreign: 'OpenCode', opencode: true },
     { dir: path.join(workspace, '.clinerules', 'workflows'), scope: 'project', foreign: 'Cline' },
@@ -121,6 +150,7 @@ export async function foreignCommandDirectories(root, env = process.env, home = 
     { dir: path.join(workspace, '.agents', 'workflows'), scope: 'project', foreign: 'Antigravity' },
     { dir: path.join(workspace, '.cursor', 'commands'), scope: 'project', foreign: 'Cursor' },
     { dir: path.join(workspace, '.roo', 'commands'), scope: 'project', foreign: 'Roo Code' },
+    { dir: path.join(workspace, '.github', 'prompts'), scope: 'project', foreign: 'VS Code', vscode: true },
     { dir: path.join(workspace, '.gemini', 'commands'), scope: 'project', foreign: 'Gemini CLI', gemini: true },
     { dir: path.join(workspace, '.opencode', 'command'), scope: 'project', foreign: 'OpenCode', opencode: true },
     { dir: path.join(workspace, '.opencode', 'commands'), scope: 'project', foreign: 'OpenCode', opencode: true }
@@ -159,7 +189,7 @@ export async function loadCustomCommands(root, options = {}) {
   const workspaceReal = await realpath(path.resolve(root)).catch(() => path.resolve(root));
   let parseToml = null;
   const opencodeJsonRead = new Set();
-  for (const { dir, scope, foreign, outside, gemini, opencode } of [...await foreignCommandDirectories(root, env, home), ...commandDirectories(root, env, home)]) {
+  for (const { dir, scope, foreign, outside, gemini, opencode, vscode } of [...await foreignCommandDirectories(root, env, home), ...commandDirectories(root, env, home)]) {
     // OpenCode commands defined under "commands" (or legacy "command") in opencode.json(c);
     // Markdown commands of the same scope override them.
     if (opencode && !opencodeJsonRead.has(scope)) {
@@ -172,7 +202,7 @@ export async function loadCustomCommands(root, options = {}) {
     const found = [];
     // Other agents' folders are flat, except Gemini CLI's and OpenCode's, whose sub-folders are
     // namespaces as in OASIS's own (git/commit.toml -> /git:commit; OpenCode's /team/review is /team:review).
-    await collect(dir, [], foreign && !gemini && !opencode ? MAX_DEPTH : 0, found, gemini ? '.toml' : '.md');
+    await collect(dir, [], foreign && !gemini && !opencode ? MAX_DEPTH : 0, found, gemini ? '.toml' : vscode ? '.prompt.md' : '.md');
     for (const { file, parts } of found) {
       const name = parts.join(':').toLowerCase();
       if (!/^[a-z0-9][a-z0-9:_-]{0,100}$/.test(name)) continue;
@@ -214,6 +244,21 @@ export async function loadCustomCommands(root, options = {}) {
       const firstLine = body.split('\n').find((line) => line.trim()) || '';
       if (opencode) {
         commands.set(name, { ...opencodeCommand(name, meta, body), file, scope, foreign, opencode: true });
+        continue;
+      }
+      if (vscode) {
+        const inputs = [...new Set([...body.matchAll(/\$\{input:([A-Za-z0-9_-]+)/g)].map((m) => m[1]))];
+        commands.set(name, {
+          name,
+          description: (String(meta.description || firstLine.replace(/^#+\s*/, '')).slice(0, 180) + ' (' + foreign + ')').trim(),
+          argumentHint: String(meta['argument-hint'] || inputs.map((input) => '<' + input + '>').join(' ')),
+          model: null, allowedTools: null, effort: null, context: null, agent: null,
+          body: body.trim(),
+          file,
+          scope,
+          foreign,
+          vscode: true
+        });
         continue;
       }
       if (foreign) {
@@ -529,6 +574,12 @@ export async function resolveCustomCommand(root, rawInput, options = {}) {
   if (command.gemini) {
     const rendered = await renderGeminiPrompt(root, command.body, argumentText, { rawInput: String(rawInput).trim(), env: options.env, allowed: command.scope === 'user' || Boolean(options.trusted), policy: options.policy, disabledByPolicy: options.disableShell === true });
     return { name: command.name, args: argumentText, command, prompt: rendered.text, mentions: rendered.files, shell: rendered.ran, grantTools: null };
+  }
+  if (command.vscode) {
+    // VS Code prompt files have no inline shell; #file and Markdown links stay text.
+    const rendered = renderVscodePrompt(command.body, argumentText);
+    const prompt = rendered.text + (argumentText.trim() && !rendered.usedArguments ? '\n\n' + argumentText.trim() : '');
+    return { name: command.name, args: argumentText, command, prompt, mentions: [], shell: [], grantTools: null };
   }
   if (command.opencode) {
     // OpenCode runs !`cmd` blocks (after placeholders) and leaves @path as plain text.
