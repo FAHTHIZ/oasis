@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Added
 
+- Hooks a repository keeps for other agents now run live: `.cursor/hooks.json`, `.github/hooks/*.json` (in a trusted workspace) and `~/.cursor/hooks.json` go through the hook protocol bridge with no install step. `"otherAgentHooks": false` or `OASIS_OTHER_AGENT_RULES=0` turns it off.
 - `oasis plugin new NAME` scaffolds a plugin with an example command, skill and agent that OASIS, Claude Code, Codex, Gemini CLI, Cursor and Copilot CLI can all install; `oasis plugin export --in-place` refreshes the generated manifests after edits.
 - `oasis plugin adopt` finds the plugins already installed in Gemini CLI, Codex, Copilot CLI and Cursor and installs them in OASIS through `oasis add` (`--list` to see them, `--yes` to install, names or `--from` to choose).
 - `oasis mcp share [--to AGENTS] [--user] [--remove]` registers `oasis mcp serve` in Claude Code, Cursor, VS Code / Copilot, Gemini CLI, Codex, OpenCode, Zed and Copilot CLI settings, editing each file in place (comments and other servers kept).
