@@ -100,3 +100,23 @@ test('Claude Code skill folders (.claude/skills and ~/.claude/skills) are loaded
   assert.match(JSON.stringify(await loadSkillResource(root, 'proj-skill', 'references/notes.md', { env })), /notes for proj-skill/);
   assert.match(JSON.stringify(await loadSkillResource(root, 'user-skill', 'references/notes.md', { env })), /notes for user-skill/);
 });
+
+test('/bisect, /flaky, /mutate and /minimize hand the right tool and arguments to the agent', async () => {
+  const state = { root: process.cwd(), env: process.env, sessionOptions: {} };
+  const usage = await runBuiltinCommand('bisect', '', state);
+  assert.match(usage.output, /Usage: \/bisect GOOD-REVISION/);
+  assert.equal(usage.prompt, undefined);
+  const bisect = await runBuiltinCommand('bisect', 'v1.4.0 npm test -- test/api.test.mjs', state);
+  assert.match(bisect.prompt, /bisect_regression with good "v1\.4\.0"/);
+  assert.match(bisect.prompt, /"npm test -- test\/api\.test\.mjs"/);
+  const flaky = await runBuiltinCommand('flaky', '12 pytest -q tests/test_cache.py', state);
+  assert.match(flaky.prompt, /flaky_check with that command and runs 12/);
+  assert.match(flaky.prompt, /"pytest -q tests\/test_cache\.py"/);
+  assert.match((await runBuiltinCommand('flaky', '', state)).prompt, /most recently/);
+  const mutate = await runBuiltinCommand('mutate', 'npm test', state);
+  assert.match(mutate.prompt, /mutation_probe/);
+  assert.match(mutate.prompt, /never to the source/);
+  assert.match((await runBuiltinCommand('minimize', 'data/big.json', state)).output, /Usage: \/minimize FILE/);
+  const minimize = await runBuiltinCommand('minimize', 'data/big.json node parse.mjs data/big.json', state);
+  assert.match(minimize.prompt, /minimize_repro with file "data\/big\.json" and command "node parse\.mjs data\/big\.json"/);
+});
