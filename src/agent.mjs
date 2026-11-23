@@ -101,6 +101,7 @@ import { webAccessSites, outboundEmailHit, userEmailAddresses } from './web-acce
 import { exitPlanMode, permissionMode } from './plan-mode.mjs';
 import { newGateState, runCompletionGates } from './completion-gates.mjs';
 import { deriveTaskSpec, restoreSpec, taskBrief, taskModelEnabled } from './task-model.mjs';
+import { applyClaimInvalidation, claimInvalidationNotice, restoreClaimLog } from './claim-ledger.mjs';
 import { adoptReportedContextWindow, useCompactToolProfile } from './context-window.mjs';
 import { MIXTURE_TOOL_DEFINITION, parseMixtureModels, runMixture } from './mixture.mjs';
 import { detectRepetition, collapseRepetition, DEGENERATE_OUTPUT_NUDGE } from './degenerate-output.mjs';
@@ -1019,6 +1020,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (!bare && needsHookWatchers(session.hooks, liveReload)) {
     try { session.fileWatchers = startHookWatchers(session, { env, liveReload, hookOptions: () => hookOptions(session, env), reload: reloadSessionSettings }); } catch {}
   }
+  if (restore && Array.isArray(restore.claimLog)) restoreClaimLog(session, restore.claimLog);
   if (startMcpBackground) setTimeout(startMcpBackground, 0);
   return session;
 }
@@ -3244,7 +3246,10 @@ async function applyToolResults(session, options, turn) {
           context.path = normalizeReviewPath(result.path);
         }
         const event = evidenceFromToolResult(name, evidenceArgs, result, context);
-        if (event) recordEvidence(sessionEvidence(session), event);
+        const recorded = event ? recordEvidence(sessionEvidence(session), event) : null;
+        // New evidence can undo claims made earlier (a page that changed, a
+        // check that now fails): the claim log, and memories saved from it.
+        if (recorded && Array.isArray(session.claimLog) && session.claimLog.length) applyClaimInvalidation(session, recorded, options);
         // Keep what the agent read, so quotes attributed to the page can be checked.
         if (event && event.kind === 'fetch') rememberPage(event.url, evidenceOutputText(result), { finalUrl: event.finalUrl });
       } catch { /* evidence is advisory; a bad result shape cannot break the turn */ }
@@ -3547,7 +3552,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         crossSessionNotice = incoming.map((message) => messaging.formatSessionMessage(message)).join('\n\n');
       } catch { /* Messaging is optional; a storage failure must not break an ordinary coding turn. */ }
     }
-    const notice = [step > 0 ? drainInbox(session) : '', step > 0 && !options.isSubagent ? sitrepAlerts(session, { env: options.env || process.env }) : '', crossSessionNotice, pendingTruncationNotice].filter(Boolean).join('\n\n');
+    const notice = [step > 0 ? drainInbox(session) : '', step > 0 && !options.isSubagent ? sitrepAlerts(session, { env: options.env || process.env }) : '', options.isSubagent ? '' : claimInvalidationNotice(session), crossSessionNotice, pendingTruncationNotice].filter(Boolean).join('\n\n');
     pendingTruncationNotice = '';
     if (notice) {
       const last = session.messages[session.messages.length - 1];

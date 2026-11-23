@@ -57,11 +57,37 @@ The verdict is derived from them, weakest first:
 | `incomplete` | It stopped at a step or budget limit |
 | `rejected` | A claim was unsupported, a checkable criterion unmet, or a review failed |
 | `unverified` | Completed, but nothing about the result was checked |
-| `evidenced` | Everything checked held; some criteria could not be judged by the runtime |
+| `evidenced` | Everything checked held, but some criteria could not be judged by the runtime, or some claims rest only on one source as read, on inference, or on evidence that has since changed |
 | `verified` | Every runtime-checkable criterion met, and at least one claim or criterion was actually checked |
 | `independently_verified` | Verified, and an independent review passed |
 
-Tool activity alone never raises the verdict: a run that fetched ten pages and cited none of them is `unverified`.
+Tool activity alone never raises the verdict: a run that fetched ten pages and cited none of them is `unverified`, and an answer that accurately repeats one page is `evidenced`, not `verified`.
+
+## Claims
+
+Source: `src/claim-ledger.mjs`.
+
+The outcome types each checkable statement in the answer by what backs it. A statement is a claim when it reports a test or build result, cites a URL, quotes, gives a result-like number, or draws an explicit conclusion ("so", "therefore", "suggests", "likely"). Other prose is not counted.
+
+| Status | Meaning |
+| --- | --- |
+| `observed` | The runtime saw it: a check that passed after the last edit |
+| `calculated` | Every number in it was printed by code, a command or a check the agent ran |
+| `reported` | It rests on pages the agent read: the cited pages were fetched, quotes are on them, numbers appear in them. What a page says can still be wrong |
+| `inferred` | A conclusion; it depends on the claims just before it |
+| `unverified` | Nothing observed backs it: a page never fetched, a number nothing printed, "tests pass" with no passing check |
+| `contradicted` | The evidence says otherwise: the last check failed, the quoted words are not on the page |
+| `stale` | It held when made, but its basis changed later |
+
+A sentence with mixed footing takes its weakest part, and a conclusion drawn from a contradicted claim is unverified. Each claim keeps its basis (evidence ledger entries with URL, command, digest and time), the sources it cites and how many of them are [independent](SUBAGENTS.md#shared-knowledge-board), a confidence score, and its age. `result.task.outcome.claims.byStatus` counts them.
+
+Claims are kept in the session's claim log (saved with the session, at most 200). New evidence is checked against it as it arrives:
+
+- a page fetched again with different content makes the claims citing it stale
+- a check that fails after a claim that checks passed contradicts it if no files changed in between, and makes it stale otherwise
+- claims that depend on an invalidated claim become stale in turn
+
+Contradicted claims, and claims made stale by a changed page, are named to the agent before its next step, so it can correct itself. Memories saved from an invalidated claim are revised ([Memory](MEMORY.md#saving-what-an-answer-claimed)).
 
 ## The task gate
 

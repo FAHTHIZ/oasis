@@ -1,6 +1,7 @@
 import { approvalSnapshot } from './neuron-approvals.mjs';
 import { randomUUID } from 'node:crypto';
 import { restoreSpec } from './task-model.mjs';
+import { claimLogSnapshot } from './claim-ledger.mjs';
 import { normalizeAgentUsage } from './agent-tasks.mjs';
 import { MAX_STEER_CHARS, foldSteering } from './steering.mjs';
 import { mkdir, open, readdir, unlink, rm } from 'node:fs/promises';
@@ -350,6 +351,7 @@ export async function saveSession(session, options = {}) {
     mustPreserve: sanitizeMustPreserve(session.mustPreserve),
     ...(sanitizeGoal(session.goal) ? { goal: sanitizeGoal(session.goal) } : {}),
     ...(restoreSpec(session.task) ? { task: restoreSpec(session.task) } : {}),
+    ...(claimLogSnapshot(session).length ? { claimLog: claimLogSnapshot(session) } : {}),
     agents: sanitizeAgentHistory(session.agentTasks),
     // A mid-turn snapshot marks the turn as unfinished; the end-of-turn save
     // drops the mark. A session restored with it tells the model its last
@@ -427,6 +429,7 @@ export async function loadSession(root, id, options = {}) {
     mustPreserve: sanitizeMustPreserve(payload.mustPreserve),
     goal: sanitizeGoal(payload.goal),
     task: restoreSpec(payload.task),
+    claimLog: Array.isArray(payload.claimLog) ? payload.claimLog.slice(-200) : [],
     agents: sanitizeAgentHistory(payload.agents),
     turnInProgress: payload.turnInProgress && typeof payload.turnInProgress === 'object'
       ? { request: safePersistedText(String(payload.turnInProgress.request || '').slice(0, 2000), 2000), savedAt: String(payload.turnInProgress.savedAt || '').slice(0, 40) }

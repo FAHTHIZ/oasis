@@ -136,7 +136,10 @@ test('acceptance is evaluated against tool results, not the reply', async (t) =>
   await writeFile(path.join(root, 'notes.md'), Array.from({ length: 100 }, (_, i) => 'w' + i).join(' '));
   const done = assessOutcome(report, { events: fetched, reply, root });
   assert.equal(done.acceptance.unmet, 0, JSON.stringify(done.acceptance.criteria));
-  assert.ok(verdictIsVerified(done.verdict));
+  // Every criterion met, but the content rests on one page as read: the
+  // attribution is checked, the facts are not (claim ledger: reported).
+  assert.equal(done.verdict, 'evidenced');
+  assert.equal(verdictIsVerified(done.verdict), false);
   const unread = assessOutcome(report, { events: [], reply, root });
   assert.equal(unread.verdict, 'rejected', 'citing a page that was never fetched is rejected');
   assert.ok(unmetCheckable(unread).length >= 1);
