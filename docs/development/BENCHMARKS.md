@@ -188,6 +188,8 @@ Second local run, 15 November 2026: `npm run bench:live -- --agents oasis --mode
 
 Pass rate 1/3. One trial per task is a smoke test, not a score. The `slice-lines` failure led to a change: an edit to a `.js`, `.mjs` or `.cjs` file with no language server running is now checked with `node --check` (parse only), so the write result itself says the file does not parse.
 
+Third local run, 23 November 2026: the seven non-code tasks with `oasis eval --trials 1` on `qwen2.5:1.5b` (16,384-token window) through Ollama 0.40.17, OASIS 1.8.0 at `8de92c59`, same 2 CPU cores; files in [live-2026-11-23-ollama](../../bench/results/live-2026-11-23-ollama/SUMMARY.md). Pass rate 0/7, median 80 s: the model mostly made one tool call (often with an absolute path missing the `workspace` folder) and stopped, and one trial ended on an Ollama `HTTP 400: invalid message content type: <nil>`. What the run did test is self-assessment: OASIS reached a verdict on 6 trials, agreed with the hidden verifier on all 5 decided ones, and made no overclaims. The fixes it led to are listed in the summary.
+
 This shows the hardware, not the harness: a 3B model on two CPU cores generates a few tokens per second, so one small task does not fit in 30 minutes. The earlier same-gateway run against Claude Code is in [live-2026-11-08-omniroute](../../bench/results/live-2026-11-08-omniroute/README.md). SWE-bench and Terminal-Bench scores (the adapter is in `bench/harbor`) need a capable hosted model and a paid budget, so none are published yet.
 
 ### Recorded same-model gateway (14 November 2026)
