@@ -41,3 +41,17 @@ An unmet criterion goes back to the model once before it may finish (`test/local
 ## Rerun of the failed task at `684ca16f`
 
 `conflicting-sources-answer`, two trials, same endpoint ([results-conflicting-rerun.json](results-conflicting-rerun.json)): 1/2 passed. Both trials read all four sources this time (one only after the new `sources_read` criterion sent it back for `sources/forum-thread.md`). The failing trial again wrote `## Contradiction` as a heading; the `opening` criterion caught it (OASIS's verdict was `rejected`, matching the verifier), but the model was never told. The eval trace does not keep reply text, so the reason is inferred, not observed: the gate allowed one round per turn, and the likeliest use of it is an earlier reply given before `answer.md` existed, which a missing file sends back. Each problem now gets its own round, two at most per turn (`test/task-contract-gate.test.mjs`). The passing trial was `evidenced`, not `verified`: its quoted line from the docs is a single-source claim.
+
+## Rerun after the system audit at `67d85470`
+
+Five tasks, one trial each, same endpoint and settings ([results-audit-rerun.json](results-audit-rerun.json)). The run ended at `a1d3ba3a`, a CI-only change, so the code under test did not change during it.
+
+| Task | Result | Time | Tokens | Tool calls | OASIS's own verdict |
+| --- | --- | ---: | ---: | ---: | --- |
+| `archive-old-logs` | pass | 227 s | 38,162 | 5 | verified |
+| `conflicting-sources-answer` | pass | 407 s | 48,135 | 8 | evidenced |
+| `meeting-action-items` | pass | 134 s | 14,858 | 2 | verified |
+| `project-schedule-plan` | pass | 497 s | 59,743 | 6 | verified |
+| `taskflow-search` | pass | 989 s | 214,081 | 20 | verified |
+
+Pass rate 5/5, median 407 s. All four decided verdicts matched the hidden verifier (0 overclaims, 0 underclaims); the `evidenced` one passed. A smoke test, not a score: one trial per task on a shared service.
