@@ -1073,6 +1073,20 @@ export async function trustEffects(root) {
     if (permissions.defaultMode) effects.push(where + ': default permission mode ' + String(permissions.defaultMode));
     if (settings.statusLine && settings.statusLine.command) effects.push(where + ': status line runs: ' + String(settings.statusLine.command).slice(0, 200));
   }
+  // Hooks other agents keep in the repository (Cursor, Copilot, Gemini CLI,
+  // Codex, OpenCode plugins), which OASIS runs once the folder is trusted.
+  try {
+    const { loadForeignHooks } = await import('./foreign-hooks.mjs');
+    for (const item of await loadForeignHooks(root, { trusted: true })) {
+      if (item.scope !== 'project') continue;
+      const where = path.relative(root, item.file);
+      for (const [event, groups] of Object.entries(item.hooks)) {
+        for (const group of groups) for (const hook of group.hooks || []) {
+          if (hook && hook.command) effects.push(where + ': ' + (hook.foreignEvent || event) + ' hook runs: ' + (item.protocol === 'opencode' ? 'the OpenCode plugin' : String(hook.command).slice(0, 200)));
+        }
+      }
+    }
+  } catch { /* unreadable hook files are skipped */ }
   const mcp = await read(path.join(root, '.mcp.json'));
   for (const [name, server] of Object.entries(mcp && mcp.mcpServers && typeof mcp.mcpServers === 'object' ? mcp.mcpServers : {})) {
     if (!server || typeof server !== 'object') continue;

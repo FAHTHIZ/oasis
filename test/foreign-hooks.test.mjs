@@ -189,3 +189,11 @@ export const Guard: Plugin = async ({ $, directory }) => ({
   await runHooks('Stop', { ...base }, { hooks: settings.hooks, root });
   assert.equal(await readFile(idle, 'utf8'), root);
 });
+
+test('trusting a folder lists the other agents\' hooks it would run', async (t) => {
+  const { root } = await setup(t);
+  await writeFile(path.join(root, '.github', 'hooks', 'policy.json'), JSON.stringify({ hooks: { preToolUse: [{ bash: './scripts/policy.sh' }] } }));
+  const { trustEffects } = await import('../src/cli.mjs');
+  const effects = await trustEffects(root);
+  assert.ok(effects.some((line) => line.startsWith(path.join('.github', 'hooks', 'policy.json') + ': preToolUse hook runs: ./scripts/policy.sh')), effects.join('\n'));
+});
