@@ -56,7 +56,7 @@ import { applyInjectionTaint, detectInjection, injectionTaint, stripInvisible } 
 import { calibrate, describeCalibration, parseConfidence, sharedCalibrationLedger } from './calibration.mjs';
 import { randomBytes } from 'node:crypto';
 import { sharedHypothesisHistory } from './hypothesis-history.mjs';
-import { HYPOTHESIS_TOOL_DEFINITION, runHypothesisTool, sanitizeMatrix, hypothesisPromptLines } from './hypothesis-board.mjs';
+import { HYPOTHESIS_TOOL_DEFINITION, runHypothesisTool, sanitizeMatrix, hypothesisPromptLines, voidEvidenceCiting } from './hypothesis-board.mjs';
 
 const MAX_ENTRIES = 200;
 const MAX_CLAIM = 600;
@@ -491,10 +491,12 @@ function retractFinding(session, board, args) {
   for (const contest of contests) settle(board, board.entries.find((item) => item.id === contest.id), 1, 'won-dispute', actor);
   const undermined = underminedFindings(board).filter((item) => item.fallen.some((premise) => premise.id === id)).map((item) => item.entry);
   for (const dependent of undermined) tellAuthor(session, dependent, '[OASIS] Your finding ' + dependent.id + ' ("' + dependent.claim.slice(0, 160) + '") builds on ' + id + ', which ' + actor + ' just retracted' + (entry.retracted.reason ? ' (' + entry.retracted.reason.slice(0, 160) + ')' : '') + '. Re-check it: retract it, or re-post it with evidence that does not depend on ' + id + '.');
+  const voided = voidEvidenceCiting(board, [id, ...undermined.map((item) => item.id)], { by: actor, reason: entry.retracted.reason, cause: id });
   const notes = [];
+  if (voided.length) notes.push('Hypotheses evidence that cited it no longer counts: ' + voided.join(', ') + '.');
   if (contests.length) notes.push('The dispute with ' + contests.map((item) => item.id).join(', ') + ' is resolved in their favour.');
   if (undermined.length) notes.push('This undermines ' + undermined.map((item) => item.id + ' (' + item.author + ')').join(', ') + ', which build' + (undermined.length === 1 ? 's' : '') + ' on it. Their authors have been told; re-check them before relying on them.');
-  return { retracted: id, ...(contests.length ? { resolved: contests.map((item) => item.id) } : {}), ...(undermined.length ? { undermines: undermined.map((item) => item.id) } : {}), ...(notes.length ? { note: notes.join(' ') } : {}) };
+  return { retracted: id, ...(contests.length ? { resolved: contests.map((item) => item.id) } : {}), ...(undermined.length ? { undermines: undermined.map((item) => item.id) } : {}), ...(voided.length ? { voided_evidence: voided } : {}), ...(notes.length ? { note: notes.join(' ') } : {}) };
 }
 
 // The author of an undermined finding hears about it at its next step, if it is still running.
