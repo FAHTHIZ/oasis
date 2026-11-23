@@ -170,11 +170,35 @@ export function requestBackgroundApproval(id, request = {}, env = process.env, o
   return run;
 }
 
+// Text from a background run reaches the user's terminal through oasis bg
+// list and approve. Control characters (an escape sequence can erase or redraw
+// the line) and direction overrides are shown as <U+XXXX> instead.
+const UNSAFE_DISPLAY = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\u200B\u200E\u200F\u061C\u2060\uFEFF]/g;
+export function displaySafe(text) {
+  return String(text == null ? '' : text).replace(/\r\n?/g, '\n').replace(UNSAFE_DISPLAY, (ch) => '<U+' + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0') + '>');
+}
+
+const MAX_APPROVAL_MESSAGE = 8000;
+
+// Keeps the start and the end: the dangerous part of a long command is often
+// at the end ("... ; curl x | sh").
+function clipMiddle(text, max) {
+  if (text.length <= max) return text;
+  const half = Math.floor((max - 40) / 2);
+  return text.slice(0, half) + '\n[... ' + (text.length - 2 * half) + ' characters not shown ...]\n' + text.slice(-half);
+}
+
+/** The waiting request in full, indented, for oasis bg list. */
+export function describePendingApproval(pending) {
+  const text = displaySafe(pending && (pending.message || pending.tool) || 'an action').trim();
+  return text.split('\n').map((line) => '      ' + line).join('\n');
+}
+
 async function askOnce(id, request, env, options) {
   const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 30 * 60 * 1000;
   const pollMs = Number(options.pollMs) > 0 ? Number(options.pollMs) : 500;
   const requestId = randomUUID();
-  const pending = { requestId, tool: request.tool || null, message: String(request.message || '').replace(/\s+/g, ' ').trim().slice(0, 2000), canAlways: Boolean(request.canAlways), at: new Date().toISOString(), expiresAt: new Date(Date.now() + timeoutMs).toISOString() };
+  const pending = { requestId, tool: request.tool || null, message: clipMiddle(displaySafe(request.message || '').trim(), MAX_APPROVAL_MESSAGE), canAlways: Boolean(request.canAlways), at: new Date().toISOString(), expiresAt: new Date(Date.now() + timeoutMs).toISOString() };
   await unlink(decisionPath(id, env)).catch(() => {});
   await writeAtomic(approvalPath(id, env), pending);
   if (options.onRequest) { try { options.onRequest(pending); } catch {} }
@@ -431,8 +455,9 @@ export function renderLog(text) {
 export function describeEntry(entry, activity = '') {
   const age = Math.max(0, Math.round((Date.now() - Date.parse(entry.startedAt)) / 60000));
   const status = entry.pendingApproval ? 'needs-input' : entry.status;
-  if (entry.pendingApproval) activity = 'waiting for approval: ' + String(entry.pendingApproval.message || entry.pendingApproval.tool || '').slice(0, 80) + '  (oasis bg approve ' + entry.id + ' | deny ' + entry.id + ')';
-  return entry.id + '  ' + status.padEnd(11) + (entry.kind === 'exec' ? ' [exec]' : '') + (entry.name ? ' ' + entry.name : '') + ' ' + (age < 60 ? age + 'm' : age < 2880 ? Math.floor(age / 60) + 'h' : Math.floor(age / 1440) + 'd') + ' ago  ' + path.basename(entry.root) + '  ' + entry.prompt.replace(/\s+/g, ' ').slice(0, 60) + (activity ? '\n    └ ' + activity : '');
+  if (entry.pendingApproval) activity = 'waiting for approval (the request is shown in full below): oasis bg approve ' + entry.id + ' | deny ' + entry.id;
+  return displaySafe(entry.id + '  ' + status.padEnd(11) + (entry.kind === 'exec' ? ' [exec]' : '') + (entry.name ? ' ' + entry.name : '') + ' ' + (age < 60 ? age + 'm' : age < 2880 ? Math.floor(age / 60) + 'h' : Math.floor(age / 1440) + 'd') + ' ago  ' + path.basename(entry.root) + '  ' + entry.prompt.replace(/\s+/g, ' ').slice(0, 60) + (activity ? '\n    └ ' + String(activity).replace(/\s+/g, ' ') : ''))
+    + (entry.pendingApproval ? '\n' + describePendingApproval(entry.pendingApproval) : '');
 }
 
 // Shown when an interactive session starts: background runs that are waiting
