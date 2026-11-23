@@ -27,6 +27,41 @@ import { replaceFileDurably } from './atomic-write.mjs';
 import { beliefConflict } from './claim-conflict.mjs';
 
 const MEMORY_CATEGORIES = ['preferences', 'project', 'decisions', 'lessons', 'people', 'reference'];
+
+// What kind of knowledge a memory is, separate from where it is filed. The
+// kinds are not interchangeable, so they are recalled differently:
+//
+//   instruction  how the user wants things done; holds until the user revises it
+//   decision     a choice and its reason; worth revisiting as things change
+//   fact         a claim about the project or the world; can be checked and go stale
+//   procedure    how to do something (commands, steps); can stop working
+//   experience   a lesson from what happened; context for judgement, not a rule
+//   hypothesis   a belief not yet established; never recalled as fact, and
+//                verifying it current with memory_verify promotes it to a fact
+//   reference    a pointer to where something lives
+//
+// A hypothesis never supersedes or revises a fact, an instruction or a decision.
+export const MEMORY_KINDS = Object.freeze(['instruction', 'decision', 'fact', 'procedure', 'experience', 'hypothesis', 'reference']);
+const CATEGORY_KIND = { preferences: 'instruction', decisions: 'decision', lessons: 'experience', people: 'fact', reference: 'reference', project: 'fact' };
+const HEDGE = /\b(?:might|may be|maybe|possibly|perhaps|probably|likely|unlikely|suspect(?:ed)?|hypothes[ie]s|unconfirmed|not (?:yet )?(?:verified|confirmed)|seems? to|appears? to|could be|i think|we think|guess)\b/i;
+const PROCEDURE = /(?:^|\n)\s*(?:\d+[.)]|[-*])\s+\S|\b(?:to \w+(?: \w+){0,4}, (?:run|use|call|open|set)|steps?:|run `|then run|first run)\b/i;
+
+/** The kind a memory is: the one given, or inferred from its category and wording. */
+export function memoryKind(input = {}) {
+  const given = String(input.kind || '').toLowerCase();
+  if (MEMORY_KINDS.includes(given)) return given;
+  const base = CATEGORY_KIND[input.category] || 'fact';
+  const text = String(input.content || input.description || '');
+  if ((base === 'fact' || base === 'experience') && HEDGE.test(text)) return 'hypothesis';
+  if (base === 'fact' && PROCEDURE.test(text)) return 'procedure';
+  return base;
+}
+
+// Instructions hold until revised; age alone does not make them stale.
+// Decisions, facts, procedures, lessons and references are worth rechecking
+// after the freshness window: circumstances change.
+const STANDING_KINDS = new Set(['instruction']);
+const KIND_HEADINGS = { instruction: 'Instructions', decision: 'Decisions', fact: 'Facts', procedure: 'Procedures', experience: 'Lessons', hypothesis: 'Hypotheses (not established)', reference: 'References' };
 const MAX_MEMORIES = 500;
 function memoryLimit(env = process.env) { return Math.min(MAX_MEMORIES, Math.max(5, Number(env.OASIS_MEMORY_LIMIT) || MAX_MEMORIES)); }
 const MAX_BODY = 8000;
@@ -135,6 +170,7 @@ function serialize(memory) {
     name: memory.name,
     description: memory.description,
     category: memory.category,
+    ...(memory.kind ? { kind: memory.kind } : {}),
     created: memory.created,
     updated: memory.updated,
     recalls: memory.recalls || 0,
@@ -165,6 +201,9 @@ function parse(source, file, scope) {
     name: meta.name || path.basename(file, '.md'),
     description: meta.description || oneLine(content, 160),
     category,
+    // Notes saved before kinds existed get their category's kind; their
+    // wording is not reinterpreted.
+    kind: MEMORY_KINDS.includes(meta.kind) ? meta.kind : (CATEGORY_KIND[category] || 'fact'),
     created: meta.created || null,
     updated: meta.updated || meta.created || null,
     recalls: Number(meta.recalls) || 0,
@@ -273,6 +312,8 @@ const MEMORY_STALE_AFTER_MS = 90 * 24 * 60 * 60 * 1000;
 export function memoryFreshness(memory, now = Date.now()) {
   const category = String(memory && memory.category || '');
   if (!TIME_SENSITIVE_CATEGORIES.has(category)) return 'personal';
+  // An instruction holds until it is revised, wherever it is filed.
+  if (memory && STANDING_KINDS.has(memory.kind) && !['outdated', 'uncertain'].includes(memory.verificationStatus)) return 'personal';
   const status = String(memory && memory.verificationStatus || 'unverified');
   if (status === 'outdated') return 'outdated';
   if (status === 'uncertain') return 'uncertain';
@@ -295,11 +336,19 @@ export async function verifyMemory(root, id, { status, evidence, env = process.e
   const note = oneLine(redactSecrets(evidence).text, 500);
   if (!note) throw new Error('Provide concise evidence for the verification decision.');
   const verifiedAt = new Date().toISOString();
-  const updated = { ...memory, verifiedAt, verificationStatus: normalized, verificationNote: note };
+  // A hypothesis checked and found true becomes a fact; found false, it
+  // stays a hypothesis, refuted. Either way the history says so.
+  const promoted = memory.kind === 'hypothesis' && normalized === 'current';
+  const revisions = memory.kind === 'hypothesis' && normalized !== 'uncertain'
+    ? [...(memory.revisions || []), { at: verifiedAt, was: oneLine(memory.content, 400), now: oneLine(memory.content, 400), reason: promoted ? 'hypothesis confirmed' : 'hypothesis refuted', evidence: note.slice(0, 300) }].slice(-MAX_REVISIONS)
+    : memory.revisions;
+  const updated = { ...memory, verifiedAt, verificationStatus: normalized, verificationNote: note, revisions, ...(promoted ? { kind: 'fact' } : {}) };
   await atomicWrite(memory.file, serialize(updated));
   return {
     id: memory.id,
     status: normalized,
+    kind: updated.kind,
+    ...(promoted ? { promoted: 'hypothesis confirmed: now a fact' } : {}),
     verifiedAt,
     evidence: note,
     freshness: memoryFreshness(updated)
@@ -380,6 +429,7 @@ export async function saveMemory(root, input = {}, { env = process.env, source =
   const description = oneLine(redactSecrets(input.description || input.content).text, 200);
   const cleaned = redactSecrets(String(input.content || input.description || '').slice(0, MAX_BODY));
   const evidence = oneLine(redactSecrets(input.evidence).text, 300) || null;
+  const kind = memoryKind({ kind: input.kind, category, content: input.content || input.description });
   if (!name) throw new Error('A memory needs a short name.');
   if (!cleaned.text.trim()) throw new Error('A memory needs content.');
   const existing = await listMemories(root, { env, scope });
@@ -394,6 +444,10 @@ export async function saveMemory(root, input = {}, { env = process.env, source =
     const conflicts = input.replace ? [] : beliefConflicts(target.content, text);
     if (conflicts.length && entrenched(target) && !evidence) {
       return { action: 'conflict', id: target.id, file: target.file, redacted: cleaned.redacted, conflicts, entrenched: { verified: verifiedOn(target), evidence: target.verificationNote || null } };
+    }
+    // A hypothesis does not rewrite what is held as fact, instruction or decision.
+    if (conflicts.length && kind === 'hypothesis' && target.kind !== 'hypothesis') {
+      return { action: 'conflict', id: target.id, file: target.file, redacted: cleaned.redacted, conflicts, hypothesis: { against: target.kind } };
     }
     let body;
     if (conflicts.length) {
@@ -420,6 +474,8 @@ export async function saveMemory(root, input = {}, { env = process.env, source =
       source: source || target.source,
       evidence: evidence || (contentChanged ? null : target.evidence),
       revisions: revisions.slice(-MAX_REVISIONS),
+      // An explicit kind wins; otherwise a merge keeps the note's kind.
+      kind: MEMORY_KINDS.includes(String(input.kind || '').toLowerCase()) ? kind : target.kind,
       ...(contentChanged ? { verifiedAt: null, verificationStatus: 'unverified', verificationNote: null } : {}),
       ...(flipped.length ? { verificationStatus: 'uncertain', verificationNote: oneLine('This belief has gone back and forth: "' + flipped[0].now + '" was revised away before and is now back. Verify it against current evidence.', 500) } : {})
     };
@@ -432,7 +488,7 @@ export async function saveMemory(root, input = {}, { env = process.env, source =
   const rivals = rankMemories(existing.filter((memory) => memoryFreshness(memory) !== 'outdated'), name + ' ' + description + ' ' + text, { limit: 8 })
     .map(({ memory }) => ({ memory, conflicts: beliefConflicts(memory.content, text) }))
     .filter((item) => item.conflicts.length);
-  const held = rivals.filter((item) => entrenched(item.memory) && !evidence);
+  const held = rivals.filter((item) => (entrenched(item.memory) && !evidence) || (kind === 'hypothesis' && item.memory.kind !== 'hypothesis'));
   const superseded = rivals.filter((item) => !held.includes(item));
   // Bounded memory (as in Hermes): a full store consolidates instead of
   // refusing. The least valuable note (outdated first, then stale and never
@@ -447,17 +503,17 @@ export async function saveMemory(root, input = {}, { env = process.env, source =
   let file = path.join(dir, slug + '.md');
   for (let n = 2; await stat(file).then(() => true, () => false); n += 1) file = path.join(dir, slug + '-' + n + '.md');
   const id = scope + ':' + category + '/' + path.basename(file, '.md');
-  const heldNote = held.length ? oneLine('Contradicts ' + held.map((item) => item.memory.id + ' (verified current on ' + verifiedOn(item.memory) + ': ' + item.conflicts[0].reason + ')').join('; ') + '. Check which is right and mark the wrong one outdated with memory_verify.', 500) : null;
-  await atomicWrite(file, serialize({ name, description, category, created: now, updated: now, recalls: 0, source, evidence, verificationStatus: held.length ? 'uncertain' : 'unverified', verificationNote: heldNote, supersedes: superseded.map((item) => item.memory.id), content: cleaned.text }));
+  const heldNote = held.length ? oneLine('Contradicts ' + held.map((item) => item.memory.id + (entrenched(item.memory) ? ' (verified current on ' + verifiedOn(item.memory) + ': ' : ' (a ' + item.memory.kind + ': ') + item.conflicts[0].reason + ')').join('; ') + '. Check which is right and mark the wrong one outdated with memory_verify.', 500) : null;
+  await atomicWrite(file, serialize({ name, description, category, kind, created: now, updated: now, recalls: 0, source, evidence, verificationStatus: held.length ? 'uncertain' : 'unverified', verificationNote: heldNote, supersedes: superseded.map((item) => item.memory.id), content: cleaned.text }));
   for (const { memory, conflicts } of superseded) {
     const note = oneLine('Superseded by ' + id + ' on ' + now.slice(0, 10) + ': "' + conflicts[0].was + '" is now "' + conflicts[0].now + '" (' + conflicts[0].reason + ')' + (evidence ? '; evidence: ' + evidence : '') + '.', 500);
     try { await atomicWrite(memory.file, serialize({ ...memory, verificationStatus: 'outdated', verifiedAt: now, verificationNote: note, supersededBy: id })); } catch {}
   }
   await writeIndex(root, scope, env);
   return {
-    action: 'created', id, file, redacted: cleaned.redacted, ...(archived ? { archived } : {}),
+    action: 'created', id, kind, file, redacted: cleaned.redacted, ...(archived ? { archived } : {}),
     ...(superseded.length ? { superseded: superseded.map(({ memory, conflicts }) => ({ id: memory.id, was: conflicts[0].was, now: conflicts[0].now, reason: conflicts[0].reason })) } : {}),
-    ...(held.length ? { contested: held.map(({ memory, conflicts }) => ({ id: memory.id, verified: verifiedOn(memory), was: conflicts[0].was, reason: conflicts[0].reason })) } : {})
+    ...(held.length ? { contested: held.map(({ memory, conflicts }) => ({ id: memory.id, kind: memory.kind, verified: entrenched(memory) ? verifiedOn(memory) : null, was: conflicts[0].was, reason: conflicts[0].reason })) } : {})
   };
 }
 
@@ -536,14 +592,24 @@ export async function memoryIndexPrompt(root, { env = process.env, budget = INDE
   const outdated = memories.filter((memory) => memoryFreshness(memory, now) === 'outdated').length;
   const sorted = memories.filter((memory) => memoryFreshness(memory, now) !== 'outdated')
     .sort((a, b) => (b.scope === 'user') - (a.scope === 'user') || memoryValue(b, now) - memoryValue(a, now) || String(b.updated).localeCompare(String(a.updated)));
-  const lines = [];
+  // Grouped by kind, so a hypothesis is never read as an instruction or fact.
+  // Budget is spent in value order across groups.
+  const chosen = new Set();
   let used = 0;
   let omitted = outdated;
+  const lineOf = (memory) => '- ' + memory.id + ' (' + memory.name + '): ' + memory.description;
   for (const memory of sorted) {
-    const line = '- ' + memory.id + ' (' + memory.name + '): ' + memory.description;
+    const line = lineOf(memory);
     if (used + line.length > budget) { omitted += 1; continue; }
-    lines.push(line);
+    chosen.add(memory);
     used += line.length + 1;
+  }
+  const lines = [];
+  const kinds = new Set(sorted.filter((memory) => chosen.has(memory)).map((memory) => memory.kind || 'fact'));
+  for (const kind of MEMORY_KINDS) {
+    if (!kinds.has(kind)) continue;
+    if (kinds.size > 1 || kind === 'hypothesis') lines.push(KIND_HEADINGS[kind] + ':');
+    for (const memory of sorted) if (chosen.has(memory) && (memory.kind || 'fact') === kind) lines.push(lineOf(memory));
   }
   return intro + '\nSaved memories (one-line abstracts; read the full note with memory_search or memory_read when relevant):\n' + lines.join('\n') + (omitted ? '\n(' + omitted + ' more not shown; search for them with memory_search)' : '');
 }
@@ -566,9 +632,11 @@ export async function recallForPrompt(root, prompt, { env = process.env, limit =
     const staleWarning = ['stale', 'outdated', 'uncertain', 'unverified'].includes(freshness)
       ? '\nFreshness: ' + freshness + '. Verify against current evidence before relying on this note.'
       : '';
-    return '<memory id="' + memory.id + '" updated="' + String(memory.updated || '').slice(0, 10) + '" freshness="' + freshness + '"' + verification + '>\n' +
+    const kindNote = memory.kind === 'hypothesis' ? '\nNot established: this is a hypothesis, not a fact. Test it before relying on it.'
+      : memory.kind === 'experience' ? '\nA lesson from earlier work: context for judgement, not a rule.' : '';
+    return '<memory id="' + memory.id + '" kind="' + (memory.kind || 'fact') + '" updated="' + String(memory.updated || '').slice(0, 10) + '" freshness="' + freshness + '"' + verification + '>\n' +
       memory.name + ': ' + (memory.content.length > per ? memory.content.slice(0, per) + '\n[truncated; memory_read ' + memory.id + ' for the rest]' : memory.content) +
-      note + staleWarning + '\n</memory>';
+      note + kindNote + staleWarning + '\n</memory>';
   });
   await markRecalled(chosen.map((item) => item.memory));
   return { text: '<recalled-memories note="Saved notes that may be relevant. They can be outdated; check against the code.">\n' + blocks.join('\n') + '\n</recalled-memories>', ids: chosen.map((item) => item.memory.id) };
@@ -588,6 +656,7 @@ export const MEMORY_TOOL_DEFINITIONS = [
           description: { type: 'string', description: 'One-line abstract shown in every future system prompt' },
           content: { type: 'string', description: 'The full note: the fact, and why it matters or how to apply it' },
           category: { type: 'string', enum: MEMORY_CATEGORIES },
+          kind: { type: 'string', enum: MEMORY_KINDS, description: 'What kind of knowledge it is: instruction (how the user wants things done), decision, fact, procedure (how to do something), experience (a lesson), hypothesis (not yet established; never recalled as fact), reference. Inferred from category and wording when omitted' },
           scope: { type: 'string', enum: ['project', 'user'], description: 'project (default) or user for every project' },
           replace: { type: 'boolean', description: 'Replace the body instead of appending to it' },
           evidence: { type: 'string', description: 'What shows this is true: a file and line, a command and its result, a URL (max 300 characters). Needed to overturn a memory that was verified current' },
@@ -603,7 +672,7 @@ export const MEMORY_TOOL_DEFINITIONS = [
     function: {
       name: 'memory_search',
       description: 'Search saved memories (keyword ranking) and return the best matches with their full text. Read-only.',
-      parameters: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 20 } }, required: ['query'], additionalProperties: false }
+      parameters: { type: 'object', properties: { query: { type: 'string' }, kind: { type: 'string', enum: MEMORY_KINDS, description: 'Only memories of this kind' }, limit: { type: 'integer', minimum: 1, maximum: 20 } }, required: ['query'], additionalProperties: false }
     }
   },
   {
@@ -726,11 +795,12 @@ function beliefFields(memory, revisions) {
 function saveNote(saved) {
   const notes = [];
   if (saved.redacted) notes.push('Secrets or <private> text were redacted before saving.');
-  if (saved.action === 'conflict') notes.push('Not saved: this contradicts ' + saved.id + ', which was verified current on ' + saved.entrenched.verified + (saved.entrenched.evidence ? ' (' + saved.entrenched.evidence + ')' : '') + ': ' + saved.conflicts.map((item) => '"' + item.was + '" vs "' + item.now + '"').join('; ') + '. Check which is right. If the memory is wrong, save again with evidence (what shows the new statement is true) or mark it outdated with memory_verify.');
+  if (saved.action === 'conflict' && saved.hypothesis) notes.push('Not saved: this hypothesis contradicts ' + saved.id + ', a ' + saved.hypothesis.against + ': ' + saved.conflicts.map((item) => '"' + item.was + '" vs "' + item.now + '"').join('; ') + '. A hypothesis does not overwrite it. Save it under its own name, or test it and, if it holds, save it as a fact with evidence.');
+  else if (saved.action === 'conflict') notes.push('Not saved: this contradicts ' + saved.id + ', which was verified current on ' + saved.entrenched.verified + (saved.entrenched.evidence ? ' (' + saved.entrenched.evidence + ')' : '') + ': ' + saved.conflicts.map((item) => '"' + item.was + '" vs "' + item.now + '"').join('; ') + '. Check which is right. If the memory is wrong, save again with evidence (what shows the new statement is true) or mark it outdated with memory_verify.');
   if (saved.revised) notes.push('Revised ' + saved.id + ': ' + saved.revised.map((item) => '"' + item.was + '" became "' + item.now + '" (' + item.reason + ')').join('; ') + '. The old statement is kept in its revision history.');
   if (saved.flipflop) notes.push('This reverses an earlier revision, so the memory is marked uncertain: verify it before relying on it.');
   if (saved.superseded) notes.push('Superseded ' + saved.superseded.map((item) => item.id + ' ("' + item.was + '", ' + item.reason + ')').join(', ') + ': marked outdated and linked to the new memory.');
-  if (saved.contested) notes.push('Saved as uncertain: it contradicts ' + saved.contested.map((item) => item.id + ' (verified current on ' + item.verified + ', ' + item.reason + ')').join(', ') + '. Check which is right and memory_verify the wrong one as outdated; pass evidence to supersede a verified memory.');
+  if (saved.contested) notes.push('Saved as uncertain: it contradicts ' + saved.contested.map((item) => item.id + (item.verified ? ' (verified current on ' + item.verified : ' (a ' + item.kind) + ', ' + item.reason + ')').join(', ') + '. Check which is right and memory_verify the wrong one as outdated; pass evidence to supersede a verified memory.');
   return notes.length ? notes.join(' ') : undefined;
 }
 
@@ -785,9 +855,10 @@ export async function runMemoryTool(name, args = {}, { root, env = process.env, 
     return { ...saved, ...(linkedClaims.length ? { claims: linkedClaims } : {}), note: note || undefined };
   }
   if (name === 'memory_search') {
-    const ranked = rankMemories(await listMemories(root, { env }), args.query, { limit: Math.min(20, Number(args.limit) || 5) });
+    const pool = (await listMemories(root, { env })).filter((memory) => !args.kind || memory.kind === args.kind);
+    const ranked = rankMemories(pool, args.query, { limit: Math.min(20, Number(args.limit) || 5) });
     return { results: ranked.map(({ memory, score }) => ({
-      id: memory.id, name: memory.name, description: memory.description, updated: memory.updated,
+      id: memory.id, name: memory.name, kind: memory.kind, description: memory.description, updated: memory.updated,
       freshness: memoryFreshness(memory), verified_at: memory.verifiedAt || null,
       verification_status: memory.verificationStatus || 'unverified', verification_note: memory.verificationNote || null,
       source: memory.source || null, ...beliefFields(memory, 3), score: Math.round(score * 100) / 100, content: memory.content.slice(0, 3000)
@@ -797,7 +868,7 @@ export async function runMemoryTool(name, args = {}, { root, env = process.env, 
     const memory = await findMemory(root, args.id, { env });
     if (!memory) throw new Error('No memory matches ' + args.id + '.');
     return {
-      id: memory.id, name: memory.name, description: memory.description, category: memory.category,
+      id: memory.id, name: memory.name, description: memory.description, category: memory.category, kind: memory.kind,
       updated: memory.updated, freshness: memoryFreshness(memory), verified_at: memory.verifiedAt || null,
       verification_status: memory.verificationStatus || 'unverified', verification_note: memory.verificationNote || null,
       source: memory.source || null, ...beliefFields(memory, MAX_REVISIONS), content: memory.content

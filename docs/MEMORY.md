@@ -29,6 +29,36 @@ The one-line abstract of every memory goes into the system prompt. Most valuable
 
 `memory_verify` records what was checked (`current`, `outdated` or `uncertain`, with a short evidence reference such as a file and line).
 
+## Kinds
+
+Each memory has a kind, so instructions, choices, facts and guesses are not
+mixed together:
+
+| Kind | What it holds | Goes stale with age |
+| --- | --- | --- |
+| `instruction` | how the user wants things done | no; only when revised |
+| `decision` | a choice and its reason | yes |
+| `fact` | something checked about the project or world | yes |
+| `procedure` | the steps for doing something | yes |
+| `experience` | a lesson from what worked or failed | yes |
+| `hypothesis` | a suspicion not yet established | yes |
+| `reference` | where to look something up | yes |
+
+`memory_save` takes an explicit `kind`; without one it follows the category
+(`preferences` are instructions, `decisions` decisions, `lessons` experience,
+`reference` references, others facts), a fact or lesson worded with hedges
+("probably", "might", "suspect") is saved as a hypothesis, and a fact written
+as steps is saved as a procedure. Notes written before kinds existed read as
+their category's kind; their wording is not reinterpreted.
+
+A hypothesis is never recalled as fact. The index lists it under "Hypotheses
+(not established)" and recall labels it. It cannot overwrite a fact,
+instruction or decision under the same name (the save is a `conflict`), and
+it never supersedes a rival: it is saved `uncertain` beside it. A fact can
+supersede a hypothesis. `memory_verify` with `current` and evidence promotes a
+hypothesis to a fact (revision "hypothesis confirmed"); `outdated` records it
+as refuted. `memory_search` filters by `kind`.
+
 ## Belief revision
 
 A note that contradicts a saved memory is a revision, not an addition. Before this, the new text was appended, leaving both beliefs in one note ("the test command is npm test … the test command is pnpm vitest"), or saved under another name while the old note kept being recalled next to it.
