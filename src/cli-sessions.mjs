@@ -78,7 +78,7 @@ export async function backgroundCommand(rest, { approve, interactive } = {}) {
     const always = more.includes('--always');
     const reason = more.filter((word) => word !== '--always').join(' ').trim();
     const pending = await bg.answerBackgroundApproval(id, allow ? 'allow' : 'deny', process.env, { always, reason });
-    stdout.write((allow ? 'Approved' : 'Denied') + (always && allow ? ' (and allowed for the rest of that run)' : '') + ': ' + (pending.message || pending.tool || 'action').slice(0, 160) + '\n');
+    stdout.write((allow ? 'Approved' : 'Denied') + (always && allow ? ' (and allowed for the rest of that run)' : '') + ':\n' + bg.describePendingApproval(pending) + '\n');
     if (!allow && reason) await bg.sendToBackgroundSession(id, 'I denied that action: ' + reason, process.env).catch(() => {});
     return;
   }
