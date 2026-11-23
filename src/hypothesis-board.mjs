@@ -153,7 +153,7 @@ export function scoreQuestion(question) {
   return { posterior, other: Math.exp(otherLog - top) / total, inconsistency, tested, diagnostic };
 }
 
-function questionView(question) {
+export function questionView(question) {
   const score = scoreQuestion(question);
   const round = (value) => Math.round(value * 1000) / 1000;
   const hypotheses = question.hypotheses.map((h) => ({ id: h.id, text: h.text, by: h.by, posterior: round(score.posterior.get(h.id)), inconsistency: Math.round(score.inconsistency.get(h.id) * 100) / 100, tested: score.tested.has(h.id), ...(h.baseRate ? { base_rate: 'prior x' + h.prior + ': similar explanations were the answer in ' + h.baseRate.wins + ' and ruled out in ' + h.baseRate.losses + ' (similarity-weighted) of ' + h.baseRate.references + ' similar past question' + (h.baseRate.references === 1 ? '' : 's') } : {}) }))
