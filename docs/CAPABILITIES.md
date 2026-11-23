@@ -47,6 +47,20 @@ performance claim.
 | `/goal` (keep working until a condition holds), routines and schedules (`oasis schedule`) | Released, lightly tested | [User guide](USER-GUIDE.md) |
 | General-purpose system prompt with rules for research, data and writing deliverables | Unreleased | [Changelog](../CHANGELOG.md#unreleased) |
 
+## Tasks, outcomes and learning
+
+| Capability | Status | Where to read more |
+| --- | --- | --- |
+| Universal task model: every request read into one spec (intent, domains, risk, deliverables, acceptance criteria, autonomy) shared by delegation, verification and learning, with a verdict ladder from `failed` to `independently_verified` decided by tool results, not by the reply | Unreleased | [Task model](TASK-MODEL.md) |
+| Main-turn task gate: missing deliverables, broken length limits, uncited or unread sources and unsupported claims send the answer back once, then are named in it | Unreleased | [Task model](TASK-MODEL.md#the-task-gate) |
+| Claim ledger: each checkable statement typed by what backs it (observed, calculated, reported, inferred, unverified, contradicted), invalidated when its evidence changes | Unreleased | [Task model](TASK-MODEL.md#claims) |
+| Independent reviews count only for the files they saw; an edit after a review voids it, and a failed review rejects the work of the agent it judged | Unreleased | [Task model](TASK-MODEL.md#independent-reviews) |
+| Verifiable work receipts: a signed, hash-chained record of a run that anyone can check and replay | Unreleased | [Receipts](RECEIPTS.md) |
+| Memory kinds: instructions, decisions, facts, procedures, experience, hypotheses and references kept apart; a hypothesis never overwrites a fact | Unreleased | [Memory](MEMORY.md#kinds) |
+| Skill track records per skill version from checked outcomes; skill proposals refused while the task's checks are unmet, for every kind of work | Unreleased | [Extending OASIS](EXTENDING.md#skill-track-records), [User guide](USER-GUIDE.md) |
+| Capability routing classes for non-code work (data analysis, writing, research synthesis, planning, operations) | Unreleased, experimental | [Configuration](CONFIGURATION.md) |
+| Eval tasks beyond code (7 of 59), and a self-assessment score: how often OASIS's own verdict agrees with the hidden verifier, with overclaims counted | Unreleased | [Benchmarks](development/BENCHMARKS.md#non-code-eval-tasks) |
+
 ## Agent network
 
 | Capability | Status | Where to read more |
@@ -135,7 +149,7 @@ performance claim.
 | Limitation | Why | Workaround |
 | --- | --- | --- |
 | No tuning for one model family | OASIS works across many providers, so prompts and tool schemas cannot be tuned for a single vendor's models the way a vendor's own agent can. | `oasis connect` tests candidate models with a real tool call and keeps the first that works. |
-| Few real-world hours | The automated suite is large (more than 3,700 tests), but the user base is small, so edge cases surface more slowly. | Report problems in [Issues](https://github.com/FAHTHIZ/oasis/issues). |
+| Few real-world hours | The automated suite is large (more than 4,000 tests), but the user base is small, so edge cases surface more slowly. | Report problems in [Issues](https://github.com/FAHTHIZ/oasis/issues). |
 | Edits are applied without asking in `default` mode | A deliberate choice for speed; edits are checkpointed and can be rewound, and protected config paths still prompt. | Use `plan` mode, or `ask` rules for `edit_file`. |
 | Plugin cost | Each enabled plugin adds tools and prompt text. | Large MCP servers move behind `tool_search`; skills are listed by name and loaded on demand. |
 | Small local models | Small models follow long tool lists less reliably, and some local servers default to a 4,096-token window. | `oasis connect http://localhost:11434` creates a 32K-window `-oasis` copy of an Ollama model. |
