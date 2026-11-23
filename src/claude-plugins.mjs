@@ -246,8 +246,21 @@ export async function resolvePluginActivation(registries, enabled) {
   return { active: [...active], missing };
 }
 
+// OASIS's own manifest folder comes first; .claude-plugin is read the same way,
+// so plugins written for Claude Code run unchanged.
+export const MANIFEST_DIRS = Object.freeze(['.oasis-plugin', '.claude-plugin']);
+
+/** The manifest folder a plugin or marketplace uses for `file`, or the first one. */
+export async function manifestPath(dir, file = 'plugin.json') {
+  for (const folder of MANIFEST_DIRS) {
+    const candidate = path.join(dir, folder, file);
+    if (await exists(candidate)) return candidate;
+  }
+  return path.join(dir, MANIFEST_DIRS[1], file);
+}
+
 export async function readManifest(pluginRoot) {
-  const manifest = await readJson(path.join(pluginRoot, '.claude-plugin', 'plugin.json'), null);
+  const manifest = await readJson(await manifestPath(pluginRoot), null);
   return manifest && typeof manifest === 'object' ? manifest : {};
 }
 
@@ -257,14 +270,22 @@ export function pluginVariables(plugin, env = process.env, root = '') {
   for (const [key, value] of Object.entries(plugin.options || {})) options['CLAUDE_PLUGIN_OPTION_' + key.toUpperCase()] = Array.isArray(value) ? value.join(',') : String(value);
   // OASIS_PACKAGE_ROOT lets a plugin copied out of this repository (the
   // oasis-research and oasis-analysis packs) still find OASIS's own modules.
-  return { CLAUDE_PLUGIN_ROOT: plugin.root, CLAUDE_PLUGIN_DATA: data, OASIS_PACKAGE_ROOT: PACKAGE_ROOT, ...(root ? { CLAUDE_PROJECT_DIR: root } : {}), ...options };
+  // Every spelling plugin formats use for the same three places: OASIS's own,
+  // Claude Code's, and the Agent Plugins / Copilot / Codex ones.
+  const neutral = {};
+  for (const [key, value] of Object.entries(options)) neutral['OASIS_PLUGIN_OPTION_' + key.slice('CLAUDE_PLUGIN_OPTION_'.length)] = value;
+  return {
+    OASIS_PLUGIN_ROOT: plugin.root, OASIS_PLUGIN_DATA: data, CLAUDE_PLUGIN_ROOT: plugin.root, CLAUDE_PLUGIN_DATA: data,
+    PLUGIN_ROOT: plugin.root, PLUGIN_DATA: data, COPILOT_PLUGIN_DATA: data, OASIS_PACKAGE_ROOT: PACKAGE_ROOT,
+    ...(root ? { OASIS_PROJECT_DIR: root, CLAUDE_PROJECT_DIR: root } : {}), ...options, ...neutral
+  };
 }
 
 const PACKAGE_ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 export function expandPluginVariables(text, vars) {
   return String(text)
-    .replace(/\$\{(CLAUDE_PLUGIN_ROOT|CLAUDE_PLUGIN_DATA|CLAUDE_PROJECT_DIR|OASIS_PACKAGE_ROOT)\}/g, (match, name) => vars[name] ?? match)
+    .replace(/\$\{(OASIS_PLUGIN_ROOT|OASIS_PLUGIN_DATA|OASIS_PROJECT_DIR|CLAUDE_PLUGIN_ROOT|CLAUDE_PLUGIN_DATA|CLAUDE_PROJECT_DIR|PLUGIN_ROOT|PLUGIN_DATA|COPILOT_PLUGIN_DATA|OASIS_PACKAGE_ROOT)\}/g, (match, name) => vars[name] ?? vars[name.replace(/^(?:OASIS|COPILOT)_/, 'CLAUDE_').replace(/^PLUGIN_/, 'CLAUDE_PLUGIN_')] ?? match)
     .replace(/\$\{user_config\.([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, key) => vars['CLAUDE_PLUGIN_OPTION_' + key.toUpperCase()] ?? (/^[A-Z][A-Z0-9_]*$/.test(key) ? process.env[key] : undefined) ?? '');
 }
 
@@ -427,7 +448,7 @@ export async function pluginCommands(plugins, options = {}) {
         if (!body && source) body = await readText(source).catch(() => '');
         if (!body) continue;
         const front = ['---', spec.description ? 'description: ' + String(spec.description).replace(/\n/g, ' ') : '', spec.argumentHint ? 'argument-hint: ' + spec.argumentHint : '', spec.model ? 'model: ' + spec.model : '', '---', ''].filter((line, i) => line || i === 5).join('\n');
-        out.push({ name: plugin.name + ':' + key.toLowerCase(), file: source || path.join(plugin.root, '.claude-plugin', 'plugin.json'), body: expandPluginVariables(body.startsWith('---') ? body : front + body, vars), plugin: plugin.id });
+        out.push({ name: plugin.name + ':' + key.toLowerCase(), file: source || path.join(plugin.root, plugin.manifestDir || '.claude-plugin', 'plugin.json'), body: expandPluginVariables(body.startsWith('---') ? body : front + body, vars), plugin: plugin.id });
       }
       continue;
     }
@@ -681,8 +702,8 @@ function parseSource(input, cwd) {
 }
 
 async function readMarketplaceManifest(dir) {
-  const manifest = await readJson(path.join(dir, '.claude-plugin', 'marketplace.json'), null);
-  if (!manifest || typeof manifest !== 'object') throw new Error('No .claude-plugin/marketplace.json found in ' + dir);
+  const manifest = await readJson(await manifestPath(dir, 'marketplace.json'), null);
+  if (!manifest || typeof manifest !== 'object') throw new Error('No .oasis-plugin/marketplace.json or .claude-plugin/marketplace.json found in ' + dir);
   if (!manifest.name || !NAME.test(String(manifest.name))) throw new Error('marketplace.json needs a kebab-case "name".');
   if (!Array.isArray(manifest.plugins)) throw new Error('marketplace.json needs a "plugins" array.');
   return manifest;
@@ -902,7 +923,7 @@ export async function installPlugin(spec, options = {}) {
     throw error;
   }
   // strict: false marketplace entries may define components that the plugin has no manifest for.
-  if (entry.strict === false && !(await exists(path.join(installPath, '.claude-plugin', 'plugin.json')))) {
+  if (entry.strict === false && !(await exists(await manifestPath(installPath)))) {
     const { source: _source, strict: _strict, ...fields } = entry;
     await writeJson(path.join(installPath, '.claude-plugin', 'plugin.json'), fields);
   }
@@ -1043,7 +1064,7 @@ export async function validatePath(target) {
   const dir = path.resolve(target || '.');
   const problems = [];
   const report = [];
-  if (await exists(path.join(dir, '.claude-plugin', 'marketplace.json'))) {
+  if (await exists(await manifestPath(dir, 'marketplace.json'))) {
     try {
       const manifest = await readMarketplaceManifest(dir);
       report.push('Marketplace "' + manifest.name + '" with ' + manifest.plugins.length + ' plugin(s).');
@@ -1054,10 +1075,10 @@ export async function validatePath(target) {
       }
     } catch (error) { problems.push(error.message); }
   }
-  const manifestFile = path.join(dir, '.claude-plugin', 'plugin.json');
+  const manifestFile = await manifestPath(dir);
   if (await exists(manifestFile)) {
     const manifest = await readJson(manifestFile, null);
-    if (!manifest) problems.push('.claude-plugin/plugin.json is not valid JSON.');
+    if (!manifest) problems.push(path.relative(dir, manifestFile).split(path.sep).join('/') + ' is not valid JSON.');
     else {
       if (manifest.name && !NAME.test(String(manifest.name))) problems.push('plugin.json "name" must be kebab-case.');
       const plugin = { id: String(manifest.name || path.basename(dir)), name: String(manifest.name || path.basename(dir)).toLowerCase(), root: dir, manifest };
@@ -1099,7 +1120,7 @@ export async function validatePath(target) {
   } else if (!report.length) {
     const native = await readJson(path.join(dir, 'plugin.json'), null);
     if (native && native.schemaVersion === 1) await validateNativeInto(dir, report, problems);
-    else problems.push('No .claude-plugin/plugin.json, .claude-plugin/marketplace.json or OASIS plugin.json found in ' + dir);
+    else problems.push('No .oasis-plugin/plugin.json, .claude-plugin/plugin.json, a marketplace.json or OASIS plugin.json found in ' + dir);
   }
   return { ok: problems.length === 0, report, problems };
 }

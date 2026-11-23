@@ -122,8 +122,13 @@ oasis plugin marketplace add anthropics/claude-plugins-official
 oasis plugin install NAME@MARKETPLACE
 oasis plugin list | show | enable | disable | update | uninstall NAME
 oasis plugin validate ./my-plugin
-oasis add OWNER/REPO                      # also converts Codex plugins and Gemini CLI extensions
+oasis add OWNER/REPO                      # also Codex, Gemini CLI, Cursor, Copilot CLI and Agent Plugins plugins and Kiro powers
 ```
+
+OASIS's own manifest is `.oasis-plugin/plugin.json`. It takes the same fields
+as `.claude-plugin/plugin.json` and is read first, so a plugin can ship both.
+Formats from other agents and what OASIS runs from each are listed in
+[Compatibility](COMPATIBILITY.md#plugins-from-other-agents).
 
 Plugins run hooks and MCP servers with your permissions, so OASIS reads every
 copied file before it registers or enables one, using the same rules as skills.
