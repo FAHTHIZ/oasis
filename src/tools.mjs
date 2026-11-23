@@ -38,7 +38,7 @@ import { getConfigDirectory, loadConfig, saveConfig, validateBaseUrl, isLoopback
 import { testProviderConnection } from './agent.mjs';
 import { installGitHubExtension, inspectGitHubExtension } from './extensions.mjs';
 import { analyzeCommand } from './permissions.mjs';
-import { assertSandboxAvailable, launchCommand, sandboxLocalhostNote } from './sandbox.mjs';
+import { assertSandboxAvailable, launchCommand, sandboxLocalhostNote, withQuarantineNote } from './sandbox.mjs';
 import { fileGlobMatcher } from './glob.mjs';
 import { isNotebookPath, readNotebook } from './notebook.mjs';
 import { imageMediaType, readImageFile } from './images.mjs';
@@ -798,7 +798,9 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   const launch = await launchCommand(command, args, sandbox, root);
   const condensers = options.condenseOutput !== false && condenseOutputEnabled(options.env || process.env)
     ? { stdout: createOutputCondenser(), stderr: createOutputCondenser() } : null;
-  return await new Promise((resolve) => {
+  return await new Promise((settle) => {
+    // Files the sandbox moved out of the workspace (see watchProtectedCreations) are reported with the result.
+    const resolve = (value) => settle(withQuarantineNote(value, launch));
     const stdoutBuffer = createBoundedOutput();
     const stderrBuffer = createBoundedOutput();
     let timedOut = false;
