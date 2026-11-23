@@ -9,7 +9,7 @@ import { atomicWriteFile } from './atomic-write.mjs';
 import { injectionHoldReason } from './untrusted-content.mjs';
 import * as gitSafety from './git-safety.mjs';
 import { frontMatterValue, splitFrontMatter } from './frontmatter.mjs';
-import { commandFlagWarning } from './command-hints.mjs';
+import { argvShellSyntaxWarning, commandFlagWarning } from './command-hints.mjs';
 import { condenseOutputEnabled, createOutputCondenser } from './output-condense.mjs';
 import { isScratchPath } from './scratch.mjs';
 import { protectedShellWrite, protectedEditsAllowed, protectedConfigPath } from './protected-paths.mjs';
@@ -2247,7 +2247,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       if (install.warnings && commandResult && typeof commandResult === 'object') commandResult.packageWarnings = install.warnings;
       if (rehearsalSink.summary && commandResult && typeof commandResult === 'object' && !commandResult.rehearsal) commandResult.rehearsal = rehearsalSink.summary;
       if (commandResult && typeof commandResult === 'object' && typeof commandResult.exitCode === 'number') {
-        const flagNote = commandFlagWarning([args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '));
+        const flagNote = [commandFlagWarning([args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ')), argvShellSyntaxWarning(args.args)].filter(Boolean).join(' ');
         if (flagNote) commandResult.commandWarning = flagNote;
       }
       if (editSnapshot && commandResult && typeof commandResult === 'object') {

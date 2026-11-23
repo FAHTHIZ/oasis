@@ -21,3 +21,17 @@ export function commandFlagWarning(command, platform = process.platform) {
   }
   return notes.join(' ');
 }
+
+// run_command runs no shell, so `python3 - <<'PY' ... PY` arrives as literal
+// arguments: python reads an empty stdin and exits 0 having done nothing (seen
+// live with gpt-oss-20b). Whole-word shell operators in the argument list are
+// noted on the result; a lone "|" can be a real grep pattern, so never blocked.
+const SHELL_WORDS = new Set(['|', '||', '&&', ';', '>', '>>', '<', '2>', '2>&1', '&>', '|&']);
+export function argvShellSyntaxWarning(args) {
+  const list = Array.isArray(args) ? args.map(String) : [];
+  const heredoc = list.find((arg) => /^<<-?\s*['"]?[A-Za-z_][\w]*['"]?$/.test(arg));
+  const operator = list.find((arg) => SHELL_WORDS.has(arg));
+  if (!heredoc && !operator) return '';
+  const what = heredoc ? 'the heredoc ' + heredoc : '"' + operator + '"';
+  return 'Note: run_command runs no shell, so ' + what + ' was passed to the program as a literal argument' + (heredoc ? ' and no script was fed to it on stdin' : '') + '. If that was not meant, save the code to a file with write_file and run the file, or give one program its own argument list.';
+}
