@@ -1814,6 +1814,9 @@ async function authorizeCall(session, name, args, context, options) {
   overlay.permissionMode = mode;
   if (mode === 'bypassPermissions') overlay.autoApprove = true;
   const baseApproval = context.approval;
+  // Nobody to ask (oasis eval, background agents): refusals say so instead of
+  // telling the model to hand the command to a user who is not there.
+  overlay.noApprover = !baseApproval;
   // Approval wrapper: an answer of "always" remembers a reusable rule for this session.
   overlay.approval = async (message, force = false, extra = null) => {
     // Args may already have been unmasked for local execution. Human approval
