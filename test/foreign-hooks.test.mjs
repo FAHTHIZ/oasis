@@ -222,3 +222,32 @@ test('npm OpenCode plugins from opencode.json run from OpenCode\'s cache; local 
   assert.equal(denied.permissionDecision, 'deny');
   assert.match(denied.reason, /npm guard says no/);
 });
+
+test('Factory Droid hooks run live: Droid matchers read as OASIS tools, Droid tool names on stdin, Claude Code replies', async (t) => {
+  const { root, home, env, log } = await setup(t);
+  await mkdir(path.join(root, '.factory'), { recursive: true });
+  await mkdir(path.join(home, '.factory'), { recursive: true });
+  const script = path.join(root, '.factory', 'guard.mjs');
+  await writeFile(script, [
+    "import { readFileSync, writeFileSync } from 'node:fs';",
+    "const input = JSON.parse(readFileSync(0, 'utf8'));",
+    "writeFileSync(process.argv[2], JSON.stringify({ input, dir: process.env.FACTORY_PROJECT_DIR }));",
+    "if (input.tool_name === 'Execute') process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'Droid says no.' } }));"
+  ].join('\n'));
+  const node = JSON.stringify(process.execPath);
+  // Standalone hooks.json is keyed by event; the user file falls back to settings.json.
+  await writeFile(path.join(root, '.factory', 'hooks.json'), JSON.stringify({ PreToolUse: [{ matcher: 'Execute', hooks: [{ type: 'command', command: `${node} "$FACTORY_PROJECT_DIR/.factory/guard.mjs" ${JSON.stringify(log)}` }] }], Unknown: [] }));
+  await writeFile(path.join(home, '.factory', 'settings.json'), JSON.stringify({ model: 'x', hooks: { PostToolUse: [{ matcher: 'Create|ApplyPatch', hooks: [{ type: 'command', command: 'true' }] }] } }));
+  const items = (await loadForeignHooks(root, { env, home, trusted: true })).filter((item) => item.protocol === 'factory');
+  assert.deepEqual(items.map((item) => [item.scope, path.basename(item.file)]), [['user', 'settings.json'], ['project', 'hooks.json']]);
+  assert.equal(items[0].hooks.PostToolUse[0].matcher, 'Write|Edit|MultiEdit');
+  assert.deepEqual(items[1].dropped, ['Unknown']);
+  assert.ok(!(await loadForeignHooks(root, { env, home, trusted: false })).some((item) => item.protocol === 'factory' && item.scope === 'project'));
+  const settings = await loadSettings(root, { env });
+  const result = await runHooks('PreToolUse', { session_id: 's1', tool_name: 'Bash', oasis_tool_name: 'run_shell', tool_input: { command: 'rm -rf dist' } }, { hooks: settings.hooks, root });
+  assert.equal(result.permissionDecision, 'deny');
+  assert.match(result.reason, /Droid says no/);
+  const seen = JSON.parse(await readFile(log, 'utf8'));
+  assert.equal(seen.input.tool_name, 'Execute');
+  assert.equal(seen.dir, root);
+});
