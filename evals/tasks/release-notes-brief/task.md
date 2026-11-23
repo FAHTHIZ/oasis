@@ -1,0 +1,1 @@
+Write RELEASE_NOTES.md for version 2.3.0 from CHANGELOG.md, for customers. Include only that version. Leave out internal and chore items; include every other change. Put the breaking change first, under a heading that contains the word "Breaking", before any other section. Keep the whole file at or under 120 words. Do not mention version 2.2.1 or its changes.

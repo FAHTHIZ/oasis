@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+const ws = process.argv[2];
+const text = readFileSync(path.join(ws, 'RELEASE_NOTES.md'), 'utf8');
+const words = text.replace(/[#*`_>-]/g, ' ').split(/\s+/).filter(Boolean);
+assert.ok(words.length <= 120, 'at most 120 words, got ' + words.length);
+const lower = text.toLowerCase();
+for (const term of ['legacy-auth', 'csv', 'emoji', 'search']) assert.ok(lower.includes(term), 'mentions ' + term);
+for (const term of ['ci runner', 'development dependencies', 'mailer', 'rounding', '2.2.1']) assert.ok(!lower.includes(term), 'leaves out ' + term);
+const headings = text.split('\n').filter((line) => /^#{2,}\s/.test(line));
+assert.ok(headings.length >= 1 && /breaking/i.test(headings[0]), 'the first section is the breaking change');
+const breakingAt = lower.indexOf('legacy-auth');
+for (const term of ['csv', 'emoji', 'search']) assert.ok(breakingAt < lower.indexOf(term), 'breaking change comes before ' + term);

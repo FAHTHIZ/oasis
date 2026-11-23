@@ -1,0 +1,40 @@
+diff --git a/project/plan.json b/project/plan.json
+new file mode 100644
+index 0000000..aeeb1e4
+--- /dev/null
++++ b/project/plan.json
+@@ -0,0 +1,34 @@
++{
++  "assignments": [
++    {
++      "task": "schema",
++      "person": "ana",
++      "start": 0
++    },
++    {
++      "task": "ui",
++      "person": "ben",
++      "start": 0
++    },
++    {
++      "task": "api",
++      "person": "ana",
++      "start": 2
++    },
++    {
++      "task": "auth",
++      "person": "ben",
++      "start": 3
++    },
++    {
++      "task": "wire",
++      "person": "ben",
++      "start": 5
++    },
++    {
++      "task": "launch",
++      "person": "ana",
++      "start": 7
++    }
++  ]
++}

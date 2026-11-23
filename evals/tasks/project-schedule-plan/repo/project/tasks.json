@@ -1,0 +1,67 @@
+{
+  "people": [
+    {
+      "name": "ana",
+      "skills": [
+        "backend",
+        "db"
+      ]
+    },
+    {
+      "name": "ben",
+      "skills": [
+        "frontend",
+        "backend"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "schema",
+      "skill": "db",
+      "days": 2,
+      "after": []
+    },
+    {
+      "id": "api",
+      "skill": "backend",
+      "days": 3,
+      "after": [
+        "schema"
+      ]
+    },
+    {
+      "id": "ui",
+      "skill": "frontend",
+      "days": 3,
+      "after": []
+    },
+    {
+      "id": "wire",
+      "skill": "frontend",
+      "days": 2,
+      "after": [
+        "api",
+        "ui"
+      ]
+    },
+    {
+      "id": "auth",
+      "skill": "backend",
+      "days": 2,
+      "after": [
+        "schema"
+      ]
+    },
+    {
+      "id": "launch",
+      "skill": "backend",
+      "days": 1,
+      "after": [
+        "wire",
+        "auth"
+      ]
+    }
+  ],
+  "deadlineDay": 10
+}

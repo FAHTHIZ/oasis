@@ -1,0 +1,30 @@
+diff --git a/report/summary.json b/report/summary.json
+new file mode 100644
+index 0000000..8dd0dd2
+--- /dev/null
++++ b/report/summary.json
+@@ -0,0 +1,11 @@
++{
++  "totalRevenue": 3404.25,
++  "byRegion": {
++    "east": 1068.75,
++    "north": 856.75,
++    "south": 668.75,
++    "west": 810.0
++  },
++  "topRegion": "east",
++  "skippedRows": 3
++}
+diff --git a/report/summary.md b/report/summary.md
+new file mode 100644
+index 0000000..2dc2102
+--- /dev/null
++++ b/report/summary.md
+@@ -0,0 +1,7 @@
++# Sales summary
++
++Total revenue: 3404.25
++
++Top region: east (1068.75)
++
++Rows skipped: 3 (malformed or duplicate order IDs).

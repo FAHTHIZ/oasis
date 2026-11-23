@@ -1,0 +1,28 @@
+diff --git a/notes/actions.json b/notes/actions.json
+new file mode 100644
+index 0000000..11ffd3c
+--- /dev/null
++++ b/notes/actions.json
+@@ -0,0 +1,22 @@
++[
++  {
++    "owner": "Priya",
++    "action": "Send the revised budget to finance",
++    "due": "2026-11-21"
++  },
++  {
++    "owner": "Lena",
++    "action": "Fix the flaky upload test",
++    "due": "2026-11-25"
++  },
++  {
++    "owner": "Tom",
++    "action": "Book the venue for the offsite",
++    "due": "2026-12-01"
++  },
++  {
++    "owner": "Lena",
++    "action": "Write the onboarding doc for new contractors",
++    "due": null
++  }
++]

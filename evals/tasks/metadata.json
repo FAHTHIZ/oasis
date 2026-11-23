@@ -9,7 +9,12 @@
     "network-safety": "URLs, redirects, provider endpoints, and bounded network payloads.",
     "secret-handling": "Credential filtering, sensitive paths, and log redaction.",
     "security-boundaries": "Filesystem paths, archive entry names, and traversal protections.",
-    "utility-logic": "Deterministic helper behavior and text transformations."
+    "utility-logic": "Deterministic helper behavior and text transformations.",
+    "data-analysis": "Computing results from data files, with messy rows, and reporting the same numbers in prose.",
+    "writing": "Producing documents for people: summaries, release notes and extracted action items, under stated constraints.",
+    "research-synthesis": "Answering from sources that disagree: currency, independence and reporting contradictions.",
+    "planning": "Plans and schedules that must satisfy dependencies, resources and deadlines.",
+    "operations": "Operational scripts and file workflows that are run for real and must be safe to rerun."
   },
   "difficulties": [
     "small",
@@ -276,6 +281,41 @@
       "category": "input-validation",
       "difficulty": "small",
       "rationale": "Validation of a structured TODO-list input."
+    },
+    "sales-region-report": {
+      "category": "data-analysis",
+      "difficulty": "medium",
+      "rationale": "Computes revenue by region from a CSV with returns, malformed rows and a duplicate order ID; the numbers must be computed, not estimated."
+    },
+    "release-notes-brief": {
+      "category": "writing",
+      "difficulty": "small",
+      "rationale": "Turns a changelog into user-facing release notes under a word limit, leaving out internal items and putting the breaking change first."
+    },
+    "conflicting-sources-answer": {
+      "category": "research-synthesis",
+      "difficulty": "medium",
+      "rationale": "Answers a factual question from local sources that disagree: the newer official source wins, a repost of the same press release is not independent, and the contradiction is reported."
+    },
+    "project-schedule-plan": {
+      "category": "planning",
+      "difficulty": "medium",
+      "rationale": "Builds a schedule that respects dependencies, skills, one task per person at a time and a deadline; the verifier checks every constraint."
+    },
+    "archive-old-logs": {
+      "category": "operations",
+      "difficulty": "medium",
+      "rationale": "Writes a reusable log-archiving script, runs it on the real directory, and is checked both on the result and by rerunning the script on a fresh copy."
+    },
+    "meeting-action-items": {
+      "category": "writing",
+      "difficulty": "small",
+      "rationale": "Extracts only explicit commitments from meeting notes, with owner and due date, and leaves out suggestions nobody took on."
+    },
+    "remove-hardcoded-key": {
+      "category": "secret-handling",
+      "difficulty": "small",
+      "rationale": "Moves a hardcoded live API key out of source into an environment variable and redacts it from start-up logs without breaking the existing test."
     }
   }
 }
