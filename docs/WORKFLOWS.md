@@ -72,6 +72,21 @@ The report gives the ruling with its confidence and each position's tally and co
 
 Checkers and reviewers are held to the same [report contracts](AGENT-NETWORK.md#evidence-and-contracts) as research agents. They cite only pages they fetched, check their quotes with `verify_quote`, and count copies of one story as one source.
 
+## Diagnose a problem
+
+`/diagnose` finds the cause of a problem by competing hypotheses, not by the first plausible explanation. The problem can be a failing test, a bug, an outage, a drop in a metric, or anything else with several possible causes:
+
+```text
+/diagnose The login test passes locally but fails on CI with "session undefined".
+/diagnose Signups fell 30% in the week of 9 November --agents 4
+```
+
+1. **Hypothesize**: two to five agents (`--agents`, default 3) propose explanations without seeing each other's, each from a different angle (everyday causes, environment and data, recent changes, rare causes, interactions). Working blind stops the first idea anchoring the rest.
+2. **Frame**: the proposals are merged into 2 to 6 mutually exclusive hypotheses, each with a distinguishing prediction.
+3. **Falsify**: each hypothesis gets an agent whose job is to refute it. Every observation is rated against every hypothesis (`++` to `--`) and says how it was obtained (ran, read, fetched or reasoned).
+4. **Discriminate**: the ratings are scored as a Bayesian update, as on the [competing-hypotheses matrix](SUBAGENTS.md#competing-hypotheses). Observations that fit every hypothesis equally are ignored, and reasoned ones count half. When the two leaders are within 30 points, one more agent designs and runs the test they predict differently. When every hypothesis is contradicted, it looks for the explanation that was missed.
+5. **Conclusion**: the most likely cause, or a leading explanation marked "not settled" when it lacks a clear margin or two direct observations from different agents. The report includes a table of posteriors with the evidence against each, the evidence list with its ratings, the decisive test, and what would change the conclusion.
+
 ## Analyse data and produce a chart
 
 ```sh
