@@ -302,7 +302,11 @@ export async function runHeadless(options) {
         if (!canUseTool && !permissionPromptTool && env.OASIS_BACKGROUND_ID && env.OASIS_BACKGROUND_APPROVALS !== '0') {
           const { requestBackgroundApproval } = await import('./background-sessions.mjs');
           const timeoutMs = Number(env.OASIS_BACKGROUND_APPROVAL_TIMEOUT_MS) || Number(session && session.settings && session.settings.backgroundApprovalTimeoutMinutes) * 60000 || undefined;
-          const answer = await requestBackgroundApproval(env.OASIS_BACKGROUND_ID, { tool: meta && meta.tool || null, message: String(message), canAlways: Boolean(meta && meta.suggestion) }, env, {
+          // The same wording the interactive prompt shows: secrets redacted, hidden
+          // characters made visible, and the command or edit spelled out.
+          const { formatApprovalMessage } = await import('./approval-language.mjs');
+          const shown = formatApprovalMessage(message, meta || {});
+          const answer = await requestBackgroundApproval(env.OASIS_BACKGROUND_ID, { tool: meta && meta.tool || null, message: shown.message + (shown.diff ? '\n' + shown.diff : ''), canAlways: Boolean(meta && meta.suggestion) }, env, {
             timeoutMs,
             signal,
             onRequest: (pending) => emit({ type: 'system', subtype: 'permission_request', tool: pending.tool, message: pending.message, expires_at: pending.expiresAt }),
