@@ -154,8 +154,27 @@ events and replies, so they run as they are; a matcher naming Codex's
 `apply_patch` also matches `Edit`, `Write` and `MultiEdit`, `commandWindows` is
 used on Windows, and `[features] hooks = false` turns a layer off. Codex-only
 events (`PreModelRequest`, `PostModelRequest`, `Interrupt`) are skipped.
+OpenCode plugins run too: JavaScript or TypeScript files (and package folders)
+in `.opencode/plugins/` or `.opencode/plugin/` (trusted workspace) and in
+`~/.config/opencode/plugins/`. A small host (`src/opencode-plugin-host.mjs`)
+loads the plugin, calls its exported functions with `project`, `directory`,
+`worktree`, `$` (commands through the system shell) and a `client` whose calls
+resolve to empty results, and runs its hooks on the matching OASIS events:
+
+| OpenCode | OASIS event | Effect |
+| --- | --- | --- |
+| `tool.execute.before` | `PreToolUse` | a throw denies the call with its message; `output.args` changed in place rewrites it (`filePath`, `oldString`, `newString` map to OASIS argument names; tools are `bash`, `read`, `write`, `edit`, `glob`, `grep`, `list`, `webfetch`, `todowrite`, `task`, `SERVER_TOOL` for MCP) |
+| `tool.execute.after` | `PostToolUse` | `output.output` changed replaces the result the model sees |
+| `event` `file.edited` | `PostToolUse` on edits | observe only |
+| `event` `session.idle`, `session.created`, `session.deleted` | `Stop`, `SessionStart`, `SessionEnd` | observe only |
+
+Each call loads the plugin fresh, so module-level state does not carry between
+calls. TypeScript plugins need Node.js 22.18 or later (type stripping). OpenCode
+V2 plugins (`Plugin.define`), custom `tool` definitions, `chat.*`,
+`permission.ask` and `shell.env` are not run.
+
 Because these files now run commands under OASIS too, writing `.codex/hooks.json`
-or anything in `.github/hooks/` asks first, like other agents' settings files.
+or anything in `.github/hooks/` or `.opencode/plugins/` asks first, like other agents' settings files.
 `OASIS_OTHER_AGENT_RULES=0` or `"otherAgentHooks": false` in settings turns this
 off.
 

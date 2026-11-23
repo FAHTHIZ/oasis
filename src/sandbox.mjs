@@ -141,7 +141,7 @@ export const PROTECTED_FILES = ['.bashrc', '.bash_profile', '.zshrc', '.zprofile
 export const PROTECTED_DIRS = ['.vscode', '.idea', '.git/hooks', '.claude/commands', '.claude/agents', '.claude/skills', '.claude/hooks',
   '.oasis/commands', '.oasis/agents', '.oasis/skills', '.oasis/hooks', '.oasis/plugins', '.claude/plugins',
   '.husky', '.devcontainer', '.agents/agents', '.gemini/agents', '.gemini/commands', '.gemini/extensions',
-  '.opencode/command', '.opencode/commands', '.cursor/rules', '.github/hooks'];
+  '.opencode/command', '.opencode/commands', '.opencode/plugin', '.opencode/plugins', '.cursor/rules', '.github/hooks'];
 const PLACEHOLDER_FILES = new Set(['.mcp.json', '.claude/settings.json', '.claude/settings.local.json', '.oasis/settings.json', '.oasis/settings.local.json', '.git/config']);
 
 function lstatOrNull(target) { try { return lstatSync(target); } catch { return null; } }
