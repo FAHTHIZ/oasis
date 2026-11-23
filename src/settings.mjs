@@ -507,11 +507,13 @@ export async function loadSettings(root, options = {}) {
     // or policy can turn it off, never a repository (src/canary-credentials.mjs).
     if (settings.canaryCredentials === false && ['user', 'flag', 'managed'].includes(scope)) result.canaryCredentials = false;
     if (typeof settings.rehearse === 'boolean' && (settings.rehearse === false || ['user', 'flag', 'managed'].includes(scope))) result.rehearse = settings.rehearse;
+    // "otherAgentHooks": false stops running Cursor / Copilot hook files (src/foreign-hooks.mjs); turning it off only tightens.
+    if (settings.otherAgentHooks === false) result.otherAgentHooks = false;
     if (!trusted) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.subagentStatusLine || settings.fileSuggestion || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
       // Any other key is also skipped until trust; say so instead of dropping it silently.
-      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'personality', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'skillRecord', 'compactionReflection', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions', 'alwaysThinkingEnabled', 'skillOverrides', 'disableBundledSkills', 'disableSkillShellExecution', 'spinnerVerbs', 'worldDrift', 'checkMemory', 'rehearse']);
+      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'personality', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'skillRecord', 'compactionReflection', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions', 'alwaysThinkingEnabled', 'skillOverrides', 'disableBundledSkills', 'disableSkillShellExecution', 'spinnerVerbs', 'worldDrift', 'checkMemory', 'rehearse', 'otherAgentHooks']);
       const skipped = Object.keys(settings).filter((key) => !untrustedSafe.has(key));
       if (loosening || skipped.length) result.ignoredUntrusted.push(file);
       return;
@@ -801,6 +803,16 @@ export async function loadSettings(root, options = {}) {
       if (sources && !sources.has(scope)) continue;
       apply(await readJsonFile(file), scope, file, result.trusted);
     }
+  }
+  // Hook files other agents keep (Cursor, Copilot), through the protocol bridge.
+  if (result.otherAgentHooks !== false && !options.skipPlugins) {
+    try {
+      const { loadForeignHooks } = await import('./foreign-hooks.mjs');
+      for (const item of await loadForeignHooks(root, { env, trusted: result.trusted })) {
+        if (sources && !sources.has(item.scope)) continue;
+        mergeHooks(result.hooks, normalizeHooks(item.hooks), item.scope, item.file);
+      }
+    } catch { /* unreadable hook files are skipped */ }
   }
   for (const extra of options.extraSettings || []) {
     if (extra && extra.settings && typeof extra.settings === 'object') apply(extra.settings, 'flag', extra.file || '--settings', true);

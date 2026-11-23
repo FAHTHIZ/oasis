@@ -128,6 +128,17 @@ these tools use: `OASIS_PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `PLUGIN_ROOT`;
 `COPILOT_PLUGIN_DATA`; and `OASIS_PROJECT_DIR` and `CLAUDE_PROJECT_DIR`.
 `${NAME}` works for each in manifests, commands and skills.
 
+The same bridge runs hooks a repository already keeps for other agents, read in
+place with no install step: `.cursor/hooks.json` (Cursor) and
+`.github/hooks/*.json` (Copilot CLI and the Copilot coding agent) in the
+project, and Cursor's user file `~/.cursor/hooks.json`. Project files load only
+in a trusted workspace, like `.claude/settings.json` hooks; the user file always
+loads. A relative script path at the start of a command is made absolute (the
+project folder, or `~/.cursor` for the user file). Hook policy
+(`allowManagedHooksOnly`, `disableAllHooks`) applies to them as to any hook.
+`OASIS_OTHER_AGENT_RULES=0` or `"otherAgentHooks": false` in settings turns this
+off.
+
 ### Bringing plugins from other agents
 
 `oasis plugin adopt --list` shows the plugins you already installed in Gemini
