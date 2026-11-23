@@ -144,3 +144,25 @@ test('minimize_repro is a registered tool that runs through executeTool', async 
   const result = await executeTool('minimize_repro', { file: 'data/big.txt', command }, { root, autoApprove: true, env });
   assert.equal(result.minimized, 'BOOM\nTRIGGER\n');
 });
+
+test('minimize_repro refuses secrets, protected config and outputs through symlinks', async (t) => {
+  const root = workspace(t, bigInput());
+  const outside = mkdtempSync(path.join(os.tmpdir(), 'oasis-minimize-outside-'));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  writeFileSync(path.join(root, '.env'), 'API_KEY=sk-live-secret\n');
+  mkdirSync(path.join(root, '.git', 'hooks'), { recursive: true });
+  writeFileSync(path.join(root, '.git', 'hooks', 'pre-commit'), '#!/bin/sh\nexit 0\n');
+  const { symlinkSync } = await import('node:fs');
+  symlinkSync(path.join(outside, 'escape.txt'), path.join(root, 'data', 'dangling.min.txt'));
+  symlinkSync(outside, path.join(root, 'outdir'));
+  const run = (args) => runMinimizeRepro(root, { command, ...args }, { autoApprove: true, env: { ...process.env, OASIS_ALLOW_CONFIG_EDITS: '' } });
+  await assert.rejects(run({ file: '.env' }), /secret/);
+  await assert.rejects(run({ file: 'data/big.txt', output: '.env.local' }), /secret/);
+  await assert.rejects(run({ file: '.git/hooks/pre-commit' }), /protected configuration/);
+  await assert.rejects(run({ file: 'data/big.txt', output: '.git/hooks/post-checkout' }), /protected configuration/);
+  await assert.rejects(run({ file: 'data/big.txt', output: 'data/dangling.min.txt' }), /symlink/);
+  await assert.rejects(run({ file: 'data/big.txt', output: 'outdir/min.txt' }), /outside the workspace/);
+  assert.equal(existsSync(path.join(outside, 'escape.txt')), false);
+  assert.equal(existsSync(path.join(outside, 'min.txt')), false);
+  assert.equal(readFileSync(path.join(root, '.git', 'hooks', 'pre-commit'), 'utf8'), '#!/bin/sh\nexit 0\n');
+});

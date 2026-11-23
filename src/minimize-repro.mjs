@@ -24,7 +24,7 @@
 // Every run goes through runWorkspaceCommand (permission rules, risk
 // analysis, the OS sandbox, cancellation). One approval covers the search.
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { normalizeFailure } from './flaky-check.mjs';
@@ -175,6 +175,31 @@ export async function runMinimizeRepro(root, args = {}, options = {}) {
   const output = path.resolve(root, String(args.output || (() => { const ext = path.extname(args.file); return args.file.slice(0, args.file.length - ext.length) + '.min' + ext; })()));
   if (!inside(root, output)) throw new Error('output must be a path inside the workspace.');
   if (output === absolute) throw new Error('output must differ from file; the original is always kept.');
+  // The input is rewritten many times and the output written, and both are
+  // shown to the model, so they get the same limits as the file tools: no
+  // secrets (.env, keys), no protected config (.git/hooks, settings, MCP), and
+  // no output through a symlink to somewhere else.
+  const { sensitivePath } = await import('./tools.mjs');
+  const { protectedConfigTarget, protectedEditsAllowed } = await import('./protected-paths.mjs');
+  const env = options.env || process.env;
+  for (const [label, target] of [['file', absolute], ['file', real], ['output', output]]) {
+    const rel = path.relative(root, target).split(path.sep).join('/');
+    if (sensitivePath(rel)) throw new Error(label + ' ' + rel + ' is a protected secret file; minimize_repro does not read or write it.');
+    const hit = protectedEditsAllowed(env) ? null : await protectedConfigTarget(root, target).catch(() => null);
+    if (hit) throw new Error(label + ' ' + hit.path + ' is protected configuration (' + hit.reason + '); minimize_repro does not change it.');
+  }
+  {
+    // lstat, not exists: a dangling symlink would let the write create its target.
+    let link = null;
+    try { link = lstatSync(output); } catch { link = null; }
+    if (link && link.isSymbolicLink()) throw new Error('output ' + path.relative(root, output) + ' is a symlink; refusing to write through it.');
+    let cursor = path.dirname(output);
+    while (!existsSync(cursor) && path.dirname(cursor) !== cursor) cursor = path.dirname(cursor);
+    let realCursor;
+    try { realCursor = realpathSync(cursor); } catch { realCursor = cursor; }
+    const realRoot = realpathSync(root);
+    if (realCursor !== realRoot && !inside(realRoot, realCursor)) throw new Error('output resolves outside the workspace (a symlink); refusing to write it.');
+  }
   let pattern = null;
   if (args.output_pattern) {
     if (String(args.output_pattern).length > 300) throw new Error('output_pattern is too long (300 characters at most).');
