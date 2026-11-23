@@ -23,7 +23,12 @@ export async function collectInsights(options = {}) {
   const stats = {
     days, sessions: 0, userTurns: 0, assistantTurns: 0, toolCalls: 0, toolErrors: 0, denials: 0, corrections: 0, interrupted: 0,
     tools: new Map(), toolErrorsBy: new Map(), projects: new Map(), models: new Map(), files: new Map(), extensions: new Map(),
-    commands: new Map(), byDay: new Map(), hours: new Array(24).fill(0), longest: [], examples: { corrections: [], errors: [] }
+    commands: new Map(),
+    // Effect signals written into tool results by agent.mjs: a failed call that had in fact
+    // taken effect (afterFailure), an approved command that did more than its rehearsal, and
+    // resumes that found the workspace changed (world-drift.mjs).
+    effects: { afterFailure: 0, afterFailureBy: new Map(), divergence: 0, divergenceBy: new Map(), driftResumes: 0, examples: [] },
+    byDay: new Map(), hours: new Array(24).fill(0), longest: [], examples: { corrections: [], errors: [] }
   };
   let dirs = [];
   try { dirs = await readdir(base, { withFileTypes: true }); } catch { return stats; }
@@ -48,9 +53,11 @@ export async function collectInsights(options = {}) {
       stats.hours[new Date(updated).getHours()]++;
       let turns = 0;
       const pending = new Map();
+      const commandOf = new Map();
       for (const message of data.messages) {
         if (!message) continue;
         if (message.role === 'user' && typeof message.content === 'string') {
+          if (message.content.startsWith('<workspace-drift>')) stats.effects.driftResumes++;
           const text = message.content.replace(/<[a-z-]+>[\s\S]*?<\/[a-z-]+>/g, ' ').trim();
           if (!text) continue;
           stats.userTurns++; turns++;
@@ -68,6 +75,11 @@ export async function collectInsights(options = {}) {
             stats.toolCalls++;
             bump(stats.tools, fn.name);
             pending.set(call.id, fn.name);
+            if (fn.name === 'run_command' || fn.name === 'bash' || fn.name === 'shell') {
+              const args = parseArgs(fn.arguments);
+              const line = [args.command].concat(Array.isArray(args.args) ? args.args : []).filter((part) => typeof part === 'string').join(' ').trim();
+              if (line) commandOf.set(call.id, line.slice(0, 120));
+            }
             if (FILE_TOOLS.has(fn.name)) {
               const args = parseArgs(fn.arguments);
               const file = args.path || args.file_path || args.notebook_path;
@@ -77,6 +89,9 @@ export async function collectInsights(options = {}) {
         } else if (message.role === 'tool') {
           const content = String(message.content || '');
           const tool = message.name || pending.get(message.tool_call_id) || 'tool';
+          if (content.startsWith('{') && (content.includes('"afterFailure"') || content.includes('"divergence"'))) {
+            noteEffects(stats.effects, content, tool, commandOf.get(message.tool_call_id), project);
+          }
           if (/^\{"error"|"error":|denied|not allowed|blocked by/i.test(content.slice(0, 300))) {
             if (/denied|not allowed|blocked by|declined/i.test(content.slice(0, 300))) stats.denials++;
             else { stats.toolErrors++; bump(stats.toolErrorsBy, tool); if (stats.examples.errors.length < 8) stats.examples.errors.push({ project, tool, text: content.slice(0, 160) }); }
@@ -90,6 +105,35 @@ export async function collectInsights(options = {}) {
   return stats;
 }
 
+function noteEffects(effects, content, tool, command, project) {
+  let result = null;
+  try { result = JSON.parse(content); } catch { /* a truncated result: fall back to the markers */ }
+  const after = result ? result.afterFailure : (/"afterFailure":\{"state":"(applied|partial|changed)"/.exec(content) || [])[1];
+  if (after) {
+    effects.afterFailure++;
+    bump(effects.afterFailureBy, command || tool);
+    if (effects.examples.length < 8) effects.examples.push({ project, kind: 'after_failure', label: command || tool, text: String(typeof after === 'object' ? after.note || after.state : after).slice(0, 200) });
+  }
+  const divergence = result ? result.rehearsal && result.rehearsal.divergence : /"divergence":\{"unrehearsed"/.test(content);
+  if (divergence) {
+    effects.divergence++;
+    bump(effects.divergenceBy, command || tool);
+    const paths = typeof divergence === 'object' && Array.isArray(divergence.unrehearsed) ? divergence.unrehearsed : [];
+    if (effects.examples.length < 8) effects.examples.push({ project, kind: 'divergence', label: command || tool, text: paths.length ? 'also changed ' + paths.slice(0, 5).join(', ') : 'changed files its rehearsal did not' });
+  }
+}
+
+/** Plain-text lines about effects; empty when nothing happened. */
+export function effectInsightLines(stats) {
+  const e = stats.effects;
+  if (!e) return [];
+  const lines = [];
+  if (e.afterFailure) lines.push(e.afterFailure + ' failed ' + (e.afterFailure === 1 ? 'call had' : 'calls had') + ' in fact taken effect (OASIS told the model, so it did not repeat them)' + (e.afterFailureBy.size ? ': ' + top(e.afterFailureBy, 3).map(([k, v]) => k + (v > 1 ? ' ×' + v : '')).join(', ') : '') + '.');
+  if (e.divergence) lines.push(e.divergence + ' approved ' + (e.divergence === 1 ? 'command' : 'commands') + ' changed more files than their rehearsal showed' + (e.divergenceBy.size ? ': ' + top(e.divergenceBy, 3).map(([k, v]) => k + (v > 1 ? ' ×' + v : '')).join(', ') : '') + '.');
+  if (e.driftResumes) lines.push(e.driftResumes + ' resumed ' + (e.driftResumes === 1 ? 'session' : 'sessions') + ' found the workspace changed since it was saved.');
+  return lines;
+}
+
 export function insightsSummaryText(stats) {
   if (!stats.sessions) return 'No saved sessions in the last ' + stats.days + ' days.';
   const pct = (a, b) => b ? Math.round((a / b) * 100) + '%' : '0%';
@@ -98,7 +142,8 @@ export function insightsSummaryText(stats) {
     'Top projects: ' + top(stats.projects, 5).map(([k, v]) => k + ' (' + v + ')').join(', ') + '.',
     // With no tool calls this line used to read "Top tools: ."
     ...(stats.toolCalls ? ['Top tools: ' + top(stats.tools, 6).map(([k, v]) => k + ' ' + v).join(', ') + '.'] : []),
-    'Friction: ' + stats.toolErrors + ' tool errors (' + pct(stats.toolErrors, stats.toolCalls) + '), ' + stats.denials + ' denials, ' + stats.corrections + ' prompts that look like corrections.'
+    'Friction: ' + stats.toolErrors + ' tool errors (' + pct(stats.toolErrors, stats.toolCalls) + '), ' + stats.denials + ' denials, ' + stats.corrections + ' prompts that look like corrections.',
+    ...effectInsightLines(stats).map((line) => 'Effects: ' + line)
   ].join('\n');
 }
 
@@ -113,6 +158,9 @@ function renderInsightsHtml(stats, narrative = '') {
   if (stats.denials > 5) tips.push(stats.denials + ' tool calls were denied. If you approve the same commands often, add allow rules with /permissions or oasis permissions add allow "Bash(npm test)".');
   if (stats.corrections > Math.max(3, stats.userTurns * 0.1)) tips.push('Many follow-up prompts read like corrections. Plan mode (/plan) or a short spec before large changes can cut down rework.');
   if ((stats.tools.get('read_file') || 0) > 4 * ((stats.tools.get('grep') || 0) + (stats.tools.get('search') || 0) + 1)) tips.push('Most exploration is file-by-file reading. Asking the agent to search first (or using the explore subagent) is usually faster on big repositories.');
+  const repeatedDivergence = stats.effects ? top(stats.effects.divergenceBy, 1).find(([, count]) => count > 1) : null;
+  if (repeatedDivergence) tips.push('The rehearsal of ' + repeatedDivergence[0] + ' missed files the real run changed ' + repeatedDivergence[1] + ' times. Its output depends on time, the network or randomness, so its rehearsal is not a reliable preview; review it from the command itself.');
+  if (stats.effects && stats.effects.afterFailure > 2) tips.push(stats.effects.afterFailure + ' calls reported an error after they had already taken effect. Those are usually timeouts on slow commands; a larger timeout for them avoids the confusion.');
   if (!tips.length) tips.push('No major friction patterns detected. Nice.');
   const days = [...stats.byDay.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Oasis insights</title>
@@ -152,6 +200,7 @@ ${narrative ? '<div class="card" style="margin-top:16px"><h2>Summary</h2>' + nar
 <div class="card"><h2>Activity by hour</h2>${bars(stats.hours.map((v, h) => [String(h).padStart(2, '0') + ':00', v]).filter(([, v]) => v))}</div>
 <div class="card"><h2>Failing tools</h2>${bars(top(stats.toolErrorsBy))}</div>
 <div class="card"><h2>Longest sessions</h2><ul>${stats.longest.map((s) => '<li>' + esc(s.title || '(untitled)') + ' <span class="muted">' + esc(s.project) + ', ' + s.turns + ' prompts, ' + s.day + '</span></li>').join('') || '<p class="muted">None yet.</p>'}</ul></div>
+${effectInsightLines(stats).length ? '<div class="card"><h2>Effects</h2><ul>' + effectInsightLines(stats).map((line) => '<li>' + esc(line) + '</li>').join('') + stats.effects.examples.map((x) => '<li><code>' + esc(x.label) + '</code> ' + esc(x.text) + ' <span class="muted">' + esc(x.project) + '</span></li>').join('') + '</ul></div>' : ''}
 <div class="card"><h2>Friction examples</h2><ul>${[...stats.examples.errors.map((e) => '<li><code>' + esc(e.tool) + '</code> ' + esc(e.text) + ' <span class="muted">' + esc(e.project) + '</span></li>'), ...stats.examples.corrections.map((c) => '<li>“' + esc(c.text) + '” <span class="muted">' + esc(c.project) + '</span></li>')].join('') || '<p class="muted">None.</p>'}</ul></div>
 </div></main></body></html>
 `;

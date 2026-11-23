@@ -64,11 +64,16 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### World drift on resume
 
-- Commit: `5d7af1e2`. Docs: [World drift on resume](../CONTINUITY.md).
+- Commit: `c2c376d9`. Docs: [World drift on resume](../CONTINUITY.md).
 - Problem: a resumed session assumes the workspace is as it left it; commits, branch switches and external edits made in between are invisible to the model.
 - Prior art: Claude Code and Codex resume restore the conversation only; OASIS's `file-state.mjs` reminder is in-memory and lost when the process exits.
 - New: each save records HEAD, branch and content hashes of the files the conversation touched; resume reports new commits, branch change, rewritten history and changed known files to the user and, once, to the model.
 - Acceptance: `test/world-drift.test.mjs` (7 tests); capture on 300 files of this repository about 127 ms, comparison about 91 ms.
+
+### Effects in insights
+
+- Commit: see `git log -- src/insights.mjs` ("Report effect signals in insights").
+- `/insights` now counts failed calls that had taken effect, rehearsal misses per command and drifted resumes, read from the saved tool results (truncated results still count by marker). Acceptance: `test/insights.test.mjs` effects test.
 
 ## Examined and not built
 
@@ -86,7 +91,6 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 ### Immediate improvements
 
 - Rehearsal on by default where the OS sandbox is already enabled with `sandbox.autoAllowCommands`, since that setting already accepts running isolated commands without a prompt.
-- Feed `rehearsal_divergence` and `afterFailure` events into `oasis insights`, so repeated divergence for one command becomes visible.
 - Add rehearsal and fault scenarios to the reliability lab (a command whose rehearsal and real run differ).
 
 ### Ready for implementation

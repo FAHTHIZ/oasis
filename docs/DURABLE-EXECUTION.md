@@ -60,3 +60,5 @@ Digests, a short summary of each call (its command line or target path, 200 char
 Durable execution engines such as Temporal and Restate make a workflow resumable by recording each activity's result and requiring activities to be idempotent, so a retry is harmless. Agent tools are not idempotent and the model chooses them at run time, so retry-by-default is unsafe. The journal takes the write-ahead record from those engines but replaces "retry and rely on idempotency" with "observe and decide": each in-doubt action is resolved from probes of the state it was meant to change. Claude Code, Codex and Aider restore the conversation, not the status of the action that was running.
 
 References: [Temporal: activities and retries](https://docs.temporal.io/activities), [Restate: durable execution](https://docs.restate.dev/concepts/durable_execution), [ARIES write-ahead logging (Mohan et al., 1992)](https://dl.acm.org/doi/10.1145/128765.128770).
+
+`/insights` (and `oasis insights`) counts failed calls that had in fact taken effect, per command, under Effects.
