@@ -41,6 +41,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { parseFrontMatter } from './frontmatter.mjs';
+import { vscodeUserPromptDirs } from './vscode-paths.mjs';
 import { sensitivePath } from './tools.mjs';
 import { agentIgnoreMatch } from './agent-ignore.mjs';
 import { imageMediaType, MAX_SOURCE_IMAGE_BYTES } from './images.mjs';
@@ -108,13 +109,6 @@ async function scanWorkflowSubfolders(workspace) {
 }
 
 // VS Code keeps user prompt files in its profile folder (Code and Code - Insiders).
-function vscodeUserPromptDirs(env, home) {
-  const bases = process.platform === 'darwin' ? [path.join(home, 'Library', 'Application Support')]
-    : process.platform === 'win32' ? [env.APPDATA || path.join(home, 'AppData', 'Roaming')]
-      : [env.XDG_CONFIG_HOME || path.join(home, '.config')];
-  return bases.flatMap((base) => ['Code', 'Code - Insiders'].map((app) => path.join(base, app, 'User', 'prompts')));
-}
-
 // VS Code prompt files (*.prompt.md): ${input:name} and ${input:name:placeholder}
 // take the typed arguments (one input gets all of them; several take one word
 // each, the last the rest). Editor variables (${selection}, ${file}, ...) have
