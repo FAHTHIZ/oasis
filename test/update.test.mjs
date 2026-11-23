@@ -96,3 +96,18 @@ test('a git checkout newer than the release is not moved back to the release tag
   assert.equal(await gitCommitsAheadOfRelease(behind, { sha: head, tag: 'v1.4.0' }), null);
   assert.equal(updatePlan(behind, { sha: head, tag: 'v1.4.0' }).steps.length, 2);
 });
+
+test('an npm or Homebrew install newer than the latest release is not downgraded', () => {
+  const latest = { tag: 'v1.4.0', sha: 'b'.repeat(40) };
+  for (const kind of ['npm', 'homebrew']) {
+    const installed = { kind, version: '1.5.0' };
+    const plan = updatePlan(installed, latest);
+    assert.equal(plan.upToDate, true, kind);
+    assert.equal(plan.steps, undefined, kind);
+    assert.match(describeUpdate(installed, latest, plan), /newer than v1\.4\.0.*instead of downgrading/);
+    // A pre-release of the next version is newer too; an older one still updates.
+    assert.equal(updatePlan({ kind, version: '1.5.0-beta.1' }, latest).upToDate, true, kind);
+    assert.equal(updatePlan({ kind, version: '1.3.9' }, latest).upToDate, false, kind);
+    assert.equal(updatePlan({ kind, version: '1.4.0-beta.2' }, latest).upToDate, false, kind);
+  }
+});
