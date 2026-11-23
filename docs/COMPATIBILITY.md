@@ -238,9 +238,20 @@ shared; each target gets its own manifest:
 | OASIS / Claude Code | `.claude-plugin/plugin.json` | Nothing | Nothing |
 | Codex | `.codex-plugin/plugin.json` | Commands and agents as skills (in `codex/skills/`) | Options |
 | Gemini CLI | `gemini-extension.json` | Commands as TOML (`$ARGUMENTS` as `{{args}}`), hooks under Gemini event and tool names, options as settings, `${CLAUDE_PLUGIN_ROOT}` as `${extensionPath}` | Hook events with no Gemini counterpart |
-| Cursor | `.cursor-plugin/plugin.json`, `mcp.json` | Options as variables | Hooks |
-| Copilot CLI | `.plugin/plugin.json` | Agents as `*.agent.md` (in `copilot/agents/`) | Hooks, options |
+| Cursor | `.cursor-plugin/plugin.json`, `mcp.json`, `cursor/hooks.json` | Options as variables, hooks through the hook shim | Hook events Cursor has no moment for |
+| Copilot CLI | `.plugin/plugin.json`, `copilot/hooks.json` | Agents as `*.agent.md` (in `copilot/agents/`), hooks through the hook shim | Hook events Copilot has no moment for, options |
 | OpenCode | `opencode/index.js` | Commands, agents (as subagents) and MCP servers added through the `config` hook; PreToolUse, PostToolUse, Stop and SessionStart hooks run in Claude Code format from `tool.execute.before`/`after` and `event` | Other hook events, skills (link `skills/*` into `.opencode/skills/`), options |
+
+Cursor and Copilot CLI read hooks in their own protocols, so their hook files
+register `hooks/oasis-hook-shim.mjs` (no dependencies beyond Node.js) for each
+event the plugin's hooks use. The shim turns that agent's payload into Claude
+Code JSON, runs the matching hooks from `hooks/claude-hooks.json`, and answers
+in the agent's format: a deny becomes `permission: deny` (Cursor) or
+`permissionDecision: deny` (Copilot), `updatedInput` becomes `updated_input` or
+`modifiedArgs` (with Copilot's `path`/`old_str`/`new_str` names), a Stop block
+becomes Cursor's `followup_message` or Copilot's `decision: block`, and
+`additionalContext` is passed on. Write a hook once in Claude Code format and
+it runs in all of them.
 
 The OpenCode export is a small plugin with no dependencies: `opencode/runtime.js`
 reads `opencode/oasis-plugin.json` and runs the hook commands with Claude Code

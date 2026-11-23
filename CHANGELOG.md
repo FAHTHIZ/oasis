@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Added
 
+- Plugin hooks now export to Cursor and Copilot CLI: `plugin export` registers a dependency-free hook shim (`hooks/oasis-hook-shim.mjs`) in `cursor/hooks.json` and `copilot/hooks.json` that runs the Claude Code-format hooks and answers in each agent's protocol (denies, argument rewrites, Stop follow-ups, added context). Before, both targets left hooks out.
 - `oasis plugin export --to opencode`: a plugin exports as a dependency-free OpenCode plugin (`opencode/index.js`) that adds its commands, agents and MCP servers and runs its Claude Code-format PreToolUse, PostToolUse, Stop and SessionStart hooks inside OpenCode. `plugin new` and `--in-place` include it.
 - Config packs carry Gemini CLI settings hooks, Codex hooks and OpenCode plugins, so installing another team's repository brings those along too. Hooks can now run OASIS's own Node.js and the OpenCode plugin host as `${OASIS_NODE}` and `${OASIS_OPENCODE_HOST}`.
 - OpenCode plugins run under OASIS: `.opencode/plugins/*.{js,ts}` (trusted workspace) and `~/.config/opencode/plugins/` go through a plugin host on `PreToolUse`, `PostToolUse`, `Stop`, `SessionStart` and `SessionEnd`. A throw in `tool.execute.before` denies the call, changed args rewrite it, and a changed `tool.execute.after` output replaces the result.

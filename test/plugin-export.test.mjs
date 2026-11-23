@@ -136,12 +136,14 @@ test('inspect reports what a plugin becomes in OASIS and every other agent witho
   assert.equal(result.format, 'Claude Code plugin');
   assert.deepEqual(result.targets.map((x) => x.target), ['claude', 'codex', 'gemini', 'cursor', 'copilot', 'opencode']);
   assert.equal(result.targets.find((x) => x.target === 'claude').full, true);
-  assert.equal(result.targets.find((x) => x.target === 'cursor').full, false);
+  assert.equal(result.targets.find((x) => x.target === 'cursor').full, true);
+  assert.equal(result.targets.find((x) => x.target === 'opencode').full, false);
   assert.deepEqual(await readdir(base), before);
   const text = formatInspectReport(result);
   assert.match(text, /OASIS reads it natively/);
   assert.match(text, /\[full\]\s+OASIS \/ Claude Code/);
-  assert.match(text, /\[partial\] Cursor/);
+  assert.match(text, /\[full\]\s+Cursor/);
+  assert.match(text, /\[partial\] OpenCode/);
 
   const gem = await fixture(t, {
     'gemini-extension.json': { name: 'gx', version: '1.0.0', mcpServers: { s: { command: 'node', args: ['${extensionPath}/s.js'] } } },
@@ -225,4 +227,45 @@ test('the OpenCode export is a working OpenCode plugin that runs the Claude-form
   const output = { title: '', output: 'file text', metadata: {} };
   await hooks['tool.execute.after']({ tool: 'read', sessionID: 's', callID: 'c3' }, output);
   assert.equal(output.output, 'file text\n\nchecked');
+});
+
+test('Cursor and Copilot exports run the Claude-format hooks through the hook shim', async (t) => {
+  const { src, out } = await fixture(t, {
+    ...plugin,
+    'hooks/hooks.json': { hooks: {
+      PreToolUse: [{ matcher: 'Bash|Edit', hooks: [{ type: 'command', command: 'node "${CLAUDE_PLUGIN_ROOT}/guard.mjs"', timeout: 7 }] }],
+      Stop: [{ hooks: [{ type: 'command', command: 'echo \'{"decision":"block","reason":"run the tests"}\'' }] }],
+      Elicitation: [{ hooks: [{ type: 'command', command: 'x' }] }]
+    } },
+    'guard.mjs': "let s='';process.stdin.on('data',(c)=>s+=c).on('end',()=>{const p=JSON.parse(s);" +
+      "if(p.tool_name==='Bash'&&p.tool_input.command.includes('rm -rf'))console.log(JSON.stringify({hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny',permissionDecisionReason:'no rm -rf in '+process.env.CLAUDE_PROJECT_DIR}}));" +
+      "else if(p.tool_name==='Edit')console.log(JSON.stringify({hookSpecificOutput:{hookEventName:'PreToolUse',updatedInput:{...p.tool_input,new_string:'fixed'}}}));});\n"
+  });
+  const result = await exportPlugin(src, { out, targets: ['cursor', 'copilot'] });
+  for (const r of result.report) {
+    assert.ok(r.translated.some((x) => /hook events through the hook shim/.test(x)), r.label);
+    assert.ok(r.dropped.some((x) => /Elicitation/.test(x)), r.label);
+  }
+  const read = async (rel) => JSON.parse(await readFile(path.join(out, rel), 'utf8'));
+  assert.equal((await read('.cursor-plugin/plugin.json')).hooks, './cursor/hooks.json');
+  assert.equal((await read('.plugin/plugin.json')).hooks, './copilot/hooks.json');
+  const cursorHooks = await read('cursor/hooks.json');
+  assert.equal(cursorHooks.version, 1);
+  assert.match(cursorHooks.hooks.preToolUse[0].command, /oasis-hook-shim\.mjs" cursor preToolUse$/);
+  assert.equal(cursorHooks.hooks.preToolUse[0].timeout, 15);
+  assert.ok(cursorHooks.hooks.stop);
+  const copilotHooks = await read('copilot/hooks.json');
+  assert.match(copilotHooks.hooks.preToolUse[0].bash, /COPILOT_PLUGIN_ROOT/);
+  assert.ok(copilotHooks.hooks.agentStop);
+
+  const { execFileSync } = await import('node:child_process');
+  const shim = path.join(out, 'hooks', 'oasis-hook-shim.mjs');
+  const call = (protocol, event, payload) => JSON.parse(execFileSync(process.execPath, [shim, protocol, event], { input: JSON.stringify(payload), cwd: out, encoding: 'utf8' }) || 'null');
+  const cwd = out;
+  assert.deepEqual(call('cursor', 'preToolUse', { conversation_id: 'c', tool_name: 'Shell', tool_input: { command: 'rm -rf /' }, cwd }), { permission: 'deny', user_message: 'no rm -rf in ' + cwd, agent_message: 'no rm -rf in ' + cwd });
+  assert.deepEqual(call('cursor', 'preToolUse', { tool_name: 'Shell', tool_input: { command: 'ls' }, cwd }), { permission: 'allow' });
+  assert.deepEqual(call('cursor', 'stop', { status: 'completed', loop_count: 0, workspace_roots: [cwd] }), { followup_message: 'run the tests' });
+  assert.equal(call('copilot', 'preToolUse', { toolName: 'bash', toolArgs: JSON.stringify({ command: 'rm -rf x' }), cwd }).permissionDecision, 'deny');
+  assert.deepEqual(call('copilot', 'preToolUse', { toolName: 'edit', toolArgs: JSON.stringify({ path: 'a.js', old_str: 'x', new_str: 'y' }), cwd }), { modifiedArgs: { path: 'a.js', old_str: 'x', new_str: 'fixed' } });
+  assert.deepEqual(call('copilot', 'agentStop', { cwd }), { decision: 'block', reason: 'run the tests' });
 });
