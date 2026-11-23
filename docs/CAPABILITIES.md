@@ -35,6 +35,7 @@ performance claim.
 | `minimize_repro`: delta debugging shrinks a failing input to the lines (or characters) that still reproduce the same failure | Unreleased | [User guide](USER-GUIDE.md#shrink-a-failing-input) |
 | `localize_fault`: spectrum-based fault localization (Ochiai over per-test line coverage) ranks the lines most likely to hold a bug | Unreleased | [User guide](USER-GUIDE.md#where-is-the-bug) |
 | Evidence checks for research (cite only fetched pages) and analysis (numbers must come from code that ran) | Stable | [Agent network](AGENT-NETWORK.md#evidence-and-contracts) |
+| Quote-verified citations: direct quotes must appear on the fetched page they cite; `verify_quote` checks them first | Unreleased | [Agent network](AGENT-NETWORK.md#quote-checks) |
 | Sessions, resume, fork, export (`/export`, HTML and Markdown) | Stable | [Terminal guide](TERMINAL.md) |
 | Memory across sessions, `session_search`, `/learning` skill proposals | Released, lightly tested | [Extending OASIS](EXTENDING.md) |
 | `/goal` (keep working until a condition holds), routines and schedules (`oasis schedule`) | Released, lightly tested | [User guide](USER-GUIDE.md) |

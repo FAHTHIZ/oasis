@@ -9,7 +9,8 @@
 //             and has no edit after it. Same rules as src/claim-check.mjs.
 //   research  Every URL the report cites must have been fetched (fetch_url or
 //             the browser). A URL that only appeared in search results was
-//             never read, so citing it is flagged.
+//             never read, so citing it is flagged. Words quoted next to a
+//             cited URL must appear on that page as fetched (a misquote).
 //   analysis  Every result-like number in the report (a decimal, a percentage,
 //             or an integer of three or more digits that is not a year) must
 //             have been printed by an execution, command, check or fetched
@@ -22,6 +23,7 @@
 
 import { claimsPassing } from './claim-check.mjs';
 import { fetchedUrls, lastCheck, normalizeUrl, producedNumbers, searchedUrls } from './evidence-ledger.mjs';
+import { checkQuotes } from './page-store.mjs';
 
 export const CONTRACT_DOMAINS = Object.freeze(['code', 'research', 'analysis']);
 const MAX_LISTED = 5;
@@ -58,6 +60,22 @@ export function researchContract(text, events) {
     domain: 'research',
     reason: 'the report cites ' + unread.length + ' URL' + (unread.length === 1 ? '' : 's') + ' the agent never fetched (' + listed + ')' + (onlySearched.length ? '; ' + onlySearched.length + ' only appeared in search results' : ''),
     urls: unread
+  }];
+}
+
+// Words in quotation marks next to a cited URL must be on that page, as the
+// agent fetched it (src/page-store.mjs). Pages fetched before a restart have
+// no stored text and are skipped.
+export function quoteContract(text, events) {
+  const fetched = fetchedUrls(events);
+  if (!fetched.size) return [];
+  const { misquotes } = checkQuotes(text, citedUrls, { fetched });
+  if (!misquotes.length) return [];
+  const first = misquotes[0];
+  return [{
+    domain: 'research',
+    reason: 'the report quotes ' + misquotes.length + ' passage' + (misquotes.length === 1 ? '' : 's') + ' that the cited page does not contain, for example "' + first.quote.slice(0, 120) + '" (' + first.urls[0] + (first.closest ? '; closest text there: "' + first.closest.slice(0, 160) + '"' : '') + ')',
+    misquotes: misquotes.slice(0, MAX_LISTED)
   }];
 }
 
@@ -119,7 +137,7 @@ function analysisApplies(events, domains) {
  */
 export function checkReport(text, events, { domains = [] } = {}) {
   const declared = (Array.isArray(domains) ? domains : [domains]).map((domain) => String(domain || '').toLowerCase()).filter((domain) => CONTRACT_DOMAINS.includes(domain));
-  const issues = [...codeContract(text, events), ...researchContract(text, events)];
+  const issues = [...codeContract(text, events), ...researchContract(text, events), ...quoteContract(text, events)];
   if (analysisApplies(events, declared)) issues.push(...analysisContract(text, events));
   return issues;
 }
