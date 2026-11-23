@@ -172,6 +172,18 @@ Search ranks by the calibrated value, so a careful model's 0.7 can outrank a bra
 
 `oasis agents calibration` prints each model's Brier score (0 is perfect, 0.25 is a coin flip), its average stated confidence against how often it held, and a reliability table. `--by-type` splits the scores by agent type, `--model NAME` shows one model, `--json` prints the raw numbers, and `--forget` deletes the record (only that model's with `--model`). Turn calibration off with `OASIS_CALIBRATION=0` or the setting `"calibration": false`, and move the file with `OASIS_CALIBRATION_FILE`. Test: `test/calibration.test.mjs`.
 
+### Competing hypotheses
+
+When the team must explain something with several possible explanations (why a test fails only on CI, what caused an outage, which of two claims is true), the `hypotheses` tool keeps a shared hypothesis matrix on the knowledge board. It follows Heuer's Analysis of Competing Hypotheses ([Psychology of Intelligence Analysis, ch. 8](https://www.cia.gov/resources/csi/books-monographs/psychology-of-intelligence-analysis-2/)), scored as a Bayesian update:
+
+- `open` a question with 2 to 8 mutually exclusive hypotheses. An implicit "none of these" holds 10% of the prior.
+- `evidence` rates one observation against every hypothesis: `++`, `+`, `0`, `-` or `--`, each a relative likelihood. Evidence rated the same for every hypothesis moves nothing and is listed as non-diagnostic. Evidence that contradicts every listed hypothesis raises "none of these", and OASIS asks for the hypothesis the team is missing (`add`).
+- Evidence counts half when the poster's own tool results do not back it (the same grounding as `knowledge_post`, so a claim of a passing check without one is refused), half again when all its sources come from sites already used on this question, and half again after the agent read a likely prompt injection. An agent's positive rating of a hypothesis it proposed itself also counts half.
+- `status` gives each hypothesis's posterior and its ACH inconsistency score (how much evidence contradicts it; lower is better). It also gives advice: hypotheses nobody has tested, and when the two leaders are close, a test they predict differently.
+- A question reaches `leading` only with a posterior of at least 0.85 backed by evidence from two agents and two independent sources. Until then OASIS says what is missing. `resolve` records the answer, with a warning when it goes against the evidence.
+
+The matrix is shared by the main agent and every subagent, saved with the session, and a starting subagent's prompt lists the open questions with their current posteriors. Test: `test/hypothesis-board.test.mjs`.
+
 ## Background agents and teams
 
 - `run_in_background: true` returns an id immediately. The parent is notified when the agent finishes.
