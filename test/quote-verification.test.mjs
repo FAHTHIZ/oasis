@@ -118,3 +118,21 @@ test('a 1.8 MB page stays fast', () => {
   assert.equal(findQuote('the needle sentence that we were looking for yesterday', pageText(URL_A)).status, 'missing');
   assert.ok(Date.now() - started < 3000, 'took ' + (Date.now() - started) + ' ms');
 });
+
+test('in JSON reports only quote fields are quotations, paired with the URLs of their object', () => {
+  const report = JSON.stringify({ claims: [
+    { claim: 'The company grew its revenue in the cloud segment substantially last year', sources: ['https://example.com/report'], quote: 'revenue grew 12% to $4.1 billion' },
+    { claim: 'An analyst wrote "cloud margins will collapse within two quarters" (https://example.com/analyst)' }
+  ] });
+  const claims = quotedClaims(report, citedUrls);
+  assert.deepEqual(claims.map((item) => item.quote), ['revenue grew 12% to $4.1 billion', 'cloud margins will collapse within two quarters']);
+  assert.deepEqual(claims[0].urls, [URL_A]);
+  assert.deepEqual(claims[1].urls, ['https://example.com/analyst']);
+  assert.equal(quotedClaims('```json\n' + report + '\n```', citedUrls).length, 2, 'fenced JSON too');
+  assert.deepEqual(quotedClaims('Broken JSON {"claim": "a claim that is long enough to be a quote", "url": "' + URL_A + '"', citedUrls), [], 'key/value pairs are never quotes');
+
+  clearPageStore();
+  rememberPage(URL_A, PAGE);
+  assert.deepEqual(checkReport(JSON.stringify({ claim: 'Revenue went up a lot thanks to the cloud business overall', url: URL_A, quote: 'revenue grew 12% to $4.1 billion' }), fetched()), []);
+  assert.equal(checkReport(JSON.stringify({ claim: 'Revenue went up', url: URL_A, quote: 'revenue tripled thanks to a major acquisition' }), fetched()).length, 1);
+});

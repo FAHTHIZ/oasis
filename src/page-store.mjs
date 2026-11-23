@@ -169,6 +169,52 @@ const QUOTE_SPANS = [
  * counts as a quote when its paragraph (or the line after it) cites a URL.
  */
 export function quotedClaims(text, citedUrls) {
+  // Structured output (a JSON report, possibly fenced): every string value is
+  // in double quotes, so only quote-like fields are quotations.
+  const structured = parseStructured(text);
+  if (structured !== undefined) return structuredQuotes(structured, citedUrls);
+  return proseQuotes(text, citedUrls);
+}
+
+const QUOTE_KEYS = /^(quote|quotes|quoted|quotation|excerpt|excerpts|verbatim)$/i;
+const URL_KEYS = /^(url|urls|source|sources|link|links|href|citation|citations|cite|cited|ref|refs|reference|references)$/i;
+
+function parseStructured(text) {
+  const trimmed = String(text || '').trim();
+  const fenced = /^```(?:json)?\s*\n([\s\S]*?)\n```$/i.exec(trimmed);
+  const body = fenced ? fenced[1].trim() : trimmed;
+  if (!/^[[{]/.test(body)) return undefined;
+  try { return JSON.parse(body); } catch { return undefined; }
+}
+
+function structuredQuotes(value, citedUrls) {
+  const out = [];
+  const visit = (node, inherited, depth) => {
+    if (depth > 12 || node === null || typeof node !== 'object') return;
+    const items = Array.isArray(node) ? node.map((item) => [null, item]) : Object.entries(node);
+    let urls = inherited;
+    if (!Array.isArray(node)) {
+      const own = items.filter(([key]) => URL_KEYS.test(key)).flatMap(([, item]) => citedUrls(typeof item === 'string' ? item : JSON.stringify(item)));
+      if (own.length) urls = [...new Set(own)];
+    }
+    for (const [key, item] of items) {
+      if (key && QUOTE_KEYS.test(key)) {
+        for (const quote of (Array.isArray(item) ? item : [item])) {
+          if (typeof quote !== 'string') continue;
+          const value = quote.trim().replace(/^["\u201c]|["\u201d]$/g, '');
+          if (urls.length && value.length <= MAX_QUOTE_CHARS && quoteWords(value).length >= MIN_QUOTE_WORDS) out.push({ quote: value, urls });
+        }
+      } else if (typeof item === 'string') {
+        // Prose inside a field may quote a page inline: 'The spec says "..." (url)'.
+        for (const found of proseQuotes(item, (text) => { const inline = citedUrls(text); return inline.length ? inline : urls; })) out.push(found);
+      } else visit(item, urls, depth + 1);
+    }
+  };
+  visit(value, [], 0);
+  return out;
+}
+
+function proseQuotes(text, citedUrls) {
   const prose = String(text || '').replace(/```[\s\S]*?```/g, '\n\n').replace(/`[^`\n]*`/g, ' ');
   const blocks = prose.split(/\n\s*\n|\n(?=\s*(?:[-*+]|\d+[.)])\s)/);
   const out = [];
@@ -176,7 +222,15 @@ export function quotedClaims(text, citedUrls) {
     const block = blocks[index];
     let urls = citedUrls(block);
     const quotes = [];
-    for (const pattern of QUOTE_SPANS) for (const match of block.matchAll(pattern)) quotes.push(match[1]);
+    for (const pattern of QUOTE_SPANS) {
+      for (const match of block.matchAll(pattern)) {
+        // "key": "value" in JSON-like text is data, not a quotation.
+        const before = block.slice(Math.max(0, match.index - 3), match.index);
+        const after = block.slice(match.index + match[0].length, match.index + match[0].length + 3);
+        if (/[:[{,]\s*$/.test(before) || /^\s*:/.test(after)) continue;
+        quotes.push(match[1]);
+      }
+    }
     const blockquote = block.split('\n').filter((line) => /^\s*>/.test(line)).map((line) => line.replace(/^\s*>\s?/, '')).join(' ').trim();
     if (blockquote) {
       // A blockquote is often followed by its attribution: "— [Source](url)".
