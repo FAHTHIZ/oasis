@@ -10,15 +10,18 @@
 //   Marketplaces           .agents/plugins/ (Codex), .cursor-plugin/, .github/plugin/, .plugin/
 //                          or a root marketplace.json (Copilot CLI and Agent Plugins)
 //
-// Parts a format has that OASIS cannot run faithfully (Cursor and Copilot hook
-// protocols, for example) are listed as not carried over instead of being
-// half-translated, so the approval summary says exactly what will run.
+// Cursor and Copilot hooks keep running: hook-bridges.mjs translates their
+// stdin and replies. Parts with no OASIS equivalent (Cursor Tab hooks, plugin
+// variables) are listed as not carried over instead of being half-translated,
+// so the approval summary says exactly what will run.
 //
 // The converted copy keeps every file; only manifests and Gemini's TOML commands
 // are rewritten, so a plugin's scripts and assets keep working.
 import { copyPluginTree } from './plugin-copy.mjs';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
+import { bridgeHookDoc } from './hook-bridges.mjs';
 import { geminiCommandToMarkdown } from './importers.mjs';
 
 const NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -114,13 +117,36 @@ async function hookDoc(dir, info) {
   return null;
 }
 
+// Cursor and Copilot hooks run through the protocol bridge (hook-bridges.mjs):
+// each one is filed under the Claude Code event that fires at the same moment.
+// A relative script path is resolved against the plugin root, as both tools do.
+function bridgedHooks(dir, info, doc) {
+  const { dropped: foreign } = splitHookEvents(doc);
+  if (!foreign.length) return { hooks: {}, dropped: [] };
+  const only = { hooks: Object.fromEntries(Object.entries(doc.hooks).filter(([event]) => foreign.includes(event))) };
+  const rewrite = (text, { path: isPath } = {}) => {
+    const value = portableVars(String(text));
+    if (isPath) return '"' + (value.startsWith('${') || path.isAbsolute(value) || !existsSync(path.join(dir, value)) ? value : underRoot(value)) + '"';
+    const match = /^(\S+)([\s\S]*)$/.exec(value.trim());
+    if (!match) return value;
+    const [, head, rest] = match;
+    // Cursor resolves a relative script against the plugin root; Copilot against
+    // the repository, so there only a path the plugin itself ships is rooted.
+    const ships = !head.startsWith('$') && !path.isAbsolute(head) && /[\\/]/.test(head) && existsSync(path.join(dir, head));
+    const relative = ships || (info.format === 'cursor' && /^\.\.?\//.test(head));
+    return relative ? '"' + underRoot(head) + '"' + rest : value;
+  };
+  return bridgeHookDoc(info.format, only, rewrite);
+}
+
 /** What a foreign plugin has that will not run under OASIS, in plain words. */
 export async function unsupportedParts(dir, info) {
   if (info.format === 'gemini') return [];
   const out = [];
   if (info.format === 'cursor' || info.format === 'copilot') {
-    const { dropped } = splitHookEvents(await hookDoc(dir, info));
-    if (dropped.length) out.push(info.label.replace(/ plugin$/, '') + ' hooks (' + dropped.slice(0, 6).join(', ') + ') use a different hook protocol');
+    const doc = await hookDoc(dir, info);
+    const { dropped } = bridgedHooks(dir, info, doc);
+    if (dropped.length) out.push(info.label.replace(/ plugin$/, '') + ' hooks (' + dropped.slice(0, 6).join(', ') + ') have no matching OASIS event');
   }
   if (info.format === 'cursor' && info.manifest.variables) out.push('Cursor plugin variables');
   return out;
@@ -247,7 +273,9 @@ export async function describeForeignPlugin(dir, info) {
   const servers = info.format === 'gemini' ? Object.keys(info.manifest.mcpServers || {}) : Object.keys(await foreignServers(dir, info));
   if (servers.length) parts.push(servers.length + ' MCP server' + (servers.length === 1 ? '' : 's') + ' (they run when sessions start)');
   if (info.format === 'cursor' || info.format === 'copilot') {
-    if (splitHookEvents(await hookDoc(dir, info)).kept) parts.push('hooks (they run commands on events)');
+    const doc = await hookDoc(dir, info);
+    const bridged = Object.keys(bridgedHooks(dir, info, doc).hooks).length;
+    if (splitHookEvents(doc).kept || bridged) parts.push('hooks (they run commands on events' + (bridged ? '; ' + (info.format === 'cursor' ? 'Cursor' : 'Copilot') + ' hooks run through the OASIS protocol bridge' : '') + ')');
   } else if (files.includes('hooks/hooks.json') || info.manifest.hooks) parts.push('hooks (they run commands on events)');
   const rules = files.filter((f) => /^rules\/.+\.(mdc|md)$/i.test(f)).length;
   if (info.format === 'cursor' && rules) parts.push(rules + ' rule' + (rules === 1 ? '' : 's') + ' (as skills)');
@@ -362,11 +390,15 @@ async function adaptCursorOrCopilot(destDir, info, manifest, files) {
     const rels = [].concat(m[key] || []).map(insideRel).filter(Boolean);
     if (rels.length && !(rels.length === 1 && rels[0] === key)) manifest[key] = rels.map((rel) => './' + rel);
   }
-  // Hooks: keep groups under Claude Code event names, drop the rest (reported).
-  const { kept } = splitHookEvents(await hookDoc(destDir, info));
+    // Hooks under Cursor/Copilot event names run through the protocol bridge.
+  const doc = await hookDoc(destDir, info);
+  const { kept } = splitHookEvents(doc);
+  const bridged = bridgedHooks(destDir, info, doc).hooks;
   delete manifest.hooks;
   for (const rel of ['hooks/hooks.json', 'hooks.json']) await rm(path.join(destDir, rel), { force: true });
-  if (kept) manifest.hooks = kept;
+  const merged = { ...(kept || {}) };
+  for (const [event, groups] of Object.entries(bridged)) merged[event] = [...(merged[event] || []), ...groups];
+  if (Object.keys(merged).length) manifest.hooks = merged;
   if (info.format === 'copilot') {
     if (!manifest.mcpServers && !(await readJson(path.join(destDir, '.mcp.json')))) {
       const servers = normalizeServers(await readJson(path.join(destDir, '.github', 'mcp.json')));
