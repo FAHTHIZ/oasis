@@ -71,3 +71,17 @@ test('rehearse comes from your own settings only; worldDrift from any', async (t
   settings = await loadSettings(root, { env, skipPlugins: true });
   assert.equal(settings.rehearse, false, 'a repository can turn it off');
 });
+
+test('canaryCredentials can be turned off by your own settings only', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-keys-'));
+  const config = await mkdtemp(path.join(os.tmpdir(), 'oasis-keys-cfg-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(config, { recursive: true, force: true })]));
+  const env = { ...process.env, OASIS_CONFIG_DIR: config, OASIS_IGNORE_CLAUDE_SETTINGS: '1' };
+  await mkdir(path.join(root, '.oasis'));
+  await writeFile(path.join(root, '.oasis', 'settings.json'), JSON.stringify({ canaryCredentials: false }));
+  let settings = await loadSettings(root, { env, skipPlugins: true });
+  assert.equal(settings.canaryCredentials, undefined, 'a repository cannot remove the tripwire');
+  await writeFile(path.join(config, 'settings.json'), JSON.stringify({ canaryCredentials: false }));
+  settings = await loadSettings(root, { env, skipPlugins: true });
+  assert.equal(settings.canaryCredentials, false);
+});
