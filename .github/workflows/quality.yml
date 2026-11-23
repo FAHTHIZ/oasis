@@ -29,6 +29,28 @@ jobs:
       - name: Run Oxlint
         run: npm exec --yes --package="oxlint@$(node -p "require('./package.json').devDependencies.oxlint")" -- oxlint --deny-warnings
 
+  attribution:
+    name: Commit messages credit no AI tool
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      # Only the commits this push adds; history already published is not judged here.
+      - name: Check the pushed commits
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: node .github/scripts/check-commit-attribution.mjs "$BEFORE" "$AFTER"
+
   integrity:
     name: Node ${{ matrix.node-version }} runtime and package integrity
     runs-on: ubuntu-latest
