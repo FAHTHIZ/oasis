@@ -4,6 +4,10 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Added
+
+- Calibrated confidence on the shared knowledge board. `knowledge_post` takes a `confidence`, and OASIS scores it: a finding holds when another agent independently corroborates or supports it with grounded evidence, or its rival in a dispute is retracted; it fails when it is withdrawn, retracted or loses a dispute. Each settled finding is a forecast recorded per model and agent type. Readers see the stated confidence next to what it has historically meant for that model (`calibrated_confidence`, and `confidence 0.95 (calibrated 0.49)` in subagent prompts), and search ranks by the calibrated value. `oasis agents calibration` prints Brier scores, over- or under-confidence and reliability tables. Turn it off with `OASIS_CALIBRATION=0` or `"calibration": false`. See [Calibrated confidence](docs/SUBAGENTS.md#calibrated-confidence).
+
 ## [1.8.0] - 2026-11-23
 
 ### Added

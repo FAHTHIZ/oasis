@@ -903,6 +903,27 @@ async function agentExperienceCommand(root, rest) {
   stdout.write(formatTrackRecord(records) + '\n');
 }
 
+// `oasis agents calibration [--by-type] [--model NAME] [--json] [--forget]`:
+// how often each model's stated confidence on board findings held.
+async function agentCalibrationCommand(rest) {
+  const { sharedCalibrationLedger, calibrationTable, formatCalibrationTable, calibrationFile } = await import('./calibration.mjs');
+  const value = (flag) => { const index = rest.indexOf(flag); return index >= 0 ? rest[index + 1] || '' : ''; };
+  const unknown = rest.filter((arg, index) => arg.startsWith('-') && !['--by-type', '--json', '--forget', '--model'].includes(arg) && rest[index - 1] !== '--model');
+  if (unknown.length) throw new Error('Unknown option ' + unknown[0] + '. Usage: oasis agents calibration [--by-type] [--model NAME] [--json] [--forget]');
+  const ledger = sharedCalibrationLedger(process.env);
+  if (!ledger) throw new Error('Calibration is off (OASIS_CALIBRATION=0).');
+  const model = value('--model');
+  if (rest.includes('--forget')) {
+    const removed = ledger.forget({ model });
+    stdout.write('Removed ' + removed + ' settled forecast' + (removed === 1 ? '' : 's') + (model ? ' for ' + model : '') + ' from ' + calibrationFile(process.env) + '.\n');
+    return;
+  }
+  const records = ledger.records({ model });
+  const rows = calibrationTable(records, { by: rest.includes('--by-type') ? ['model', 'type'] : ['model'] });
+  if (rest.includes('--json')) { stdout.write(JSON.stringify({ forecasts: records.length, rows }, null, 2) + '\n'); return; }
+  stdout.write(formatCalibrationTable(rows) + '\n');
+}
+
 // `oasis ultrareview [target] [--json] [--timeout MIN] [--post]`: the deep review, non-interactively.
 async function ultrareviewCommand(root, rest, autoApprove, persistence) {
   const words = [];
@@ -3869,6 +3890,7 @@ async function main() {
   if (command === 'auth') return await authCommand(workspace, rest);
   if (command === 'setup-token') return await setupTokenCommand(rest);
   if (command === 'agents' && rest[0] === 'experience') return await agentExperienceCommand(workspace, rest.slice(1));
+  if (command === 'agents' && rest[0] === 'calibration') return await agentCalibrationCommand(rest.slice(1));
   if (command === 'agents' && (rest.includes('--json') || !stdin.isTTY)) return await agentsCommand(rest);
   if (command === 'ultrareview') return await ultrareviewCommand(workspace, rest, autoApprove, persistence);
   if (command === 'insights') {
