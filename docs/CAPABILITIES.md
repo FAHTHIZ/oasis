@@ -32,6 +32,7 @@ performance claim.
 | `mutation_probe`: revert check and planted bugs on the changed lines show whether the tests catch a regression in the change | Unreleased | [User guide](USER-GUIDE.md#do-the-tests-catch-a-bug-in-the-change) |
 | `bisect_regression`: `git bisect` in an isolated worktree finds the first commit that broke a check, with endpoint checks and skip support | Unreleased | [User guide](USER-GUIDE.md#which-commit-broke-it) |
 | `flaky_check`: reruns a check (optionally several copies at once) to tell a reproducible failure from a flaky one, with error signatures and likely causes | Unreleased | [User guide](USER-GUIDE.md#is-the-failure-real) |
+| `minimize_repro`: delta debugging shrinks a failing input to the lines (or characters) that still reproduce the same failure | Unreleased | [User guide](USER-GUIDE.md#shrink-a-failing-input) |
 | Evidence checks for research (cite only fetched pages) and analysis (numbers must come from code that ran) | Stable | [Agent network](AGENT-NETWORK.md#evidence-and-contracts) |
 | Sessions, resume, fork, export (`/export`, HTML and Markdown) | Stable | [Terminal guide](TERMINAL.md) |
 | Memory across sessions, `session_search`, `/learning` skill proposals | Released, lightly tested | [Extending OASIS](EXTENDING.md) |
