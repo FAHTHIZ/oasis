@@ -97,8 +97,10 @@ async function waitFor(page, expression, { timeout = 60000, label = expression }
 // a bare getElementById(...).click() then threw on null.
 const click = (page, id, options = {}) => waitFor(page, `(() => { const el = document.getElementById(${JSON.stringify(id)}); if (!el || el.hidden || el.disabled) return false; el.click(); return true; })()`, { label: 'click #' + id, timeout: 20000, ...options });
 const paste = (selector, value) => `(() => { const el = document.querySelector(${JSON.stringify(selector)}); el.focus(); const dt = new DataTransfer(); dt.setData('text/plain', ${JSON.stringify(value)}); el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); return true; })()`;
-const type = (value) => `(() => { const el = document.getElementById('input'); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`;
-const submit = `(() => { document.getElementById('composer').requestSubmit(); return true; })()`;
+// type and submit go through waitFor too: right after a reload the page can
+// still be swapping its DOM, and a bare getElementById('input') was null.
+const type = (value) => `(() => { const el = document.getElementById('input'); if (!el) return false; el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`;
+const submit = `(() => { const form = document.getElementById('composer'); if (!form) return false; form.requestSubmit(); return true; })()`;
 const busy = `document.body.classList.contains('busy')`; // setBusy() toggles it on <body>
 
 test('runtime engine end to end: app at /, paste to connect, approve a real edit, files and changes', { skip: chrome ? false : 'no Chrome/Chromium installed', timeout: 360000 }, async (t) => {
@@ -175,8 +177,8 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
 
   // 3. A task that edits real files (checkpointed, no prompt) and then runs a
   // command, which the app's own approval sheet asks about.
-  await evaluate(page, type('Build a counter web app in index.html'));
-  await evaluate(page, submit);
+  await waitFor(page, type('Build a counter web app in index.html'));
+  await waitFor(page, submit, { label: 'submit the message box', timeout: 20000 });
   await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval sheet for the command', timeout: 30000 });
   assert.match(await evaluate(page, `document.querySelector('#approvalSummary .approval-command').textContent`), /^node -e/);
   assert.equal(await evaluate(page, `document.querySelector('#approvalSummary .risk-badge') ? 'risky' : 'plain'`), 'risky');
@@ -214,12 +216,12 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await waitFor(page, `document.readyState === 'complete' && !window.__stale && document.documentElement.dataset.ready === '1' && document.documentElement.classList.contains('runtime') && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'chat restored after reload' });
 
   // 6. Typing while OASIS works adds a note to the running task.
-  await evaluate(page, type('Run a slow check'));
-  await evaluate(page, submit);
+  await waitFor(page, type('Run a slow check'));
+  await waitFor(page, submit, { label: 'submit the message box', timeout: 20000 });
   await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval for the slow check', timeout: 30000 });
-  await evaluate(page, type('use tabs please'));
+  await waitFor(page, type('use tabs please'));
   assert.equal(await evaluate(page, `document.body.classList.contains('steering') && document.getElementById('sendButton').getAttribute('aria-label')`), 'Send to the running task');
-  await evaluate(page, submit);
+  await waitFor(page, submit, { label: 'submit the message box', timeout: 20000 });
   // The note waits as a chip above the message box (not a new turn) until the agent reads it.
   await waitFor(page, `document.getElementById('input').value === '' && [...document.querySelectorAll('#pendingInputs .pending-input.steer')].some((m) => /use tabs please/.test(m.textContent))`, { label: 'note waiting above the message box' });
   assert.equal(await evaluate(page, `[...document.querySelectorAll('.msg.user')].some((m) => /use tabs please/.test(m.textContent))`), false, 'a waiting note is not shown as a new message');
@@ -240,9 +242,9 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   // 7. A pasted screenshot goes to the model as an image.
   await evaluate(page, `(() => { const c = document.createElement('canvas'); c.width = 40; c.height = 30; const g = c.getContext('2d'); g.fillStyle = '#c00'; g.fillRect(0, 0, 40, 30); return new Promise((r) => c.toBlob((blob) => { const dt = new DataTransfer(); dt.items.add(new File([blob], 'shot.png', { type: 'image/png' })); const el = document.getElementById('input'); el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); r(true); }, 'image/png')); })()`);
   await waitFor(page, `document.querySelectorAll('#attachments .attachment').length === 1`, { label: 'pasted image shown above the message box' });
-  await evaluate(page, type('What is in this screenshot?'));
+  await waitFor(page, type('What is in this screenshot?'));
   await shot('7-image');
-  await evaluate(page, submit);
+  await waitFor(page, submit, { label: 'submit the message box', timeout: 20000 });
   await waitFor(page, `!${busy} && /I can see your image \\(data:image\\/png;base64/.test(document.getElementById('transcript').textContent)`, { label: 'the model received the image', timeout: 30000 });
   assert.equal(await evaluate(page, `document.querySelectorAll('#attachments .attachment').length + ':' + document.querySelectorAll('.msg.user .thumbs img').length`), '0:1', 'the image moved into the sent message');
   await shot('7-image-sent');
@@ -253,8 +255,8 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, `(() => { window.__adds = []; const t = document.getElementById('transcript'); const add = t.appendChild.bind(t); t.appendChild = (node) => { window.__adds.push((node.className || '') + ' @ ' + new Error().stack.split('\\n').slice(2, 6).join(' | ')); return add(node); }; return true; })()`);
   await click(page, 'newChatButton');
   await waitFor(page, `document.getElementById('chatsSheet').hidden && !document.querySelector('#transcript .msg') && !document.getElementById('welcome').hidden`, { label: 'new chat is empty' });
-  await evaluate(page, type('Say hi'));
-  await evaluate(page, submit);
+  await waitFor(page, type('Say hi'));
+  await waitFor(page, submit, { label: 'submit the message box', timeout: 20000 });
   await waitFor(page, `!${busy} && /Answer from acme\\/coder-pro/.test(document.getElementById('transcript').textContent)`, { label: 'second chat answered' });
   await click(page, 'chatsButton');
   await waitFor(page, `document.querySelectorAll('#chatList .project-item').length === 2`, { label: 'two chats listed' });
@@ -268,26 +270,26 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
 
   // 9. Dictation writes into the message box and sends nothing by itself.
   await waitFor(page, `Boolean(document.getElementById('input')) && !${busy} && !document.getElementById('dictateButton').hidden`, { label: 'app ready after reload, with a microphone button' });
-  await evaluate(page, type('Please'));
+  await waitFor(page, type('Please'));
   await click(page, 'dictateButton');
   await waitFor(page, `document.getElementById('dictateButton').classList.contains('listening') && document.getElementById('input').value === 'Please add a reset button'`, { label: 'dictated words appear after what was typed' });
   await click(page, 'dictateButton');
   await waitFor(page, `!document.getElementById('dictateButton').classList.contains('listening') && document.getElementById('dictateButton').getAttribute('aria-pressed') === 'false'`, { label: 'dictation stopped' });
   assert.equal(await evaluate(page, `document.querySelectorAll('.msg.user').length > 0 && !/reset button/.test(document.getElementById('transcript').textContent)`), true, 'nothing was sent');
-  await evaluate(page, type(''));
+  await waitFor(page, type(''));
 
   // 10. `!command` runs on this computer after approval, without the model,
   // and its output goes with the next message.
   await waitFor(page, `Boolean(document.getElementById('input')) && !${busy}`, { label: 'app ready after reload' });
-  await evaluate(page, type('!node -e "console.log(6 * 7)" | cat'));
-  await evaluate(page, submit);
+  await waitFor(page, type('!node -e "console.log(6 * 7)" | cat'));
+  await waitFor(page, submit, { label: 'submit the message box', timeout: 20000 });
   await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval for the ! command', timeout: 30000 });
   assert.match(await evaluate(page, `document.querySelector('#approvalSummary').textContent`), /node/);
   await click(page, 'allowButton');
   await waitFor(page, `!${busy} && [...document.querySelectorAll('.tool')].at(-1).className === 'tool ok' && /42/.test([...document.querySelectorAll('.tool')].at(-1).textContent)`, { label: 'the ! command ran and its output is shown', timeout: 30000 });
   await shot('8-shell');
-  await evaluate(page, type('What did that print?'));
-  await evaluate(page, submit);
+  await waitFor(page, type('What did that print?'));
+  await waitFor(page, submit, { label: 'submit the message box', timeout: 20000 });
   await waitFor(page, `!${busy} && /Your command printed 42\\./.test(document.getElementById('transcript').textContent)`, { label: 'the next message carried the command output', timeout: 30000 });
 
   // 11. Opening the terminal panel asks first. No task is waiting on that
