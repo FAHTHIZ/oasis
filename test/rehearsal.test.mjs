@@ -321,3 +321,23 @@ test('run_shell offers and applies the rehearsal the same way', { skip }, async 
   assert.equal(await readFile(path.join(root, 'count.txt'), 'utf8'), 'run\n');
   assert.equal(await readFile(path.join(root, 'other.txt'), 'utf8'), 'two\n');
 });
+
+test('edits made while the approval prompt is open are not credited to the command', async (t) => {
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const root = await workspace();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  execFileSync('git', ['init', '-q'], { cwd: root });
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], { cwd: root });
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'base'], { cwd: root });
+  const env = { ...process.env, OASIS_REHEARSE: '0', OASIS_CONFIG_DIR: path.join(os.tmpdir(), 'oasis-rebase-cfg-' + process.pid) };
+  t.after(() => rm(env.OASIS_CONFIG_DIR, { recursive: true, force: true }));
+  const make = await script(root, 'make-b.sh', 'echo built > built.txt');
+  const { config, requests } = await scriptedModel(t, [toolCall('c1', 'run_command', { command: make, args: [] }), { content: 'done' }]);
+  const session = await createSession({ root, config, env });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'build', { env, approval: async () => { await writeFile(path.join(root, 'a.txt'), 'edited by a person meanwhile\n'); return true; } });
+  const tool = JSON.parse(requests[1].messages.find((message) => message.role === 'tool').content);
+  assert.ok(tool.effects, JSON.stringify(tool));
+  assert.deepEqual(tool.effects.files, ['built.txt (added)']);
+});
