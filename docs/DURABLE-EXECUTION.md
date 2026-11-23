@@ -11,7 +11,7 @@ The intent journal closes both by deciding from the world, not from memory.
 
 ## How it works
 
-Before a consequential call starts, after it was authorized, OASIS appends an `intent` record to the session's journal and fsyncs it. When the call returns (or fails), it appends a `done` record. The journal is JSON Lines under the session folder (`sessions/<workspace>/journal/<id>.jsonl`, mode 600). A torn last line from a crash mid-write is skipped.
+Before a consequential call starts, after it was authorized, OASIS appends an `intent` record to the session's journal and fsyncs it. When the call returns (or fails), it appends a `done` record carrying the intent's sequence number; outcomes pair with intents by that number, not by tool-call ID, because IDs repeat across turns. The journal is JSON Lines under the session folder (`sessions/<workspace>/journal/<id>.jsonl`, mode 600). A torn last line from a crash mid-write is skipped.
 
 Each intent carries **probes**: observations taken just before the call, with the state the call should leave where that is known in advance.
 
