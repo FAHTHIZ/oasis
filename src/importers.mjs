@@ -15,6 +15,9 @@
 //           .cursor/mcp.json                        -> project .mcp.json
 //           .cursorrules, .cursor/rules/**/*.mdc    -> .claude/rules/ (globs -> paths)
 //           .cursor/commands/*.md                   -> project commands
+//   Factory ~/.factory/mcp.json, .factory/mcp.json  -> user and project MCP servers
+//           (droids, commands, skills and hooks run in place; see subagents.mjs,
+//           commands.mjs, tools.mjs and foreign-hooks.mjs)
 //   Claude  ~/.claude/projects/<this repo>/memory/*.md -> OASIS project memories
 //   Hermes  ~/.hermes/config.yaml mcp_servers       -> user MCP servers
 //           memories/MEMORY.md, USER.md             -> OASIS user memories
@@ -47,7 +50,7 @@ import { parse as parseJsoncText, printParseErrorCode } from 'jsonc-parser';
 import { parseYamlMapping, splitFrontMatter } from './frontmatter.mjs';
 import { replaceFileDurably } from './atomic-write.mjs';
 
-const IMPORT_SOURCES = ['codex', 'gemini', 'cursor', 'claude', 'hermes', 'openclaw', 'opencode', 'antigravity', 'windsurf', 'cline'];
+const IMPORT_SOURCES = ['codex', 'gemini', 'cursor', 'factory', 'claude', 'hermes', 'openclaw', 'opencode', 'antigravity', 'windsurf', 'cline'];
 const MAX_SKILL_BYTES = 4 * 1024 * 1024;
 const MAX_FILE = 256 * 1024;
 
@@ -149,7 +152,7 @@ export function normalizeServer(raw, flavor) {
   }
   const url = flavor === 'gemini' ? (raw.httpUrl || raw.url) : (raw.url || raw.serverUrl);
   if (url) {
-    out.type = flavor === 'gemini' && raw.url && !raw.httpUrl ? 'sse' : 'http';
+    out.type = raw.type === 'sse' || (flavor === 'gemini' && raw.url && !raw.httpUrl) ? 'sse' : 'http';
     out.url = String(url);
     const headers = { ...(raw.headers || raw.http_headers || {}) };
     if (raw.bearer_token_env_var) headers.Authorization = 'Bearer ${' + raw.bearer_token_env_var + '}';
@@ -402,6 +405,10 @@ export async function planImport(root, options = {}) {
     for (const { file, parts } of await listFiles(path.join(workspace, '.cursor', 'commands'), '.md')) {
       await addFile('command', 'cursor', file, path.join(workspace, '.oasis', 'commands', ...parts.slice(0, -1).map(slug), slug(parts[parts.length - 1]) + '.md'), await readText(file), parts.join(':'));
     }
+  }
+  if (sources.includes('factory')) {
+    addServers(((await readJson(path.join(home, '.factory', 'mcp.json'))) || {}).mcpServers, 'factory', 'user', 'factory');
+    addServers(((await readJson(path.join(workspace, '.factory', 'mcp.json'))) || {}).mcpServers, 'factory', 'project', 'factory');
   }
   if (sources.includes('claude')) {
     const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(home, '.claude');
@@ -666,7 +673,7 @@ export function parseImportArgs(args) {
   return { sources, dryRun, yes };
 }
 
-const SOURCE_LABELS = { codex: 'Codex', gemini: 'Gemini CLI', cursor: 'Cursor', claude: 'Claude Code', hermes: 'Hermes', openclaw: 'OpenClaw', opencode: 'OpenCode', antigravity: 'Antigravity', windsurf: 'Windsurf', cline: 'Cline' };
+const SOURCE_LABELS = { codex: 'Codex', gemini: 'Gemini CLI', cursor: 'Cursor', factory: 'Factory Droid', claude: 'Claude Code', hermes: 'Hermes', openclaw: 'OpenClaw', opencode: 'OpenCode', antigravity: 'Antigravity', windsurf: 'Windsurf', cline: 'Cline' };
 
 // Startup hint for people arriving from another agent: name what /import would
 // bring over. Shown once for a given set of items; a new item shows it again.
