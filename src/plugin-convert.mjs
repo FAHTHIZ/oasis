@@ -217,21 +217,6 @@ function geminiServer(raw, settings) {
   return out;
 }
 
-// Gemini hook events -> Claude Code hook events (others have no counterpart).
-const GEMINI_EVENTS = { BeforeTool: 'PreToolUse', AfterTool: 'PostToolUse', SessionStart: 'SessionStart', SessionEnd: 'SessionEnd', BeforeAgent: 'UserPromptSubmit', AfterAgent: 'Stop', Notification: 'Notification', PreCompress: 'PreCompact' };
-
-function convertGeminiHooks(doc) {
-  const hooks = doc && doc.hooks && typeof doc.hooks === 'object' ? doc.hooks : null;
-  if (!hooks) return null;
-  const out = {};
-  for (const [event, groups] of Object.entries(hooks)) {
-    const target = GEMINI_EVENTS[event];
-    if (!target || !Array.isArray(groups)) continue;
-    out[target] = JSON.parse(JSON.stringify(groups), (key, value) => geminiVars(value));
-  }
-  return Object.keys(out).length ? { hooks: out } : null;
-}
-
 // Codex and Agent Plugins resolve a relative stdio `cwd` (and a `./` command)
 // against the plugin root, and expand ${PLUGIN_ROOT} / ${PLUGIN_DATA}. Claude
 // Code plugins spell those ${CLAUDE_PLUGIN_ROOT} / ${CLAUDE_PLUGIN_DATA}.
@@ -353,9 +338,11 @@ export async function convertToClaudePlugin(srcDir, destDir, info) {
     // Gemini hooks use their own event names: rewrite them, drop the original.
     const hooksDoc = await readJson(path.join(destDir, 'hooks', 'hooks.json'));
     if (hooksDoc) {
-      const converted = convertGeminiHooks(hooksDoc);
+      // Through the protocol bridge: Gemini tool names, stdin fields, millisecond
+      // timeouts and decision replies all differ from Claude Code's.
+      const { hooks } = bridgeHookDoc('gemini', hooksDoc, (text, { path: isPath } = {}) => isPath ? '"' + geminiVars(String(text)) + '"' : geminiVars(String(text)));
       await rm(path.join(destDir, 'hooks', 'hooks.json'), { force: true });
-      if (converted) manifest.hooks = converted;
+      if (Object.keys(hooks).length) manifest.hooks = { hooks };
     }
     // GEMINI.md is always-on context in Gemini; here it becomes a skill the agent reads when it applies.
     const context = contextFiles(m, files);

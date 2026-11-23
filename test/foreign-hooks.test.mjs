@@ -77,3 +77,50 @@ test('OASIS_OTHER_AGENT_RULES=0 and "otherAgentHooks": false turn it off', async
   const settings = await loadSettings(root, { env });
   assert.ok(!Object.values(settings.hooks).flat().flatMap((group) => group.hooks).some((hook) => hook.protocol));
 });
+
+test('Gemini CLI settings hooks run through the bridge: tool names, millisecond timeouts and deny', async (t) => {
+  const { root, home, env, log } = await setup(t);
+  const script = path.join(root, 'gemini-guard.mjs');
+  await writeFile(script, [
+    "import { readFileSync, writeFileSync } from 'node:fs';",
+    "const input = JSON.parse(readFileSync(0, 'utf8'));",
+    "writeFileSync(process.argv[2], JSON.stringify({ input, dir: process.env.GEMINI_PROJECT_DIR }));",
+    "process.stdout.write(JSON.stringify({ decision: 'deny', reason: 'Gemini says no.' }));"
+  ].join('\n'));
+  await mkdir(path.join(root, '.gemini'), { recursive: true });
+  await writeFile(path.join(root, '.gemini', 'settings.json'), `{
+    // comments are allowed
+    "hooks": {
+      "BeforeTool": [{ "matcher": "run_shell_command", "hooks": [{ "name": "guard", "type": "command", "command": ${JSON.stringify(JSON.stringify(process.execPath) + ' ' + JSON.stringify(script) + ' ' + JSON.stringify(log))}, "timeout": 5000 }] }],
+      "BeforeModel": [{ "hooks": [{ "type": "command", "command": "echo x" }] }]
+    }
+  }`);
+  const [item] = (await loadForeignHooks(root, { env, home, trusted: true })).filter((entry) => entry.protocol === 'gemini');
+  assert.deepEqual(item.dropped, ['BeforeModel']);
+  const settings = await loadSettings(root, { env });
+  const hook = settings.hooks.PreToolUse.flatMap((group) => group.hooks).find((entry) => entry.protocol === 'gemini');
+  assert.equal(hook.timeout, 5);
+  assert.equal(hook.foreignMatcher, 'run_shell_command');
+  // A file read does not match the shell matcher.
+  const read = await runHooks('PreToolUse', { session_id: 's1', tool_name: 'Read', oasis_tool_name: 'read_file', tool_name_oasis: 'read_file', tool_input: { path: 'a.txt' } }, { hooks: settings.hooks, root });
+  assert.notEqual(read.permissionDecision, 'deny');
+  const result = await runHooks('PreToolUse', { session_id: 's1', tool_name: 'Bash', oasis_tool_name: 'run_shell', tool_name_oasis: 'run_shell', tool_input: { command: 'rm -rf dist' } }, { hooks: settings.hooks, root });
+  assert.equal(result.permissionDecision, 'deny');
+  assert.match(result.reason, /Gemini says no/);
+  const seen = JSON.parse(await readFile(log, 'utf8'));
+  assert.equal(seen.input.hook_event_name, 'BeforeTool');
+  assert.equal(seen.input.tool_name, 'run_shell_command');
+  assert.equal(seen.input.tool_input.command, 'rm -rf dist');
+  assert.equal(seen.dir, root);
+});
+
+test('Gemini hooksConfig.disabled skips a named hook; enabled: false skips all', async (t) => {
+  const { root, home, env } = await setup(t);
+  await mkdir(path.join(root, '.gemini'), { recursive: true });
+  const doc = (config) => JSON.stringify({ hooksConfig: config, hooks: { AfterAgent: [{ hooks: [{ name: 'a', type: 'command', command: 'echo a' }, { name: 'b', type: 'command', command: 'echo b' }] }] } });
+  await writeFile(path.join(root, '.gemini', 'settings.json'), doc({ disabled: ['a'] }));
+  let [item] = await loadForeignHooks(root, { env, home, trusted: true });
+  assert.deepEqual(item.hooks.Stop.flatMap((group) => group.hooks).map((hook) => hook.command), ['echo b']);
+  await writeFile(path.join(root, '.gemini', 'settings.json'), doc({ enabled: false }));
+  assert.deepEqual(await loadForeignHooks(root, { env, home, trusted: true }), []);
+});

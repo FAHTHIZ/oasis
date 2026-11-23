@@ -1,8 +1,9 @@
 // Hooks other agents already run in this project, run by OASIS too.
 //
 // A team that uses Cursor or GitHub Copilot keeps hooks next to the code:
-// .cursor/hooks.json (Cursor) and .github/hooks/*.json (Copilot CLI and the
-// Copilot coding agent). Cursor's user hooks live in ~/.cursor/hooks.json.
+// .cursor/hooks.json (Cursor), .github/hooks/*.json (Copilot CLI and the
+// Copilot coding agent) and the "hooks" of .gemini/settings.json (Gemini CLI).
+// User hooks live in ~/.cursor/hooks.json and ~/.gemini/settings.json.
 // They are read in place and run through the protocol bridge
 // (hook-bridges.mjs): each hook is filed under the Claude Code event that
 // fires at the same moment, gets the stdin fields its own tool sends, and its
@@ -16,6 +17,7 @@ import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { parse as parseJsonc } from 'jsonc-parser';
 import { bridgeHookDoc } from './hook-bridges.mjs';
 
 const MAX_FILE = 256 * 1024;
@@ -24,7 +26,10 @@ async function readJson(file) {
   try {
     const text = await readFile(file, 'utf8');
     if (text.length > MAX_FILE) return null;
-    const value = JSON.parse(text);
+    // Gemini settings may carry comments.
+    const errors = [];
+    const value = parseJsonc(text, errors, { allowTrailingComma: true });
+    if (errors.length) return null;
     return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
   } catch { return null; }
 }
@@ -51,12 +56,16 @@ function rooted(base) {
  */
 export async function loadForeignHooks(root, { env = process.env, home = env.HOME || os.homedir(), trusted = false } = {}) {
   if (env.OASIS_OTHER_AGENT_RULES === '0') return [];
-  const sources = [{ scope: 'user', protocol: 'cursor', file: path.join(home, '.cursor', 'hooks.json'), base: path.join(home, '.cursor') }];
+  const sources = [
+    { scope: 'user', protocol: 'cursor', file: path.join(home, '.cursor', 'hooks.json'), base: path.join(home, '.cursor') },
+    { scope: 'user', protocol: 'gemini', file: path.join(home, '.gemini', 'settings.json'), base: root ? path.resolve(root) : home }
+  ];
   if (root && trusted) {
     const workspace = path.resolve(root);
     // The user file and the project file are different places only when the
     // project is not the home folder itself.
     if (path.resolve(workspace, '.cursor', 'hooks.json') !== sources[0].file) sources.push({ scope: 'project', protocol: 'cursor', file: path.join(workspace, '.cursor', 'hooks.json'), base: workspace });
+    if (path.resolve(workspace, '.gemini', 'settings.json') !== sources[1].file) sources.push({ scope: 'project', protocol: 'gemini', file: path.join(workspace, '.gemini', 'settings.json'), base: workspace });
     let names = [];
     try { names = (await readdir(path.join(workspace, '.github', 'hooks'))).filter((name) => name.endsWith('.json')).sort(); } catch { /* none */ }
     for (const name of names) sources.push({ scope: 'project', protocol: 'copilot', file: path.join(workspace, '.github', 'hooks', name), base: workspace });

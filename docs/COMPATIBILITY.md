@@ -85,8 +85,9 @@ carried over", anything OASIS will not run.
 
 ### Hook protocol bridge
 
-Cursor ([hooks](https://cursor.com/docs/agent/hooks)) and Copilot CLI
+Cursor ([hooks](https://cursor.com/docs/agent/hooks)), Copilot CLI
 ([hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference))
+and Gemini CLI ([hooks reference](https://geminicli.com/docs/hooks/reference/))
 hooks are commands like Claude Code's, but with their own event names, stdin
 fields and reply fields. OASIS runs them unchanged: each one is filed under the
 Claude Code event that fires at the same moment, and when it runs the payload is
@@ -104,8 +105,18 @@ reads it. A plugin that also ships Claude Code hooks keeps those as they are.
 | Copilot `permissionRequest` | `PermissionRequest` | `behavior` allow or deny; `interrupt` stops the agent |
 | Copilot `agentStop`, `subagentStop` | `Stop`, `SubagentStop` | `decision: "block"` keeps the agent working |
 | Copilot `postToolUse`, `postToolUseFailure`, `sessionStart`, `sessionEnd`, `userPromptSubmitted`, `errorOccurred`, `subagentStart`, `preCompact`, `notification` | the matching event | `additionalContext`; `postToolUse` `modifiedResult` |
+| Gemini `BeforeTool` | `PreToolUse`; the matcher is a regular expression over Gemini tool names (`run_shell_command`, `read_file`, `write_file`, `replace`, `glob`, `grep_search`, `list_directory`, `web_fetch`, `google_web_search`, `mcp_SERVER_TOOL`) | `decision` deny or block with `reason`; `hookSpecificOutput.tool_input` is merged over the call's arguments. `allow` is not taken as a grant: OASIS still asks where it would |
+| Gemini `AfterTool` | `PostToolUse` | `decision: "deny"` replaces the result with `reason`; `additionalContext` reaches the model; `tailToolCallRequest` is reported and ignored |
+| Gemini `BeforeAgent`, `AfterAgent` | `UserPromptSubmit`, `Stop` | `deny` drops the prompt, or asks for another turn with `reason` as the prompt; `continue: false` stops |
+| Gemini `SessionStart`, `SessionEnd`, `Notification`, `PreCompress` | the matching event (the matcher is an exact `source`, `reason`, type or `trigger`) | `additionalContext` at session start; `systemMessage` |
 
-Exit codes keep each tool's meaning. Cursor: exit 2 denies or blocks; a
+Gemini timeouts are milliseconds and become seconds; `hooksConfig.disabled`
+skips hooks by `name` and `hooksConfig.enabled: false` skips them all.
+`BeforeModel`, `AfterModel` and `BeforeToolSelection` have no OASIS moment and
+are reported. Gemini extensions installed as plugins use the same bridge.
+
+Exit codes keep each tool's meaning. Gemini: exit 2 blocks with stderr as the
+reason (after a tool it replaces the result), other codes warn. Cursor: exit 2 denies or blocks; a
 permission hook whose reply is not JSON blocks the action, and `failClosed:
 true` makes a crash or timeout block too; other failures let the action go on.
 Copilot: exit 2 denies `preToolUse` and `permissionRequest`, turns stdout into
@@ -129,9 +140,10 @@ these tools use: `OASIS_PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `PLUGIN_ROOT`;
 `${NAME}` works for each in manifests, commands and skills.
 
 The same bridge runs hooks a repository already keeps for other agents, read in
-place with no install step: `.cursor/hooks.json` (Cursor) and
-`.github/hooks/*.json` (Copilot CLI and the Copilot coding agent) in the
-project, and Cursor's user file `~/.cursor/hooks.json`. Project files load only
+place with no install step: `.cursor/hooks.json` (Cursor),
+`.github/hooks/*.json` (Copilot CLI and the Copilot coding agent) and the
+`hooks` of `.gemini/settings.json` (Gemini CLI) in the project, and the user
+files `~/.cursor/hooks.json` and `~/.gemini/settings.json`. Project files load only
 in a trusted workspace, like `.claude/settings.json` hooks; the user file always
 loads. A relative script path at the start of a command is made absolute (the
 project folder, or `~/.cursor` for the user file). Hook policy

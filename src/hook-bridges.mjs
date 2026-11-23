@@ -18,7 +18,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-export const BRIDGE_PROTOCOLS = ['cursor', 'copilot'];
+export const BRIDGE_PROTOCOLS = ['cursor', 'copilot', 'gemini'];
 
 // Cursor hook events -> the Claude Code event that fires at the same moment,
 // and (for tool events) which tools it covers. Events with no OASIS moment
@@ -61,15 +61,32 @@ export const COPILOT_EVENTS = {
   notification: { event: 'Notification' }
 };
 
+// Gemini CLI hook events (settings.json and extension hooks/hooks.json).
+// BeforeModel, AfterModel and BeforeToolSelection have no OASIS moment.
+export const GEMINI_EVENTS = {
+  BeforeTool: { event: 'PreToolUse' },
+  AfterTool: { event: 'PostToolUse' },
+  BeforeAgent: { event: 'UserPromptSubmit' },
+  AfterAgent: { event: 'Stop' },
+  SessionStart: { event: 'SessionStart' },
+  SessionEnd: { event: 'SessionEnd' },
+  Notification: { event: 'Notification' },
+  PreCompress: { event: 'PreCompact' }
+};
+
 export function bridgeEventTable(protocol) {
-  return protocol === 'cursor' ? CURSOR_EVENTS : protocol === 'copilot' ? COPILOT_EVENTS : null;
+  return protocol === 'cursor' ? CURSOR_EVENTS : protocol === 'copilot' ? COPILOT_EVENTS : protocol === 'gemini' ? GEMINI_EVENTS : null;
 }
 
 // Tool names each agent shows its hooks, by OASIS tool.
 const CURSOR_TOOLS = { run_command: 'Shell', run_shell: 'Shell', powershell: 'Shell', read_file: 'Read', write_file: 'Write', edit_file: 'Write', multi_edit: 'Write', notebook_edit: 'Write', delete_file: 'Delete', grep: 'Grep', search_files: 'Grep', glob_files: 'Glob', list_files: 'LS', task: 'Task', fetch_url: 'WebFetch', web_search: 'WebSearch', todo_write: 'TodoWrite' };
 const COPILOT_TOOLS = { run_command: 'bash', run_shell: 'bash', powershell: 'powershell', read_file: 'view', list_files: 'view', write_file: 'create', edit_file: 'edit', multi_edit: 'edit', grep: 'grep', search_files: 'grep', glob_files: 'glob', fetch_url: 'web_fetch', web_search: 'web_search', task: 'task' };
 
-const PERMISSION_EVENTS = { cursor: new Set(['preToolUse', 'beforeShellExecution', 'beforeMCPExecution', 'beforeReadFile']), copilot: new Set(['preToolUse']) };
+const GEMINI_TOOLS = { run_command: 'run_shell_command', run_shell: 'run_shell_command', powershell: 'run_shell_command', read_file: 'read_file', write_file: 'write_file', edit_file: 'replace', multi_edit: 'replace', grep: 'grep_search', search_files: 'grep_search', glob_files: 'glob', list_files: 'list_directory', fetch_url: 'web_fetch', web_search: 'google_web_search', todo_write: 'write_todos' };
+const GEMINI_DIR_TOOLS = new Set(['list_directory', 'glob', 'grep_search']);
+
+const PERMISSION_EVENTS = { cursor: new Set(['preToolUse', 'beforeShellExecution', 'beforeMCPExecution', 'beforeReadFile']), copilot: new Set(['preToolUse']), gemini: new Set(['BeforeTool']) };
+const LABELS = { cursor: 'Cursor', copilot: 'Copilot', gemini: 'Gemini CLI' };
 
 function shellLine(name, input) {
   if (!input || typeof input !== 'object') return '';
@@ -86,14 +103,17 @@ function foreignToolName(protocol, payload) {
   const oasis = payload.oasis_tool_name || payload.tool_name_oasis || '';
   const mcp = mcpParts(payload);
   if (protocol === 'cursor') return mcp ? 'MCP:' + mcp.tool : CURSOR_TOOLS[oasis] || payload.tool_name || oasis;
+  if (protocol === 'gemini') return mcp ? 'mcp_' + mcp.server + '_' + mcp.tool : GEMINI_TOOLS[oasis] || oasis || payload.tool_name;
   return mcp ? mcp.server + '-' + mcp.tool : COPILOT_TOOLS[oasis] || oasis || payload.tool_name;
 }
 
 // Cursor and Copilot show tools with file_path/command fields; OASIS tools use path.
-function foreignToolInput(payload) {
+function foreignToolInput(payload, protocol) {
   const input = payload.tool_input && typeof payload.tool_input === 'object' ? { ...payload.tool_input } : {};
   const oasis = payload.oasis_tool_name || payload.tool_name_oasis || '';
-  if (typeof input.path === 'string' && input.file_path === undefined) input.file_path = input.path;
+  // Gemini's directory tools take dir_path; its file tools take file_path.
+  if (protocol === 'gemini' && GEMINI_DIR_TOOLS.has(GEMINI_TOOLS[oasis]) && typeof input.path === 'string' && input.dir_path === undefined) input.dir_path = input.path;
+  else if (typeof input.path === 'string' && input.file_path === undefined) input.file_path = input.path;
   if (oasis === 'run_command') input.command = shellLine(oasis, payload.tool_input);
   return input;
 }
@@ -104,6 +124,7 @@ function oasisToolInput(payload, updated) {
   const oasis = payload.oasis_tool_name || payload.tool_name_oasis || '';
   const out = { ...updated };
   if (typeof out.file_path === 'string' && (payload.tool_input || {}).path !== undefined) { out.path = out.file_path; delete out.file_path; }
+  if (typeof out.dir_path === 'string' && (payload.tool_input || {}).dir_path === undefined) { out.path = out.dir_path; delete out.dir_path; }
   if (oasis === 'run_command' && typeof out.command === 'string' && out.command !== shellLine(oasis, payload.tool_input)) {
     // A rewritten command line cannot be split back into a program and arguments
     // safely, so only a line with plain words is accepted.
@@ -132,8 +153,10 @@ function resultText(response) {
 }
 
 // Cursor matchers are plain regular expressions; Copilot anchors them (^(?:…)$).
-function foreignMatcherAccepts(protocol, matcher, name) {
+// Gemini: a regular expression for tools, an exact string for lifecycle events.
+function foreignMatcherAccepts(protocol, matcher, name, lifecycle = false) {
   if (!matcher || matcher === '*') return true;
+  if (protocol === 'gemini' && lifecycle) return matcher === String(name || '');
   try { return new RegExp(protocol === 'copilot' ? '^(?:' + matcher + ')$' : matcher).test(String(name || '')); } catch { return matcher === name; }
 }
 
@@ -143,8 +166,10 @@ export function toForeignPayload(protocol, foreignEvent, payload, hook = {}) {
   const cwd = p.cwd || process.cwd();
   const tool = foreignToolName(protocol, p);
   if (hook.foreignMatcher) {
-    const target = p.tool_name !== undefined ? tool : protocol === 'copilot' ? { subagentStart: p.agent_type, preCompact: p.trigger, notification: p.notification_type }[foreignEvent] : undefined;
-    if (target !== undefined && !foreignMatcherAccepts(protocol, hook.foreignMatcher, target)) return null;
+    const lifecycle = protocol === 'copilot' ? { subagentStart: p.agent_type, preCompact: p.trigger, notification: p.notification_type }[foreignEvent]
+      : protocol === 'gemini' ? { SessionStart: p.source, SessionEnd: p.reason, PreCompress: p.trigger, Notification: p.notification_type }[foreignEvent] : undefined;
+    const target = p.tool_name !== undefined ? tool : lifecycle;
+    if (target !== undefined && !foreignMatcherAccepts(protocol, hook.foreignMatcher, target, p.tool_name === undefined)) return null;
   }
   if (protocol === 'cursor') {
     const base = { conversation_id: p.session_id || 'unsaved', generation_id: p.session_id || 'unsaved', hook_event_name: foreignEvent, cursor_version: 'oasis', workspace_roots: [cwd], user_email: null, transcript_path: p.transcript_path || null, model: p.model || null };
@@ -176,6 +201,23 @@ export function toForeignPayload(protocol, foreignEvent, payload, hook = {}) {
       case 'sessionEnd': return { ...base, session_id: p.session_id || 'unsaved', reason: p.reason === 'exit' ? 'user_close' : String(p.reason || 'completed'), duration_ms: 0 };
       case 'preCompact': return { ...base, trigger: p.trigger || 'auto' };
       default: return { ...base };
+    }
+  }
+  if (protocol === 'gemini') {
+    const base = { session_id: p.session_id || 'unsaved', transcript_path: p.transcript_path || '', cwd, hook_event_name: foreignEvent, timestamp: new Date().toISOString() };
+    const mcp = mcpParts(p);
+    const tool_input = foreignToolInput(p, 'gemini');
+    const extra = mcp ? { mcp_context: { server_name: mcp.server, tool_name: mcp.tool } } : {};
+    switch (foreignEvent) {
+      case 'BeforeTool': return { ...base, tool_name: tool, tool_input, ...extra };
+      case 'AfterTool': return { ...base, tool_name: tool, tool_input, tool_response: { llmContent: resultText(p.tool_response), returnDisplay: resultText(p.tool_response), ...(p.error ? { error: String(p.error) } : {}) }, ...extra };
+      case 'BeforeAgent': return { ...base, prompt: String(p.prompt || '') };
+      case 'AfterAgent': return { ...base, prompt: String(p.prompt || ''), prompt_response: String(p.last_assistant_message || ''), stop_hook_active: Boolean(p.stop_hook_active) };
+      case 'SessionStart': return { ...base, source: p.source === 'resume' || p.source === 'clear' ? p.source : 'startup' };
+      case 'SessionEnd': return { ...base, reason: ['exit', 'clear', 'logout', 'prompt_input_exit'].includes(p.reason) ? p.reason : 'other' };
+      case 'Notification': return { ...base, notification_type: p.notification_type || '', message: String(p.message || ''), details: { title: String(p.title || '') } };
+      case 'PreCompress': return { ...base, trigger: p.trigger === 'manual' ? 'manual' : 'auto' };
+      default: return base;
     }
   }
   if (protocol === 'copilot') {
@@ -214,7 +256,15 @@ export function fromForeignOutput(protocol, foreignEvent, out, context = {}) {
   const permission = PERMISSION_EVENTS[protocol] && PERMISSION_EVENTS[protocol].has(foreignEvent);
   if (!out || out.exitCode !== 0) {
     if (!out) return out;
-    const label = (protocol === 'cursor' ? 'Cursor' : 'Copilot') + ' ' + foreignEvent + ' hook';
+    const label = LABELS[protocol] + ' ' + foreignEvent + ' hook';
+    if (protocol === 'gemini') {
+      // Gemini: exit 2 blocks, with stderr as the reason, as in Claude Code;
+      // after a tool it replaces the result the model sees. Other codes warn.
+      if (out.exitCode === 2 && foreignEvent === 'AfterTool') return reply(out, { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: { output: String(out.stderr || '').trim() || label + ' hid this result.' } } });
+      if (out.exitCode === 2 && !['BeforeTool', 'BeforeAgent', 'AfterAgent'].includes(foreignEvent)) return { ...out, exitCode: 1 };
+      if (out.exitCode === 2) return { ...out, stderr: String(out.stderr || '').trim() || label + ' blocked this.' };
+      return out;
+    }
     if (protocol === 'copilot') {
       // Copilot: exit 2 denies only preToolUse and permissionRequest; on
       // postToolUseFailure its stdout is recovery advice; elsewhere it is a warning.
@@ -268,6 +318,7 @@ export function fromForeignOutput(protocol, foreignEvent, out, context = {}) {
     if (foreignEvent === 'afterMCPExecution' && json.updated_mcp_tool_output !== undefined) return reply(out, { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedMCPToolOutput: json.updated_mcp_tool_output } });
     return reply(out, null);
   }
+  if (protocol === 'gemini') return fromGeminiJson(foreignEvent, json, out, payload);
   // Copilot CLI
   if (foreignEvent === 'preToolUse') {
     const specific = { hookEventName: 'PreToolUse' };
@@ -300,11 +351,56 @@ export function fromForeignOutput(protocol, foreignEvent, out, context = {}) {
   return reply(out, null);
 }
 
+// Gemini CLI replies: { decision: allow|deny|block, reason, continue, stopReason,
+// systemMessage, hookSpecificOutput: { additionalContext, tool_input } }.
+// "allow" is not taken as a permission grant: OASIS still asks where it would.
+function fromGeminiJson(foreignEvent, json, out, payload) {
+  const deny = json.decision === 'deny' || json.decision === 'block';
+  const reason = typeof json.reason === 'string' && json.reason.trim() ? json.reason : '';
+  const specific = json.hookSpecificOutput && typeof json.hookSpecificOutput === 'object' ? json.hookSpecificOutput : {};
+  const context = typeof specific.additionalContext === 'string' && specific.additionalContext.trim() ? specific.additionalContext : '';
+  const common = {
+    ...(typeof json.systemMessage === 'string' && json.systemMessage.trim() ? { systemMessage: json.systemMessage } : {}),
+    ...(json.continue === false && !['SessionStart', 'SessionEnd', 'Notification', 'PreCompress'].includes(foreignEvent) ? { continue: false, stopReason: json.stopReason || reason || 'Stopped by a Gemini CLI ' + foreignEvent + ' hook.' } : {})
+  };
+  const messages = common.systemMessage ? [common.systemMessage] : [];
+  const done = (body) => { const merged = { ...common, ...body }; if (messages.length) merged.systemMessage = messages.join('\n'); return reply(out, Object.keys(merged).length ? merged : null); };
+  switch (foreignEvent) {
+    case 'BeforeTool': {
+      const hook = { hookEventName: 'PreToolUse' };
+      if (deny) { hook.permissionDecision = 'deny'; hook.permissionDecisionReason = reason || 'Denied by a Gemini CLI BeforeTool hook.'; }
+      if (!deny && specific.tool_input && typeof specific.tool_input === 'object' && !Array.isArray(specific.tool_input)) {
+        // Gemini merges the hook's arguments over the model's.
+        const updated = oasisToolInput(payload, { ...foreignToolInput(payload, 'gemini'), ...specific.tool_input });
+        if (updated && updated.unsupported) messages.push('Gemini CLI BeforeTool hook: argument rewrite ignored (' + updated.unsupported + ').');
+        else if (updated) hook.updatedInput = updated;
+      }
+      return done(Object.keys(hook).length > 1 ? { hookSpecificOutput: hook } : {});
+    }
+    case 'AfterTool': {
+      if (specific.tailToolCallRequest) messages.push('Gemini CLI AfterTool hook: tail tool calls are not supported; the original result stands.');
+      const hook = { hookEventName: 'PostToolUse', ...(deny ? { updatedToolOutput: { output: reason || 'Hidden by a Gemini CLI AfterTool hook.' } } : {}), ...(context ? { additionalContext: context } : {}) };
+      return done(Object.keys(hook).length > 1 ? { hookSpecificOutput: hook } : {});
+    }
+    case 'BeforeAgent':
+      if (deny) return done({ decision: 'block', reason: reason || 'Blocked by a Gemini CLI BeforeAgent hook.' });
+      return done(context ? { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context } } : {});
+    case 'AfterAgent':
+      // deny asks for another turn with the reason as the prompt, like a Claude Code Stop block.
+      return done(deny ? { decision: 'block', reason: reason || 'A Gemini CLI AfterAgent hook asked for a correction.' } : {});
+    case 'SessionStart':
+      return done(context ? { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: context } } : {});
+    default:
+      return done({});
+  }
+}
+
 /** Environment a bridged hook gets on top of the OASIS one. */
 export function bridgeEnv(protocol, root, pluginEnv = {}) {
   const pluginRoot = pluginEnv.CLAUDE_PLUGIN_ROOT || pluginEnv.OASIS_PLUGIN_ROOT || '';
   if (protocol === 'cursor') return { CURSOR_PROJECT_DIR: root, ...(pluginRoot ? { CURSOR_PLUGIN_ROOT: pluginRoot } : {}) };
   if (protocol === 'copilot') return { ...(pluginRoot ? { COPILOT_PLUGIN_ROOT: pluginRoot } : {}) };
+  if (protocol === 'gemini') return { GEMINI_PROJECT_DIR: root, GEMINI_CWD: root, ...(pluginRoot ? { GEMINI_EXTENSION_PATH: pluginRoot } : {}) };
   return {};
 }
 
@@ -330,9 +426,29 @@ export function bridgeHookDoc(protocol, doc, rewriteCommand = (command) => comma
   const source = doc && doc.hooks && typeof doc.hooks === 'object' && !Array.isArray(doc.hooks) ? doc.hooks : null;
   const hooks = {}, dropped = [];
   if (!table || !source) return { hooks, dropped };
+  // Gemini settings: hooksConfig.disabled names hooks to skip; hooksConfig.enabled: false skips all.
+  const config = protocol === 'gemini' && doc.hooksConfig && typeof doc.hooksConfig === 'object' ? doc.hooksConfig : {};
+  if (config.enabled === false) return { hooks, dropped };
+  const disabled = new Set(Array.isArray(config.disabled) ? config.disabled.filter((name) => typeof name === 'string') : []);
   for (const [foreignEvent, entries] of Object.entries(source)) {
+    // Older Gemini settings kept flags (enabled, disabled) beside the events.
+    if (protocol === 'gemini' && !Array.isArray(entries)) continue;
     const target = table[foreignEvent];
     if (!target || !Array.isArray(entries)) { dropped.push(foreignEvent); continue; }
+    if (protocol === 'gemini') {
+      // Gemini groups hooks like Claude Code: { matcher, hooks: [{ type, command, timeout (ms) }] }.
+      for (const group of entries) {
+        if (!group || !Array.isArray(group.hooks)) continue;
+        for (const entry of group.hooks) {
+          if (!entry || (entry.type && entry.type !== 'command') || typeof entry.command !== 'string' || !entry.command.trim()) continue;
+          if (disabled.has(entry.name)) continue;
+          const ms = Number(entry.timeout) || 0;
+          const hook = { type: 'command', command: rewriteCommand(entry.command), protocol, foreignEvent, ...(ms > 0 ? { timeout: Math.max(1, Math.ceil(ms / 1000)) } : {}), ...(typeof group.matcher === 'string' && group.matcher.trim() ? { foreignMatcher: group.matcher.trim() } : {}) };
+          (hooks[target.event] ||= []).push({ ...(target.matcher ? { matcher: target.matcher } : {}), hooks: [hook] });
+        }
+      }
+      continue;
+    }
     for (const entry of entries) {
       const hook = bridgeEntry(protocol, foreignEvent, entry, rewriteCommand);
       if (!hook) continue;
