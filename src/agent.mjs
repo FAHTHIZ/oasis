@@ -17,6 +17,7 @@ import { applyInjectionTaint, commandFetchesExternal, fetchedOutputPaths, guardE
 import { commandEgressReason, egressProvenanceEnabled, egressReason, noteExternalContent } from './egress-provenance.mjs';
 import { maskSecrets, unmaskSecretsForTool, secretShieldEnabled, redactSecretText, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { canaryTripwire } from './canary-credentials.mjs';
+import { divergenceNote, knownChecksNote, recordCheck, rememberable } from './check-memory.mjs';
 import { followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
@@ -3459,6 +3460,14 @@ async function applyToolResults(session, options, turn) {
         // New evidence can undo claims made earlier (a page that changed, a
         // check that now fails): the claim log, and memories saved from it.
         if (recorded && Array.isArray(session.claimLog) && session.claimLog.length) applyClaimInvalidation(session, recorded, options);
+        // Check memory (src/check-memory.mjs): the outcome on exactly these
+        // files, kept across sessions; a different outcome on the same files
+        // is not the files' doing, and the result says so.
+        if (recorded && rememberable(recorded)) {
+          const memory = await recordCheck(session.root, recorded, { env: options.env || process.env, settings: session.settings || {}, sessionId: session.sessionId || '', cwd: evidenceArgs.cwd || '.' }).catch(() => null);
+          const note = memory && memory.divergence ? divergenceNote(recorded, memory.divergence) : '';
+          if (note && item && typeof item.content === 'string') item.content += '\n\n' + note;
+        }
         // Keep what the agent read, so quotes attributed to the page can be checked.
         if (event && event.kind === 'fetch') rememberPage(event.url, evidenceOutputText(result), { finalUrl: event.finalUrl });
       } catch { /* evidence is advisory; a bad result shape cannot break the turn */ }
@@ -3528,6 +3537,11 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   if (!options.isSubagent && session.worldDrift && !session.worldDriftTold) {
     userContent = driftNote(session.worldDrift) + '\n\n' + userContent;
     session.worldDriftTold = true;
+  }
+  if (!options.isSubagent && !session.checkMemoryTold) {
+    session.checkMemoryTold = true;
+    const known = await knownChecksNote(session.root, { env: options.env || process.env, settings: session.settings || {}, sessionId: session.sessionId || '' }).catch(() => '');
+    if (known) userContent = known + '\n\n' + userContent;
   }
   if (!options.isSubagent && session.interruptedTurn) {
     userContent = interruptedTurnNote(session.interruptedTurn) + '\n\n' + userContent;
