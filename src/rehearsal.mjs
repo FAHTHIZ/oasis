@@ -27,8 +27,8 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import { chmodSync, lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,9 +55,34 @@ export function rehearsalSupport() {
   } catch (error) {
     probed = { available: false, reason: String(error && error.message || error) };
   } finally {
-    if (base) rmSync(base, { recursive: true, force: true });
+    if (base) removeStateSync(base);
   }
   return probed;
+}
+
+// overlayfs leaves its work directory (work/work) with mode 000. GNU rm copes, but
+// Node 24 and later refuse to descend into it (EACCES), which threw out of the probe
+// and left every rehearsal's private state behind. Directories are made searchable
+// first; only the rehearsal's own state is ever passed here.
+function unlockTreeSync(dir) {
+  let info;
+  try { info = lstatSync(dir); } catch { return; }
+  if (!info.isDirectory()) return;
+  try { chmodSync(dir, 0o700); } catch { /* not ours */ }
+  let names = [];
+  try { names = readdirSync(dir); } catch { return; }
+  for (const name of names) unlockTreeSync(path.join(dir, name));
+}
+
+export function removeStateSync(dir) {
+  try { rmSync(dir, { recursive: true, force: true }); return; } catch { /* unlock and retry */ }
+  unlockTreeSync(dir);
+  try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+}
+
+async function removeState(dir) {
+  try { await rm(dir, { recursive: true, force: true }); return; } catch { /* unlock and retry */ }
+  removeStateSync(dir);
 }
 
 /** For tests. */
@@ -129,8 +154,15 @@ export async function rehearseCommand({ root, command, args = [], env = process.
   const filter = unixSocketFilterPath();
   const bwrapArgs = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp'];
   // Host daemons reached over sockets under /run would act outside the overlay.
+  // A folder inside one already replaced (XDG_RUNTIME_DIR=/run/user/1001) is skipped: mounting
+  // a second tmpfs there would recreate its parents (/run/user) inside the empty /run.
+  const emptied = [];
   for (const dir of ['/run', '/var/run', '/dev/shm', env.XDG_RUNTIME_DIR || '']) {
-    if (dir && !pathContains(dir, lower) && await isDir(dir)) bwrapArgs.push('--tmpfs', dir);
+    if (!dir || pathContains(dir, lower) || !await isDir(dir)) continue;
+    const real = await realDir(dir);
+    if (emptied.some((done) => pathContains(done, real))) continue;
+    emptied.push(real);
+    bwrapArgs.push('--tmpfs', dir);
   }
   // The command has not been approved yet, and the names of the files it
   // creates are shown to the model. It gets the same view as a real sandboxed
@@ -233,6 +265,8 @@ export function failureLine(result) {
 
 function emptyChanges() { return { created: [], modified: [], deleted: [], touched: [] }; }
 
+async function realDir(dir) { try { return await realpath(dir); } catch { return path.resolve(dir); } }
+
 async function isDir(dir) { try { return (await lstat(dir)).isDirectory(); } catch { return false; } }
 
 function pathContains(parent, child) {
@@ -332,7 +366,7 @@ async function collectChanges(upper, lower, merged) {
 /** Delete the rehearsal's private state. */
 export async function disposeRehearsal(result) {
   if (result && result.keep && result.keep.state) {
-    await rm(result.keep.state, { recursive: true, force: true }).catch(() => {});
+    await removeState(result.keep.state);
     result.keep = null;
   }
 }

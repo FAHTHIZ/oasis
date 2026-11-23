@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, readdir, lstat, readlink, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, lstat, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { applyRehearsal, disposeRehearsal, formatRehearsal, rehearsalApplicable, rehearsalDivergence, rehearsalEnabled, withoutGitConfigCredentials, rehearsalEnv, failureLine, rehearsalSupport, rehearseCommand, rehearseForApproval, summaryDivergence } from '../src/rehearsal.mjs';
+import { applyRehearsal, disposeRehearsal, formatRehearsal, rehearsalApplicable, rehearsalDivergence, rehearsalEnabled, withoutGitConfigCredentials, rehearsalEnv, failureLine, rehearsalSupport, rehearseCommand, rehearseForApproval, removeStateSync, summaryDivergence } from '../src/rehearsal.mjs';
 import { runWorkspaceCommand } from '../src/tools.mjs';
 
 const support = rehearsalSupport();
@@ -486,4 +486,27 @@ test('rehearsals switch off update checks so npm scripts are not blamed on the r
   assert.equal(env.OASIS_REHEARSAL_RECORD_NET, '1');
   assert.equal(env.GIT_CONFIG_VALUE_0, '', 'credential git config is still stripped');
   assert.equal(rehearsalEnv({}, true).OASIS_REHEARSAL_RECORD_NET, undefined);
+});
+
+test('rehearsal state with overlayfs\'s mode-000 work directory is removed on every Node version', async () => {
+  const state = await mkdtemp(path.join(os.tmpdir(), 'oasis-rehearsal-state-test-'));
+  await mkdir(path.join(state, 'work', 'work'), { recursive: true });
+  await writeFile(path.join(state, 'work', 'work', 'leftover'), 'x');
+  await chmod(path.join(state, 'work', 'work'), 0o000);
+  removeStateSync(state);
+  await assert.rejects(lstat(state), 'the state folder was left behind');
+});
+
+test('a runtime folder inside /run does not repopulate the emptied /run', { skip }, async () => {
+  const uid = typeof process.getuid === 'function' ? process.getuid() : 0;
+  const runtime = path.join('/run/user', String(uid));
+  let isDirectory = false;
+  try { isDirectory = (await lstat(runtime)).isDirectory(); } catch { /* absent */ }
+  if (!isDirectory) return;
+  const root = await workspace();
+  try {
+    const result = await rehearseCommand({ root, command: '/bin/sh', args: ['-c', 'ls -A /run | wc -l | tr -d " "'], env: { ...process.env, XDG_RUNTIME_DIR: runtime } });
+    assert.equal(result.stdout.trim(), '0', 'XDG_RUNTIME_DIR recreated /run/user inside the rehearsal');
+    await disposeRehearsal(result);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
