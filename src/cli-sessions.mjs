@@ -1,7 +1,7 @@
 import { stdout } from 'node:process';
 import { readFile, open } from 'node:fs/promises';
 import path from 'node:path';
-import { listSessions, deleteSession, staleSessions, pruneSessions, setSessionArchived, unarchivedSessions } from './sessions.mjs';
+import { listSessions, deleteSession, staleSessions, pruneSessions, setSessionArchived, unarchivedSessions, unreadableSessions } from './sessions.mjs';
 
 // Complete lines appended to a log since byte `offset`. `logs --follow` used to
 // re-read the whole log every 700 ms, so a long run cost more on every poll.
@@ -108,6 +108,9 @@ export async function manageSessions(root, rest, { approve } = {}) {
     const archivedOnly = rest.includes('--archived');
     const shown = archivedOnly ? sessions.filter((item) => item.archived) : unarchivedSessions(sessions);
     stdout.write((archivedOnly ? 'Archived sessions for ' : 'Saved sessions for ') + path.resolve(root) + ':\n');
+    const damaged = archivedOnly ? [] : await unreadableSessions(root);
+    for (const item of damaged) stdout.write('  ' + item.id + '  ' + (item.modifiedAt || 'unknown time') + '  unreadable: ' + item.reason + '  (oasis sessions delete ' + item.id + ' removes it)\n');
+    if (!shown.length && damaged.length) return;
     if (!shown.length) { stdout.write(archivedOnly ? '  No archived sessions.\n' : '  No saved sessions yet. Every chat in this folder is saved automatically; continue the last one with oasis -c, or pick one with oasis -r ID.\n'); return; }
     for (const item of shown) stdout.write('  ' + item.id + '  ' + item.updatedAt + '  ' + item.messages + ' messages  ' + (item.model || 'unknown model') + (item.title ? '  ' + JSON.stringify(item.title.length > 60 ? item.title.slice(0, 59) + '…' : item.title) : '') + '\n');
     const hidden = sessions.length - shown.length;
@@ -125,7 +128,7 @@ export async function manageSessions(root, rest, { approve } = {}) {
   if (action === 'clear' || action === 'delete' || action === 'remove') {
     const id = rest[1];
     if (!id) throw new Error('Usage: oasis sessions clear SESSION_ID');
-    if (!sessions.some((item) => item.id === id)) throw new Error('No saved session with ID ' + id + ' exists for this workspace.');
+    if (!sessions.some((item) => item.id === id) && !(await unreadableSessions(root)).some((item) => item.id === id)) throw new Error('No saved session with ID ' + id + ' exists for this workspace.');
     if (!(await approve('Delete the locally saved conversation ' + id + '? This removes the saved history file.', true, false))) {
       stdout.write('Session deletion cancelled.\n');
       return;
