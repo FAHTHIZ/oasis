@@ -38,3 +38,18 @@ test('run_command applies the same container rule', () => {
   assert.ok(analyzeCommand('podman', ['run', '--privileged', 'alpine']).highRisk);
   assert.equal(analyzeCommand('docker', ['run', '-v', './d:/d', 'alpine']).highRisk, undefined);
 });
+
+test('inline code with clustered or --eval= flags and git value options are analyzed like the plain forms', async () => {
+  const { analyzeShellLine, shellAnalyzerReady } = await import('../src/shell-risk.mjs');
+  await shellAnalyzerReady();
+  for (const line of [
+    `node -pe "require('child_process').execSync('rm -rf ~')"`,
+    'perl -le "system(q{rm -rf ~})"',
+    `python3 -Ic "import os; os.system('rm -rf ~')"`,
+    `node --eval="require('fs').rmSync(os.homedir(), { recursive: true })"`,
+    'git --git-dir .git push --force',
+    'git --work-tree . --namespace x push -f origin main'
+  ]) assert.ok(analyzeShellLine(line).blocked, line);
+  assert.equal(analyzeShellLine('node -pe 1+1').blocked, undefined);
+  assert.equal(analyzeShellLine('git --git-dir .git push origin main').blocked, undefined);
+});
