@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-labelledby="t d">
+<title id="t">BROWSER &amp; COMPUTER USE: Sees the screen, clicks</title>
+<desc id="d">A window with a form. A cursor moves to the title field and clicks, the text Quarterly report is typed, the cursor clicks Save, the button turns green and reads Saved, and a chip reads screenshot checked.</desc>
+<defs><linearGradient id="rim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7CFF5E" stop-opacity=".55"/><stop offset=".45" stop-color="#1F2E23"/><stop offset="1" stop-color="#1F2E23"/></linearGradient>
+<radialGradient id="spot" cx="0" cy="0" r="1"><stop offset="0" stop-color="#7CFF5E" stop-opacity=".10"/><stop offset="1" stop-color="#7CFF5E" stop-opacity="0"/></radialGradient></defs>
+<style>
+@media (prefers-reduced-motion: no-preference) {
+.tf{animation:tf 10s infinite}
+@keyframes tf{0%,23%{transform:translateX(0);opacity:1;animation-timing-function:steps(16,end)}32%,39%{transform:translateX(151px);opacity:1}39.5%,100%{transform:translateX(151px);opacity:0}}
+.cur{animation:cur 10s infinite}@keyframes cur{0%,6%{transform:translate(500px,196px);animation-timing-function:cubic-bezier(.4,0,.2,1)}18%,34%{transform:translate(240px,104px);animation-timing-function:cubic-bezier(.4,0,.2,1)}44%,94%{transform:translate(486px,168px)}100%{transform:translate(500px,196px)}}
+.rp1,.rp2{transform-box:fill-box;transform-origin:center}
+.rp1{animation:rp1 10s ease-out infinite}@keyframes rp1{0%,19%{transform:scale(.3);opacity:0}20%{opacity:.8}26%,100%{transform:scale(2.2);opacity:0}}
+.rp2{animation:rp2 10s ease-out infinite}@keyframes rp2{0%,45%{transform:scale(.3);opacity:0}46%{opacity:.8}52%,100%{transform:scale(2.2);opacity:0}}
+.foc{animation:foc 10s linear infinite}@keyframes foc{0%,20%{stroke:#1F2E23}21%,45%{stroke:#7CFF5E}46%,100%{stroke:#1F2E23}}
+.sv0{animation:sv0 10s linear infinite}
+@keyframes sv0{0%,0%{opacity:0}2.5%,46%{opacity:1}48.5%,100%{opacity:0}}
+.sv1{animation:sv1 10s linear infinite}
+@keyframes sv1{0%,46%{opacity:0;transform:translateY(5px)}49.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.shot{animation:shot 10s linear infinite}
+@keyframes shot{0%,54%{opacity:0;transform:translateY(5px)}57.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+}
+</style>
+<rect x="1" y="1" width="638" height="358" rx="22" fill="#0E1510" stroke="url(#rim)" stroke-width="1.5"/>
+<rect x="1" y="1" width="638" height="358" rx="22" fill="url(#spot)"/>
+<text x="32" y="46" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" letter-spacing="2.5" fill="#7CFF5E">BROWSER &amp; COMPUTER USE</text>
+<text x="32" y="84" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="27" font-weight="800" fill="#E6F5EA">Sees the screen, clicks</text>
+<g transform="translate(32 116)" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<rect x="0" y="0" width="576" height="212" rx="12" fill="#121B15" stroke="#1F2E23"/>
+<path d="M1 30H575" stroke="#1F2E23"/><circle cx="18" cy="15" r="5" fill="#FF5F57"/><circle cx="36" cy="15" r="5" fill="#FEBC2E"/><circle cx="54" cy="15" r="5" fill="#28C840"/>
+<rect x="160" y="7" width="256" height="16" rx="8" fill="#0E1510" stroke="#1F2E23"/><text x="288" y="19" text-anchor="middle" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="11" fill="#5E7064">localhost:3000/new</text>
+<text x="28" y="66" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#8FA597">Title</text>
+<rect class="foc" x="28" y="84" width="380" height="36" rx="8" fill="#0E1510" stroke="#1F2E23" stroke-width="1.5"/><text x="40" y="109" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="15" font-weight="400" fill="#E6F5EA" xml:space="preserve">Quarterly report</text>
+<g class="tf"><rect x="39" y="94" width="167" height="22" fill="#0E1510"/><rect x="40" y="96" width="8" height="17" fill="#7CFF5E" opacity=".9"/></g>
+<g class="sv0"><rect x="428" y="150" width="120" height="38" rx="9" fill="#0E1510" stroke="#1F2E23" stroke-width="1.5"/><text x="488" y="174" text-anchor="middle" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#E6F5EA">Save</text></g>
+<g class="sv1"><rect x="428" y="150" width="120" height="38" rx="9" fill="#32E07A"/><text x="488" y="174" text-anchor="middle" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#0B0F0C">Saved ✓</text></g>
+<g class="shot"><rect x="28" y="154" width="184" height="30" rx="15" fill="#123A1F"/><text x="42" y="174" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#7CFF5E">✓ screenshot checked</text></g>
+<g class="cur"><circle class="rp1" cx="0" cy="0" r="10" fill="none" stroke="#7CFF5E" stroke-width="2"/><circle class="rp2" cx="0" cy="0" r="10" fill="none" stroke="#7CFF5E" stroke-width="2"/><path d="M0 0 L0 20 L5 15 L9 24 L13 22 L9 13 L16 13 Z" fill="#FFFFFF" stroke="#0B0F0C" stroke-width="1.5" stroke-linejoin="round"/></g>
+</g>
+</svg>

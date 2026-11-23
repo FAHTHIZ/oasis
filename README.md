@@ -1,8 +1,17 @@
+<a id="readme-top"></a>
+
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis">
     <img src="assets/readme/hero.svg" alt="Animated illustration: OASIS, the open agent runtime for any model. A drawn terminal window shows OASIS on a research and analysis request: it plans three research angles, runs three research agents in parallel, checks that every cited page was opened and every number came from code, runs a chart script and saves a report with its sources." width="100%">
   </a>
   <br><sub>Illustration, not a recording. The recordings under <a href="#work-where-you-work">Work where you work</a> are real, unscripted runs.</sub>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/tagline-dark.svg">
+    <img src="assets/readme/tagline-light.svg" alt="One open runtime for software, research, data analysis, writing, automation and computer use, with any model." width="100%">
+  </picture>
 </p>
 
 <p align="center">
@@ -13,31 +22,107 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/quality.yml?branch=main&style=flat&label=quality&labelColor=0B0F0C&color=32E07A"></a>
-  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=flat&labelColor=0B0F0C&color=7CFF5E"></a>
-  <img alt="More than 3,700 tests" src="https://img.shields.io/badge/tests-3%2C700%2B-0ED168?style=flat&labelColor=0B0F0C">
-  <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat&labelColor=0B0F0C&color=1A1F1B"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/quality.yml?branch=main&style=for-the-badge&label=quality&labelColor=0B0F0C&color=32E07A"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=for-the-badge&labelColor=0B0F0C&color=7CFF5E"></a>
+  <img alt="More than 3,700 tests" src="https://img.shields.io/badge/tests-3%2C700%2B-0ED168?style=for-the-badge&labelColor=0B0F0C">
+  <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=for-the-badge&labelColor=0B0F0C&color=1A1F1B"></a>
   <br>
-  <img alt="Windows, macOS and Linux" src="https://img.shields.io/badge/windows%20%C2%B7%20macos%20%C2%B7%20linux-1A1F1B?style=flat&logo=nodedotjs&logoColor=7CFF5E&labelColor=0B0F0C">
-  <img alt="Node.js 22.19 or newer" src="https://img.shields.io/badge/node-%E2%89%A522.19-1A1F1B?style=flat&labelColor=0B0F0C">
-  <a href="https://github.com/FAHTHIZ/oasis/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/FAHTHIZ/oasis?style=flat&labelColor=0B0F0C&color=32E07A"></a>
-  <a href="https://github.com/FAHTHIZ/oasis/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/FAHTHIZ/oasis/main?style=flat&labelColor=0B0F0C&color=1A1F1B"></a>
-  <a href="CONTRIBUTING.md"><img alt="Pull requests welcome" src="https://img.shields.io/badge/PRs-welcome-7CFF5E?style=flat&labelColor=0B0F0C"></a>
+  <img alt="Windows, macOS and Linux" src="https://img.shields.io/badge/windows%20%C2%B7%20macos%20%C2%B7%20linux-1A1F1B?style=flat-square&logo=nodedotjs&logoColor=7CFF5E&labelColor=0B0F0C">
+  <img alt="Node.js 22.19 or newer" src="https://img.shields.io/badge/node-%E2%89%A522.19-1A1F1B?style=flat-square&labelColor=0B0F0C">
+  <a href="https://github.com/FAHTHIZ/oasis/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/FAHTHIZ/oasis?style=flat-square&labelColor=0B0F0C&color=32E07A"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/FAHTHIZ/oasis/main?style=flat-square&labelColor=0B0F0C&color=1A1F1B"></a>
+  <a href="CONTRIBUTING.md"><img alt="Pull requests welcome" src="https://img.shields.io/badge/PRs-welcome-7CFF5E?style=flat-square&labelColor=0B0F0C"></a>
 </p>
 
 <p align="center">
   <a href="#install"><b>Install</b></a> &nbsp;·&nbsp;
+  <a href="#why-oasis">Why OASIS</a> &nbsp;·&nbsp;
   <a href="#what-oasis-does">What it does</a> &nbsp;·&nbsp;
   <a href="#work-where-you-work"><b>Terminal and web</b></a> &nbsp;·&nbsp;
   <a href="#how-a-task-runs">How it works</a> &nbsp;·&nbsp;
-  <a href="#models-and-integrations">Models and integrations</a> &nbsp;·&nbsp;
+  <a href="#models-and-integrations">Models</a> &nbsp;·&nbsp;
+  <a href="#security">Security</a> &nbsp;·&nbsp;
   <a href="#capability-status">Status</a> &nbsp;·&nbsp;
   <a href="docs/README.md">Docs</a>
 </p>
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/stats-dark.svg">
+    <img src="assets/readme/stats-light.svg" alt="OASIS in numbers: more than 3,700 tests in the suite, 48 built-in app connectors, 8 chat app gateways, and 0 hosted services required." width="100%">
+  </picture>
+</p>
+
+<details>
+<summary><b>Table of contents</b></summary>
+
+<br>
+
+- [Why OASIS](#why-oasis)
+- [Install](#install)
+- [What OASIS does](#what-oasis-does)
+- [Work where you work](#work-where-you-work)
+- [How a task runs](#how-a-task-runs) · [How agents collaborate](#how-agents-collaborate) · [Where work runs](#where-work-runs)
+- [Models and integrations](#models-and-integrations)
+- [Security](#security)
+- [Capability status](#capability-status)
+- [Documentation](#documentation)
+- [Development](#development)
+- [Community](#community)
+- [Meet Fen](#meet-fen)
+- [License](#license)
+
+</details>
+
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
+## Why OASIS
+
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-models-dark.svg"><img src="assets/readme/icon-models-light.svg" width="48" height="48" alt="" aria-hidden="true"></picture>
+      <h3>Any model</h3>
+      Hosted APIs, a local Ollama or llama.cpp server, or a free-tier router. <code>oasis connect</code> tests each model with a real tool call and keeps backups for failover.
+    </td>
+    <td width="33%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-verified-dark.svg"><img src="assets/readme/icon-verified-light.svg" width="48" height="48" alt="" aria-hidden="true"></picture>
+      <h3>Checked before done</h3>
+      A verification gate looks at the evidence the run produced: tests that really passed, pages that were really opened, numbers that code really printed.
+    </td>
+    <td width="33%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-agents-dark.svg"><img src="assets/readme/icon-agents-light.svg" width="48" height="48" alt="" aria-hidden="true"></picture>
+      <h3>Agents that collaborate</h3>
+      Subagents and teams run as one network with a scheduler, shared budgets and a knowledge board. Each report is checked against its own tool results.
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-safety-dark.svg"><img src="assets/readme/icon-safety-light.svg" width="48" height="48" alt="" aria-hidden="true"></picture>
+      <h3>Approvals and sandboxes</h3>
+      Permission modes from read-only to fully unattended, risk analysis for shell commands, secret redaction, and OS sandboxes or containers when you want isolation.
+    </td>
+    <td width="33%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-hosted-dark.svg"><img src="assets/readme/icon-hosted-light.svg" width="48" height="48" alt="" aria-hidden="true"></picture>
+      <h3>Yours to run</h3>
+      The terminal, the web app and the desktop app all run on a computer or server you control. There is no hosted OASIS service in the loop.
+    </td>
+    <td width="33%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-plugins-dark.svg"><img src="assets/readme/icon-plugins-light.svg" width="48" height="48" alt="" aria-hidden="true"></picture>
+      <h3>Open and extensible</h3>
+      MCP servers, 48 built-in apps, skills, hooks and plugins. Existing Claude Code setups load without conversion; Codex and Gemini CLI plugins are converted on install.
+    </td>
+  </tr>
+</table>
+
 ## Install
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/quickstart-dark.svg">
+    <img src="assets/readme/quickstart-light.svg" alt="Quick start in three steps: 01 install with the curl script and oasis doctor reports ready, 02 connect a model with oasis connect, tested with a real tool call, 03 ask in plain words with oasis." width="100%">
+  </picture>
+</p>
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh | sh
@@ -77,24 +162,62 @@ Ask in plain words. A few requests OASIS is built for:
 | "Every weekday at 9, summarize new issues and post them to Slack" | Schedules a routine that runs without a terminal open |
 | "Find out why the login test fails and fix it" | Runs the tests, edits the code, reruns the tests and shows you the diff |
 
+New here? [First run](docs/FIRST-RUN.md) walks through the first session step by step.
+
+<p align="right"><a href="#readme-top"><sub>back to top ↑</sub></a></p>
+
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
 ## What OASIS does
 
 OASIS is not tied to one kind of task or one model vendor. The same runtime plans the work, gives the model tools, splits large jobs across agents and checks the result before it is reported as done.
 
-| Area | What is in the box |
-| --- | --- |
-| Software | Reads and edits code, runs tests and commands, reviews diffs, works in git worktrees, opens pull requests, and checkpoints every edit so `/rewind` undoes a turn. |
-| Research | Federated web search, page fetching and a real Chrome it can drive (`--chrome`). An evidence ledger flags any claim that cites a page the agent never opened. `/deep-research` fans a question out to parallel research agents and cross-checks their claims. |
-| Data analysis | CSV and spreadsheet analysis, charts and notebooks, with numbers computed by code it ran rather than mental arithmetic. The optional analysis pack rejects a report whose numbers were not printed by code. |
-| Writing and documents | Reads PDFs and images, and saves reports, posts and slides as files in the workspace that you can review, diff and undo. |
-| Automation | `oasis schedule add "every 1d" "…"` runs routines on a schedule, cron or webhook; `oasis gateway` answers in Telegram, Slack, Discord and other chat apps; `/goal` keeps going until a condition holds. |
-| Browser and computer use | Drives Chrome over CDP, and (experimental) sees the screen and uses the mouse and keyboard on Linux, macOS and Windows with `--computer-use`, optionally inside a virtual desktop. See [Computer use](docs/COMPUTER_USE.md). |
-| Media | `generate_image` and `text_to_speech` through any OpenAI-compatible images or speech API, local servers included. |
-| Memory | Memory across sessions, full-text recall of past conversations, repeatable work proposed as reviewable skills (`/learning`), and an optional [Honcho](docs/CONFIGURATION.md#honcho-user-modeling) user model. `oasis import` brings settings, memories and skills from other agent tools. |
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/card-software-dark.svg"><img src="assets/readme/card-software-light.svg" width="100%" alt="Software card: a diff in cart.mjs replaces a wrong discount line, npm test runs, and chips read 2 passed and checkpoint, rewind ready."></picture>
+      <br><b>Software.</b> Reads and edits code, runs tests and commands, reviews diffs, works in git worktrees, opens pull requests, and checkpoints every edit so <code>/rewind</code> undoes a turn.
+    </td>
+    <td width="50%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/card-research-dark.svg"><img src="assets/readme/card-research-light.svg" width="100%" alt="Research card: three sources change from fetching to opened, and a citation of a page that was never fetched is flagged."></picture>
+      <br><b>Research.</b> Federated web search, page fetching and a real Chrome it can drive (<code>--chrome</code>). An evidence ledger flags any claim that cites a page the agent never opened. <code>/deep-research</code> fans a question out to parallel research agents and cross-checks their claims.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/card-data-dark.svg"><img src="assets/readme/card-data-light.svg" width="100%" alt="Data analysis card: a bar chart grows while chips read python analyze.py exit 0 and every number printed by code."></picture>
+      <br><b>Data analysis.</b> CSV and spreadsheet analysis, charts and notebooks, with numbers computed by code it ran rather than mental arithmetic. The optional analysis pack rejects a report whose numbers were not printed by code.
+    </td>
+    <td width="50%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/card-writing-dark.svg"><img src="assets/readme/card-writing-light.svg" width="100%" alt="Writing card: a document fills with lines, then chips read summary.md saved, left out 2 items, and undo turn with Esc Esc."></picture>
+      <br><b>Writing and documents.</b> Reads PDFs and images, and saves reports, posts and slides as files in the workspace that you can review, diff and undo.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/card-automation-dark.svg"><img src="assets/readme/card-automation-light.svg" width="100%" alt="Automation card: weekday tiles light up at 09:00 and OASIS posts a summary of new issues to a team chat channel."></picture>
+      <br><b>Automation.</b> <code>oasis schedule add "every 1d" "…"</code> runs routines on a schedule, cron or webhook; <code>oasis gateway</code> answers in Telegram, Slack, Discord and other chat apps; <code>/goal</code> keeps going until a condition holds.
+    </td>
+    <td width="50%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/card-computer-dark.svg"><img src="assets/readme/card-computer-light.svg" width="100%" alt="Browser and computer use card: a cursor clicks a form field, types a title, clicks Save, and the result is checked with a screenshot."></picture>
+      <br><b>Browser and computer use.</b> Drives Chrome over CDP, and (experimental) sees the screen and uses the mouse and keyboard on Linux, macOS and Windows with <code>--computer-use</code>, optionally inside a virtual desktop. See <a href="docs/COMPUTER_USE.md">Computer use</a>.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/card-media-dark.svg"><img src="assets/readme/card-media-light.svg" width="100%" alt="Media card: a generated dune picture is revealed by a scan line beside a moving speech waveform."></picture>
+      <br><b>Media.</b> <code>generate_image</code> and <code>text_to_speech</code> through any OpenAI-compatible images or speech API, local servers included.
+    </td>
+    <td width="50%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/card-memory-dark.svg"><img src="assets/readme/card-memory-light.svg" width="100%" alt="Memory card: a recall question lights up two matching past sessions in a graph, and a skill is proposed."></picture>
+      <br><b>Memory.</b> Memory across sessions, full-text recall of past conversations, repeatable work proposed as reviewable skills (<code>/learning</code>), and an optional <a href="docs/CONFIGURATION.md#honcho-user-modeling">Honcho</a> user model. <code>oasis import</code> brings settings, memories and skills from other agent tools.
+    </td>
+  </tr>
+</table>
 
-Each workflow, with the exact commands and what the runtime enforces, is in [Workflows](docs/WORKFLOWS.md).
+<sub>The cards are illustrations of each workflow, not recordings. Each workflow, with the exact commands and what the runtime enforces, is in <a href="docs/WORKFLOWS.md">Workflows</a>.</sub>
+
+<p align="right"><a href="#readme-top"><sub>back to top ↑</sub></a></p>
 
 ## Work where you work
 
@@ -120,6 +243,15 @@ The terminal and the web app run on the same runtime, sessions and settings. Sta
 </table>
 
 The web app runs on a computer or server you control, not a hosted service, and opens in any modern browser. An optional [desktop app](docs/DESKTOP.md) shows the same workspace in its own window; there is no separate mobile app.
+
+### One runtime, many front doors
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/orbit-dark.svg">
+    <img src="assets/readme/orbit-light.svg" alt="The OASIS portal mark in the centre with two orbits of places it runs. Inner: terminal, web app, desktop app, VS Code and Cursor, Zed and JetBrains, CI and the GitHub Action. Outer: Telegram, Slack, Discord, WhatsApp, Matrix and Signal, email, A2A agents, MCP clients, Codex clients, the Node.js SDK, cloud runs and the Cursor API." width="100%">
+  </picture>
+</p>
 
 <details>
 <summary><b>More places OASIS runs</b></summary>
@@ -184,6 +316,8 @@ oasis -p --permission-mode auto --goal "npm test passes"              # keeps go
 
 </details>
 
+<p align="right"><a href="#readme-top"><sub>back to top ↑</sub></a></p>
+
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
 ## How a task runs
@@ -203,23 +337,37 @@ You ask in plain words. OASIS plans the work, acts through tools (files, shell, 
 
 Larger jobs are split across agents that run as one network with a single scheduler ([Agent network](docs/AGENT-NETWORK.md)):
 
-- **Subagents.** Built-in `explore`, `plan`, `general-purpose`, `code-review` and `security-review` agents, plus your own agent files. They run in parallel or in the background, can be resumed, and can each get their own git worktree ([Subagents](docs/SUBAGENTS.md)).
-- **Teams.** Agent teams coordinate around a shared task board, with messages between members and leases on claimed tasks.
-- **Checked reports.** A subagent's report is checked against its own tool results: a "tests pass" with no passing test run, a cited page it never fetched or a number no code printed is flagged before the parent relies on it.
-- **Budgets and cancellation.** Each agent can reserve a budget (tokens, dollars, requests, steps, children) from its parent's, a scheduler limits how many run at once, and stopping an agent stops its whole subtree.
-- **Workflows.** `/deep-research` and `/audit` are built-in scripted workflows; the `workflow` tool runs your own. Research and analysis domain packs add specialist agents with narrower tools.
-- **Shared knowledge.** Agents of a session post findings to a shared knowledge board (`knowledge_post`, `knowledge_search`); each post is checked against the poster's own evidence, and new subagents start with the relevant findings.
-- **Experience.** Each run's outcome is recorded from evidence, so later runs can recall what worked before (`oasis agents experience`).
+| | |
+| --- | --- |
+| **Subagents** | Built-in `explore`, `plan`, `general-purpose`, `code-review` and `security-review` agents, plus your own agent files. They run in parallel or in the background, can be resumed, and can each get their own git worktree ([Subagents](docs/SUBAGENTS.md)). |
+| **Teams** | Agent teams coordinate around a shared task board, with messages between members and leases on claimed tasks. |
+| **Checked reports** | A subagent's report is checked against its own tool results: a "tests pass" with no passing test run, a cited page it never fetched or a number no code printed is flagged before the parent relies on it. |
+| **Budgets and cancellation** | Each agent can reserve a budget (tokens, dollars, requests, steps, children) from its parent's, a scheduler limits how many run at once, and stopping an agent stops its whole subtree. |
+| **Workflows** | `/deep-research` and `/audit` are built-in scripted workflows; the `workflow` tool runs your own. Research and analysis domain packs add specialist agents with narrower tools. |
+| **Shared knowledge** | Agents of a session post findings to a shared knowledge board (`knowledge_post`, `knowledge_search`); each post is checked against the poster's own evidence, and new subagents start with the relevant findings. |
+| **Experience** | Each run's outcome is recorded from evidence, so later runs can recall what worked before (`oasis agents experience`). |
 
 ### Where work runs
 
 By default OASIS works in the folder you start it in, on your machine, with approvals. It can also run commands in a bubblewrap or macOS Seatbelt sandbox, a Docker, Podman or Apptainer container (optionally under gVisor), or on a remote SSH, Daytona or Modal machine. `oasis doctor` tells you which is active. Details: [Execution backends](docs/EXECUTION-BACKENDS.md).
 
+<p align="right"><a href="#readme-top"><sub>back to top ↑</sub></a></p>
+
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
 ## Models and integrations
 
-**Any model.** OpenAI, Anthropic, Gemini, Bedrock, Vertex AI, Azure AI Foundry, OpenRouter, Groq, DeepSeek, Mistral, xAI, any OpenAI-compatible endpoint, or a local Ollama, LM Studio, llama.cpp or vLLM server. `oasis connect` takes an API key, a model page link or a server address, works out the provider, tests models with a real tool call and saves the first that works plus backups for failover. Prompt caching, automatic compaction, task-aware routing, zero-budget mode and spend limits are built in ([Model providers](docs/CONFIGURATION.md#model-providers), [Inference](docs/INFERENCE.md)). The harness gives small and local models the same tools and checks, but OASIS does not guarantee that every model will solve every task: on a given task the model you connect usually matters more than the harness.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/providers-dark.svg">
+    <img src="assets/readme/providers-light.svg" alt="Three scrolling rows. Hosted: OpenAI, Anthropic, Google Gemini, Amazon Bedrock, Vertex AI, Azure AI Foundry, OpenRouter, Groq, DeepSeek, Mistral, xAI and any OpenAI-compatible API. Local: Ollama, LM Studio, llama.cpp, vLLM, OmniRoute, FreeLLMAPI, zero-budget mode, failover backups, prompt caching and spend limits. Plugs into: MCP servers, the MCP Registry, 48 app connectors, Claude Code plugins, Codex plugins, Gemini CLI extensions, skills, hooks, the GitHub Action and A2A agents." width="100%">
+  </picture>
+</p>
+
+**Any model.** OpenAI, Anthropic, Gemini, Bedrock, Vertex AI, Azure AI Foundry, OpenRouter, Groq, DeepSeek, Mistral, xAI, any OpenAI-compatible endpoint, or a local Ollama, LM Studio, llama.cpp or vLLM server. `oasis connect` takes an API key, a model page link or a server address, works out the provider, tests models with a real tool call and saves the first that works plus backups for failover. Prompt caching, automatic compaction, task-aware routing, zero-budget mode and spend limits are built in ([Model providers](docs/CONFIGURATION.md#model-providers), [Inference](docs/INFERENCE.md)).
+
+> [!NOTE]
+> The harness gives small and local models the same tools and checks, but OASIS does not guarantee that every model will solve every task: on a given task the model you connect usually matters more than the harness.
 
 **Apps.** Say "connect GitHub" or type `/connect linear` and a Connect card appears in the conversation. Approve access on the service's own page and its tools are ready in the same turn. 48 apps are built in, and any other remote MCP server works by name from the official MCP Registry or by URL.
 
@@ -255,9 +403,13 @@ The web app manages servers under **Settings → Tools**, apps under **Settings 
 
 </details>
 
+<p align="right"><a href="#readme-top"><sub>back to top ↑</sub></a></p>
+
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
 ## Security
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-safety-dark.svg"><img src="assets/readme/icon-safety-light.svg" width="56" height="56" align="right" alt="" aria-hidden="true"></picture>
 
 OASIS can read and change files, run commands, browse and send context to your model provider, with your account's permissions.
 
@@ -265,9 +417,9 @@ OASIS can read and change files, run commands, browse and send context to your m
 - Shell commands get a risk analysis, protected paths such as `.env` and `.git` are guarded, secrets in tool output are redacted before the model sees them, and commits are scanned for secrets. Project settings that loosen anything wait until you trust the workspace.
 - The web app signs browsers in with a 256-bit access key, with DNS-rebinding protection and brute-force lockout ([Remote access](docs/REMOTE-ACCESS.md)).
 - Plugins, hooks and MCP servers can run third-party code. Review them before turning them on.
-- Approval prompts are not a replacement for operating-system isolation. Use the sandbox, a container or a throwaway machine for untrusted code.
 
-Read the [security policy](SECURITY.md) before using OASIS on sensitive work.
+> [!WARNING]
+> Approval prompts are not a replacement for operating-system isolation. Use the sandbox, a container or a throwaway machine for untrusted code. Read the [security policy](SECURITY.md) before using OASIS on sensitive work.
 
 ## Capability status
 
@@ -275,12 +427,14 @@ OASIS is a young project. Status labels for every part are in [Capabilities and 
 
 | Status | Areas |
 | --- | --- |
-| Stable | Terminal and scripted runs, the self-hosted web app, sessions, checkpoints and undo, permission modes, bubblewrap and Docker sandboxes, MCP, Claude Code plugins, OpenAI-compatible, Anthropic, Gemini and local providers |
-| Released, lightly tested | Subagents in parallel and in teams, scripted workflows, domain packs, the desktop app (installers not yet code-signed), editor integrations, Codex App Server and Cursor API compatibility, the SDK, GitHub Action and cloud runs, Telegram, Slack and Discord gateways, the Chrome browser tool, app connectors, image and speech tools |
-| Unreleased (on `main`, install from source) | Desktop computer use and virtual desktops (experimental), the control room, A2A, agent experience, the shared knowledge board, `mixture_of_agents`, Daytona, Modal, Apptainer and gVisor backends, more chat gateways, Honcho and Home Assistant |
-| Not claimed | Production readiness for untrusted code without OS isolation, results with paid frontier models, a hosted service, a published Terminal-Bench or SWE-bench score |
+| ![Stable](https://img.shields.io/badge/-stable-32E07A?style=flat-square) | Terminal and scripted runs, the self-hosted web app, sessions, checkpoints and undo, permission modes, bubblewrap and Docker sandboxes, MCP, Claude Code plugins, OpenAI-compatible, Anthropic, Gemini and local providers |
+| ![Released, lightly tested](https://img.shields.io/badge/-released%2C%20lightly%20tested-7CFF5E?style=flat-square) | Subagents in parallel and in teams, scripted workflows, domain packs, the desktop app (installers not yet code-signed), editor integrations, Codex App Server and Cursor API compatibility, the SDK, GitHub Action and cloud runs, Telegram, Slack and Discord gateways, the Chrome browser tool, app connectors, image and speech tools |
+| ![Unreleased](https://img.shields.io/badge/-unreleased%20(main)-FBBF24?style=flat-square) | On `main`, install from source: desktop computer use and virtual desktops (experimental), the control room, A2A, agent experience, the shared knowledge board, `mixture_of_agents`, Daytona, Modal, Apptainer and gVisor backends, more chat gateways, Honcho and Home Assistant |
+| ![Not claimed](https://img.shields.io/badge/-not%20claimed-1A1F1B?style=flat-square) | Production readiness for untrusted code without OS isolation, results with paid frontier models, a hosted service, a published Terminal-Bench or SWE-bench score |
 
 Engineering benchmarks of the harness itself (tool-call repair, edit application, risky-command blocking, secret detection) and every recorded live run are kept for development in [Benchmarks](docs/development/BENCHMARKS.md) and [Real-world runs](docs/development/REAL-WORLD-RUNS.md). They are one-trial samples, not a ranking.
+
+<p align="right"><a href="#readme-top"><sub>back to top ↑</sub></a></p>
 
 ## Documentation
 
@@ -306,6 +460,15 @@ node scripts/readme-art.mjs       # regenerate the animated README art in assets
 ```
 
 CI also runs platform security tests, a live Docker sandbox test, native PTY tests and a browser test that drives the web app like a person: approvals, a reload mid-task that must reattach, a second browser, Remember this device, and WCAG contrast checks. Contributions are welcome: start with the [Contributing guide](CONTRIBUTING.md).
+
+<details>
+<summary><b>About the README artwork</b></summary>
+
+<br>
+
+Every animation in this README is a plain SVG built by `scripts/readme-art.mjs` and `scripts/readme-scenes.mjs`: CSS keyframes and SMIL only, no scripts, no web fonts, no external images. Each one ships in a dark and a light version picked by `<picture>`, and each one shows a finished still frame when your system asks for reduced motion. `node scripts/readme-art.mjs --check` fails when a file in `assets/readme/` is out of date.
+
+</details>
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
@@ -340,4 +503,7 @@ Fen is the OASIS mascot: a fennec fox, the desert animal that always finds the w
 
 [Apache License 2.0](LICENSE). Bundled third-party code, fonts and data keep their own licenses; see [Third-party notices](THIRD-PARTY-NOTICES.md).
 
-<p align="center"><br><sub>Made with care by the OASIS contributors. Fen says hi.</sub></p>
+<p align="center">
+  <img src="assets/readme/footer.svg" alt="A night desert under twinkling stars. The OASIS portal glows on the horizon above a small pool that reflects it, Fen the fennec fox sits on a dune and blinks, and the words Plan, Act, Verify light up in turn." width="100%">
+  <br><sub>Made with care by the OASIS contributors. Fen says hi.</sub>
+</p>

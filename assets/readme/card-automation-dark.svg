@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-labelledby="t d">
+<title id="t">AUTOMATION: Runs on a schedule</title>
+<desc id="d">Five weekday tiles, Monday to Friday at 09:00, light up in turn with a pulse. A chat message from OASIS appears in team-updates: 12 new issues, 3 need a reply.</desc>
+<defs><linearGradient id="rim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7CFF5E" stop-opacity=".55"/><stop offset=".45" stop-color="#1F2E23"/><stop offset="1" stop-color="#1F2E23"/></linearGradient>
+<radialGradient id="spot" cx="0" cy="0" r="1"><stop offset="0" stop-color="#7CFF5E" stop-opacity=".10"/><stop offset="1" stop-color="#7CFF5E" stop-opacity="0"/></radialGradient></defs>
+<style>
+@media (prefers-reduced-motion: no-preference) {
+.d0{animation:d0 10s ease-in-out infinite}@keyframes d0{0%,6%{stroke:#1F2E23;fill:#121B15}8%,94%{stroke:#7CFF5E;fill:#123A1F}100%{stroke:#1F2E23;fill:#121B15}}
+.p0{transform-box:fill-box;transform-origin:center;animation:p0 10s ease-out infinite}@keyframes p0{0%,6%{transform:scale(.6);opacity:0}7%{opacity:.9}15%,100%{transform:scale(2.4);opacity:0}}
+.t0{animation:t0 10s linear infinite}
+@keyframes t0{0%,8%{opacity:0;transform:translateY(5px)}11.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.d1{animation:d1 10s ease-in-out infinite}@keyframes d1{0%,13%{stroke:#1F2E23;fill:#121B15}15%,94%{stroke:#7CFF5E;fill:#123A1F}100%{stroke:#1F2E23;fill:#121B15}}
+.p1{transform-box:fill-box;transform-origin:center;animation:p1 10s ease-out infinite}@keyframes p1{0%,13%{transform:scale(.6);opacity:0}14%{opacity:.9}22%,100%{transform:scale(2.4);opacity:0}}
+.t1{animation:t1 10s linear infinite}
+@keyframes t1{0%,15%{opacity:0;transform:translateY(5px)}18.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.d2{animation:d2 10s ease-in-out infinite}@keyframes d2{0%,20%{stroke:#1F2E23;fill:#121B15}22%,94%{stroke:#7CFF5E;fill:#123A1F}100%{stroke:#1F2E23;fill:#121B15}}
+.p2{transform-box:fill-box;transform-origin:center;animation:p2 10s ease-out infinite}@keyframes p2{0%,20%{transform:scale(.6);opacity:0}21%{opacity:.9}29%,100%{transform:scale(2.4);opacity:0}}
+.t2{animation:t2 10s linear infinite}
+@keyframes t2{0%,22%{opacity:0;transform:translateY(5px)}25.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.d3{animation:d3 10s ease-in-out infinite}@keyframes d3{0%,27%{stroke:#1F2E23;fill:#121B15}29%,94%{stroke:#7CFF5E;fill:#123A1F}100%{stroke:#1F2E23;fill:#121B15}}
+.p3{transform-box:fill-box;transform-origin:center;animation:p3 10s ease-out infinite}@keyframes p3{0%,27%{transform:scale(.6);opacity:0}28%{opacity:.9}36%,100%{transform:scale(2.4);opacity:0}}
+.t3{animation:t3 10s linear infinite}
+@keyframes t3{0%,29%{opacity:0;transform:translateY(5px)}32.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.d4{animation:d4 10s ease-in-out infinite}@keyframes d4{0%,34%{stroke:#1F2E23;fill:#121B15}36%,94%{stroke:#7CFF5E;fill:#123A1F}100%{stroke:#1F2E23;fill:#121B15}}
+.p4{transform-box:fill-box;transform-origin:center;animation:p4 10s ease-out infinite}@keyframes p4{0%,34%{transform:scale(.6);opacity:0}35%{opacity:.9}43%,100%{transform:scale(2.4);opacity:0}}
+.t4{animation:t4 10s linear infinite}
+@keyframes t4{0%,36%{opacity:0;transform:translateY(5px)}39.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.m1{animation:m1 10s linear infinite}
+@keyframes m1{0%,44%{opacity:0;transform:translateY(5px)}47.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.m2{animation:m2 10s linear infinite}
+@keyframes m2{0%,51%{opacity:0;transform:translateY(5px)}54.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+}
+</style>
+<rect x="1" y="1" width="638" height="358" rx="22" fill="#0E1510" stroke="url(#rim)" stroke-width="1.5"/>
+<rect x="1" y="1" width="638" height="358" rx="22" fill="url(#spot)"/>
+<text x="32" y="46" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" letter-spacing="2.5" fill="#7CFF5E">AUTOMATION</text>
+<text x="32" y="84" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="27" font-weight="800" fill="#E6F5EA">Runs on a schedule</text>
+<g transform="translate(32 116)" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<g><rect x="0" y="-6" width="192" height="30" rx="15" fill="#121B15" stroke="#1F2E23"/><text x="14" y="14" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#8FA597">every weekday at 9:00</text></g><rect class="d0" x="0" y="36" width="104" height="64" rx="12" fill="#121B15" stroke="#1F2E23" stroke-width="1.5"/>
+<text x="16" y="62" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#E6F5EA">Mon</text>
+<text x="16" y="86" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#8FA597">09:00</text>
+<circle class="p0" cx="86" cy="57" r="6" fill="none" stroke="#7CFF5E" stroke-width="2"/>
+<g class="t0"><circle cx="86" cy="57" r="5" fill="#7CFF5E"/></g><rect class="d1" x="117" y="36" width="104" height="64" rx="12" fill="#121B15" stroke="#1F2E23" stroke-width="1.5"/>
+<text x="133" y="62" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#E6F5EA">Tue</text>
+<text x="133" y="86" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#8FA597">09:00</text>
+<circle class="p1" cx="203" cy="57" r="6" fill="none" stroke="#7CFF5E" stroke-width="2"/>
+<g class="t1"><circle cx="203" cy="57" r="5" fill="#7CFF5E"/></g><rect class="d2" x="234" y="36" width="104" height="64" rx="12" fill="#121B15" stroke="#1F2E23" stroke-width="1.5"/>
+<text x="250" y="62" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#E6F5EA">Wed</text>
+<text x="250" y="86" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#8FA597">09:00</text>
+<circle class="p2" cx="320" cy="57" r="6" fill="none" stroke="#7CFF5E" stroke-width="2"/>
+<g class="t2"><circle cx="320" cy="57" r="5" fill="#7CFF5E"/></g><rect class="d3" x="351" y="36" width="104" height="64" rx="12" fill="#121B15" stroke="#1F2E23" stroke-width="1.5"/>
+<text x="367" y="62" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#E6F5EA">Thu</text>
+<text x="367" y="86" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#8FA597">09:00</text>
+<circle class="p3" cx="437" cy="57" r="6" fill="none" stroke="#7CFF5E" stroke-width="2"/>
+<g class="t3"><circle cx="437" cy="57" r="5" fill="#7CFF5E"/></g><rect class="d4" x="468" y="36" width="104" height="64" rx="12" fill="#121B15" stroke="#1F2E23" stroke-width="1.5"/>
+<text x="484" y="62" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#E6F5EA">Fri</text>
+<text x="484" y="86" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#8FA597">09:00</text>
+<circle class="p4" cx="554" cy="57" r="6" fill="none" stroke="#7CFF5E" stroke-width="2"/>
+<g class="t4"><circle cx="554" cy="57" r="5" fill="#7CFF5E"/></g><g class="m1"><rect x="0" y="118" width="576" height="94" rx="14" fill="#121B15" stroke="#1F2E23"/>
+<rect x="16" y="134" width="30" height="30" rx="8" fill="#123A1F"/><text x="31" y="155" text-anchor="middle" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="15" font-weight="800" fill="#7CFF5E">O</text>
+<text x="58" y="146" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#E6F5EA">OASIS <tspan font-weight="500" fill="#5E7064">in #team-updates</tspan></text>
+<text x="58" y="172" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" fill="#8FA597">12 new issues since yesterday · 3 need a reply</text></g>
+<g class="m2"><text x="58" y="198" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#7CFF5E">✓ posted · next run tomorrow 09:00</text></g>
+</g>
+</svg>

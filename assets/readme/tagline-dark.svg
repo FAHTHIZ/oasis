@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="96" viewBox="0 0 1280 96" role="img" aria-labelledby="t d">
+<title id="t">One open runtime for software, research, data analysis, writing, automation and computer use</title>
+<desc id="d">A prompt bar that types, in turn: software, research, data analysis, writing, automation and computer use, after the words One open runtime for. A chip on the right reads with any model.</desc>
+<defs><linearGradient id="edge" x1="0" x2="1"><stop offset="0" stop-color="#7CFF5E" stop-opacity=".1"/><stop offset=".5" stop-color="#7CFF5E" stop-opacity=".8"/><stop offset="1" stop-color="#7CFF5E" stop-opacity=".1"/></linearGradient></defs>
+<style>
+@media (prefers-reduced-motion: no-preference) {
+.w0{animation:w0 19.200000000000003s infinite}
+@keyframes w0{0%,0%{opacity:0}0.05%,16.41%{opacity:1}16.67%,100%{opacity:0}}
+.k0{animation:k0 19.200000000000003s infinite}
+@keyframes k0{0%,0%{transform:translateX(0);animation-timing-function:steps(8,end)}4.69%,12.76%{transform:translateX(149px);animation-timing-function:steps(8,end)}15.89%,100%{transform:translateX(0)}}
+.w1{animation:w1 19.200000000000003s infinite}
+@keyframes w1{0%,16.67%{opacity:0}16.72%,33.07%{opacity:1}33.33%,100%{opacity:0}}
+.k1{animation:k1 19.200000000000003s infinite}
+@keyframes k1{0%,16.67%{transform:translateX(0);animation-timing-function:steps(8,end)}21.35%,29.43%{transform:translateX(149px);animation-timing-function:steps(8,end)}32.55%,100%{transform:translateX(0)}}
+.w2{animation:w2 19.200000000000003s infinite}
+@keyframes w2{0%,33.33%{opacity:0}33.39%,49.74%{opacity:1}50%,100%{opacity:0}}
+.k2{animation:k2 19.200000000000003s infinite}
+@keyframes k2{0%,33.33%{transform:translateX(0);animation-timing-function:steps(13,end)}38.02%,46.09%{transform:translateX(242px);animation-timing-function:steps(13,end)}49.22%,100%{transform:translateX(0)}}
+.w3{animation:w3 19.200000000000003s infinite}
+@keyframes w3{0%,50%{opacity:0}50.05%,66.41%{opacity:1}66.67%,100%{opacity:0}}
+.k3{animation:k3 19.200000000000003s infinite}
+@keyframes k3{0%,50%{transform:translateX(0);animation-timing-function:steps(7,end)}54.69%,62.76%{transform:translateX(131px);animation-timing-function:steps(7,end)}65.89%,100%{transform:translateX(0)}}
+.w4{animation:w4 19.200000000000003s infinite}
+@keyframes w4{0%,66.67%{opacity:0}66.72%,83.07%{opacity:1}83.33%,100%{opacity:0}}
+.k4{animation:k4 19.200000000000003s infinite}
+@keyframes k4{0%,66.67%{transform:translateX(0);animation-timing-function:steps(10,end)}71.35%,79.43%{transform:translateX(186px);animation-timing-function:steps(10,end)}82.55%,100%{transform:translateX(0)}}
+.w5{animation:w5 19.200000000000003s infinite}
+@keyframes w5{0%,83.33%{opacity:0}83.39%,99.74%{opacity:1}100%,100%{opacity:0}}
+.k5{animation:k5 19.200000000000003s infinite}
+@keyframes k5{0%,83.33%{transform:translateX(0);animation-timing-function:steps(12,end)}88.02%,96.09%{transform:translateX(224px);animation-timing-function:steps(12,end)}99.22%,100%{transform:translateX(0)}}
+.caret{animation:blink 1s steps(1,end) infinite}@keyframes blink{50%{opacity:0}}
+.glow{animation:glow 4s ease-in-out infinite alternate}@keyframes glow{from{opacity:.35}to{opacity:.9}}
+}
+</style>
+<rect x="1" y="1" width="1278" height="94" rx="47" fill="#0E1510" stroke="#1F2E23" stroke-width="1.5"/>
+<rect class="glow" x="200" y="93.5" width="880" height="1.5" fill="url(#edge)"/>
+<text x="252" y="58" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="30" font-weight="700" fill="#7CFF5E">❯</text>
+<text x="594" y="58" text-anchor="end" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="30" font-weight="700" fill="#E6F5EA">One open runtime for</text>
+<g class="w0"><text x="608" y="58" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="30" font-weight="700" fill="#7CFF5E">software</text>
+  <g class="k0"><rect x="606" y="26" width="499" height="44" fill="#0E1510"/><rect class="caret" x="609" y="31" width="15" height="30" fill="#7CFF5E"/></g></g>
+<g class="w1"><text x="608" y="58" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="30" font-weight="700" fill="#7CFF5E">research</text>
+  <g class="k1"><rect x="606" y="26" width="499" height="44" fill="#0E1510"/><rect class="caret" x="609" y="31" width="15" height="30" fill="#7CFF5E"/></g></g>
+<g class="w2"><text x="608" y="58" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="30" font-weight="700" fill="#7CFF5E">data analysis</text>
+  <g class="k2"><rect x="606" y="26" width="592" height="44" fill="#0E1510"/><rect class="caret" x="609" y="31" width="15" height="30" fill="#7CFF5E"/></g></g>
+<g class="w3"><text x="608" y="58" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="30" font-weight="700" fill="#7CFF5E">writing</text>
+  <g class="k3"><rect x="606" y="26" width="481" height="44" fill="#0E1510"/><rect class="caret" x="609" y="31" width="15" height="30" fill="#7CFF5E"/></g></g>
+<g class="w4"><text x="608" y="58" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="30" font-weight="700" fill="#7CFF5E">automation</text>
+  <g class="k4"><rect x="606" y="26" width="536" height="44" fill="#0E1510"/><rect class="caret" x="609" y="31" width="15" height="30" fill="#7CFF5E"/></g></g>
+<g class="w5"><text x="608" y="58" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="30" font-weight="700" fill="#7CFF5E">computer use</text>
+  <g class="k5"><rect x="606" y="26" width="574" height="44" fill="#0E1510"/><rect class="caret" x="609" y="31" width="15" height="30" fill="#7CFF5E"/></g></g>
+
+<g font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="700"><rect x="1052" y="31" width="164" height="34" rx="17" fill="#123A1F"/><circle cx="1074" cy="48" r="5" fill="#7CFF5E" class="glow"/><text x="1088" y="53.5" fill="#7CFF5E">with any model</text></g>
+</svg>

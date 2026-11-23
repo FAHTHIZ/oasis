@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-labelledby="t d">
+<title id="t">DATA ANALYSIS: Numbers come from code</title>
+<desc id="d">A bar chart grows bar by bar while a chip reads python analyze.py exit 0, and a second chip confirms every number was printed by code.</desc>
+<defs><linearGradient id="rim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0A7846" stop-opacity=".45"/><stop offset=".45" stop-color="#D5E5DA"/><stop offset="1" stop-color="#D5E5DA"/></linearGradient>
+<radialGradient id="spot" cx="0" cy="0" r="1"><stop offset="0" stop-color="#0A7846" stop-opacity=".07"/><stop offset="1" stop-color="#0A7846" stop-opacity="0"/></radialGradient></defs>
+<style>
+@media (prefers-reduced-motion: no-preference) {
+.b0{transform-box:fill-box;transform-origin:50% 100%;animation:b0 10s cubic-bezier(.2,.8,.2,1) infinite}@keyframes b0{0%,8%{transform:scaleY(0)}16%,94%{transform:scaleY(1)}100%{transform:scaleY(0)}}
+.v0{animation:v0 10s linear infinite}
+@keyframes v0{0%,15%{opacity:0;transform:translateY(5px)}18.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.b1{transform-box:fill-box;transform-origin:50% 100%;animation:b1 10s cubic-bezier(.2,.8,.2,1) infinite}@keyframes b1{0%,11%{transform:scaleY(0)}19%,94%{transform:scaleY(1)}100%{transform:scaleY(0)}}
+.v1{animation:v1 10s linear infinite}
+@keyframes v1{0%,18%{opacity:0;transform:translateY(5px)}21.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.b2{transform-box:fill-box;transform-origin:50% 100%;animation:b2 10s cubic-bezier(.2,.8,.2,1) infinite}@keyframes b2{0%,14%{transform:scaleY(0)}22%,94%{transform:scaleY(1)}100%{transform:scaleY(0)}}
+.v2{animation:v2 10s linear infinite}
+@keyframes v2{0%,21%{opacity:0;transform:translateY(5px)}24.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.b3{transform-box:fill-box;transform-origin:50% 100%;animation:b3 10s cubic-bezier(.2,.8,.2,1) infinite}@keyframes b3{0%,17%{transform:scaleY(0)}25%,94%{transform:scaleY(1)}100%{transform:scaleY(0)}}
+.v3{animation:v3 10s linear infinite}
+@keyframes v3{0%,24%{opacity:0;transform:translateY(5px)}27.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.b4{transform-box:fill-box;transform-origin:50% 100%;animation:b4 10s cubic-bezier(.2,.8,.2,1) infinite}@keyframes b4{0%,20%{transform:scaleY(0)}28%,94%{transform:scaleY(1)}100%{transform:scaleY(0)}}
+.v4{animation:v4 10s linear infinite}
+@keyframes v4{0%,27%{opacity:0;transform:translateY(5px)}30.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.b5{transform-box:fill-box;transform-origin:50% 100%;animation:b5 10s cubic-bezier(.2,.8,.2,1) infinite}@keyframes b5{0%,23%{transform:scaleY(0)}31%,94%{transform:scaleY(1)}100%{transform:scaleY(0)}}
+.v5{animation:v5 10s linear infinite}
+@keyframes v5{0%,30%{opacity:0;transform:translateY(5px)}33.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.py{animation:py 10s linear infinite}
+@keyframes py{0%,2%{opacity:0;transform:translateY(5px)}5.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.ok{animation:ok 10s linear infinite}
+@keyframes ok{0%,34%{opacity:0;transform:translateY(5px)}37.5%,91%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+}
+</style>
+<rect x="1" y="1" width="638" height="358" rx="22" fill="#FFFFFF" stroke="url(#rim)" stroke-width="1.5"/>
+<rect x="1" y="1" width="638" height="358" rx="22" fill="url(#spot)"/>
+<text x="32" y="46" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" letter-spacing="2.5" fill="#0A7846">DATA ANALYSIS</text>
+<text x="32" y="84" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="27" font-weight="800" fill="#0B1A10">Numbers come from code</text>
+<g transform="translate(32 116)" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<defs><linearGradient id="bar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A7846"/><stop offset="1" stop-color="#0A7846" stop-opacity=".55"/></linearGradient></defs><path d="M40 200H576" stroke="#D5E5DA" stroke-width="1" /><path d="M40 155H576" stroke="#D5E5DA" stroke-width="1" stroke-dasharray="3 5"/><path d="M40 110H576" stroke="#D5E5DA" stroke-width="1" stroke-dasharray="3 5"/><path d="M40 65H576" stroke="#D5E5DA" stroke-width="1" stroke-dasharray="3 5"/><rect class="b0" x="64" y="148" width="48" height="52" rx="7" fill="url(#bar)"/>
+<g class="v0"><text x="88" y="140" text-anchor="middle" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#0B1A10">380</text></g>
+<text x="88" y="218" text-anchor="middle" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" fill="#71877A">Jan</text><rect class="b1" x="148" y="118" width="48" height="82" rx="7" fill="url(#bar)"/>
+<g class="v1"><text x="172" y="110" text-anchor="middle" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#0B1A10">599</text></g>
+<text x="172" y="218" text-anchor="middle" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" fill="#71877A">Feb</text><rect class="b2" x="232" y="134" width="48" height="66" rx="7" fill="url(#bar)"/>
+<g class="v2"><text x="256" y="126" text-anchor="middle" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#0B1A10">482</text></g>
+<text x="256" y="218" text-anchor="middle" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" fill="#71877A">Mar</text><rect class="b3" x="316" y="88" width="48" height="112" rx="7" fill="url(#bar)"/>
+<g class="v3"><text x="340" y="80" text-anchor="middle" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#0B1A10">818</text></g>
+<text x="340" y="218" text-anchor="middle" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" fill="#71877A">Apr</text><rect class="b4" x="400" y="104" width="48" height="96" rx="7" fill="url(#bar)"/>
+<g class="v4"><text x="424" y="96" text-anchor="middle" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#0B1A10">701</text></g>
+<text x="424" y="218" text-anchor="middle" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" fill="#71877A">May</text><rect class="b5" x="484" y="60" width="48" height="140" rx="7" fill="url(#bar)"/>
+<g class="v5"><text x="508" y="52" text-anchor="middle" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#0B1A10">1022</text></g>
+<text x="508" y="218" text-anchor="middle" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" fill="#71877A">Jun</text><g class="py"><rect x="0" y="-6" width="231" height="30" rx="15" fill="#F2FBF4" stroke="#D5E5DA"/><text x="14" y="14" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#4A6352">python analyze.py → exit 0</text></g><g class="ok"><rect x="290" y="-6" width="262" height="30" rx="15" fill="#E3FBE6"/><text x="304" y="14" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" font-weight="700" fill="#0A7846">✓ every number printed by code</text></g>
+</g>
+</svg>
