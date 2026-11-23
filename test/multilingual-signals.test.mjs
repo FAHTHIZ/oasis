@@ -154,3 +154,79 @@ test('failure reports in other languages are not success claims', () => {
     assert.ok(!claimsPassing(text), text);
   }
 });
+
+test('a reply in another language that claims a failed edit applied is caught, and one that admits it is not', async () => {
+  const { newClaimState, recordEditFailure, failedEditIssue } = await import('../src/claim-check.mjs');
+  const claims = [
+    'notes.txt ফাইলটি আপডেট করেছি।',
+    'नोट्स के लिए notes.txt अपडेट किया।',
+    'Actualicé notes.txt con los cambios.',
+    'J\'ai modifié notes.txt.',
+    'Ich habe notes.txt aktualisiert.',
+    'Я обновил notes.txt.',
+    'notes.txt dosyasını güncelledim.',
+    'Saya sudah memperbarui notes.txt.',
+    '已更新 notes.txt。',
+    'notes.txt を更新しました。',
+    'notes.txt 파일을 수정했습니다.',
+    'Tôi đã cập nhật notes.txt.',
+    'قمت بتحديث notes.txt.'
+  ];
+  for (const reply of claims) {
+    const state = newClaimState();
+    recordEditFailure(state, { path: 'notes.txt', error: 'File has not been read yet' });
+    assert.match(failedEditIssue(state, reply), /notes\.txt/, reply);
+  }
+  const admissions = [
+    'notes.txt আপডেট করতে পারিনি।',
+    'notes.txt अपडेट नहीं हो सका, त्रुटि आई।',
+    'No se pudo actualizar notes.txt.',
+    'Ich konnte notes.txt nicht aktualisieren.',
+    'Не удалось обновить notes.txt.',
+    '无法更新 notes.txt。',
+    'notes.txt を更新できませんでした。',
+    'notes.txt 수정에 실패했습니다.',
+    'Tidak dapat memperbarui notes.txt.'
+  ];
+  for (const reply of admissions) {
+    const state = newClaimState();
+    recordEditFailure(state, { path: 'notes.txt', error: 'File has not been read yet' });
+    assert.equal(failedEditIssue(state, reply), '', reply);
+  }
+});
+
+test('a reply in another language that admits nothing was checked gets no duplicate notice', async () => {
+  const { appendUnverifiedNotice, newClaimState } = await import('../src/claim-check.mjs');
+  const issue = ['no relevant test, check, lint, build, or type-check command has passed after the latest code edit'];
+  for (const reply of [
+    'লগইন ঠিক করেছি, তবে টেস্ট চালানো হয়নি।',
+    'लॉगिन ठीक किया, पर टेस्ट नहीं चलाए।',
+    'Arreglé el login, pero no ejecuté las pruebas.',
+    'Corrigi o login, mas não executei os testes.',
+    'J\'ai corrigé la connexion, mais je n\'ai pas exécuté les tests.',
+    'Login behoben, Tests nicht ausgeführt.',
+    'Исправил вход, но тесты не запускал.',
+    '修复了登录，但没有运行测试。',
+    'ログインを修正しましたが、テストは実行していません。',
+    '로그인을 고쳤지만 테스트는 실행하지 않았습니다.',
+    'Đã sửa đăng nhập nhưng chưa chạy kiểm thử.'
+  ]) assert.equal(appendUnverifiedNotice(reply, issue, {}, newClaimState()), reply, reply);
+  // An English reply still gets the notice, and one claiming a pass in Bengali is flagged.
+  assert.match(appendUnverifiedNotice('Fixed the login.', issue, {}, newClaimState()), /Not verified: /);
+  assert.match(appendUnverifiedNotice('লগইন ঠিক করেছি। সব টেস্ট পাস করেছে।', issue, {}, newClaimState()), /Not verified: [\s\S]*not observed by OASIS/);
+});
+
+test('claim sentences split on 。！？ and the danda', async () => {
+  const { claimSentences } = await import('../src/claim-ledger.mjs');
+  assert.deepEqual(claimSentences('修复了登录错误。所有测试都通过了！\nলগইন ঠিক করেছি। সব টেস্ট পাস করেছে।'), ['修复了登录错误。', '所有测试都通过了！', 'লগইন ঠিক করেছি।', 'সব টেস্ট পাস করেছে।']);
+  assert.deepEqual(claimSentences('Fixed it. Tests pass e.g. 3.5 times.'), ['Fixed it.', 'Tests pass e.g. 3.5 times.']);
+});
+
+test('the admission and change readers stay silent on English', async () => {
+  const { multilingualAdmitsFailure, multilingualClaimsChange, multilingualAdmitsUnverified } = await import('../src/multilingual-signals.mjs');
+  for (const line of ['Added a fallback for errored trials.', 'const errors = [];', 'I will create notes.txt next.', 'Updated the salvation army page.', 'There are no corrections needed.', 'Task not found']) {
+    assert.equal(multilingualAdmitsFailure(line), false, line);
+    assert.equal(multilingualClaimsChange(line), false, line);
+    assert.equal(multilingualAdmitsUnverified(line), false, line);
+  }
+});

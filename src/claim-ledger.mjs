@@ -50,6 +50,9 @@ const MAX_LOG = 200;
 const INFERENCE = /\b(?:therefore|thus|hence|consequently|so (?:it|this|the|we)|this (?:suggests|implies|indicates|means)|which (?:suggests|implies|indicates|means)|suggests? that|implies that|indicates? that|likely|probably|presumably|appears? to|seems? to|must (?:be|have)|i (?:infer|conclude)|we (?:infer|conclude)|in conclusion)\b/i;
 const QUOTE = /["“]([^"“”\n]{12,400})["”]/g;
 
+// Chinese, Japanese and Korean pack a full claim into a few characters.
+const DENSE_SCRIPT = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/u;
+
 /** Sentences and list items of a result, without code blocks. */
 export function claimSentences(text) {
   const prose = String(text || '').replace(/```[\s\S]*?```/g, '\n');
@@ -59,8 +62,9 @@ export function claimSentences(text) {
     if (!item || /^#{1,6}\s/.test(item) || /^\|?[\s:-]+\|[\s|:-]*$/.test(item)) continue;
     // Split after . ! ? followed by space and a capital or quote, keeping
     // decimals, abbreviations like "e.g." and URLs intact.
-    const parts = item.split(/(?<=[^\s.]{2}[.!?])\s+(?=[A-Z"“(\[])/);
-    for (const part of parts) { const value = part.trim(); if (value.length >= 8) out.push(value); }
+    // Other scripts end sentences with 。！？ (no space follows) or the danda ।.
+    const parts = item.split(/(?<=[^\s.]{2}[.!?])\s+(?=[A-Z"“(\[])|(?<=[。！？])\s*(?=\S)|(?<=[।॥])\s+/u);
+    for (const part of parts) { const value = part.trim(); if (value.length >= 8 || (value.length >= 4 && DENSE_SCRIPT.test(value))) out.push(value); }
   }
   return out;
 }

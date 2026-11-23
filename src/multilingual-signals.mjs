@@ -367,3 +367,81 @@ export function multilingualClaimsPassing(text) {
     return !FAIL_WORDS.test(sentence);
   });
 }
+
+// ------------------------------------------------- admissions and change claims
+// The reply admits that nothing was checked: "যাচাই করা হয়নি", "no ejecuté las pruebas".
+const UNVERIFIED_WORDS = compile([
+  sub('যাচাই করা হয়নি|যাচাই করা হয়নি|যাচাই করিনি|যাচাই হয়নি|যাচাই হয়নি|চালানো হয়নি|চালানো হয়নি|চালাইনি|পরীক্ষা করিনি|অযাচাইকৃত'),
+  sub('सत्यापित नहीं|सत्यापन नहीं|जांच नहीं|जाँच नहीं|नहीं चलाया|नहीं चलाए|नहीं चला|चलाया नहीं|अपुष्ट'),
+  sub('تصدیق نہیں|نہیں چلایا|نہیں چلائے|چیک نہیں'),
+  sub('لم يتم التحقق|لم أتحقق|لم يتم تشغيل|لم أشغل|لم أقم بتشغيل|غير مؤكد|دون تحقق'),
+  stem('no (?:se )?(?:verifiqu|comprob|ejecut)|no se verific|sin verificar|sin comprobar|no lo pude (?:verificar|ejecutar|probar)'),
+  stem('não (?:foi |foram )?(?:verific|execut|testad|rod)|sem verificar|não consegui (?:verificar|executar|testar)'),
+  stem('non vérifié|pas (?:été )?(?:vérifié|exécuté|lancé|testé)|sans vérifi|n\'ai pas (?:pu )?(?:vérifier|exécuter|lancer|tester)'),
+  stem('nicht (?:verifiziert|überprüft|geprüft|ausgeführt|getestet)|ungeprüft|unverifiziert|konnte (?:\\p{L}+ )?nicht (?:prüfen|ausführen|testen)'),
+  stem('non (?:è stato |sono stati )?(?:verificat|eseguit|testat|controllat)|senza verific'),
+  stem('не (?:был[аио]? )?(?:провер|запуска|запущен|выполн|тестир)|непровер|без провер'),
+  stem('doğrulanmadı|doğrulamadım|çalıştırılmadı|çalıştırmadım|test edilmedi|test etmedim'),
+  stem('belum (?:di)?(?:verifikasi|uji|jalankan|cek)|tidak (?:di)?(?:verifikasi|jalankan|uji)|tanpa verifikasi'),
+  sub('未验证|未经验证|没有验证|没验证|没有运行|没运行|未运行|未执行|没有执行|未测试|没有测试|無法驗證|未驗證|沒有執行'),
+  sub('未検証|検証していません|検証できません|実行していません|実行できません|テストしていません|未確認|確認していません'),
+  sub('검증하지|검증되지|확인하지 않|확인되지 않|실행하지 않|실행하지 못|테스트하지 않|테스트하지 못'),
+  word('chưa (?:được )?(?:xác minh|kiểm tra|chạy|kiểm thử)|không (?:thể )?(?:xác minh|chạy)')
+]);
+// The reply says it changed something: "ঠিক করেছি", "actualicé", "已修复".
+const CHANGE_WORDS = compile([
+  sub('আপডেট করেছি|আপডেট করা হয়েছে|আপডেট করা হয়েছে|পরিবর্তন করেছি|পরিবর্তন করা হয়েছে|পরিবর্তন করা হয়েছে|ঠিক করেছি|ঠিক করা হয়েছে|ঠিক করা হয়েছে|যোগ করেছি|তৈরি করেছি|লিখেছি|সংশোধন করেছি|সেভ করেছি'),
+  sub('अपडेट किया|अपडेट कर दिया|बदल दिया|बदला है|ठीक किया|ठीक कर दिया|जोड़ दिया|जोड़ा|बनाया|लिख दिया|सुधार दिया|सहेज'),
+  sub('اپ ڈیٹ کر دیا|اپڈیٹ کیا|تبدیل کر دیا|ٹھیک کر دیا|شامل کر دیا|بنا دیا|لکھ دیا'),
+  sub('حدّثت|حدثت|قمت بتحديث|تم تحديث|عدّلت|عدلت|تم تعديل|أصلحت|تم إصلاح|أضفت|تمت إضافة|أنشأت|تم إنشاء|كتبت'),
+  stem('actualic|actualizad|cambié|modifiqu|modificad|corregí|corregid|añadí|agregué|creé|escribí|arreglé|guardé|reemplac'),
+  word('atualizei|atualizad[oa]s?|alterei|modifiquei|corrigi|adicionei|criei|escrevi|salvei|substituí'),
+  stem('mis à jour|modifié|corrigé|ajouté|créé|écrit|remplacé|enregistré'),
+  stem('aktualisiert|geändert|behoben|korrigiert|hinzugefügt|erstellt|geschrieben|ersetzt|gespeichert'),
+  word('(?:aggiornat|modificat|corrett|aggiunt|scritt|sostituit|salvat)[oaie]|creat[oai]|ho (?:aggiornato|modificato|corretto|aggiunto|creato|scritto)'),
+  stem('обновил|изменил|исправил|добавил|создал|записал|заменил|сохранил|переписал'),
+  stem('güncelledim|değiştirdim|düzelttim|ekledim|oluşturdum|yazdım|kaydettim'),
+  stem('memperbarui|diperbarui|mengubah|diubah|memperbaiki|diperbaiki|menambahkan|ditambahkan|membuat|dibuat|menulis|menyimpan'),
+  sub('已更新|更新了|已修改|修改了|已修复|修复了|已添加|添加了|已创建|创建了|写入了|已写入|已替换|已保存|已修正'),
+  sub('更新しました|変更しました|修正しました|追加しました|作成しました|書き込みました|置き換えました|保存しました'),
+  sub('업데이트했|수정했|변경했|고쳤|추가했|생성했|작성했|저장했|교체했'),
+  word('đã cập nhật|đã sửa|đã thay đổi|đã thêm|đã tạo|đã ghi|đã lưu')
+]);
+
+const test = (pattern, value) => { pattern.lastIndex = 0; const hit = pattern.test(value); pattern.lastIndex = 0; return hit; };
+
+/** True when a reply in another language admits a check was not run or the work is unverified. */
+export function multilingualAdmitsUnverified(text) {
+  return test(UNVERIFIED_WORDS, String(text || ''));
+}
+
+/** True when a sentence in another language says a file was changed, written or fixed. */
+export function multilingualClaimsChange(text) {
+  return test(CHANGE_WORDS, String(text || ''));
+}
+
+// Like FAIL_WORDS, but without stems that are also English words ("fallback",
+// "errors"), since this runs on English replies too.
+const ADMIT_FAIL_WORDS = compile([
+  sub('ব্যর্থ|ফেল|হয়নি|হয়নি|পারিনি|করা যায়নি|করা যায়নি'),
+  sub('विफल|फेल|नहीं|असफल|त्रुटि'),
+  sub('ناکام|فیل|نہیں|خرابی'),
+  sub('فشل|فشلت|لم |تعذر|خطأ'),
+  word('falló|fallaron|fallan|fallido|fallida|no se pudo|no pude|no fue posible|errores'),
+  word('falhou|falharam|falha|não foi possível|não consegui|erros?'),
+  stem('échou|échec|erreur|pas pu|impossible de'),
+  stem('fehlgeschlagen|schlägt fehl|schlagen fehl|nicht|fehler|konnte nicht'),
+  word('fallit[oaie]|falliscono|fallisce|non è stato possibile|non sono riuscit[oaie]|errore|errori'),
+  stem('не удалось|не прош|не смог|провал|ошибк|сбой'),
+  stem('başarısız|geçmedi|yapılamadı|edilemedi|hata'),
+  stem('gagal|tidak bisa|tidak dapat|tidak berhasil|kesalahan'),
+  sub('失败|未能|无法|没能|报错|出错|錯誤|失敗'),
+  sub('失敗|できませんでした|できません|エラー'),
+  sub('실패|못했|못 했|할 수 없|오류|에러'),
+  word('thất bại|không thể|không được|lỗi')
+]);
+
+/** True when a sentence in another language admits a failure or error. */
+export function multilingualAdmitsFailure(text) {
+  return test(ADMIT_FAIL_WORDS, String(text || '').replace(ZERO_FAILURES, ' '));
+}
