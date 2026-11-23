@@ -11,6 +11,11 @@
 //   MCP server (repo/package) -> the MCP Registry entry, or npx for an npm package
 //   Remote MCP URL            -> addRemoteMcpServer (http, or sse for /sse URLs)
 //   Markdown agents/commands  -> installGitHubExtension (prompts only)
+//   Other formats             -> plugin-convert.mjs and config-packs.mjs: Codex,
+//                                Gemini CLI, Cursor, Copilot CLI, Kiro, Agent
+//                                Plugins, MCP Bundles (.mcpb), and config packs
+//                                (VS Code / Copilot, Continue, Cursor, Windsurf,
+//                                Cline, OpenCode, Antigravity project files)
 //
 // Nothing is changed before the one approval. Nothing from the source runs
 // during inspection: the repository is cloned shallowly with hooks off and
@@ -251,6 +256,18 @@ async function fetchRepository(source, options = {}) {
   if (source.local) {
     const dir = path.resolve(options.root || process.cwd(), source.local);
     const info = await stat(dir).catch(() => null);
+    // A packed MCP Bundle (.mcpb, or .dxt from before the rename) is a zip.
+    if (info && info.isFile() && /\.(mcpb|dxt)$/i.test(dir)) {
+      const temp = await mkdtemp(path.join(os.tmpdir(), 'oasis-add-bundle-'));
+      try {
+        const { extractZip } = await import('./zip.mjs');
+        await extractZip(await readFile(dir), temp);
+      } catch (error) {
+        await rm(temp, { recursive: true, force: true });
+        throw new Error('Could not open ' + source.local + ': ' + error.message);
+      }
+      return { dir: temp, cleanup: () => rm(temp, { recursive: true, force: true }) };
+    }
     if (!info || !info.isDirectory()) throw new Error('No folder at ' + source.local + '.');
     return { dir, cleanup: async () => {} };
   }
@@ -360,6 +377,11 @@ export async function inspectAddonDirectory(dir) {
     if (pyName && /\bmcp\b/.test(text)) collection.push({ name: path.posix.basename(path.posix.dirname(rel)), pypiName: pyName[1] });
   }
   if (collection.length) return { type: 'mcp-collection', servers: collection };
+  // Another agent's customization files (VS Code prompts, Continue blocks,
+  // Cursor or Windsurf rules, OpenCode agents…) become one plugin.
+  const { detectConfigPack, describeConfigPack } = await import('./config-packs.mjs');
+  const pack = await detectConfigPack(dir);
+  if (pack) return { type: 'foreign-plugin', format: pack.format, label: pack.label, name: pack.name, description: pack.description.slice(0, 200), contents: describeConfigPack(pack), unsupported: [], pack };
   const prompts = await findFiles(dir, (rel) => /^(\.claude\/)?(agents|commands)\/.+\.md$/i.test(rel), { depth: 3 });
   if (prompts.length) return { type: 'prompts', count: prompts.length };
   const hidden = await skillNames(dir, { includeHidden: true });
@@ -511,7 +533,7 @@ async function planAddon(raw, options = {}) {
   }
   if (info.type === 'foreign-plugin') {
     const convert = await import('./plugin-convert.mjs');
-    let foreign = await convert.detectForeignPlugin(fetched.dir);
+    let foreign = info.pack || await convert.detectForeignPlugin(fetched.dir);
     // Like Gemini CLI, prefer the built archive from the latest GitHub release.
     const release = foreign.format === 'gemini' && source.owner && /github\.com/i.test(source.url || '') && !source.subdir && !source.local
       ? await convert.fetchGeminiRelease(source.owner, source.name, { env, fetchImpl: options.fetchImpl, ref: source.ref }) : null;
