@@ -693,6 +693,10 @@ async function runShell(root, args, context, flavor = 'sh') {
     } finally {
       if (rehearsal.kept) { const { disposeRehearsal } = await import('./rehearsal.mjs'); await disposeRehearsal(rehearsal.kept); }
     }
+    if (!ok && (!context.approval || context.noApprover)) {
+      const { unattendedCommandMessage } = await import('./tools.mjs');
+      return { approved: false, command, unattended: true, message: unattendedCommandMessage(hardRisk || appRisk, 'shell') };
+    }
     if (!ok) return { approved: false, command, ...(rehearsal.summary ? { rehearsal: rehearsal.summary } : {}), message: 'Shell command was not approved. ' + (rehearsal.summary ? 'It only ran as a rehearsal in a throwaway copy of the workspace, and nothing it did was kept.' : 'Nothing ran.') };
   }
   if (context.signal && context.signal.aborted) {
