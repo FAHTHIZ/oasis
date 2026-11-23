@@ -201,3 +201,36 @@ test('oasis mcp login finds an HTTP server that comes from a plugin (context7 ne
   assert.equal(server.url, 'https://mcp.example.com/mcp?client=claude-code-plugin');
   await assert.rejects(findHttpServer(root, 'nope', { env }), /or in an enabled plugin/);
 });
+
+test('a Factory Droid plugin installs: droids as agents, mcp.json, hooks under Claude Code tool names', async (t) => {
+  const { src, root, env } = await fixture(t, {
+    '.factory-plugin/plugin.json': { name: 'droid-kit', version: '0.2.0', description: 'Droid tools' },
+    'droids/reviewer.md': '---\nname: reviewer\ndescription: Reviews diffs\ntools: read-only\nmodel: custom:gpt-x\n---\nReview the diff in ${DROID_PLUGIN_ROOT}.\n',
+    'droids/fixer.md': '---\nname: fixer\ntools: [Read, Create, Execute, FetchUrl]\n---\nFix it.\n',
+    'commands/hello.md': '---\ndescription: Say hi\n---\nHi $ARGUMENTS\n',
+    'mcp.json': { mcpServers: { kit: { command: 'node', args: ['${DROID_PLUGIN_ROOT}/server.js'] } } },
+    'hooks/hooks.json': { hooks: { PreToolUse: [{ matcher: 'Execute|Create', hooks: [{ type: 'command', command: '"${DROID_PLUGIN_ROOT}/guard.sh" "$FACTORY_PROJECT_DIR"' }] }], Bogus: [] } },
+    'server.js': '', 'guard.sh': '#!/bin/sh\n'
+  });
+  const asked = [];
+  await addAnything(src, { root, env, approve: async (s) => { asked.push(s); return true; } });
+  assert.match(asked[0], /Factory Droid plugin "droid-kit"/);
+  assert.match(asked[0], /2 agents/);
+  const plugins = await loadEnabledPlugins(root, { env });
+  assert.deepEqual(plugins.map((p) => p.name), ['droid-kit']);
+  const { readFile } = await import('node:fs/promises');
+  const reviewer = await readFile(path.join(plugins[0].root, 'agents', 'reviewer.md'), 'utf8');
+  assert.match(reviewer, /^tools: Read, Grep, Glob, LS$/m);
+  assert.doesNotMatch(reviewer, /model:/);
+  assert.match(reviewer, /\$\{CLAUDE_PLUGIN_ROOT\}/);
+  assert.match(await readFile(path.join(plugins[0].root, 'agents', 'fixer.md'), 'utf8'), /^tools: Read, Write, Bash, WebFetch$/m);
+  const servers = Object.assign({}, ...(await pluginMcpServers(plugins, { env, root })).map((m) => m.mcpServers));
+  assert.equal(servers.kit.args[0], plugins[0].root + '/server.js');
+  const hooks = Object.assign({}, ...(await pluginHooks(plugins, { env, root })).map((h) => h.hooks));
+  assert.deepEqual(Object.keys(hooks), ['PreToolUse']);
+  assert.equal(hooks.PreToolUse[0].matcher, 'Bash|Write');
+  assert.match(hooks.PreToolUse[0].hooks[0].command, /guard\.sh/);
+  assert.doesNotMatch(hooks.PreToolUse[0].hooks[0].command, /DROID_PLUGIN_ROOT|FACTORY_PROJECT_DIR/);
+  const commands = await pluginCommands(plugins, { env });
+  assert.deepEqual(commands.map((c) => c.name), ['droid-kit:hello']);
+});
