@@ -39,6 +39,22 @@ when two or more independent sources back it. The
 oasis --plugin-dir plugins/oasis-research
 ```
 
+## Debate a contested question
+
+When the honest answer is "it depends" or experts disagree, `/debate` runs a structured debate instead of asking one agent for its opinion:
+
+```text
+/debate Does a four-day work week raise productivity? --rounds 2
+```
+
+1. **Frame**: 2–4 distinct, defensible positions (the strongest form of each) and the cruxes between them. Pass your own with `args: { question, positions: ["...", "..."], rounds }`.
+2. **Opening**: one advocate per position, in parallel, with up to 5 arguments. Each argument is a claim with the URL of a page the advocate fetched and a verbatim quote from it, and each advocate also gives its confidence.
+3. **Rebuttal** (1–3 rounds): every advocate sees the whole argument ledger and answers with typed moves. A `challenge` disputes an opponent's argument (with evidence where it is factual), `concede` accepts one, `counter` adds an argument that answers a specific one, and `withdraw` drops one of its own. Each round it restates its confidence and what evidence would change its mind.
+4. **Fact-check**: every argument still disputed goes to an independent fact-checker that saw none of the debate. Its verdict is `supported`, `refuted` or `unsettled`.
+5. **Judgement**: a judge with no tools rules on the record against a stated rubric: claims that survived, evidence quality, responsiveness, calibration. Next to its ruling the report shows a mechanical evidence tally (+3 supported or conceded, +1 unchallenged, +0.5 unsettled, −2 refuted, half for unsourced arguments) and flags any disagreement between the two.
+
+The report gives the ruling with its confidence and each position's tally and confidence path, then the points of consensus, the remaining dissent, the cruxes (with the evidence that would settle each), what would change each side's mind, and the full argument ledger. Advocates and fact-checkers are held to the [report contracts](AGENT-NETWORK.md#evidence-and-contracts). An advocate whose report cites an unfetched page or misquotes one is sent back once; if it fails again, its position forfeits.
+
 ## Analyse data and produce a chart
 
 ```sh

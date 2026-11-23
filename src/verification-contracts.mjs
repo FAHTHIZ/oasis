@@ -43,7 +43,8 @@ export function citedUrls(text) {
   const out = new Set();
   const value = String(text || '');
   for (const match of value.matchAll(/\]\((https?:\/\/[^)\s]+)\)/g)) { const url = normalizeUrl(match[1]); if (url) out.add(url); }
-  for (const match of value.matchAll(/(?<![(\w])https?:\/\/[^\s<>()"'`\]]+/g)) { const url = normalizeUrl(match[0]); if (url) out.add(url); }
+  // Bare URLs, including "(https://...)"; a markdown link's target, "](url)", is read above.
+  for (const match of value.matchAll(/(?<!\]\()(?<!\w)https?:\/\/[^\s<>()"'`\]]+/g)) { const url = normalizeUrl(match[0]); if (url) out.add(url); }
   return [...out];
 }
 
