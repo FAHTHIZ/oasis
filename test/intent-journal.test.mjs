@@ -163,3 +163,26 @@ test('a resumed session tells the model what happened to calls in flight', async
   assert.match(user, /<in-doubt-actions>[\s\S]*write_file \(src\/app\.js\) was started but OASIS stopped before it returned; checked now: it took effect/);
   assert.equal(await readFile(path.join(root, 'src/app.js'), 'utf8'), 'v2\n');
 });
+
+test('a call ID reused in a later turn does not hide that turn\'s interrupted call', async (t) => {
+  const { root, env } = await workspace(t);
+  const session = { root, settings: {} };
+  // Turn 1: a text-parsed call finished and was recorded.
+  const first = await journalIntent(session, { tool: 'write_file', args: { path: 'one.txt', content: 'a' }, callId: 'oasis_text_call_1_1', env });
+  await writeFile(path.join(root, 'one.txt'), 'a');
+  await journalDone(session, first, { ok: true });
+  // Turn 2: the same per-turn ID; OASIS died before the call returned.
+  await journalIntent(session, { tool: 'write_file', args: { path: 'two.txt', content: 'b' }, callId: 'oasis_text_call_1_1', env });
+  const messages = [
+    { role: 'tool', tool_call_id: 'oasis_text_call_1_1', content: '{"ok":true}' },
+    { role: 'tool', tool_call_id: 'oasis_text_call_1_1', content: INTERRUPTED_TOOL_RESULT }
+  ];
+  const { actions } = await reconcileJournal(root, session.journalPath, messages);
+  assert.equal(actions.length, 1, 'only the second turn\'s call is in doubt');
+  assert.equal(actions[0].kind, 'in_doubt');
+  assert.equal(actions[0].summary, 'two.txt');
+  assert.equal(actions[0].state, 'not_applied');
+  await compactJournal(session.journalPath);
+  const kept = await readJournal(session.journalPath);
+  assert.ok(kept.some((record) => record.t === 'intent' && record.summary === 'two.txt'), 'compaction keeps the open intent');
+});
