@@ -219,6 +219,22 @@ Every message gets an id (`m_N`). The recipient's copy starts with a header such
 
 Open threads appear in `team_status` (`open_threads`, with `owed_by` and age), and a sender that still owes replies is reminded in its next `team_send_message` result (`you_still_owe`). When an agent finishes or fails with obligations outstanding, they lapse: each running agent left waiting gets a notice at its next step ("agent_2 finished without replying to your request m_4 ... do not wait for it"), and the parent's result lists them under `open_obligations`. Nobody waits on a reply that cannot come, and an unanswered challenge does not disappear quietly. The ledger keeps up to 500 messages per session, dropping closed ones first. Test: `test/agent-messaging-acts.test.mjs`.
 
+### Coordinator sitrep
+
+A coordinator's state is spread over the agent registry, the message threads, the knowledge board and the hypotheses matrix. `team_status` without `team_id` starts with a `sitrep` that combines them into one ranked list, each item with what is wrong and the next action:
+
+| Priority | Item | Next action |
+| --- | --- | --- |
+| 1 | `owed_by_you`: a request, proposal or challenge addressed to the caller, or a commit it made | the exact `team_send_message` reply, or deliver |
+| 1 | `failed_agent`: a worker failed or stalled, with its error | read `agent_status`, then retry, reassign or do it yourself |
+| 1 | `missing_hypothesis`: "none of these" leads an open question | add the missing explanation |
+| 2 | `dispute`: two live findings contradict each other | check both against their sources and retract the wrong one |
+| 2 | `stalled_thread`: a reply owed for over 5 minutes while its owner keeps running | nudge the owner, or answer it |
+| 2 | `thin_lead`: a hypothesis leads on one agent's evidence or one source | get an independent check |
+| 3 | `close_call`, `untested`, `ready_to_resolve` | run the test the leaders disagree on, look for disconfirming evidence, or resolve |
+
+A worker that calls `team_status` gets the same view with itself as the caller, so its own owed replies come first. The `summary` line counts running, finished and failed agents, open threads, disputes and open questions; at most 12 items are listed. Test: `test/team-sitrep.test.mjs`.
+
 ## Safety boundaries
 
 Subagents can launch their own subagents up to three layers below the main conversation, as in Claude Code. Change the limit with `subagentMaxDepth` (1-5), `OASIS_SUBAGENT_MAX_DEPTH`, or Claude Code's `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`; `1` turns nesting off. At the limit the `task` tool is withheld. Read-only agents never get it, so they can't gain write access through a child. To stop one agent from delegating, leave `Agent` out of its `tools` or add it to `disallowedTools`. The 8-agent background cap is shared across the whole tree; each agent can still run up to 6 in parallel. To run fewer at once, for example on a rate-limited provider, set `subagentMaxParallel` (1-6) in your user settings or `OASIS_SUBAGENT_MAX_PARALLEL`; extra `task` calls from the same reply wait for a free slot, in order. Subagents cannot ask the user questions, enter plan mode, schedule cron jobs, or write shared durable memory. They suggest memory and skill candidates in their report for the parent to review. Their spend counts toward the parent's `--max-budget-usd`. An agent definition can also cap one run with `budgetTokens`, `budgetUsd`, `budgetRequests`, `budgetSteps` and `budgetChildren` (or `OASIS_SUBAGENT_BUDGET="tokens=200000,usd=0.5"` for all of them); the budget is reserved from the parent's and the unspent part is returned when the run ends. See [Budget algebra](AGENT-NETWORK.md#budget-algebra). `SubagentStart` and `SubagentStop` hooks run around every child.

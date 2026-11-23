@@ -1,3 +1,4 @@
+import { buildSitrep } from './team-sitrep.mjs';
 import { recordDialogue, dialogueHeader, openObligations, openThreads, lapseObligations, describeLapse } from './agent-dialogue.mjs';
 import { restoreApprovals, waitingApprovals } from './neuron-approvals.mjs';
 import { applyInjectionTaint, injectionTaint, taintNotice } from './untrusted-content.mjs';
@@ -51,7 +52,7 @@ export const AGENT_TOOL_DEFINITIONS = [
     name: { type: 'string', description: 'Short unique team name, maximum 100 characters' },
     description: { type: 'string', description: 'Goal or scope for this team, maximum 1,000 characters' }
   }, required: ['name'] } } },
-  { type: 'function', function: { name: 'team_status', description: 'Show named agent teams and their member roster, or inspect one team by ID. A shutting-down team becomes closed after all its workers stop.', parameters: { type: 'object', properties: {
+  { type: 'function', function: { name: 'team_status', description: 'Show named agent teams and their member roster, or inspect one team by ID. Without team_id it starts with a sitrep: what needs your attention across agents, message threads, disputed findings and open hypotheses, ranked, each with a next action. A shutting-down team becomes closed after all its workers stop.', parameters: { type: 'object', properties: {
     team_id: { type: 'string', description: 'Optional team ID such as team_1; omit to list all teams' }
   }, required: [] } } },
   { type: 'function', function: { name: 'team_shutdown', description: 'Stop a named team: prevent new members, request cancellation of its running agents, and close the team when its workers have exited. Only the main coordinator can shut down teams.', parameters: { type: 'object', properties: {
@@ -336,7 +337,8 @@ export function createAgentTeam(session, args = {}) {
 export function agentTeamStatus(session, args = {}) {
   if (args.team_id) return { team: summarizeTeam(session, getAgentTeam(session, args.team_id)) };
   const teams = listAgentTeams(session);
-  return { teams, total: teams.length, active: teams.filter((team) => team.status === 'active').length, open_threads: openThreads(agentRegistry(session)) };
+  const registry = agentRegistry(session);
+  return { sitrep: buildSitrep({ registry, board: session.knowledgeBoard, self: session.agentId || 'main' }), teams, total: teams.length, active: teams.filter((team) => team.status === 'active').length, open_threads: openThreads(registry) };
 }
 
 export function shutdownAgentTeam(session, args = {}) {
