@@ -24,3 +24,14 @@ test('a failing run, a different file or an unrun changed file is not enough', (
   markRanSources(deno, 'deno', ['run', '--allow-read', 'main.ts'], 0);
   assert.doesNotMatch(verificationIssues(deno).join('\n'), NO_CHECK);
 });
+
+test('a changed Python file with regex characters in its name does not break inline-code checks', () => {
+  for (const file of ['pkg/c++.py', 'a(b).py', 'x[1].py', 'tools/ma$h.py']) {
+    const state = { changedPaths: new Set([file]) };
+    assert.doesNotThrow(() => markRanSources(state, 'python3', ['-c', 'print(1)'], 0), file);
+    assert.ok(!(state.ranPaths && state.ranPaths.has(file)), file);
+  }
+  const state = { changedPaths: new Set(['pkg/c++.py']) };
+  markRanSources(state, 'python3', ['-c', 'import pkg.c++'], 0);
+  assert.ok(state.ranPaths.has('pkg/c++.py'));
+});
