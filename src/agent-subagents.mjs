@@ -29,7 +29,7 @@ import { loadAgentTranscript } from './sessions.mjs';
 import { repairInterruptedHistory } from './tool-results.mjs';
 import { unsupportedChildClaim } from './claim-check.mjs';
 import { applyInjectionTaint, injectionTaint, judgedPathsFor, taintNotice } from './untrusted-content.mjs';
-import { evidenceSince, evidenceSummary, sessionEvidence } from './evidence-ledger.mjs';
+import { changesFiles, evidenceSince, evidenceSummary, sessionEvidence } from './evidence-ledger.mjs';
 import { assessReport, checkReport } from './verification-contracts.mjs';
 import { assessOutcome, deriveTaskSpec } from './task-model.mjs';
 
@@ -55,13 +55,13 @@ import { RESEARCH_TOOL_NAMES } from './research-tools.mjs';
 import { recoveryPlan, waitForRecovery } from './agent-recovery.mjs';
 import { defineSessionAgent } from './session-agents.mjs';
 import { spawnScope } from './spawn-scope.mjs';
-import { chooseExperienceModel, experienceEnabled, experiencePromptSection, experienceProject, recordAgentExperience, sharedExperienceStore, taskDomain } from './agent-experience.mjs';
+import { applyReviewToExperience, chooseExperienceModel, experienceEnabled, experiencePromptSection, experienceProject, recordAgentExperience, sharedExperienceStore, taskDomain } from './agent-experience.mjs';
 import { priceFor } from './pricing.mjs';
 import { routeCost, zeroBudgetEnabled } from './cost-policy.mjs';
 import { callDigest, consumeGrant, parkApproval } from './neuron-approvals.mjs';
 import { schedulerForRegistry, providerKey, describeWait } from './neuron-scheduler.mjs';
 import { childBudgetRequest, close as closeBudget, reserve as reserveBudget, sessionBudget } from './budget-algebra.mjs';
-import { REVIEWER_TYPES, recordTaskReview } from './task-reviews.mjs';
+import { REVIEWER_TYPES, noteTaskWorker, recordTaskReview } from './task-reviews.mjs';
 import { runAgentTurn, headTailText, MAX_SUBAGENT_REPORT_CHARS, READ_ONLY_TOOLS, hookOptions, boundSubagentReport } from './agent.mjs';
 
 const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep']);
@@ -693,6 +693,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   const evidenceFrom = sessionEvidence(child) ? sessionEvidence(child).seq : 0;
   // The parent's files as the child first sees them: what a review reviewed.
   const parentEpochAtStart = sessionEvidence(parent) ? sessionEvidence(parent).epoch : 0;
+  const runStartedAt = Date.now();
   const runStart = { at: Date.now(), toolCalls: record.toolCalls || 0, costUsd: Number(record.usage && record.usage.costUsd) || 0 };
   const experienceRun = (extra) => ({
     prompt, model: child.config && child.config.model, toolCalls: (record.toolCalls || 0) - runStart.toolCalls,
@@ -776,6 +777,9 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   // with an unsupported claim is returned as rejected, with the reasons.
   const evidence = evidenceSince(sessionEvidence(child), evidenceFrom);
   record.evidence = evidenceSummary(evidence);
+  // Edits in the parent's own tree change the files the parent (and any
+  // earlier review) saw; a later review judges this agent's result.
+  if (!worktree && evidence.some(changesFiles)) noteTaskWorker(parent, { agentId: record.id, agentType: type, startedAt: runStartedAt });
   record.verificationIssues = checkReport(outcome.text, evidence, { domains: record.domains });
   const codeIssue = record.verificationIssues.find((issue) => issue.domain === 'code');
   record.unverifiedClaim = (codeIssue && codeIssue.reason) || (record.verificationIssues.length ? null : unsupportedChildClaim(outcome)) || null;
@@ -793,6 +797,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   const definition = (parent.agents || BUILTIN_AGENTS)[type];
   if (REVIEWER_TYPES.includes(type) && definition && definition.source === 'built-in') {
     try { record.review = recordTaskReview(parent, { by: type + ' ' + record.id, text: outcome.text, finished: outcome.finished !== false, toolCalls: outcome.toolCalls, limitReached: Boolean(outcome.limitReached), epoch: parentEpochAtStart }); } catch { record.review = null; }
+    if (record.review) applyReviewToExperience(parent, record.review, { env: options.env });
   }
   if (record.verificationIssues.length) recordAgentEvent(parent, 'agent.report_rejected', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: record.verificationIssues.map((issue) => issue.domain + ': ' + issue.reason).join('; ').slice(0, 600) });
   // Disputes this agent opened or was drawn into on the knowledge board.

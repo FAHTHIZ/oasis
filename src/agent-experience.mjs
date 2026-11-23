@@ -236,6 +236,19 @@ export function openExperienceStore(file) {
       params.push(Math.max(1, Math.min(MAX_ROWS, Math.floor(Number(limit) || 200))));
       return db.prepare('SELECT * FROM agent_runs WHERE ' + where.join(' AND ') + ' ORDER BY seq DESC LIMIT ?').all(...params).map(shape);
     },
+    /**
+     * An independent review judged a run after it was recorded: a failed
+     * review makes it rejected; a passed one makes a clean or verified run
+     * verified. Only the latest row of that agent in that session changes.
+     */
+    amend({ sessionId = '', agentId = '', since = 0, verdict = '', detail = '' } = {}) {
+      if (!open || !agentId || (verdict !== 'pass' && verdict !== 'fail')) return 0;
+      const row = db.prepare('SELECT seq, outcome FROM agent_runs WHERE IFNULL(session_id, \'\') = ? AND agent_id = ? AND at >= ? ORDER BY seq DESC LIMIT 1').get(cleanExperienceText(sessionId, 200) || '', cleanExperienceText(agentId, 100), Math.floor(Number(since) || 0));
+      if (!row) return 0;
+      if (verdict === 'fail') return Number(db.prepare("UPDATE agent_runs SET outcome = 'rejected', verdict = 'rejected', detail = ?, lesson = '' WHERE seq = ?").run(cleanExperienceText('independent review failed: ' + detail, 400), row.seq).changes) || 0;
+      if (row.outcome !== 'clean' && row.outcome !== 'verified') return 0;
+      return Number(db.prepare("UPDATE agent_runs SET outcome = 'verified', verdict = 'independently_verified' WHERE seq = ?").run(row.seq).changes) || 0;
+    },
     /** Drop rows past the retention window, and the oldest beyond the row cap. */
     prune(now = Date.now(), retentionMs = RETENTION_MS, maxRows = MAX_ROWS) {
       if (!open) return 0;
@@ -322,6 +335,26 @@ export function recordAgentExperience(parent, record, run = {}, { env } = {}) {
       verdict: taskOutcome ? taskOutcome.verdict : '', acceptanceMet: taskOutcome ? taskOutcome.acceptance.met : 0, acceptanceUnmet: taskOutcome ? taskOutcome.acceptance.unmet : 0
     });
   } catch { return false; }
+}
+
+/**
+ * Carry an independent review's verdict back to the runs it judged
+ * (src/task-reviews.mjs): a worker whose result failed review did not
+ * succeed, whatever its own checks said. Never throws.
+ */
+export function applyReviewToExperience(parent, review, { env } = {}) {
+  try {
+    if (!review || !Array.isArray(review.reviewed) || !review.reviewed.length) return 0;
+    const store = sharedExperienceStore(sessionEnv(parent, env), parent && parent.settings);
+    if (!store || typeof store.amend !== 'function') return 0;
+    const workers = Array.isArray(parent.taskWorkers) ? parent.taskWorkers : [];
+    let changed = 0;
+    for (const agentId of review.reviewed) {
+      const worker = workers.find((item) => item.agentId === agentId);
+      changed += store.amend({ sessionId: parent && parent.sessionId, agentId, since: worker ? worker.startedAt : 0, verdict: review.verdict, detail: review.detail });
+    }
+    return changed;
+  } catch { return 0; }
 }
 
 /**

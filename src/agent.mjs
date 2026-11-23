@@ -145,6 +145,7 @@ export { EFFORT_LEVELS, applyEffort, claudeEffortFor, claudeThinkingMode, inline
 export { announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationEnabled, claimsUnmadeChange, detectProjectTestCommand, diffReviewComplete, failureSignature, fencedFileFromReply, givesUpEarly, isVerificationCommand, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, requestedNewFile, samplingTemperature, targetFileHint, unreviewedPaths, untestedNewCode, verificationIssues, wrongFileNudge } from './turn-guards.mjs';
 export { formatWait, isHardQuotaError, isMalformedGenerationError, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs } from './provider-retry.mjs';
 import { recordTaskReview } from './task-reviews.mjs';
+import { applyReviewToExperience } from './agent-experience.mjs';
 import { MAX_SPECIALIST_REVIEWS_PER_TASK, runSpecialistReview, isReadOnlyAgent, runWorkflowTool, runSubagent, runAgentTool } from './agent-subagents.mjs';
 export { SPECIALIST_MAX_STEPS } from './agent-subagents.mjs';
 
@@ -2506,6 +2507,7 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
         const specialistResult = await runSpecialistReview(session, validatedInput, executionContext, executionOptions, budget);
         // A separate read-only session's verdict on the current task (src/task-reviews.mjs).
         const recordedReview = recordTaskReview(session, { by: specialistResult.specialist, text: specialistResult.review, finished: specialistResult.finished, toolCalls: specialistResult.toolCalls, limitReached: specialistResult.verificationIncomplete });
+        if (recordedReview) applyReviewToExperience(session, recordedReview, { env: runtime.env });
         return recordedReview ? { ...specialistResult, verdict: recordedReview.verdict, verdictReason: recordedReview.detail } : specialistResult;
       }
       if (name === 'task') {
