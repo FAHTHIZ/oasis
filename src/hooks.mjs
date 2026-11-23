@@ -29,6 +29,11 @@ import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 
 import { parseRule, ruleMatches } from './permissions.mjs';
 import { runBridgedHook } from './hook-bridges.mjs';
+import { fileURLToPath } from 'node:url';
+
+// The Node.js running OASIS and the OpenCode plugin host, for hooks that run
+// OpenCode plugins (${OASIS_NODE} ${OASIS_OPENCODE_HOST} PLUGIN EVENT).
+const RUNTIME_VARS = { OASIS_NODE: process.execPath, OASIS_OPENCODE_HOST: fileURLToPath(new URL('./opencode-plugin-host.mjs', import.meta.url)) };
 
 export const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PostToolBatch', 'PermissionRequest', 'PermissionDenied', 'UserPromptSubmit', 'UserPromptExpansion', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionStart', 'SessionEnd', 'PreCompact', 'PostCompact', 'Notification', 'CwdChanged', 'DirectoryAdded', 'InstructionsLoaded', 'TaskCreated', 'TaskCompleted', 'PreModelSwitch', 'PostModelSwitch', 'FileChanged', 'ConfigChange', 'WorktreeCreate', 'WorktreeRemove', 'TeammateIdle', 'Setup', 'Elicitation', 'ElicitationResult', 'MessageDisplay'];
 
@@ -116,12 +121,13 @@ function hookEnvironment(baseEnv, root) {
   }
   env.OASIS_PROJECT_DIR = root;
   env.CLAUDE_PROJECT_DIR = root;
+  Object.assign(env, RUNTIME_VARS);
   return env;
 }
 
 export function runHookCommand(command, payload, options = {}) {
   const timeoutMs = options.timeout === Infinity ? 0 : Math.max(1, Math.min(MAX_HOOK_TIMEOUT_SECONDS, Number(options.timeout) || 600)) * 1000;
-  const vars = { CLAUDE_PROJECT_DIR: options.root, OASIS_PROJECT_DIR: options.root, ...(options.pluginEnv || {}) };
+  const vars = { ...RUNTIME_VARS, CLAUDE_PROJECT_DIR: options.root, OASIS_PROJECT_DIR: options.root, ...(options.pluginEnv || {}) };
   const substitute = (text) => String(text).replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name) => vars[name] ?? match)
     .replace(/\$\{user_config\.([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, key) => vars['CLAUDE_PLUGIN_OPTION_' + key.toUpperCase()] ?? '');
   let shell;

@@ -23,6 +23,14 @@ import { parseYamlMapping, splitFrontMatter } from './frontmatter.mjs';
 
 const slug = (value, fallback = 'item') => String(value || '').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '').slice(0, 60) || fallback;
 const readJson = async (file) => { try { return JSON.parse(await readFile(file, 'utf8')); } catch { return null; } };
+const readJsonc = async (file) => {
+  try {
+    const { parse } = await import('jsonc-parser');
+    const errors = [];
+    const value = parse(await readFile(file, 'utf8'), errors, { allowTrailingComma: true });
+    return !errors.length && value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  } catch { return null; }
+};
 const readText = (file) => readFile(file, 'utf8').catch(() => '');
 const isDir = async (dir) => Boolean(await stat(dir).then((s) => s.isDirectory()).catch(() => false));
 
@@ -254,6 +262,17 @@ async function scanPack(dir) {
   }
   const cursorHooks = await readJson(path.join(dir, '.cursor', 'hooks.json'));
   if (cursorHooks && cursorHooks.hooks && typeof cursorHooks.hooks === 'object') { found.hookDocs.push({ protocol: 'cursor', doc: cursorHooks, file: '.cursor/hooks.json' }); found.tools.add('Cursor'); }
+  // Gemini CLI settings hooks and Codex hooks (hooks.json, or [hooks] in config.toml).
+  const geminiSettingsDoc = await readJsonc(path.join(dir, '.gemini', 'settings.json'));
+  if (geminiSettingsDoc && geminiSettingsDoc.hooks && typeof geminiSettingsDoc.hooks === 'object') { found.hookDocs.push({ protocol: 'gemini', doc: { hooks: geminiSettingsDoc.hooks, hooksConfig: geminiSettingsDoc.hooksConfig }, file: '.gemini/settings.json' }); found.tools.add('Gemini CLI'); }
+  const codexHooksDoc = await readJson(path.join(dir, '.codex', 'hooks.json'));
+  if (codexHooksDoc && codexHooksDoc.hooks && typeof codexHooksDoc.hooks === 'object') { found.hookDocs.push({ protocol: 'codex', doc: codexHooksDoc, file: '.codex/hooks.json' }); found.tools.add('Codex'); }
+  // OpenCode plugins: JavaScript that runs through the OpenCode plugin host.
+  for (const sub of ['plugins', 'plugin']) {
+    let names = [];
+    try { names = (await readdir(path.join(dir, '.opencode', sub))).filter((name) => /\.(?:m?js|ts)$/.test(name) && !name.endsWith('.d.ts')).sort(); } catch {}
+    for (const name of names) { (found.openCodePlugins ||= []).push('.opencode/' + sub + '/' + name); found.tools.add('OpenCode'); }
+  }
   const vscodeMcp = await readJson(path.join(dir, '.vscode', 'mcp.json'));
   if (vscodeMcp) {
     const { servers, userConfig } = vscodeServers(vscodeMcp);
@@ -265,7 +284,9 @@ async function scanPack(dir) {
     try {
       const { parse: parseToml } = await import('smol-toml');
       const { normalizeServer } = await import('./importers.mjs');
-      for (const [name, raw] of Object.entries(parseToml(codexToml).mcp_servers || {})) {
+      const codexConfig = parseToml(codexToml);
+      if (codexConfig.hooks && typeof codexConfig.hooks === 'object') { found.hookDocs.push({ protocol: 'codex', doc: { hooks: JSON.parse(JSON.stringify(codexConfig.hooks)) }, file: '.codex/config.toml' }); found.tools.add('Codex'); }
+      for (const [name, raw] of Object.entries(codexConfig.mcp_servers || {})) {
         const server = normalizeServer(raw, 'codex');
         if (server) { found.servers[slug(name, 'server')] = server; found.tools.add('Codex'); }
       }
@@ -339,7 +360,7 @@ async function scanPack(dir) {
 }
 
 // Claude Code files alone are not a pack (OASIS reads them as they are).
-const packSize = (found) => found.tools.size ? found.commands.length + found.agents.length + found.rules.length + found.skills.length + Object.keys(found.servers).length + found.hookDocs.length : 0;
+const packSize = (found) => found.tools.size ? found.commands.length + found.agents.length + found.rules.length + found.skills.length + Object.keys(found.servers).length + found.hookDocs.length + (found.openCodePlugins || []).length : 0;
 
 /** A folder of another agent's customizations, or null. */
 export async function detectConfigPack(dir) {
@@ -363,6 +384,8 @@ export function describeConfigPack(info) {
   if (servers) parts.push(count(servers, 'MCP server') + ' (they run when sessions start)');
   const events = f.hookDocs.reduce((n, item) => n + Object.keys(item.doc.hooks).length, 0);
   if (events) parts.push(count(events, 'hook event') + ' from ' + f.hookDocs.map((item) => item.file).join(', ') + ' (they run commands on your machine)');
+  const plugins = (f.openCodePlugins || []).length;
+  if (plugins) parts.push(count(plugins, 'OpenCode plugin') + ' (JavaScript that runs on tool events)');
   return parts;
 }
 

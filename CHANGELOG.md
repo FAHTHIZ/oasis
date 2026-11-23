@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Added
 
+- Config packs carry Gemini CLI settings hooks, Codex hooks and OpenCode plugins, so installing another team's repository brings those along too. Hooks can now run OASIS's own Node.js and the OpenCode plugin host as `${OASIS_NODE}` and `${OASIS_OPENCODE_HOST}`.
 - OpenCode plugins run under OASIS: `.opencode/plugins/*.{js,ts}` (trusted workspace) and `~/.config/opencode/plugins/` go through a plugin host on `PreToolUse`, `PostToolUse`, `Stop`, `SessionStart` and `SessionEnd`. A throw in `tool.execute.before` denies the call, changed args rewrite it, and a changed `tool.execute.after` output replaces the result.
 - Codex hooks run live: `.codex/hooks.json` and `[hooks]` in `.codex/config.toml` (trusted workspace) and the same in `~/.codex`, with `apply_patch` matchers covering the edit tools. Writing `.codex/hooks.json` or `.github/hooks/` is now a protected-path change.
 - Gemini CLI hooks run through the hook protocol bridge: Gemini tool names in matchers, millisecond timeouts, `decision`/`reason` replies, `hookSpecificOutput.tool_input` rewrites and `hooksConfig.disabled`. Hooks in `.gemini/settings.json` and `~/.gemini/settings.json` run live, and Gemini extension hooks installed as plugins now behave as they do in Gemini (before, their matchers never matched OASIS tool names and their timeouts were read as seconds).

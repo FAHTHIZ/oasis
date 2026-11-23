@@ -130,6 +130,26 @@ test('repository hooks from Copilot and Cursor run through the bridge', async (t
   assert.ok(post.some((h) => h.protocol === 'cursor' && h.command.includes('/.cursor/hooks/fmt.sh')), JSON.stringify(post));
 });
 
+test('Gemini settings hooks, Codex hooks and OpenCode plugins in a pack come along', async (t) => {
+  const { src, root, env } = await fixture(t, {
+    '.gemini/settings.json': '{ // comment\n "hooks": { "BeforeTool": [{ "matcher": "write_file", "hooks": [{ "type": "command", "command": "./hooks/check.sh", "timeout": 2000 }] }] } }',
+    'hooks/check.sh': '#!/bin/sh\n',
+    '.codex/hooks.json': { hooks: { PostToolUse: [{ matcher: 'apply_patch', hooks: [{ type: 'command', command: 'echo codex' }] }] } },
+    '.opencode/plugins/guard.js': 'export const Guard = async () => ({ "tool.execute.before": async () => {} })\n'
+  });
+  const { asked, plugins } = await install(src, root, env);
+  assert.match(asked[0], /OpenCode plugin/);
+  const { pluginHooks } = await import('../src/claude-plugins.mjs');
+  const hooks = Object.assign({}, ...(await pluginHooks(plugins, { env })).map((h) => h.hooks));
+  const pre = hooks.PreToolUse.flatMap((g) => g.hooks);
+  const gemini = pre.find((h) => h.protocol === 'gemini');
+  assert.ok(gemini && gemini.command.includes('/hooks/check.sh') && gemini.timeout === 2, JSON.stringify(pre));
+  const host = pre.find((h) => h.command === '${OASIS_NODE}');
+  assert.ok(host && host.args[1].endsWith('/.opencode/plugins/guard.js') && host.args[2] === 'PreToolUse', JSON.stringify(pre));
+  const post = hooks.PostToolUse.find((g) => g.hooks.some((h) => h.command === 'echo codex'));
+  assert.equal(post.matcher, 'Edit|Write|MultiEdit|apply_patch');
+});
+
 test('a pack keeps skills in hidden agent folders and Codex project servers', async (t) => {
   const { src, root, env } = await fixture(t, {
     '.github/prompts/go.prompt.md': 'Go.\n',
