@@ -87,3 +87,41 @@ test('archiving a session elsewhere survives the live session saving again', asy
   await saveSession(resumed, { env });
   assert.equal((await loadSession(root, id, { env })).archived, true);
 });
+
+test('two processes saving the same session at once both keep their conversation', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-concurrent-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = { ...process.env, HOME: root, OASIS_CONFIG_DIR: path.join(root, 'cfg') };
+  const first = await createSession({ root, config, env });
+  first.messages.push({ role: 'user', content: 'start' }, { role: 'assistant', content: 'ok' });
+  const { id } = await saveSession(first, { env });
+  const a = await createSession({ root, config, env, restore: await loadSession(root, id, { env }) });
+  const b = await createSession({ root, config, env, restore: await loadSession(root, id, { env }) });
+  a.messages.push({ role: 'user', content: 'from A' }, { role: 'assistant', content: 'A done' });
+  b.messages.push({ role: 'user', content: 'from B' }, { role: 'assistant', content: 'B done' });
+  // Both pass the early check before either writes.
+  const [savedA, savedB] = await Promise.all([saveSession(a, { env }), saveSession(b, { env })]);
+  assert.notEqual(savedA.id, savedB.id);
+  assert.equal([savedA, savedB].filter((saved) => saved.forkedFrom === id).length, 1);
+  const texts = await Promise.all([savedA.id, savedB.id].map(async (sid) => JSON.stringify((await loadSession(root, sid, { env })).messages)));
+  assert.ok(texts.some((body) => body.includes('from A')));
+  assert.ok(texts.some((body) => body.includes('from B')));
+  const { readdir } = await import('node:fs/promises');
+  const { getSessionDirectory } = await import('../src/session-paths.mjs');
+  assert.deepEqual((await readdir(getSessionDirectory(root, env))).filter((name) => name.endsWith('.lock')), []);
+});
+
+test('a lock file left by a crashed process does not block saving', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-concurrent-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = { ...process.env, HOME: root, OASIS_CONFIG_DIR: path.join(root, 'cfg') };
+  const session = await createSession({ root, config, env });
+  session.messages.push({ role: 'user', content: 'x' }, { role: 'assistant', content: 'y' });
+  const { id, path: file } = await saveSession(session, { env });
+  const { writeFile, utimes } = await import('node:fs/promises');
+  await writeFile(file + '.lock', '999999');
+  const old = new Date(Date.now() - 60000);
+  await utimes(file + '.lock', old, old);
+  session.messages.push({ role: 'user', content: 'again' }, { role: 'assistant', content: 'ok' });
+  assert.equal((await saveSession(session, { env })).id, id);
+});

@@ -5,7 +5,7 @@ import { restoreSpec } from './task-model.mjs';
 import { claimLogSnapshot } from './claim-ledger.mjs';
 import { normalizeAgentUsage } from './agent-tasks.mjs';
 import { MAX_STEER_CHARS, foldSteering } from './steering.mjs';
-import { mkdir, open, readdir, unlink, rm } from 'node:fs/promises';
+import { mkdir, open, readdir, unlink, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import { sanitizeSharedTaskStore } from './shared-tasks.mjs';
@@ -187,7 +187,8 @@ async function saveAgentTranscripts(session, id, env) {
     if (!resumableRecord(record)) { if (record && record.transcriptSaved) saved.add(record.id); continue; }
     let list = transcriptMessages(record.child.messages);
     if (!list.length) continue;
-    const signature = list.length + ':' + JSON.stringify(list[list.length - 1]).length;
+    // Keyed by session id too: a save that forks to a new id must write the transcripts there.
+    const signature = id + ':' + list.length + ':' + JSON.stringify(list[list.length - 1]).length;
     if (record.transcriptSignature === signature) { saved.add(record.id); continue; }
     // What the agent's conversation knows of its workspace, so a later resume can tell it what moved.
     const world = await captureWorld(record.child.root || session.root, list, { env, settings: session.settings || {} }).catch(() => null);
@@ -330,6 +331,37 @@ export function sanitizeEvidenceLedger(ledger) {
   return { events, seq: Math.max(Number.isInteger(ledger.seq) ? ledger.seq : 0, last ? last.seq : 0), epoch: Math.max(Number.isInteger(ledger.epoch) ? ledger.epoch : 0, last ? last.epoch : 0) };
 }
 
+// Serializes the final check-and-write of one session file across processes.
+// The conflict check reads the file's updatedAt, then the slow parts of a save
+// (transcripts, world capture) run; without this a second terminal's save
+// landing in between was overwritten without notice. A lock older than
+// STALE_LOCK_MS is left by a crashed process and is taken over.
+const STALE_LOCK_MS = 15000;
+async function withSessionFileLock(file, fn, { timeoutMs = 5000 } = {}) {
+  const lock = file + '.lock';
+  const started = Date.now();
+  let handle;
+  for (;;) {
+    try { handle = await open(lock, 'wx', 0o600); break; } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      const info = await stat(lock).catch(() => null);
+      if (!info || Date.now() - info.mtimeMs > STALE_LOCK_MS || Date.now() - started > timeoutMs) {
+        await unlink(lock).catch(() => {});
+        if (Date.now() - started > timeoutMs + 1000) throw new Error('Another OASIS process is holding the session save lock ' + lock + '.');
+        continue;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  }
+  try {
+    await handle.writeFile(String(process.pid)).catch(() => {});
+    return await fn();
+  } finally {
+    await handle.close().catch(() => {});
+    await unlink(lock).catch(() => {});
+  }
+}
+
 export async function saveSession(session, options = {}) {
   if (!session || !Array.isArray(session.messages)) throw new Error('There is no active session to save.');
   const env = options.env || process.env;
@@ -411,8 +443,26 @@ export async function saveSession(session, options = {}) {
   if (Buffer.byteLength(body, 'utf8') > MAX_SESSION_BYTES) throw new Error('Session is too large to save safely. Start a fresh session or disable persistence.');
   const directory = getSessionDirectory(session.root, env);
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  const destination = sessionPath(session.root, id, env);
-  await replaceFileDurably(destination, body, { mode: 0o600 });
+  let destination = sessionPath(session.root, id, env);
+  const write = async () => {
+    // Check again under the lock: another process may have saved while this
+    // save was capturing transcripts and the workspace.
+    if (!forkedFrom && session.sessionId && session.persistedUpdatedAt) {
+      const onDisk = await savedHead(destination);
+      if (onDisk.updatedAt && onDisk.updatedAt !== session.persistedUpdatedAt) return false;
+    }
+    await replaceFileDurably(destination, body, { mode: 0o600 });
+    return true;
+  };
+  if (!(await withSessionFileLock(destination, write))) {
+    forkedFrom = id;
+    id = randomUUID();
+    payload.id = id;
+    body = (body.startsWith('{\n') ? JSON.stringify(payload, null, 2) : JSON.stringify(payload)) + '\n';
+    await saveAgentTranscripts(session, id, env);
+    destination = sessionPath(session.root, id, env);
+    await replaceFileDurably(destination, body, { mode: 0o600 });
+  }
   session.sessionId = id;
   session.persistedUpdatedAt = payload.updatedAt;
   session.persistedArchived = payload.archived === true;
