@@ -421,6 +421,7 @@ export function renderApprovalText(approval, { color = false, columns = 80, maxD
 // The one line an answered approval leaves behind.
 export function approvalSummary(chosen, meta = {}) {
   if (!chosen) return '  ⎿ Denied';
+  if (chosen.value === 'rehearsal') return '  ⎿ Applied the rehearsed changes';
   if (chosen.value === 'always') return '  ⎿ Allowed for this session' + (meta && meta.suggestion ? ': ' + meta.suggestion : '');
   if (chosen.value === true && meta && meta.scope === 'session') return '  ⎿ Allowed for this session' + (Array.isArray(meta.sites) && meta.sites.length ? ': ' + meta.sites.join(', ') : '');
   return chosen.value === true ? '  ⎿ Allowed once' : '  ⎿ Denied';
@@ -435,6 +436,7 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
     const approvalSound = playSound('attention', { stream: stdout });
     if (CURRENT_TURN_STARTED_AT) notifyAttention('OASIS needs your approval: ' + approval.message.split('\n').filter(Boolean)[0], { elapsedMs: Date.now() - CURRENT_TURN_STARTED_AT, soundPlayed: approvalSound, stream: stdout });
     const offerAlways = meta && meta.suggestion && !forceInteractive;
+    const offerRehearsal = Boolean(meta && meta.rehearsal && meta.rehearsal.offer);
     if (signal && (!stdin.isTTY || !stdout.isTTY)) { await new Promise((resolve) => { signal.addEventListener('abort', resolve, { once: true }); setTimeout(resolve, 300000).unref?.(); }); return false; }
     if (stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && process.env.OASIS_LINE_APPROVALS !== '1') {
       // Claude Code-style dialog: arrows/j/k + Enter, 1-3, y/n/a, Esc; rebindable via the Confirmation context.
@@ -442,6 +444,7 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
       // A site approval holds for the session, so its button says so.
       const options = [{ label: meta && meta.scope === 'session' ? 'Allow for this session' : 'Allow once', value: true, hotkey: 'yes' }];
       if (offerAlways) options.push({ label: 'Always allow this session for ' + meta.suggestion, value: 'always', hotkey: 'always' });
+      if (offerRehearsal) options.push({ label: 'Apply the rehearsed changes only (do not run it again)', value: 'rehearsal', hotkey: 'rehearsal' });
       options.push({ label: 'No', value: false, hotkey: 'no' });
       stdout.write((richOutput() ? '\x1b[1mDo you want to proceed?\x1b[22m' : 'Do you want to proceed?') + '\n');
       const paused = turnKeys;
@@ -452,8 +455,12 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
       try { return await selectDialog({ input: stdin, output: stdout, options, color: colorEnabled(stdout), signal, collapse }); }
       finally { if (paused && turnKeys === paused) paused.resume(); }
     }
-    const answer = (await askLine(offerAlways ? 'Allow once [y] / [N]o / [a]lways allow ' + meta.suggestion + ' this session: ' : (meta && meta.scope === 'session' ? 'Allow for this session? [y/N] ' : 'Allow once? [y/N] '), signal)).trim().toLowerCase();
+    const question = offerAlways ? 'Allow once [y] / [N]o / [a]lways allow ' + meta.suggestion + ' this session' + (offerRehearsal ? ' / [r] apply the rehearsal' : '') + ': '
+      : offerRehearsal ? 'Allow once [y] / [N]o / [r] apply the rehearsed changes only: '
+        : (meta && meta.scope === 'session' ? 'Allow for this session? [y/N] ' : 'Allow once? [y/N] ');
+    const answer = (await askLine(question, signal)).trim().toLowerCase();
     if (offerAlways && ['a', 'always'].includes(answer)) return 'always';
+    if (offerRehearsal && ['r', 'rehearsal', 'apply'].includes(answer)) return 'rehearsal';
     return ['y', 'yes'].includes(answer);
   } catch {
     if (signal && signal.aborted) return false;

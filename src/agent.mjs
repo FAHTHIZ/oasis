@@ -1872,6 +1872,9 @@ async function authorizeCall(session, name, args, context, options) {
     }
     const answer = await baseApproval(safeMessage, force, { tool: name, suggestion, input: safeArgs, ...(extra || {}) });
     if (answer === 'always' && suggestion && policy) policy.rememberForSession(suggestion);
+    // "Apply the rehearsal" (offered only when extra.rehearsal.offer): the caller lands the
+    // rehearsed changes instead of running the command again.
+    if (answer === 'rehearsal' && extra && extra.choice && extra.rehearsal && extra.rehearsal.offer) extra.choice.value = 'rehearsal';
     if (!answer) session.turnDeclined.add(declineKey);
     return Boolean(answer);
   };

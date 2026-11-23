@@ -610,6 +610,21 @@ export async function searchWorkspaceFiles(root, query, limit = 25, scope) {
   return matches.length ? { query: needle, matches, truncated: false } : { query: needle, matches, truncated: false, hint: emptySearchHint(needle, prefix) };
 }
 
+// "Apply the rehearsal": land the rehearsed changes (conflict-checked) without running again.
+export async function applyRehearsedRun(kept, command, args) {
+  const { applyRehearsal, publicRehearsal } = await import('./rehearsal.mjs');
+  const summary = publicRehearsal(kept);
+  const applied = await applyRehearsal(kept);
+  if (!applied.applied) {
+    return { command, args, approved: true, exitCode: null, stdout: '', stderr: '', rehearsal: summary, error: applied.message + ' The command was not run.' };
+  }
+  return {
+    command, args, approved: true, exitCode: kept.exitCode, stdout: kept.stdout || '', stderr: kept.stderr || '',
+    rehearsal: summary, appliedRehearsal: true,
+    message: 'The person chose to apply the rehearsal: its ' + (summary.created.length + summary.modified.length + summary.deleted.length) + ' file change(s) were copied into the workspace and the command was not run a second time. Output above is from the rehearsal (network was off).'
+  };
+}
+
 export function scrubEnvironment(source = process.env) {
   const allow = new Set(String(source.OASIS_COMMAND_ENV_ALLOWLIST || '').split(',').map((item) => item.trim()).filter(Boolean));
   const env = {};
@@ -749,14 +764,24 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   let rehearsal = { text: '', summary: null };
   if (needsApproval && approval && !options.interactive && !options.background) {
     const { rehearseForApproval } = await import('./rehearsal.mjs');
-    rehearsal = await rehearseForApproval({ root, command, args, env: options.env || process.env, settings: options.settings || {}, sandbox, injectionHold: options.injectionHold });
+    rehearsal = await rehearseForApproval({ root, command, args, env: options.env || process.env, settings: options.settings || {}, sandbox, injectionHold: options.injectionHold, keep: !highRisk && !options.clientTerminal });
     if (options.rehearsalSink && rehearsal.summary) options.rehearsalSink.summary = rehearsal.summary;
   }
   if (needsApproval) {
-    const ok = approval && await approval('Run this command in the workspace?\n  ' + command + ' ' + args.map((arg) => JSON.stringify(arg)).join(' ') + rehearsal.text +
+    // A person can accept exactly what the rehearsal showed instead of a second run.
+    // Not offered for high-risk commands: those are approved by reading the command.
+    const choice = { value: null };
+    const extra = rehearsal.kept ? { rehearsal: { offer: true }, choice } : null;
+    let ok;
+    try {
+    ok = approval && await approval('Run this command in the workspace?\n  ' + command + ' ' + args.map((arg) => JSON.stringify(arg)).join(' ') + rehearsal.text +
       (highRisk ? '\nHIGH RISK: ' + (configRisk ? configRisk : 'this command ' + highRisk) + '. Auto-approval does not apply.' : '') +
       '\nCommands can change project files or execute project scripts. ' + (typeof options.clientTerminal === 'function' && !(sandbox && sandbox.available) ? 'It will run in the editor\'s terminal, with the editor\'s environment.' : 'Oasis strips common secret environment variables from the child process.') +
-      (sandbox && sandbox.available ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + (sandbox.ssh.display || sandbox.ssh.host) + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : ''), Boolean(highRisk));
+      (sandbox && sandbox.available ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + (sandbox.ssh.display || sandbox.ssh.host) + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : ''), Boolean(highRisk), extra);
+    if (ok && choice.value === 'rehearsal' && rehearsal.kept) return await applyRehearsedRun(rehearsal.kept, command, args);
+    } finally {
+      if (rehearsal.kept) { const { disposeRehearsal } = await import('./rehearsal.mjs'); await disposeRehearsal(rehearsal.kept); }
+    }
     if (!ok) return { approved: false, command, args, ...(rehearsal.summary ? { rehearsal: rehearsal.summary } : {}), message: 'Command was not approved. ' + (rehearsal.summary ? 'It only ran as a rehearsal in a throwaway copy of the workspace, and nothing it did was kept.' : 'No process was started.') + ' Do not retry it or ask for approval again this turn; finish what you can without it and tell the user the exact command to run.' };
   }
   if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before the command started.' };
