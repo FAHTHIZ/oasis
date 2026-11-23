@@ -6,6 +6,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Added
 
+- Receipts record, per command, how the real run related to the rehearsal the person approved (applied, matched, diverged with the extra files, or incomplete), signed in the evidence chain; `oasis receipt verify` reports them on a `rehearsals` line. See [Receipts](docs/RECEIPTS.md#what-is-in-it).
 - Receipts now attest files that commands changed, not only files edited by tools: each command and check event in the signed chain lists the files it was observed to change, and `files` includes them, so `oasis receipt verify` notices when generated or formatted output was altered afterwards. See [Receipts](docs/RECEIPTS.md#what-is-in-it).
 - An **Apply rehearsal** button on the app's approval card for rehearsed commands, matching the terminal's "apply the rehearsed changes only" answer. See [Command rehearsal](docs/REHEARSAL.md#apply-the-rehearsal-instead-of-running-again).
 - World drift now also covers chats that `/resume` a session (the reply says what moved) and subagents resumed from a saved transcript (the parent's message starts with a note naming the files that agent knew and that changed while it was idle). See [Continuity](docs/CONTINUITY.md#chats-and-subagents).

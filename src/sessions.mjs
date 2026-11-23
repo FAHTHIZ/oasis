@@ -310,7 +310,7 @@ async function savedHead(file) {
 // The evidence ledger (src/evidence-ledger.mjs) is kept with the session, so a
 // resumed session's receipts and checks still see what earlier turns ran.
 const MAX_SAVED_EVIDENCE = 500;
-const EVIDENCE_STRING_FIELDS = ['kind', 'tool', 'command', 'checkKind', 'url', 'finalUrl', 'query', 'path', 'digest'];
+const EVIDENCE_STRING_FIELDS = ['kind', 'tool', 'command', 'checkKind', 'url', 'finalUrl', 'query', 'path', 'digest', 'rehearsal'];
 export function sanitizeEvidenceLedger(ledger) {
   if (!ledger || typeof ledger !== 'object' || !Array.isArray(ledger.events)) return null;
   const events = [];
@@ -321,6 +321,7 @@ export function sanitizeEvidenceLedger(ledger) {
     for (const key of ['finished', 'passed', 'masked', 'noTests', 'filtered', 'mayEdit']) if (typeof event[key] === 'boolean') out[key] = event[key];
     if (Number.isInteger(event.exitCode)) out.exitCode = event.exitCode;
     if (Array.isArray(event.numbers)) out.numbers = event.numbers.filter((value) => typeof value === 'string').slice(0, 100);
+    if (Array.isArray(event.unrehearsed)) out.unrehearsed = event.unrehearsed.filter((value) => typeof value === 'string').slice(0, 30).map((value) => value.slice(0, 400));
     if (Array.isArray(event.changed)) out.changed = event.changed.filter((value) => typeof value === 'string').slice(0, 30).map((value) => value.slice(0, 400));
     if (Array.isArray(event.urls)) out.urls = event.urls.filter((value) => typeof value === 'string').slice(0, 50);
     events.push(out);

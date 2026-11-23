@@ -309,3 +309,27 @@ test('observed changes skip concurrent runs and paths outside the workspace', as
   assert.deepEqual(observedChanges({ effects: { changed: 2, files: ['../x (modified)', '/etc/y (modified)'] } }), []);
   assert.deepEqual(observedChanges({}), []);
 });
+
+test('receipts record how each rehearsed action related to its rehearsal', async (t) => {
+  const { rehearsalOutcome } = await import('../src/evidence-ledger.mjs');
+  assert.deepEqual(rehearsalOutcome({}), {});
+  assert.deepEqual(rehearsalOutcome({ rehearsal: { status: 'ok' }, appliedRehearsal: true }), { rehearsal: 'applied' });
+  assert.deepEqual(rehearsalOutcome({ rehearsal: { status: 'ok', divergence: { unrehearsed: ['extra.txt'] } } }), { rehearsal: 'diverged', unrehearsed: ['extra.txt'] });
+  assert.deepEqual(rehearsalOutcome({ rehearsal: { status: 'timeout' } }), { rehearsal: 'incomplete' });
+  assert.deepEqual(rehearsalOutcome({ rehearsal: { status: 'ok' } }), { rehearsal: 'matched' });
+
+  const { root, env, session } = await fixture(t);
+  recordEvidence(session.evidenceLedger, { kind: 'command', tool: 'run_command', command: './gen.sh', exitCode: 0, finished: true, changed: ['out.txt', 'extra.txt'], rehearsal: 'diverged', unrehearsed: ['extra.txt'], digest: 'cccc' });
+  recordEvidence(session.evidenceLedger, { kind: 'command', tool: 'run_command', command: './fmt.sh', exitCode: 0, finished: true, rehearsal: 'applied', digest: 'dddd' });
+  const saved = sanitizeEvidenceLedger(session.evidenceLedger).events.find((event) => event.command === './gen.sh');
+  assert.equal(saved.rehearsal, 'diverged');
+  assert.deepEqual(saved.unrehearsed, ['extra.txt']);
+  const receipt = await createReceipt(session, { env });
+  const verdict = await verifyReceipt(receipt, { root, env });
+  const line = verdict.checks.find((check) => check.name === 'rehearsals');
+  assert.equal(line.level, 'warning');
+  assert.match(line.detail, /1 of 2 rehearsed action\(s\) changed files the rehearsal did not show: \.\/gen\.sh \(extra\.txt\)/);
+  assert.notEqual(verdict.status, 'tampered', 'a divergence is reported, not treated as tampering');
+  const forged = await signReceipt({ ...receipt, evidence: { ...receipt.evidence, events: receipt.evidence.events.map((event) => event.rehearsal === 'diverged' ? { ...event, rehearsal: 'matched' } : event) } }, { env });
+  assert.equal((await verifyReceipt(forged, { root, env })).status, 'tampered', 'rewriting a rehearsal outcome breaks the chain');
+});

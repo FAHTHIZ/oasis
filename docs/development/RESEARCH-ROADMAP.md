@@ -112,6 +112,11 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - Commit: see `git log -- docs/RECEIPTS.md` ("Attest files that commands changed in receipts").
 - Receipts attested only paths from edit tools, so a file produced by a formatter or generator was outside the signature. Command and check evidence events now carry the observed `changed` paths (from effect contracts, skipped when unattributable), saved with the session, signed in the chain and digested in `files`. `test/receipts.test.mjs` runs a real generating command through the agent, verifies the receipt, alters the file and sees `files` fail; without the change the generated file is not in the receipt.
 
+### Rehearsal outcomes in receipts
+
+- Commit: see `git log -- src/receipts.mjs` ("Record rehearsal outcomes in receipts").
+- Each rehearsed command's evidence event carries `rehearsal` (applied, matched, diverged plus `unrehearsed`, incomplete); it is saved with the session and signed in the chain, and verification adds a `rehearsals` line. Tests: `test/receipts.test.mjs` (outcomes, verification line, a forged outcome detected as tampering) and `test/rehearsal.test.mjs` (a real applied-then-matched pair through the agent).
+
 ## Examined and not built
 
 | Direction | Finding | Decision |
@@ -141,4 +146,3 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 ### Long term
 
 - Network effect rehearsal through a recording proxy, so a rehearsal can show which hosts a command would contact and what it would send.
-- Rehearsal records inside work receipts (what was rehearsed versus what landed, per action), building on the per-action `changed` lists receipts now carry.

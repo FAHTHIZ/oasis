@@ -175,6 +175,20 @@ export function observedChanges(result) {
   return paths;
 }
 
+// How a command related to its rehearsal (src/rehearsal.mjs), for receipts: 'applied'
+// (the rehearsed changes were landed without a second run), 'diverged' (the real run
+// changed files the rehearsal did not, listed in `unrehearsed`), 'matched', or
+// 'incomplete' (the rehearsal timed out or could not run, so it showed only part).
+export function rehearsalOutcome(result) {
+  const rehearsal = result && result.rehearsal;
+  if (!rehearsal || typeof rehearsal !== 'object') return {};
+  if (result.appliedRehearsal) return { rehearsal: 'applied' };
+  const unrehearsed = rehearsal.divergence && Array.isArray(rehearsal.divergence.unrehearsed) ? rehearsal.divergence.unrehearsed.filter((item) => typeof item === 'string').slice(0, MAX_CHANGED_PATHS) : [];
+  if (unrehearsed.length) return { rehearsal: 'diverged', unrehearsed };
+  if (rehearsal.status === 'timeout' || rehearsal.status === 'error') return { rehearsal: 'incomplete' };
+  return { rehearsal: 'matched' };
+}
+
 export function evidenceFromToolResult(name, args = {}, result = {}, context = {}) {
   if (!result || typeof result !== 'object') return null;
   if (PACK_FETCH.test(name) || PACK_SEARCH.test(name)) return packEvidence(name, args || {}, result, digestOf(result));
@@ -185,7 +199,7 @@ export function evidenceFromToolResult(name, args = {}, result = {}, context = {
     const exitCode = Number.isInteger(result.exitCode) ? result.exitCode : null;
     const finished = exitCode !== null && !result.timedOut && !result.cancelled;
     const changed = observedChanges(result);
-    const changedField = changed.length ? { changed } : {};
+    const changedField = { ...(changed.length ? { changed } : {}), ...rehearsalOutcome(result) };
     if (context.isCheck) {
       const noTests = finished && exitCode === 0 && ranNoTests(outputText(result));
       const filtered = (context.checkKind || 'test') === 'test' && filteredRun(command);

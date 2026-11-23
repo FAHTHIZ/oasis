@@ -403,3 +403,19 @@ test('the web server ignores a rehearsal answer when none was offered', async (t
   assert.equal(snapshot.status, 'completed', snapshot.error);
   assert.equal(await readFile(path.join(root, 'ran.txt'), 'utf8'), 'x', 'the command ran for real');
 });
+
+test('an applied rehearsal is recorded as such in the evidence a receipt signs', { skip }, async (t) => {
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const root = await workspace();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_REHEARSE: '1', OASIS_CONFIG_DIR: path.join(root, '.cfg') };
+  const count = await script(root, 'count.sh', 'echo run >> count.txt');
+  const { config } = await scriptedModel(t, [toolCall('c1', 'run_command', { command: count, args: [] }), toolCall('c2', 'run_command', { command: count, args: [] }), { content: 'done' }]);
+  const session = await createSession({ root, config, env });
+  t.after(() => closeSession(session));
+  let asked = 0;
+  await runAgentTurn(session, 'count twice', { env, approval: async (text, force, meta) => (++asked === 1 && meta && meta.rehearsal && meta.rehearsal.offer ? 'rehearsal' : true) });
+  const runs = session.evidenceLedger.events.filter((event) => event.tool === 'run_command');
+  assert.deepEqual(runs.map((event) => event.rehearsal), ['applied', 'matched']);
+});
