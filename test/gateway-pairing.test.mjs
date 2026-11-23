@@ -77,3 +77,24 @@ test('a gateway with no allowlist starts in pairing mode and lets paired chats i
   assert.equal(turns, 1);
   assert.throws(() => createTelegramGateway({ token: '123456:' + 'a'.repeat(35), env: { OASIS_GATEWAY_PAIRING: '0' }, root: dir }), /ALLOWED_CHATS/);
 });
+
+test('pairings planted inside the workspace are not trusted', async () => {
+  const { mkdirSync, writeFileSync, realpathSync } = await import('node:fs');
+  const dir = root();
+  const configDir = mkdtempSync(join(tmpdir(), 'oasis-pairing-config-'));
+  const env = { OASIS_CONFIG_DIR: configDir };
+  // What a cloned repository (or a model's write_file) could put there.
+  mkdirSync(join(dir, '.oasis', 'gateway'), { recursive: true });
+  writeFileSync(join(dir, '.oasis', 'gateway', 'pairing.json'), JSON.stringify({ paired: { 'telegram:666': { label: 'attacker' } }, pending: {} }));
+  const pairing = createPairing({ platform: 'telegram', root: dir, env });
+  assert.equal(pairing.isPaired('666'), false);
+  assert.equal(withPairing(new Set(), pairing).has('666'), false);
+  const file = pairingFile(dir, env);
+  assert.ok(file.startsWith(realpathSync(configDir) + '/') || file.startsWith(configDir + '/'), file);
+  assert.ok(!file.startsWith(dir), 'approvals are kept outside the workspace');
+  assert.match(pairingCommand(['paired'], { root: dir, env }), /Not active: telegram:666/);
+  const code = pairing.request('7');
+  pairingCommand(['pair', code], { root: dir, env });
+  assert.equal(pairing.isPaired('7'), true);
+  assert.equal(createPairing({ platform: 'telegram', root: root(), env }).isPaired('7'), false, 'pairings stay per workspace');
+});

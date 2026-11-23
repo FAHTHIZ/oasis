@@ -4,14 +4,20 @@
 // that person can use the agent on that platform. Nobody can approve
 // themselves from a chat: codes are only accepted on the command line.
 //
-// Approvals live in .oasis/gateway/pairing.json (mode 0600) in the workspace,
-// are re-read on every check so a running gateway picks them up at once, and
+// Approvals live in the user's OASIS config folder (gateway/pairing/<hash of
+// the workspace path>.json, mode 0600), one file per workspace. They used to
+// be in the workspace's .oasis/gateway/pairing.json, where a cloned repository
+// or the model's own file edits could add an attacker's chat ID. That file is
+// no longer read; `oasis gateway paired` lists what it holds so the owner can
+// pair those people again. Approvals are re-read on every check so a running
+// gateway picks them up at once, and
 // can be listed with `oasis gateway paired` and revoked with
 // `oasis gateway unpair PLATFORM:ID`. OASIS_GATEWAY_PAIRING=0 turns pairing off,
 // leaving only the allowlist variables.
-import { randomInt } from 'node:crypto';
-import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { createHash, randomInt } from 'node:crypto';
+import { chmodSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { getConfigDirectory } from './config.mjs';
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I/L
 const CODE_TTL_MS = 60 * 60 * 1000;
@@ -21,7 +27,18 @@ export function pairingEnabled(env = process.env) {
   return !/^(0|off|false|no)$/i.test(String(env.OASIS_GATEWAY_PAIRING || ''));
 }
 
-export function pairingFile(root) {
+function workspaceId(root) {
+  const resolved = path.resolve(root || process.cwd());
+  try { return realpathSync(resolved); } catch { return resolved; }
+}
+
+export function pairingFile(root, env = process.env) {
+  const id = createHash('sha256').update(workspaceId(root)).digest('hex').slice(0, 32);
+  return path.join(getConfigDirectory(env), 'gateway', 'pairing', id + '.json');
+}
+
+/** Where pairings used to be kept, inside the workspace; never trusted now. */
+export function legacyPairingFile(root) {
   return path.join(path.resolve(root || process.cwd()), '.oasis', 'gateway', 'pairing.json');
 }
 
@@ -53,7 +70,7 @@ const normalizeCode = (code) => String(code || '').toUpperCase().replace(/[^A-Z0
  * (null when pairing is off or too many requests are waiting).
  */
 export function createPairing({ platform, root, env = process.env, now = () => Date.now(), log = () => {} } = {}) {
-  const file = pairingFile(root);
+  const file = pairingFile(root, env);
   const enabled = pairingEnabled(env);
   const keyOf = (id) => platform + ':' + String(id);
   return {
@@ -73,6 +90,7 @@ export function createPairing({ platform, root, env = process.env, now = () => D
       if (Object.keys(data.pending).length >= MAX_PENDING) return null;
       const code = newPairingCode();
       data.pending[code] = { key, label: String(label || '').slice(0, 120), expires: time + CODE_TTL_MS };
+      data.workspace = workspaceId(root);
       save(file, data);
       log('pairing request from ' + key + (label ? ' (' + String(label).slice(0, 60) + ')' : '') + ': approve with oasis gateway pair ' + code);
       return code;
@@ -90,9 +108,9 @@ export function strangerMessage({ pairing, id, label = '', idName, envName }) {
 }
 
 /** `oasis gateway pair CODE | paired | unpair PLATFORM:ID` */
-export function pairingCommand(args = [], { root, now = () => Date.now() } = {}) {
+export function pairingCommand(args = [], { root, env = process.env, now = () => Date.now() } = {}) {
   const [action, value] = args;
-  const file = pairingFile(root);
+  const file = pairingFile(root, env);
   const data = load(file);
   if (action === 'pair') {
     const code = normalizeCode(value);
@@ -115,7 +133,10 @@ export function pairingCommand(args = [], { root, now = () => Date.now() } = {})
   if (action === 'paired') {
     const rows = Object.entries(data.paired).map(([key, item]) => '  ' + key + (item.label ? '  ' + item.label : '') + (item.at ? '  since ' + item.at.slice(0, 10) : ''));
     const waiting = Object.entries(data.pending).filter(([, item]) => item.expires > now()).map(([code, item]) => '  ' + code + '  ' + item.key + (item.label ? '  ' + item.label : ''));
-    return (rows.length ? 'Paired:\n' + rows.join('\n') : 'Nobody is paired yet.') + (waiting.length ? '\nWaiting for approval (oasis gateway pair CODE):\n' + waiting.join('\n') : '');
+    const legacy = Object.keys(load(legacyPairingFile(root)).paired);
+    const legacyNote = legacy.length ? '\nNot active: ' + legacy.slice(0, 20).join(', ') + (legacy.length > 20 ? ', ...' : '') + ' (from ' + legacyPairingFile(root) +
+      ', inside the workspace, which a repository or a file edit could have written; OASIS no longer reads it). Pair them again if you know them, then delete that file.' : '';
+    return (rows.length ? 'Paired:\n' + rows.join('\n') : 'Nobody is paired yet.') + (waiting.length ? '\nWaiting for approval (oasis gateway pair CODE):\n' + waiting.join('\n') : '') + legacyNote;
   }
   throw new Error('Usage: oasis gateway pair CODE | paired | unpair PLATFORM:ID');
 }
