@@ -183,7 +183,7 @@ function list(items, max = 12) {
   return items.slice(0, max).join(', ') + (items.length > max ? ' and ' + (items.length - max) + ' more' : '');
 }
 
-function lines(drift) {
+export function driftLines(drift) {
   const out = [];
   if (drift.branch) out.push('The branch changed from ' + (drift.branch.from || '(detached HEAD)') + ' to ' + (drift.branch.to || '(detached HEAD)') + '.');
   if (drift.head) {
@@ -204,12 +204,12 @@ function lines(drift) {
 export function driftNote(drift, now = Date.now()) {
   if (!drift) return '';
   const when = ago(drift.since, now);
-  return '<workspace-drift>The workspace changed since this conversation was last saved' + (when ? ' (' + when + ')' : '') + '. ' + lines(drift).join(' ')
+  return '<workspace-drift>The workspace changed since this conversation was last saved' + (when ? ' (' + when + ')' : '') + '. ' + driftLines(drift).join(' ')
     + ' What earlier messages show of these files and of the repository is out of date: read them again before relying on them, and do not undo changes you did not make.</workspace-drift>';
 }
 
 /** One line for the person resuming. */
 export function driftSummary(drift) {
   if (!drift) return '';
-  return '[session] The workspace changed since this session was saved: ' + lines(drift).join(' ') + ' The model will be told.';
+  return '[session] The workspace changed since this session was saved: ' + driftLines(drift).join(' ') + ' The model will be told.';
 }

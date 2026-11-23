@@ -2,7 +2,15 @@
 // saved by the terminal, the web app or another chat. The chat keeps saving
 // to the same session ID, so `oasis --resume ID` picks it up again later.
 
+import { driftLines } from './world-drift.mjs';
+
 const LIST = 6;
+
+/** What moved in the workspace since the resumed session was saved, for the chat reply. */
+export function resumeDriftText(drift) {
+  if (!drift) return '';
+  return 'The workspace changed since then: ' + driftLines(drift).join(' ') + ' OASIS will tell the model before your next message.';
+}
 
 function age(updatedAt, now) {
   const ms = now - Date.parse(updatedAt || '');
