@@ -765,7 +765,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   if (options.interactive) {
     if (options.background) throw new Error('Choose either interactive=true or run_in_background=true, not both.');
     if (!options.ptyManager) throw new Error('Interactive terminal sessions are not available in this context.');
-    const launch = await launchCommand(command, args, sandbox, root, { tty: true });
+    const launch = await launchCommand(command, args, sandbox, root, { tty: true, env });
     try {
       const started = await options.ptyManager.start(launch.command, launch.args, {
         cwd: root, env, cols: options.cols, rows: options.rows, release: launch.release,
@@ -780,7 +780,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   }
   if (options.background) {
     if (!options.backgroundRegistry) throw new Error('Background commands are not available in this session.');
-    const launch = await launchCommand(command, args, sandbox, root);
+    const launch = await launchCommand(command, args, sandbox, root, { env });
     return startBackgroundProcess(options.backgroundRegistry, launch, { cwd: root, env, display: commandLineText(command, args), sandboxed: sandbox && sandbox.available ? sandbox.kind : null, onLine: options.onLine, onExit: options.onExit, onStuck: options.onStuck, maxSeconds: options.maxSeconds, monitor: options.monitor });
   }
   // ACP editors with terminal support (opt-in): the command runs in the editor's own
@@ -801,7 +801,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   if (options.persistOutputLogs !== false) {
     try { outputLog = await createCommandOutputLog(root); } catch { outputLog = null; }
   }
-  const launch = await launchCommand(command, args, sandbox, root);
+  const launch = await launchCommand(command, args, sandbox, root, { env });
   const condensers = options.condenseOutput !== false && condenseOutputEnabled(options.env || process.env)
     ? { stdout: createOutputCondenser(), stderr: createOutputCondenser() } : null;
   return await new Promise((settle) => {

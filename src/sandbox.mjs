@@ -21,7 +21,7 @@ import { normalizeSshSettings, detectSshRuntime, sshWrap, DEFAULT_SSH_EXCLUDES }
 import { normalizeDaytonaSettings, ensureDaytonaSync, daytonaSshSettings } from './daytona-backend.mjs';
 import { normalizeModalSettings, ensureModalSync, modalSshSettings } from './modal-backend.mjs';
 import { spawnSync } from 'node:child_process';
-import { realpathSync, statSync, lstatSync, rmdirSync, unlinkSync, readFileSync, existsSync, mkdtempSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import { realpathSync, statSync, lstatSync, rmdirSync, unlinkSync, readFileSync, writeFileSync, existsSync, mkdtempSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -189,6 +189,58 @@ function removeSandboxPlaceholders(placeholders = []) {
       else if (item.type === 'file' && info.isFile() && info.size === 0) unlinkSync(item.path);
     } catch {}
   }
+}
+// A missing protected file is masked with /dev/null inside the sandbox. Git
+// sees that as a character device: `git status` lists it and `git add -A` /
+// `git add .` stop with "can only add regular files", so committing from a
+// sandboxed command failed in every workspace without, say, a .mcp.json.
+// The placeholders are hidden from git with an excludes file that carries
+// the user's own core.excludesFile patterns plus the anchored placeholders,
+// passed through GIT_CONFIG_COUNT (appended after any entries already set).
+const MAX_EXCLUDES_BYTES = 1024 * 1024;
+export function placeholderGitExcludes(missing = [], roots = [], env = process.env, run = spawnSync) {
+  const files = missing.filter((item) => item.type === 'file' && !item.path.split(path.sep).includes('.git'));
+  if (!files.length) return null;
+  const patterns = [];
+  const gitEnv = { ...env, GIT_TERMINAL_PROMPT: '0' };
+  let excludesFile = '';
+  for (const root of roots) {
+    const top = run('git', ['rev-parse', '--show-toplevel'], { cwd: root, env: gitEnv, encoding: 'utf8', timeout: 5000 });
+    if (!top || top.status !== 0 || !String(top.stdout || '').trim()) continue;
+    let topReal;
+    try { topReal = realpathSync(String(top.stdout).trim()); } catch { continue; }
+    if (!excludesFile) {
+      const configured = run('git', ['config', '--path', '--get', 'core.excludesFile'], { cwd: root, env: gitEnv, encoding: 'utf8', timeout: 5000 });
+      const value = configured && configured.status === 0 ? String(configured.stdout || '').trim() : '';
+      const home = env.HOME || os.homedir();
+      excludesFile = value || path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'git', 'ignore');
+    }
+    let rootReal;
+    try { rootReal = realpathSync(root); } catch { continue; }
+    for (const item of files) {
+      const relToRoot = path.relative(path.resolve(root), item.path);
+      if (relToRoot.startsWith('..') || path.isAbsolute(relToRoot)) continue;
+      const rel = path.relative(topReal, path.join(rootReal, relToRoot));
+      if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) continue;
+      patterns.push('/' + rel.split(path.sep).join('/').replace(/([*?[\\!#])/g, '\\$1'));
+    }
+  }
+  if (!patterns.length) return null;
+  let base = '';
+  try {
+    const info = statSync(excludesFile);
+    if (info.isFile() && info.size <= MAX_EXCLUDES_BYTES) base = readFileSync(excludesFile, 'utf8');
+  } catch {}
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'oasis-git-excludes-'));
+  const file = path.join(dir, 'exclude');
+  writeFileSync(file, (base && !base.endsWith('\n') ? base + '\n' : base) + '# OASIS sandbox placeholders\n' + [...new Set(patterns)].join('\n') + '\n', { mode: 0o600 });
+  const count = Math.max(0, Number.parseInt(env.GIT_CONFIG_COUNT, 10) || 0);
+  return {
+    file,
+    dir,
+    env: { GIT_CONFIG_COUNT: String(count + 1), ['GIT_CONFIG_KEY_' + count]: 'core.excludesFile', ['GIT_CONFIG_VALUE_' + count]: file },
+    cleanup: () => { try { rmSync(dir, { recursive: true, force: true }); } catch {} }
+  };
 }
 const pendingPlaceholders = new Set();
 let exitSweepInstalled = false;
@@ -753,13 +805,20 @@ export function wrapCommand(command, args, sandbox, cwd, options = {}) {
       if (item.type === 'directory') wrapped.push('--perms', '0555', '--tmpfs', item.path, '--remount-ro', item.path);
       else wrapped.push('--ro-bind', '/dev/null', item.path);
     }
+    const excludes = guarded.missing.some((item) => item.type === 'file')
+      ? placeholderGitExcludes(guarded.missing, sandbox.protectedRoots || [], options.env || process.env) : null;
+    if (excludes) {
+      wrapped.push('--ro-bind', excludes.file, excludes.file);
+      for (const [name, value] of Object.entries(excludes.env)) wrapped.push('--setenv', name, value);
+    }
     if (!sandbox.network) wrapped.push('--unshare-net');
     for (const name of sandbox.deniedEnv || []) wrapped.push('--unsetenv', name);
     // The helper may live under a folder the read block hid, so mount it back read-only.
     const filter = sandbox.unixSocketFilter;
     if (filter) wrapped.push('--ro-bind', filter, filter);
     wrapped.push('--chdir', cwd, '--', ...(filter ? [filter] : []), command, ...args);
-    return { command: 'bwrap', args: wrapped, release: trackPlaceholders(guarded.missing) };
+    const releasePlaceholders = trackPlaceholders(guarded.missing);
+    return { command: 'bwrap', args: wrapped, release: excludes ? () => { releasePlaceholders(); excludes.cleanup(); } : releasePlaceholders };
   }
   if (sandbox.kind === 'sandbox-exec') {
     return { command: 'sandbox-exec', args: ['-p', macProfile(sandbox), ...unsetEnvPrefix(sandbox), command, ...args] };
