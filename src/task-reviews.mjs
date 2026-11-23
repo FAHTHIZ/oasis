@@ -74,12 +74,20 @@ export function recordTaskReview(session, review = {}) {
     seq: ledger ? ledger.seq : 0,
     at: Date.now()
   };
+  // The reviewer's model and the models that did the work, so the outcome
+  // can tell a second look by the same model from an independent one
+  // (src/verifier-diversity.mjs).
+  if (review.model) entry.model = String(review.model).slice(0, 200);
   // The agents whose finished work this review saw: workers on this task
   // that changed files before the review started, not yet judged by an
   // earlier review of the same files.
   const workers = Array.isArray(session.taskWorkers) ? session.taskWorkers : [];
   entry.reviewed = workers.filter((worker) => worker.taskId === entry.taskId && worker.epoch <= entry.epoch && !worker.judged).map((worker) => worker.agentId);
   if (verdict !== 'inconclusive') for (const worker of workers) if (entry.reviewed.includes(worker.agentId)) worker.judged = verdict;
+  if (entry.model) {
+    const authors = new Set([review.authorModel, ...workers.filter((worker) => entry.reviewed.includes(worker.agentId)).map((worker) => worker.model)].map((item) => String(item || '').trim()).filter(Boolean));
+    if (authors.size) entry.authors = [...authors].slice(0, 10);
+  }
   if (!Array.isArray(session.taskReviews)) session.taskReviews = [];
   session.taskReviews.push(entry);
   if (session.taskReviews.length > MAX_TASK_REVIEWS) session.taskReviews.splice(0, session.taskReviews.length - MAX_TASK_REVIEWS);
@@ -124,11 +132,11 @@ export function combinedReview(reviews = []) {
  * parent's evidence epoch moves on, and the agent is remembered as a worker
  * whose result a later review judges.
  */
-export function noteTaskWorker(session, { agentId, agentType = '', startedAt = 0 } = {}) {
+export function noteTaskWorker(session, { agentId, agentType = '', startedAt = 0, model = '' } = {}) {
   if (!session || typeof session !== 'object' || !agentId) return null;
   const ledger = sessionEvidence(session);
   if (ledger) ledger.epoch += 1;
-  const worker = { agentId: String(agentId), agentType: String(agentType || ''), taskId: session.task && session.task.id || '', epoch: ledger ? ledger.epoch : 0, startedAt: Number(startedAt) || 0, at: Date.now() };
+  const worker = { agentId: String(agentId), agentType: String(agentType || ''), taskId: session.task && session.task.id || '', epoch: ledger ? ledger.epoch : 0, startedAt: Number(startedAt) || 0, at: Date.now(), ...(model ? { model: String(model).slice(0, 200) } : {}) };
   if (!Array.isArray(session.taskWorkers)) session.taskWorkers = [];
   session.taskWorkers = session.taskWorkers.filter((item) => item.agentId !== worker.agentId);
   session.taskWorkers.push(worker);

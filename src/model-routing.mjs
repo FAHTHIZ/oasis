@@ -237,6 +237,9 @@ export function sanitizeModelRouting(value) {
     // Subagent model choice from the agent experience track record (src/agent-experience.mjs).
     ...(value.subagents === 'experience' ? { subagents: 'experience' } : {}),
     ...(Array.isArray(value.subagentModels) && value.subagentModels.some((item) => normalize(item)) ? { subagentModels: [...new Set(value.subagentModels.map(normalize).filter(Boolean))].slice(0, 20) } : {}),
-    ...(Number.isInteger(value.subagentMinRuns) && value.subagentMinRuns >= 2 && value.subagentMinRuns <= 1000 ? { subagentMinRuns: value.subagentMinRuns } : {})
+    ...(Number.isInteger(value.subagentMinRuns) && value.subagentMinRuns >= 2 && value.subagentMinRuns <= 1000 ? { subagentMinRuns: value.subagentMinRuns } : {}),
+    // Reviewers on another model lineage than the author's (src/verifier-diversity.mjs).
+    ...(value.reviewers === 'diverse' ? { reviewers: 'diverse' } : {}),
+    ...(Array.isArray(value.reviewerModels) && value.reviewerModels.some((item) => normalize(item)) ? { reviewerModels: [...new Set(value.reviewerModels.map(normalize).filter(Boolean))].slice(0, 20) } : {})
   };
 }
