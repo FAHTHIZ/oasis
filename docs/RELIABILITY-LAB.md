@@ -50,6 +50,20 @@ The fifteen scenarios cover a clean run, each model fault, tool failures
 before running, slow tools, lost replies on an idempotent write and on a
 non-idempotent command, and a mixed storm of four faults in one turn.
 
+Three more scenarios cover [command rehearsal](REHEARSAL.md) with a stand-in
+person answering the approval prompt (they need bubblewrap 0.11 with overlay
+support and are reported as skipped elsewhere). A command writes a file named
+after the time and a random number, so its rehearsal and its real run never
+agree:
+
+- `rehearsal-divergence-reported`: the person answers yes; the real run's file
+  differs from the rehearsed one, and the result must name it as unrehearsed.
+- `rehearsal-applied-as-shown`: the person picks "apply the rehearsed changes";
+  exactly the file the rehearsal showed must land, with no second run.
+- `rehearsal-conflict-then-retry`: someone edits the command's target while the
+  prompt is open, then the person picks apply. Nothing may be applied over the
+  edit, and the stand-in model's retry must land the change once.
+
 ## What it found
 
 The first run passed 10 of 15 scenarios. Three weaknesses were real:
@@ -71,7 +85,16 @@ The first run passed 10 of 15 scenarios. Three weaknesses were real:
    and a change made while another command ran at the same time is flagged as
    possibly that command's. `OASIS_AFTER_FAILURE_CHECK=0` turns it off.
 
-After the fixes all 15 pass. The ablation (`--compare`) on the same scenarios:
+The rehearsal scenarios found a fourth: the effect snapshot for a command was
+taken before its approval prompt, so a file someone edited while the prompt was
+open was reported as the command's change. In `rehearsal-conflict-then-retry`
+the refused apply then got an `afterFailure` note saying the command "probably
+ran", and the model did not retry (the change never landed). The snapshot is
+now re-taken once the call is approved (`rebaseEffectObservation`), which also
+keeps such edits out of the divergence check and out of `/rewind`'s preimages.
+
+After the fixes all 15 of the original scenarios pass, and all 18 with the
+rehearsal scenarios. The ablation (`--compare`) on the same scenarios:
 
 | | Scenarios passed | Duplicated side effects | Model requests, lost reply on a write |
 | --- | --- | --- | --- |

@@ -24,7 +24,7 @@ import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './outpu
 import { priceFor, estimateCostUsd, recordBudgetSpend, formatUsd, cloudModelBehindGateway } from './pricing.mjs';
 import { hasImages, fitImages } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, captureFromPreimage, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
-import { beginEffectObservation, finishEffectObservation, preimagesFor, publicEffects } from './effect-contracts.mjs';
+import { beginEffectObservation, finishEffectObservation, preimagesFor, publicEffects, rebaseEffectObservation } from './effect-contracts.mjs';
 import { summaryDivergence } from './rehearsal.mjs';
 import { compareWorld, driftNote } from './world-drift.mjs';
 import { applyReconciliation, checkProbes, journalDone, journalIntent, journalPathFor, readJournal, reconcileJournal, reconciliationNote } from './intent-journal.mjs';
@@ -2817,6 +2817,11 @@ async function executeOneCallRaw(session, call, context, options) {
           // command that may write, so its real effects are observed afterwards.
           if (EFFECT_OBSERVED_TOOLS.has(name) && !commandIsReadOnly(session, name, authorizedArgs)) {
             effectHandle = await beginEffectObservation(session, { name, args: authorizedArgs, env: options.env || process.env }).catch(() => null);
+            // The tool asks for approval itself; re-snapshot once it is granted (see rebaseEffectObservation).
+            if (effectHandle && authorizedContext) {
+              const handle = effectHandle;
+              authorizedContext.onApproved = () => rebaseEffectObservation(session, handle).catch(() => handle);
+            }
           }
           if (name === 'skill_propose') {
             const state = authorizedContext && authorizedContext.verification;

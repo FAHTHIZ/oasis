@@ -504,6 +504,17 @@ export async function beginEffectObservation(session, { name, args = {}, env = p
   return { name, args, before, store, predicted, key, started: Date.now(), concurrent: activeByTree.get(key) > 1 };
 }
 
+// Re-takes the "before" snapshot once the call is approved. The first one is taken before
+// the approval prompt, and anything a person or editor changed while it was open would
+// otherwise be credited to the command (its effects, the after-failure check, the rehearsal
+// divergence and /rewind's preimages).
+export async function rebaseEffectObservation(session, handle) {
+  if (!handle || !handle.store) return handle;
+  const before = await snapshotWorkTree(session.root, { store: handle.store }).catch(() => ({ ok: false }));
+  if (before.ok) { handle.before = before; handle.started = Date.now(); handle.rebased = true; }
+  return handle;
+}
+
 // Snapshots again, diffs, checks the contract and reads the pre-command
 // content of every changed file (record.preimages), then frees the store.
 export async function finishEffectObservation(session, handle) {

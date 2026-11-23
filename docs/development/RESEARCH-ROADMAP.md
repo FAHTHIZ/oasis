@@ -87,6 +87,11 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - New: a third terminal answer lands the rehearsed upper layer, conflict-checked, with no second run; offered only for clean, non-high-risk rehearsals.
 - Acceptance: `test/rehearsal.test.mjs`: a counting script lands one line, not two; a file edited during the prompt blocks the apply and nothing runs; failing, no-op and high-risk commands are not offered it; the agent path for `run_command` and `run_shell` returns `appliedRehearsal: true`; no rehearsal directory is left behind.
 
+### Rehearsal in the reliability lab, and approval-time snapshots
+
+- Commit: see `git log -- src/reliability-lab.mjs` ("Grade rehearsal in the reliability lab").
+- Three scenarios with a stand-in person (yes, apply, edit-then-apply). The third failed on first run: the effect snapshot was taken before the approval prompt, so an edit made during the prompt was credited to the command and the refused apply was reported as "probably ran". Fixed by re-taking the snapshot on approval; `test/rehearsal.test.mjs` fails without the fix. Lab: 18 of 18.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |
@@ -102,7 +107,8 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### Immediate improvements
 
-- Add rehearsal and fault scenarios to the reliability lab (a command whose rehearsal and real run differ).
+- Re-take the other pre-approval snapshots on approval too (the git-safety snapshot and the scripted-edit snapshot in `run_command`), for the same reason as the effect snapshot.
+- World drift for subagent transcripts and gateway sessions, which resume through other paths.
 
 ### Ready for implementation
 
