@@ -149,8 +149,14 @@ export function globToRegExp(pattern) {
   };
 }
 
-function commandLine(command, args = []) {
-  return [String(command || ''), ...(Array.isArray(args) ? args : [])].join(' ').trim();
+// run_command never goes through a shell, so each argv entry is one literal
+// word. Rules are matched with shell parsing, so the words are quoted first:
+// joined raw, an argument such as "it's" or "console.log(1)" made the whole
+// line unparsable, an allow rule never matched (run_command(node -e:*) did not
+// allow `node -e console.log(1)`) and a deny rule missed (Read(.env) did not
+// stop `cat "it's" .env`).
+function argvLine(command, args = []) {
+  return [String(command || ''), ...(Array.isArray(args) ? args.map((arg) => quoteWord(String(arg))) : [])].join(' ').trim();
 }
 
 const BACKTICK = String.fromCharCode(96);
@@ -655,7 +661,7 @@ export function ruleMatches(rule, toolName, args = {}, options = {}) {
     const coversRead = rule.tools.includes('read_file');
     const coversWrite = rule.tools.some((tool) => EDIT_TOOLS.has(tool));
     if (!coversRead && !coversWrite) return false;
-    const line = toolName === 'run_shell' ? String(args.command || '') : commandLine(args.command, args.args);
+    const line = toolName === 'run_shell' ? String(args.command || '') : argvLine(args.command, args.args);
     if (!line.trim()) return false;
     const targets = shellFileTargets(line);
     const candidates = [...(coversRead ? targets.reads : []), ...(coversWrite ? targets.writes : [])];
@@ -665,9 +671,9 @@ export function ruleMatches(rule, toolName, args = {}, options = {}) {
   if (!rule.tools.includes(toolName)) return false;
   if (toolName === 'run_command' || toolName === 'monitor') {
     if (toolName === 'monitor' && !args.command) return false;
-    if (matchCommandSpecifier(rule.specifier, commandLine(args.command, args.args), { requireEveryCommand: options.requireEveryCommand !== false })) return true;
+    if (matchCommandSpecifier(rule.specifier, argvLine(args.command, args.args), { requireEveryCommand: options.requireEveryCommand !== false })) return true;
     // Deny/ask rules also catch the same program called by path (rm:* blocks /bin/rm).
-    return Boolean(options.matchBasename) && /[\\/]/.test(String(args.command || '')) && matchCommandSpecifier(rule.specifier, commandLine(path.basename(String(args.command)), args.args), { requireEveryCommand: options.requireEveryCommand !== false });
+    return Boolean(options.matchBasename) && /[\\/]/.test(String(args.command || '')) && matchCommandSpecifier(rule.specifier, argvLine(path.basename(String(args.command)), args.args), { requireEveryCommand: options.requireEveryCommand !== false });
   }
   if (toolName === 'workflow') { const name = String(args.name || ''); const spec = rule.specifier.replace(/:\*$/, '*'); return spec.endsWith('*') ? name.startsWith(spec.slice(0, -1)) : name === spec; }
   if (toolName === 'load_skill') { const name = String(args.name || ''); const spec = rule.specifier.replace(/:\*$/, '*'); return spec.endsWith('*') ? name.startsWith(spec.slice(0, -1)) : name === spec; }
@@ -789,7 +795,7 @@ export class PermissionPolicy {
   // part of it, explain why (the common "I allowed git:* and it still asks" confusion).
   allowNearMiss(toolName, args = {}) {
     if (!['run_command', 'run_shell', 'monitor', 'powershell'].includes(toolName)) return '';
-    const line = toolName === 'run_shell' || toolName === 'powershell' ? String(args.command || '').trim() : commandLine(args.command, args.args);
+    const line = toolName === 'run_shell' || toolName === 'powershell' ? String(args.command || '').trim() : argvLine(args.command, args.args);
     const rules = [...this.allow, ...this.sessionAllow].filter((rule) => rule.tools.includes(toolName));
     const partial = rules.find((rule) => ruleMatches(rule, toolName, args, { root: this.root, requireEveryCommand: false }));
     if (!partial) return '';
