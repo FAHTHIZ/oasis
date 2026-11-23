@@ -210,3 +210,26 @@ test('oasis receipt key --new prints a usable PEM that is not saved', async (t) 
   const { generateKeyPairSync } = await import('node:crypto');
   assert.throws(() => receiptKeyFromPem(generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey.export({ type: 'pkcs8', format: 'pem' })), /Ed25519/);
 });
+
+test('oasis receipt create writes a verifiable receipt for a saved session, after the fact', async (t) => {
+  const { root, env, session } = await fixture(t);
+  const { saveSession } = await import('../src/sessions.mjs');
+  const saved = await saveSession({ ...session, sessionId: undefined, messages: [{ role: 'system', content: 'You are OASIS.' }, ...session.messages] }, { env });
+  let out = '';
+  const write = (text) => { out += text; };
+  assert.equal(await receiptCommand(['create', '--session', saved.id, '-o', 'after.json', '--json'], root, { write, env }), 0);
+  const info = JSON.parse(out);
+  assert.equal(info.session, saved.id);
+  assert.equal(info.events, 2, 'the saved evidence ledger is in the receipt');
+  assert.equal(info.file, path.join(root, 'after.json'));
+  const receipt = JSON.parse(await readFile(info.file, 'utf8'));
+  assert.equal(receipt.run.sessionId, saved.id);
+  assert.match(receipt.run.request, /Fix the bug/);
+  assert.equal((await verifyReceipt(receipt, { root })).status, 'verified');
+  out = '';
+  assert.equal(await receiptCommand(['create', '--last'], root, { write, env }), 0);
+  assert.match(out, new RegExp('Receipt for session ' + saved.id + ' written to .*oasis-receipt-' + saved.id.slice(0, 8) + '\\.json'));
+  out = '';
+  assert.equal(await receiptCommand(['show', info.file], root, { write, env }), 0);
+  assert.match(out, /Claims: {4}\d+ \w+/);
+});

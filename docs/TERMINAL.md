@@ -103,7 +103,8 @@ The `json` result reports `usage` (tokens), `total_cost_usd`, the configured
 answered, including a fallback model, subagents and the advisor.
 
 `oasis receipt verify FILE [--replay] [--trust KEY_ID] [--json]` checks a receipt
-and exits 1 unless it holds; `/receipt [FILE]` writes one from an interactive session.
+and exits 1 unless it holds; `/receipt [FILE]` writes one from an interactive session,
+and `oasis receipt create --session ID` writes one for a saved session.
 
 Piped input is added to the prompt: `cat build.log | oasis -p "explain this error"`.
 
