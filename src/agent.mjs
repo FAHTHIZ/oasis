@@ -26,6 +26,7 @@ import { hasImages, fitImages } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, captureFromPreimage, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
 import { beginEffectObservation, finishEffectObservation, preimagesFor, publicEffects } from './effect-contracts.mjs';
 import { summaryDivergence } from './rehearsal.mjs';
+import { compareWorld, driftNote } from './world-drift.mjs';
 import { applyReconciliation, checkProbes, journalDone, journalIntent, journalPathFor, readJournal, reconcileJournal, reconciliationNote } from './intent-journal.mjs';
 import { keywordRulesFor, nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, modelAllowed, modelDenied, modelRestrictionMessage } from './model-aliases.mjs';
@@ -990,6 +991,11 @@ export async function createSession({ root, config, restore = null, permissionMo
           session.journalReconciliation = reconciliation;
         }
       } catch { /* the journal is advisory; a damaged one cannot block a resume */ }
+    }
+    // What moved in the workspace since the save: commits, branch, files the conversation knows.
+    if (restore.world && !bare) {
+      session.worldDrift = await compareWorld(restore.world, root, { env, settings: loadedSettings }).catch(() => null);
+      if (session.worldDrift) recordSessionEvent(session, { type: 'world_drift', branch: Boolean(session.worldDrift.branch), head: session.worldDrift.head ? session.worldDrift.head.relation : '', changed: session.worldDrift.files.changed.length, deleted: session.worldDrift.files.deleted.length, created: session.worldDrift.files.created.length }, env);
     }
     if (restore.checkpointsDir && checkpointPersistenceEnabled(env)) {
       const saved = await loadCheckpoints(restore.checkpointsDir).catch(() => null);
@@ -3453,6 +3459,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     const note = reconciliationNote(session.journalReconciliation);
     if (note) userContent = note + '\n\n' + userContent;
     session.journalReconciliation = null;
+  }
+  if (!options.isSubagent && session.worldDrift && !session.worldDriftTold) {
+    userContent = driftNote(session.worldDrift) + '\n\n' + userContent;
+    session.worldDriftTold = true;
   }
   if (!options.isSubagent && session.interruptedTurn) {
     userContent = interruptedTurnNote(session.interruptedTurn) + '\n\n' + userContent;
