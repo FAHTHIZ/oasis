@@ -167,3 +167,18 @@ test('file-based linters run only when installed and matching files exist, and s
   const missing = await runDiagnostics(root, { checker: 'hadolint' }, { env: { PATH: '/usr/bin:/bin' }, autoApprove: true });
   assert.match(missing.message, /hadolint is not installed/);
 });
+
+test('a path that looks like an option reaches the checker as a path', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'oasis-diag-opt-'));
+  await writeFile(path.join(root, 'package.json'), '{}');
+  await writeFile(path.join(root, '.oxlintrc.json'), '{}');
+  await mkdir(path.join(root, 'node_modules', '.bin'), { recursive: true });
+  const bin = path.join(root, 'node_modules', '.bin', 'oxlint');
+  await writeFile(bin, '#!/bin/sh\nfor a in "$@"; do echo "ARG[$a]"; done\n');
+  await chmod(bin, 0o755);
+  const result = await runDiagnostics(root, { checker: 'oxlint', paths: ['--config=evil.json', '-c'] }, { autoApprove: true, approval: async () => true });
+  const command = result.ran.map((entry) => entry.command).join(' ');
+  assert.match(command, /\.\/--config=evil\.json/);
+  assert.doesNotMatch(command, /(^|\s)--config=evil\.json/);
+  assert.doesNotMatch(command, /(^|\s)-c(\s|$)/);
+});
