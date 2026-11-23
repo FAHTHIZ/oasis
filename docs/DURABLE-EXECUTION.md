@@ -43,6 +43,10 @@ For each, it re-reads the probes and decides:
 
 The `Interrupted:` placeholders in the restored transcript are replaced with what was found, and the next turn starts with an `<in-doubt-actions>` note listing every such action and its state, so the model does not repeat what took effect and checks what cannot be told from the workspace.
 
+## Right after a failure
+
+The same checks run without a restart. When a journaled call fails (it threw, timed out or lost its connection) OASIS re-reads its probes and what the [effect contract](EFFECTS.md) saw change. If the targets show the call took effect, the error result carries `afterFailure` with the state (`applied`, `partial` or `changed`), the findings and the note "Check the result before repeating it; repeating may do it twice." A failure that changed nothing gets no note. The [reliability laboratory](RELIABILITY-LAB.md) found the case this closes: a command whose reply was lost after it appended to a file was repeated, so the line was written twice. `OASIS_AFTER_FAILURE_CHECK=0` turns the live check off.
+
 ## What it stores
 
 Digests, a short summary of each call (its command line or target path, 200 characters at most), the probe hashes and exit status. Never file contents, full arguments or results. Journals are compacted past 2 MB (unresolved intents are always kept) and removed after 14 days without a write.
