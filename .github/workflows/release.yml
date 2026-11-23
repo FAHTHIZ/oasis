@@ -52,6 +52,27 @@ jobs:
           mkdir -p release
           npm pack --pack-destination release
           ls -l release
+      - name: Check the tarball rebuilds byte for byte
+        # A second pack of the same commit must give the same digest; a
+        # difference means something nondeterministic entered the build.
+        run: |
+          set -euo pipefail
+          again="$(mktemp -d)"
+          npm pack --silent --pack-destination "$again" > /dev/null
+          first="$(sha256sum release/*.tgz | cut -d' ' -f1)"
+          second="$(sha256sum "$again"/*.tgz | cut -d' ' -f1)"
+          if [ "$first" != "$second" ]; then
+            echo "::error::npm pack is not reproducible: $first then $second"
+            exit 1
+          fi
+          echo "Reproducible tarball: sha256 $first"
+      - name: Write the CycloneDX SBOM and check it against node_modules
+        run: |
+          set -euo pipefail
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          version="$(node -p "require('./package.json').version")"
+          node scripts/sbom.mjs --out "release/oasis-oss-$version.cdx.json"
+          node scripts/sbom.mjs --check "release/oasis-oss-$version.cdx.json"
       - name: Smoke-test the packed CLI
         run: |
           set -euo pipefail
@@ -186,7 +207,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write # npm provenance
+      id-token: write # npm provenance and Sigstore-signed attestations
+      attestations: write # SLSA build provenance and SBOM attestations
     steps:
       - name: Check out the exact release source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -300,6 +322,26 @@ jobs:
           cd release-assets
           find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
           test -s SHA256SUMS
+      - name: Attest SLSA build provenance for every release asset
+        # Signed with a short-lived Sigstore certificate bound to this
+        # workflow run; check with `gh attestation verify FILE -R FAHTHIZ/oasis`.
+        if: steps.release-version.outputs.publish == 'true'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-checksums: release-assets/SHA256SUMS
+      - name: Find the npm tarball and its SBOM
+        if: steps.release-version.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "TARBALL=$(ls release-assets/*.tgz | head -1)" >> "$GITHUB_ENV"
+          echo "SBOM=$(ls release-assets/*.cdx.json | head -1)" >> "$GITHUB_ENV"
+      - name: Attest the SBOM for the npm tarball
+        if: steps.release-version.outputs.publish == 'true'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ env.TARBALL }}
+          sbom-path: ${{ env.SBOM }}
       - name: Publish GitHub release
         if: steps.release-version.outputs.publish == 'true'
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
