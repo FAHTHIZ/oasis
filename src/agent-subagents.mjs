@@ -26,6 +26,7 @@ import { resolveTeammateMode, openTeammatePane, mirrorToPane } from './teammate-
 import { handOffReport, reportPreview } from './report-handoff.mjs';
 import { isWorktreeBranchName } from './branch-names.mjs';
 import { loadAgentTranscript } from './sessions.mjs';
+import { compareWorld, driftNote, driftLines } from './world-drift.mjs';
 import { repairInterruptedHistory } from './tool-results.mjs';
 import { unsupportedChildClaim } from './claim-check.mjs';
 import { applyInjectionTaint, injectionTaint, judgedPathsFor, taintNotice } from './untrusted-content.mjs';
@@ -1285,7 +1286,13 @@ export async function runAgentTool(session, name, args, context, options) {
     const restoredMessages = [{ role: 'system', content: '' }, ...saved.messages];
     repairInterruptedHistory({ messages: restoredMessages });
     recordAgentEvent(session, 'agent.resume_requested', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: message });
-    const resumedPrompt = (record.status === 'interrupted' ? 'OASIS restarted while you were working, and your conversation was restored. Check the current state of the files before continuing (your last step may not have finished).\n\n' : '') + 'New message from the parent agent:\n' + message;
+    // The workspace may have moved while the agent was idle (other agents, the parent, the user).
+    let drift = null;
+    if (saved.world) {
+      drift = await compareWorld(saved.world, resumeWorktree ? resumeWorktree.path : session.root, { env: options.env || process.env, settings: session.settings || {} }).catch(() => null);
+      if (drift) recordAgentEvent(session, 'agent.world_drift', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: driftLines(drift).join(' ').slice(0, 500) });
+    }
+    const resumedPrompt = (drift ? driftNote(drift) + '\n\n' : '') + (record.status === 'interrupted' ? 'OASIS restarted while you were working, and your conversation was restored. Check the current state of the files before continuing (your last step may not have finished).\n\n' : '') + 'New message from the parent agent:\n' + message;
     return await runSubagent(session, { subagent_type: record.type, description: record.description, prompt: resumedPrompt, run_in_background: true, ...(saved.model && saved.model !== (session.config && session.config.model) ? { model: saved.model } : {}) }, context, { ...options, resumeAgent: { record, messages: restoredMessages.slice(1), worktree: resumeWorktree } });
   }
   if (!record.child) throw new Error('Agent ' + record.id + ' has no live worker process. Its saved status and report are available, but a runtime restart does not restore the original worker; launch a new task from its saved checkpoint instead.');

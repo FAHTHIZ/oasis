@@ -149,3 +149,38 @@ test('a worktree subagent is not resumed when its checkout was switched to anoth
   assert.match(toolResult + JSON.stringify(second.messages), /is on branch someone-else/);
   assert.notEqual(second.agentTasks.agents.get('agent_1').status, 'completed');
 });
+
+test('a resumed subagent is told which files it knew changed while it was idle', async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-trd-home-'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-trd-root-'));
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  await writeFile(path.join(root, 'notes.txt'), 'version one\n');
+  await writeFile(path.join(root, 'other.txt'), 'untouched\n');
+  const childPrompts = [];
+  const route = (payload) => {
+    if (isChild(payload)) {
+      const lastUserIndex = payload.messages.map((m) => m.role).lastIndexOf('user');
+      if (text(payload).includes('New message from the parent agent')) { childPrompts.push(lastUser(payload)); return { content: 'answered' }; }
+      if (!payload.messages.slice(lastUserIndex).some((m) => m.role === 'tool')) return { content: null, tool_calls: [call('r1', 'read_file', { path: 'notes.txt' })] };
+      return { content: 'read it' };
+    }
+    return router(payload);
+  };
+  const { config } = await scriptedModel(t, Array.from({ length: 12 }, () => route));
+  const first = await createSession({ root, config, permissionMode: 'default', env });
+  await runAgentTurn(first, 'start the worker', { env });
+  const saved = await saveSession(first, { env });
+  const transcript = await loadAgentTranscript(root, saved.id, 'agent_1', env);
+  assert.deepEqual(Object.keys(transcript.world.files), ['notes.txt'], 'the transcript records what the agent knew');
+
+  await writeFile(path.join(root, 'notes.txt'), 'version two, edited by someone else\n');
+  const second = await createSession({ root, config, restore: await loadSession(root, saved.id, { env }), permissionMode: 'default', env });
+  await runAgentTurn(second, 'ask the worker again', { env });
+  const again = second.agentTasks.agents.get('agent_1');
+  await again.promise;
+  assert.equal(again.status, 'completed', again.error || '');
+  assert.equal(childPrompts.length, 1);
+  assert.match(childPrompts[0], /<workspace-drift>.*Changed: notes\.txt\./s);
+  assert.doesNotMatch(childPrompts[0], /other\.txt/);
+  assert.match(childPrompts[0], /New message from the parent agent/);
+});

@@ -189,10 +189,12 @@ async function saveAgentTranscripts(session, id, env) {
     if (!list.length) continue;
     const signature = list.length + ':' + JSON.stringify(list[list.length - 1]).length;
     if (record.transcriptSignature === signature) { saved.add(record.id); continue; }
+    // What the agent's conversation knows of its workspace, so a later resume can tell it what moved.
+    const world = await captureWorld(record.child.root || session.root, list, { env, settings: session.settings || {} }).catch(() => null);
     let body = '';
     for (;;) {
       try { validateMessages([{ role: 'system', content: '' }, ...list]); } catch { list = []; }
-      body = JSON.stringify({ schemaVersion: 1, agentId: record.id, type: String(record.type || 'general-purpose').slice(0, 80), model: String(record.child.config && record.child.config.model || '').slice(0, 200), messages: list }) + '\n';
+      body = JSON.stringify({ schemaVersion: 1, agentId: record.id, type: String(record.type || 'general-purpose').slice(0, 80), model: String(record.child.config && record.child.config.model || '').slice(0, 200), messages: list, ...(world ? { world } : {}) }) + '\n';
       if (!list.length || Buffer.byteLength(body, 'utf8') <= MAX_TRANSCRIPT_BYTES) break;
       list = list.slice(Math.max(1, Math.floor(list.length / 4)));
       while (list.length && list[0].role !== 'user') list = list.slice(1);
@@ -220,7 +222,7 @@ export async function loadAgentTranscript(root, sessionId, agentId, env = proces
   if (!data || data.agentId !== agentId || !Array.isArray(data.messages) || !data.messages.length) throw new Error('Agent transcript is invalid.');
   validateMessages([{ role: 'system', content: '' }, ...data.messages]);
   if (data.messages.some((m) => m.role === 'system')) throw new Error('Agent transcript is invalid.');
-  return { type: String(data.type || ''), model: String(data.model || ''), messages: data.messages };
+  return { type: String(data.type || ''), model: String(data.model || ''), messages: data.messages, world: sanitizeWorld(data.world) };
 }
 
 // A saved transcript must not end with a tool call that has no result, or the

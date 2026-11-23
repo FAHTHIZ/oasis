@@ -6,6 +6,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Added
 
+- World drift now also covers chats that `/resume` a session (the reply says what moved) and subagents resumed from a saved transcript (the parent's message starts with a note naming the files that agent knew and that changed while it was idle). See [Continuity](docs/CONTINUITY.md#chats-and-subagents).
 - Three reliability-lab scenarios for command rehearsal: divergence reported, applied as shown, and a conflict during the prompt followed by a retry. See [Reliability laboratory](docs/RELIABILITY-LAB.md#scenarios).
 - "Apply the rehearsed changes only" in the terminal approval prompt for a rehearsed `run_command` or `run_shell`: lands exactly the files the rehearsal showed, after a conflict check, without running the command again. Offered only for a clean rehearsal (exit 0, changes inside the workspace, no `.git` changes) of a command that is not high-risk. See [Command rehearsal](docs/REHEARSAL.md#apply-the-rehearsal-instead-of-running-again).
 - Command rehearsal is on by default when the OS sandbox runs on bubblewrap. Under the sandbox it also hides that sandbox's own `denyRead` masks. `"rehearse"` and `"worldDrift"` in settings now take effect (they were dropped by the settings loader); a repository can turn rehearsal off but not on.

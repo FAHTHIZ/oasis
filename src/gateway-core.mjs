@@ -249,7 +249,7 @@ export function createChatCore(options = {}) {
     if (cmd === '/resume') {
       const current = chats.get(chatKey);
       if (current && current.controller) { await send(chatKey, 'Still working on the previous request. Send /stop first.'); return true; }
-      const { resumeCommand } = await import('./gateway-resume.mjs');
+      const { resumeCommand, resumeDriftText } = await import('./gateway-resume.mjs');
       const result = await resumeCommand(args, { root, env, sessions: deps.sessions && deps.sessions.listSessions ? deps.sessions : undefined, currentId: current && current.session.sessionId });
       if (result.restore) {
         const { createSession } = deps.agent || await import('./agent.mjs');
@@ -258,6 +258,7 @@ export function createChatCore(options = {}) {
         const session = await createSession({ root, config, env, restore: result.restore, permissionMode: options.permissionMode || null });
         session.headless = true;
         chats.set(chatKey, { session, controller: null });
+        if (session.worldDrift) result.text += '\n\n' + resumeDriftText(session.worldDrift);
       }
       await send(chatKey, result.text);
       return true;
