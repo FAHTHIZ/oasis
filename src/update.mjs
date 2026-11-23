@@ -5,6 +5,8 @@ import { promisify } from 'node:util';
 import { access, readFile } from 'node:fs/promises';
 import { fetchLatestRelease, resolveTagCommit } from './github-release.mjs';
 import { releaseTarballAssets } from './update-verify.mjs';
+import semverParse from 'semver/functions/parse.js';
+import semverCompare from 'semver/functions/compare.js';
 
 const execFileAsync = promisify(execFile);
 const UPDATE_REPO = 'FAHTHIZ/oasis';
@@ -81,9 +83,18 @@ export async function gitCommitsAheadOfRelease(installed, latest, options = {}) 
   return Number.isFinite(count) && count > 0 ? count : null;
 }
 
+// Whether an npm or Homebrew install already has a later version than the
+// release (for example one installed from main), so updating would downgrade it.
+function newerThanRelease(installed, latest) {
+  const mine = semverParse(String(installed.version || '').trim());
+  const theirs = semverParse(String(latest.tag || '').trim().replace(/^v/, ''));
+  return Boolean(mine && theirs && semverCompare(mine, theirs) > 0);
+}
+
 export function updatePlan(installed, latest) {
   if (installed.commit && installed.commit === latest.sha) return { upToDate: true };
   if (installed.kind === 'git' && installed.aheadOfRelease) return { upToDate: true, ahead: installed.aheadOfRelease };
+  if (installed.kind !== 'git' && newerThanRelease(installed, latest)) return { upToDate: true, newer: true };
   if (installed.kind === 'homebrew') {
     if (installed.version && 'v' + installed.version === latest.tag) return { upToDate: true };
     return { upToDate: false, steps: [{ command: 'brew', args: ['upgrade', 'fahthiz/oasis/oasis-cli'] }] };
@@ -114,6 +125,7 @@ export function describeUpdate(installed, latest, plan) {
     'Latest stable release: ' + latest.tag + ' (' + latest.sha.slice(0, 7) + ')' + (latest.message ? ' - ' + latest.message : '') + (latest.date ? ' (' + latest.date.slice(0, 10) + ')' : '')
   ];
   if (plan.ahead) lines.push('This checkout already includes ' + latest.tag + ' and is ' + plan.ahead + ' commit' + (plan.ahead === 1 ? '' : 's') + ' newer, so oasis update leaves it alone. To follow main, run: git -C ' + JSON.stringify(installed.root) + ' pull');
+  else if (plan.newer) lines.push('Installed v' + installed.version + ' is newer than ' + latest.tag + ', so oasis update leaves it alone instead of downgrading it.');
   else if (plan.upToDate) lines.push('Oasis is up to date.');
   else if (plan.blocked) lines.push(plan.blocked);
   else {
