@@ -229,6 +229,8 @@ export function classifySource(raw) {
       }
       return { kind: 'repo', url: url.origin + '/' + parts[0] + '/' + parts[1] + '.git', owner: parts[0], name: parts[1], ref, subdir, pick: fragmentIsRef ? '' : fragment, display: text };
     }
+    // An MCP Bundle download (.mcpb, or .dxt from before the rename).
+    if (/\.(mcpb|dxt)$/i.test(url.pathname)) return { kind: 'repo', archive: url.href, name: slug(decodeURIComponent(url.pathname.split('/').pop()).replace(/\.(mcpb|dxt)$/i, ''), 'bundle'), display: text };
     if (/\.zip$/i.test(url.pathname)) return { kind: 'zip', url: url.href, display: text };
     return { kind: 'remote-mcp', url: url.href, transport: /\/sse\/?$/i.test(url.pathname) ? 'sse' : 'http', name: slug(url.hostname.replace(/^(www|mcp|api)\./, '').split('.')[0], 'remote'), display: text };
   }
@@ -253,6 +255,12 @@ function runGit(args, options = {}) {
 }
 
 async function fetchRepository(source, options = {}) {
+  if (source.archive) {
+    const { fetchPluginArchive } = await import('./zip.mjs');
+    const dir = await fetchPluginArchive(source.archive, { fetchImpl: options.fetchImpl || globalThis.fetch, markers: ['manifest.json'] });
+    const top = path.basename(path.dirname(dir)).startsWith('oasis-plugin-url-') ? path.dirname(dir) : dir;
+    return { dir, cleanup: () => rm(top, { recursive: true, force: true }) };
+  }
   if (source.local) {
     const dir = path.resolve(options.root || process.cwd(), source.local);
     const info = await stat(dir).catch(() => null);
@@ -469,7 +477,7 @@ async function planAddon(raw, options = {}) {
   }
 
   // A repository or folder: look inside.
-  const fetched = await fetchRepository(source, { root, cloneImpl: options.cloneImpl });
+  const fetched = await fetchRepository(source, { root, cloneImpl: options.cloneImpl, fetchImpl: options.fetchImpl });
   let info;
   try { info = await inspectAddonDirectory(fetched.dir); } catch (error) { await fetched.cleanup(); throw error; }
   const repoLabel = source.owner ? source.owner + '/' + source.name : source.display;
