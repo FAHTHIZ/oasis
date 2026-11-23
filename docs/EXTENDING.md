@@ -102,7 +102,9 @@ Protections applied to every server:
 
 Filters, lazy start and long-running tools are in
 [Configuration](CONFIGURATION.md#mcp-tool-filters). `oasis mcp serve` exposes
-OASIS's own tools to other MCP clients.
+OASIS's own tools, its skills and every slash command it can read (as MCP
+prompts) to other MCP clients; see
+[Compatibility](COMPATIBILITY.md#using-everything-from-any-mcp-client).
 
 ## Connected apps
 
