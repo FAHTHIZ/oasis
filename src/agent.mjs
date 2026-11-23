@@ -41,7 +41,7 @@ import { redactAuditValue, runTool } from './tool-kernel.mjs';
 import { toResponsesRequest, toAnthropicRequest, chatCompletionTool } from './provider-requests.mjs';
 import { startHookWatchers, needsHookWatchers } from './file-watch.mjs';
 import { externalChangesReminder, markFileSeen, restoreFilesAfterCompaction } from './file-state.mjs';
-import { realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { BROWSER_TOOL_DEFINITION, closeBrowser } from './browser-tool.mjs';
 import { setComputerUse, closeComputerUse } from './computer-use.mjs';
 import { WORKFLOW_TOOL_DEFINITION } from './workflows.mjs';
@@ -1408,6 +1408,27 @@ export function repairToolName(name, known) {
   return name;
 }
 
+// Small models given /tmp/run/workspace write /tmp/run/sources/a.md: the
+// workspace folder's own name dropped. When that path does not exist and the
+// same path inside the workspace does, the call is rewritten to the relative
+// path before permissions, hooks and history see it, so the model reads what
+// it meant and learns the right form. Anything else is left to be refused.
+export function droppedWorkspaceFolderPath(root, rawPath) {
+  if (!root || typeof rawPath !== 'string' || !path.isAbsolute(rawPath) || rawPath.includes('\0')) return null;
+  let rootReal;
+  try { rootReal = realpathSync(root); } catch { return null; }
+  const target = path.resolve(rawPath);
+  const parent = path.dirname(rootReal);
+  if (parent === rootReal || !target.startsWith(parent + path.sep)) return null;
+  if (target === rootReal || target.startsWith(rootReal + path.sep)) return null;
+  const relative = path.relative(parent, target);
+  if (!relative || relative.split(path.sep).includes('..')) return null;
+  if (existsSync(target)) return null;
+  const candidate = path.join(rootReal, relative);
+  if (!candidate.startsWith(rootReal + path.sep) || !existsSync(candidate)) return null;
+  return relative.split(path.sep).join('/');
+}
+
 function normalizeAssistantToolCalls(session, assistant, step) {
   const repairs = { textCalls: 0, repairedArguments: 0, invalidArguments: 0 };
   const native = Array.isArray(assistant.tool_calls) ? assistant.tool_calls : [];
@@ -1471,6 +1492,14 @@ function normalizeAssistantToolCalls(session, assistant, step) {
       if (repaired || typeof raw !== 'string') {
         call.function.arguments = JSON.stringify(args);
         if (repaired) repairs.repairedArguments++;
+        for (const item of Array.isArray(assistant.responseItems) ? assistant.responseItems : []) {
+          if (item && item.type === 'function_call' && (item.call_id || item.id) === call.id) item.arguments = call.function.arguments;
+        }
+      }
+      const fixedPath = droppedWorkspaceFolderPath(session.root, args && args.path);
+      if (fixedPath) {
+        call.function.arguments = JSON.stringify({ ...args, path: fixedPath });
+        repairs.repairedPaths = (repairs.repairedPaths || 0) + 1;
         for (const item of Array.isArray(assistant.responseItems) ? assistant.responseItems : []) {
           if (item && item.type === 'function_call' && (item.call_id || item.id) === call.id) item.arguments = call.function.arguments;
         }
@@ -3981,7 +4010,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     }
     if (debugEnabled('raw')) debugLog('raw', 'model reply before cleanup: ' + JSON.stringify({ content: typeof assistant.content === 'string' ? assistant.content.slice(0, 4000) : assistant.content, tool_calls: assistant.tool_calls || [] }).slice(0, 6000));
     const toolCallRepairs = normalizeAssistantToolCalls(session, assistant, step);
-    if ((toolCallRepairs.textCalls || toolCallRepairs.repairedNames || toolCallRepairs.repairedArguments || toolCallRepairs.invalidArguments) && typeof options.onToolCallRepair === 'function') options.onToolCallRepair(toolCallRepairs);
+    if ((toolCallRepairs.textCalls || toolCallRepairs.repairedNames || toolCallRepairs.repairedArguments || toolCallRepairs.repairedPaths || toolCallRepairs.invalidArguments) && typeof options.onToolCallRepair === 'function') options.onToolCallRepair(toolCallRepairs);
     const assistantMessage = { role: 'assistant', content: assistant.content ?? null };
     // DeepSeek (thinking mode with tools) and Kimi return 400 unless every
     // later request replays the reasoning; other providers never see it.
