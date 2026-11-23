@@ -27,7 +27,7 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - Commit: `0a8b77f2`. Docs: [What `oasis update` checks](../RELEASES.md#what-oasis-update-checks).
 - Problem: `oasis update` installed whatever the network returned.
 - New: the update downloads the release's own npm tarball, checks its SHA-256 against `SHA256SUMS`, reads `package.json` from inside the tarball to refuse downgrades or substitutions, and verifies the SLSA provenance with `gh attestation verify` pinned to the release workflow, tag and commit. A failed check installs nothing.
-- Acceptance: `test/update-verify.test.mjs` (8 tests, including the real v1.8.0 tarball). Live check against v1.8.0: checksum matched; provenance reported `unavailable` in a sandbox where `gh` could not reach Sigstore, which is the documented outcome.
+- Acceptance: `test/update-verify.test.mjs` (8 tests, including the real v1.8.0 tarball, since renumbered 0.9.0). Live check against v1.8.0: checksum matched; provenance reported `unavailable` in a sandbox where `gh` could not reach Sigstore, which is the documented outcome.
 
 ### Verifier diversity
 

@@ -69,6 +69,24 @@ On an npm install, `oasis update` installs the release's own npm tarball (`oasis
 
 The update prints each result. `SHA256SUMS` comes from the same release, so on its own it catches corruption and truncation; the signed provenance is what ties the file to the release workflow. Releases made before attestations existed, or machines without `gh`, get the first two checks and a note that provenance was not verified. `OASIS_UPDATE_REQUIRE_PROVENANCE=1` refuses any update whose provenance could not be verified. Git checkouts update by fetching the tag and checking out its commit, and Homebrew installs go through `brew upgrade`, which checks the formula's own SHA-256.
 
+## Version numbers
+
+OASIS uses [semantic versioning](https://semver.org/) on a 0.x line: while the major number is 0, a minor release (0.10 to 0.11) may change commands, settings or the SDK, and the changelog says how. Patch releases (0.10.0 to 0.10.1) only fix things.
+
+The first fourteen releases were published as 1.0.0 through 1.8.0 before the project moved to 0.x. They are renumbered by moving the major number into the minor one, and the changelog lists each under its new number with the old one beside it:
+
+| Published as | Now |
+| --- | --- |
+| 1.0.0 | 0.1.0 |
+| 1.1.0, 1.1.1 | 0.2.0, 0.2.1 |
+| 1.2.0 ... 1.6.0 | 0.3.0 ... 0.7.0 |
+| 1.7.0, 1.7.1, 1.7.2 | 0.8.0, 0.8.1, 0.8.2 |
+| 1.8.0 | 0.9.0 |
+
+0.10.0 is the first release under the new numbers. Nothing needs to be done by hand: `oasis update`, the desktop app's update check and both install scripts read an installed or tagged 1.x version as its 0.x equivalent (`src/version-lineage.mjs`), so an install that still reports 1.8.0 is offered 0.10.0 instead of treating it as a downgrade. The old `v1.8.0` tag and release were removed so that tag-based installers cannot pick them.
+
+The 1.x major is retired. The release after the 0.x line will be 2.0.0, so a version that starts with 1 always means one of the old numbers.
+
 ## How releases are published
 
 `.github/workflows/release.yml`:

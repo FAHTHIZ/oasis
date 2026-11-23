@@ -66,7 +66,7 @@ test('Homebrew installs update through brew, never by rewriting the Cellar with 
   const plan = updatePlan(installed, { tag: 'v1.2.0', sha: 'b'.repeat(40) });
   assert.deepEqual(plan.steps, [{ command: 'brew', args: ['upgrade', 'fahthiz/oasis/oasis-cli'] }]);
   const text = describeUpdate(installed, { tag: 'v1.2.0', sha: 'b'.repeat(40) }, plan);
-  assert.match(text, /Installed: v1\.1\.0 \(homebrew install\)/);
+  assert.match(text, /Installed: v1\.1\.0 \(now numbered 0\.2\.0\) \(homebrew install\)/);
   assert.match(text, /brew "upgrade" "fahthiz\/oasis\/oasis-cli"/);
 });
 

@@ -7,7 +7,7 @@ performance claim.
 
 | Label | Meaning |
 | --- | --- |
-| **Stable** | In the latest release ([v1.8.0](https://github.com/FAHTHIZ/oasis/releases/latest)), covered by automated tests and exercised in live runs on Linux. |
+| **Stable** | In the latest release ([v0.10.0](https://github.com/FAHTHIZ/oasis/releases/latest)), covered by automated tests and exercised in live runs on Linux. |
 | **Released, lightly tested** | In the latest release and covered by unit or integration tests, but with few real-world hours. Expect rough edges. |
 | **Unreleased** | Merged on `main` and tested, but not in a tagged release yet. Install from source to use it. See [Unreleased in the changelog](../CHANGELOG.md#unreleased). |
 | **Experimental** | Works, but the interface or behaviour may change, or it depends on platform pieces OASIS cannot test in CI. |
@@ -29,37 +29,37 @@ performance claim.
 | Agent turn loop, tool calls, streaming, compaction, checkpoints and `/rewind` | Stable | [Architecture](ARCHITECTURE.md) |
 | Permission modes (`plan` … `dont-ask`), shell-command risk analysis, protected paths, secret scanning | Stable | [Security model](SECURITY.md) |
 | Verification gate: a reply that claims success without a reviewed diff or a passing check is sent back | Stable | [Architecture](ARCHITECTURE.md) |
-| `mutation_probe`: revert check and planted bugs on the changed lines show whether the tests catch a regression in the change | Unreleased | [User guide](USER-GUIDE.md#do-the-tests-catch-a-bug-in-the-change) |
-| `bisect_regression`: `git bisect` in an isolated worktree finds the first commit that broke a check, with endpoint checks and skip support | Unreleased | [User guide](USER-GUIDE.md#which-commit-broke-it) |
-| `flaky_check`: reruns a check (optionally several copies at once) to tell a reproducible failure from a flaky one, with error signatures and likely causes | Unreleased | [User guide](USER-GUIDE.md#is-the-failure-real) |
-| `minimize_repro`: delta debugging shrinks a failing input to the lines (or characters) that still reproduce the same failure | Unreleased | [User guide](USER-GUIDE.md#shrink-a-failing-input) |
-| `localize_fault`: spectrum-based fault localization (Ochiai over per-test line coverage) ranks the lines most likely to hold a bug | Unreleased | [User guide](USER-GUIDE.md#where-is-the-bug) |
+| `mutation_probe`: revert check and planted bugs on the changed lines show whether the tests catch a regression in the change | Released, lightly tested | [User guide](USER-GUIDE.md#do-the-tests-catch-a-bug-in-the-change) |
+| `bisect_regression`: `git bisect` in an isolated worktree finds the first commit that broke a check, with endpoint checks and skip support | Released, lightly tested | [User guide](USER-GUIDE.md#which-commit-broke-it) |
+| `flaky_check`: reruns a check (optionally several copies at once) to tell a reproducible failure from a flaky one, with error signatures and likely causes | Released, lightly tested | [User guide](USER-GUIDE.md#is-the-failure-real) |
+| `minimize_repro`: delta debugging shrinks a failing input to the lines (or characters) that still reproduce the same failure | Released, lightly tested | [User guide](USER-GUIDE.md#shrink-a-failing-input) |
+| `localize_fault`: spectrum-based fault localization (Ochiai over per-test line coverage) ranks the lines most likely to hold a bug | Released, lightly tested | [User guide](USER-GUIDE.md#where-is-the-bug) |
 | Evidence checks for research (cite only fetched pages) and analysis (numbers must come from code that ran) | Stable | [Agent network](AGENT-NETWORK.md#evidence-and-contracts) |
-| `/debate`: advocates argue assigned positions with quoted, fetched evidence over typed moves (challenge, concede, counter, withdraw); disputed points are fact-checked independently; a judge rules on the ledger with consensus, dissent and cruxes | Unreleased | [Workflows](WORKFLOWS.md#debate-a-contested-question) |
-| `/factcheck`: checkable claims from a text, file or page, each to an independent checker that may not use the original source as evidence, confident verdicts sent to an adversarial reviewer, verdict table with corrections and a weighted reliability score | Unreleased | [Workflows](WORKFLOWS.md#fact-check-a-text-file-or-page) |
-| `/diagnose`: root cause by competing hypotheses: blind proposers, one falsifier per hypothesis, every observation rated against all hypotheses, Bayesian ranking, a discriminating test when the leaders are close | Unreleased | [Workflows](WORKFLOWS.md#diagnose-a-problem) |
-| Workflow agents held to the report contracts: a rejected report is retried with the reasons, then fails; citations are checked against what the whole run fetched | Unreleased | [Agent network](AGENT-NETWORK.md#evidence-and-contracts) |
-| Contested findings: the knowledge board keeps disagreeing findings (different figures, negation, opposites) as a dispute instead of merging them, and reports open disputes to the parent | Unreleased | [Subagents](SUBAGENTS.md#disagreements) |
-| Source independence: syndicated copies and same-site pages count as one source when corroborating (`source_independence`, knowledge board, `deep-research`) | Unreleased | [Agent network](AGENT-NETWORK.md#source-independence) |
-| Quote-verified citations: direct quotes must appear on the fetched page they cite; `verify_quote` checks them first | Unreleased | [Agent network](AGENT-NETWORK.md#quote-checks) |
+| `/debate`: advocates argue assigned positions with quoted, fetched evidence over typed moves (challenge, concede, counter, withdraw); disputed points are fact-checked independently; a judge rules on the ledger with consensus, dissent and cruxes | Released, lightly tested | [Workflows](WORKFLOWS.md#debate-a-contested-question) |
+| `/factcheck`: checkable claims from a text, file or page, each to an independent checker that may not use the original source as evidence, confident verdicts sent to an adversarial reviewer, verdict table with corrections and a weighted reliability score | Released, lightly tested | [Workflows](WORKFLOWS.md#fact-check-a-text-file-or-page) |
+| `/diagnose`: root cause by competing hypotheses: blind proposers, one falsifier per hypothesis, every observation rated against all hypotheses, Bayesian ranking, a discriminating test when the leaders are close | Released, lightly tested | [Workflows](WORKFLOWS.md#diagnose-a-problem) |
+| Workflow agents held to the report contracts: a rejected report is retried with the reasons, then fails; citations are checked against what the whole run fetched | Released, lightly tested | [Agent network](AGENT-NETWORK.md#evidence-and-contracts) |
+| Contested findings: the knowledge board keeps disagreeing findings (different figures, negation, opposites) as a dispute instead of merging them, and reports open disputes to the parent | Released, lightly tested | [Subagents](SUBAGENTS.md#disagreements) |
+| Source independence: syndicated copies and same-site pages count as one source when corroborating (`source_independence`, knowledge board, `deep-research`) | Released, lightly tested | [Agent network](AGENT-NETWORK.md#source-independence) |
+| Quote-verified citations: direct quotes must appear on the fetched page they cite; `verify_quote` checks them first | Released, lightly tested | [Agent network](AGENT-NETWORK.md#quote-checks) |
 | Sessions, resume, fork, export (`/export`, HTML and Markdown) | Stable | [Terminal guide](TERMINAL.md) |
 | Memory across sessions, `session_search`, `/learning` skill proposals | Released, lightly tested | [Extending OASIS](EXTENDING.md) |
 | `/goal` (keep working until a condition holds), routines and schedules (`oasis schedule`) | Released, lightly tested | [User guide](USER-GUIDE.md) |
-| General-purpose system prompt with rules for research, data and writing deliverables | Unreleased | [Changelog](../CHANGELOG.md#unreleased) |
+| General-purpose system prompt with rules for research, data and writing deliverables | Released, lightly tested | [Changelog](../CHANGELOG.md#unreleased) |
 
 ## Tasks, outcomes and learning
 
 | Capability | Status | Where to read more |
 | --- | --- | --- |
-| Universal task model: every request read into one spec (intent, domains, risk, deliverables, acceptance criteria, autonomy) shared by delegation, verification and learning, with a verdict ladder from `failed` to `independently_verified` decided by tool results, not by the reply | Unreleased | [Task model](TASK-MODEL.md) |
-| Main-turn task gate: missing deliverables, broken length limits, uncited or unread sources and unsupported claims send the answer back once, then are named in it | Unreleased | [Task model](TASK-MODEL.md#the-task-gate) |
-| Claim ledger: each checkable statement typed by what backs it (observed, calculated, reported, inferred, unverified, contradicted), invalidated when its evidence changes | Unreleased | [Task model](TASK-MODEL.md#claims) |
-| Independent reviews count only for the files they saw; an edit after a review voids it, and a failed review rejects the work of the agent it judged | Unreleased | [Task model](TASK-MODEL.md#independent-reviews) |
-| Verifiable work receipts: a signed, hash-chained record of a run that anyone can check and replay | Unreleased | [Receipts](RECEIPTS.md) |
-| Memory kinds: instructions, decisions, facts, procedures, experience, hypotheses and references kept apart; a hypothesis never overwrites a fact | Unreleased | [Memory](MEMORY.md#kinds) |
-| Skill track records per skill version from checked outcomes; skill proposals refused while the task's checks are unmet, for every kind of work | Unreleased | [Extending OASIS](EXTENDING.md#skill-track-records), [User guide](USER-GUIDE.md) |
-| Capability routing classes for non-code work (data analysis, writing, research synthesis, planning, operations) | Unreleased, experimental | [Configuration](CONFIGURATION.md) |
-| Eval tasks beyond code (7 of 59), and a self-assessment score: how often OASIS's own verdict agrees with the hidden verifier, with overclaims counted | Unreleased | [Benchmarks](development/BENCHMARKS.md#non-code-eval-tasks) |
+| Universal task model: every request read into one spec (intent, domains, risk, deliverables, acceptance criteria, autonomy) shared by delegation, verification and learning, with a verdict ladder from `failed` to `independently_verified` decided by tool results, not by the reply | Released, lightly tested | [Task model](TASK-MODEL.md) |
+| Main-turn task gate: missing deliverables, broken length limits, uncited or unread sources and unsupported claims send the answer back once, then are named in it | Released, lightly tested | [Task model](TASK-MODEL.md#the-task-gate) |
+| Claim ledger: each checkable statement typed by what backs it (observed, calculated, reported, inferred, unverified, contradicted), invalidated when its evidence changes | Released, lightly tested | [Task model](TASK-MODEL.md#claims) |
+| Independent reviews count only for the files they saw; an edit after a review voids it, and a failed review rejects the work of the agent it judged | Released, lightly tested | [Task model](TASK-MODEL.md#independent-reviews) |
+| Verifiable work receipts: a signed, hash-chained record of a run that anyone can check and replay | Released, lightly tested | [Receipts](RECEIPTS.md) |
+| Memory kinds: instructions, decisions, facts, procedures, experience, hypotheses and references kept apart; a hypothesis never overwrites a fact | Released, lightly tested | [Memory](MEMORY.md#kinds) |
+| Skill track records per skill version from checked outcomes; skill proposals refused while the task's checks are unmet, for every kind of work | Released, lightly tested | [Extending OASIS](EXTENDING.md#skill-track-records), [User guide](USER-GUIDE.md) |
+| Capability routing classes for non-code work (data analysis, writing, research synthesis, planning, operations) | Experimental | [Configuration](CONFIGURATION.md) |
+| Eval tasks beyond code (7 of 59), and a self-assessment score: how often OASIS's own verdict agrees with the hidden verifier, with overclaims counted | Released, lightly tested | [Benchmarks](development/BENCHMARKS.md#non-code-eval-tasks) |
 
 ## Agent network
 
@@ -71,19 +71,19 @@ performance claim.
 | Scripted workflows (`workflow` tool, built-in `/audit` and `/deep-research`) | Released, lightly tested | [Subagents](SUBAGENTS.md) |
 | Research and analysis domain packs (`plugins/oasis-research`, `plugins/oasis-analysis`) | Released, lightly tested | [Extending OASIS](EXTENDING.md#domain-packs) |
 | Best-of-N attempts in parallel worktrees (`oasis attempts`) | Released, lightly tested | [User guide](USER-GUIDE.md#best-of-n-attempts) |
-| `mixture_of_agents`: ask several models the same question and merge the answers | Unreleased | [Changelog](../CHANGELOG.md#unreleased) |
-| Subagents with their own virtual desktop (`environment: "desktop"`) | Unreleased, experimental | [Computer use](COMPUTER_USE.md) |
-| Control room: every agent on this computer, its screen, history and spend | Unreleased | [Control room](CONTROL_ROOM.md) |
-| Agent experience: evidence-decided outcomes per run, recall of earlier runs, `oasis agents experience`, optional experience-based model routing | Unreleased | [Subagents](SUBAGENTS.md#experience) |
-| Calibrated confidence: findings on the knowledge board carry a stated confidence, are settled by corroboration, retraction or disputes, and are scored per model (Brier, reliability); readers see and search by the calibrated value, `oasis agents calibration` | Unreleased | [Subagents](SUBAGENTS.md#calibrated-confidence) |
-| Typed agent messages: `team_send_message` speech acts (request, propose, challenge, commit, answer, accept, reject) with tracked obligations, open threads in `team_status`, and lapse notices when an agent finishes without replying; a `commit` becomes a claimed task that delivery completes and a lapse reopens | Unreleased | [Subagents](SUBAGENTS.md#typed-messages-and-obligations) |
-| Coordinator sitrep: `team_status` ranks what needs attention (owed replies, failed workers, disputed findings, stalled threads, unsettled hypotheses) with a next action for each; new items reach the coordinator unprompted as one-time alerts | Unreleased | [Subagents](SUBAGENTS.md#coordinator-sitrep) |
-| Truth maintenance: findings name their premises (`builds_on`); retracting one marks every finding built on it as undermined, tells running authors, and down-ranks them in search | Unreleased | [Subagents](SUBAGENTS.md#truth-maintenance) |
-| Memory truth maintenance: memories saved from a finding are marked outdated when it is retracted and uncertain when a premise under it falls | Unreleased | [Subagents](SUBAGENTS.md#truth-maintenance) |
-| Competing hypotheses: a shared Analysis-of-Competing-Hypotheses matrix where agents rate evidence against every hypothesis; Bayesian posteriors weighted by grounding, source overlap, self-confirmation and each rater model's track record, "none of these" detection, next-test advice, and `plan`, which ranks candidate tests by expected information gain | Unreleased | [Subagents](SUBAGENTS.md#competing-hypotheses) |
-| Dissent gate: a final answer that picks one side of an open knowledge-board dispute or an unsettled hypotheses question without saying so is sent back once to report both sides, settle it, or state its confidence | Unreleased | [Subagents](SUBAGENTS.md#dissent-gate) |
-| Memory belief revision: contradicting saves replace the old statement and keep it in a revision history, supersede conflicting memories, need evidence to overturn a verified memory, flag flip-flops; `memory_save from_finding` saves a checked knowledge board finding with its provenance | Unreleased | [Memory](MEMORY.md#belief-revision) |
-| Shared knowledge board for the agents of a session (`knowledge_post`, `knowledge_search`), with posts checked against the poster's evidence | Unreleased | [Subagents](SUBAGENTS.md#shared-knowledge-board) |
+| `mixture_of_agents`: ask several models the same question and merge the answers | Released, lightly tested | [Changelog](../CHANGELOG.md#unreleased) |
+| Subagents with their own virtual desktop (`environment: "desktop"`) | Experimental | [Computer use](COMPUTER_USE.md) |
+| Control room: every agent on this computer, its screen, history and spend | Released, lightly tested | [Control room](CONTROL_ROOM.md) |
+| Agent experience: evidence-decided outcomes per run, recall of earlier runs, `oasis agents experience`, optional experience-based model routing | Released, lightly tested | [Subagents](SUBAGENTS.md#experience) |
+| Calibrated confidence: findings on the knowledge board carry a stated confidence, are settled by corroboration, retraction or disputes, and are scored per model (Brier, reliability); readers see and search by the calibrated value, `oasis agents calibration` | Released, lightly tested | [Subagents](SUBAGENTS.md#calibrated-confidence) |
+| Typed agent messages: `team_send_message` speech acts (request, propose, challenge, commit, answer, accept, reject) with tracked obligations, open threads in `team_status`, and lapse notices when an agent finishes without replying; a `commit` becomes a claimed task that delivery completes and a lapse reopens | Released, lightly tested | [Subagents](SUBAGENTS.md#typed-messages-and-obligations) |
+| Coordinator sitrep: `team_status` ranks what needs attention (owed replies, failed workers, disputed findings, stalled threads, unsettled hypotheses) with a next action for each; new items reach the coordinator unprompted as one-time alerts | Released, lightly tested | [Subagents](SUBAGENTS.md#coordinator-sitrep) |
+| Truth maintenance: findings name their premises (`builds_on`); retracting one marks every finding built on it as undermined, tells running authors, and down-ranks them in search | Released, lightly tested | [Subagents](SUBAGENTS.md#truth-maintenance) |
+| Memory truth maintenance: memories saved from a finding are marked outdated when it is retracted and uncertain when a premise under it falls | Released, lightly tested | [Subagents](SUBAGENTS.md#truth-maintenance) |
+| Competing hypotheses: a shared Analysis-of-Competing-Hypotheses matrix where agents rate evidence against every hypothesis; Bayesian posteriors weighted by grounding, source overlap, self-confirmation and each rater model's track record, "none of these" detection, next-test advice, and `plan`, which ranks candidate tests by expected information gain | Released, lightly tested | [Subagents](SUBAGENTS.md#competing-hypotheses) |
+| Dissent gate: a final answer that picks one side of an open knowledge-board dispute or an unsettled hypotheses question without saying so is sent back once to report both sides, settle it, or state its confidence | Released, lightly tested | [Subagents](SUBAGENTS.md#dissent-gate) |
+| Memory belief revision: contradicting saves replace the old statement and keep it in a revision history, supersede conflicting memories, need evidence to overturn a verified memory, flag flip-flops; `memory_save from_finding` saves a checked knowledge board finding with its provenance | Released, lightly tested | [Memory](MEMORY.md#belief-revision) |
+| Shared knowledge board for the agents of a session (`knowledge_post`, `knowledge_search`), with posts checked against the poster's evidence | Released, lightly tested | [Subagents](SUBAGENTS.md#shared-knowledge-board) |
 
 ## Interfaces
 
@@ -97,8 +97,8 @@ performance claim.
 | Node.js SDK (`src/sdk.mjs`), MCP server (`oasis mcp serve`) | Released, lightly tested | [Interfaces](INTERFACES.md) |
 | GitHub Action (`action.yml`) and cloud runs on GitHub Actions (`oasis cloud run`) | Released, lightly tested | [User guide](USER-GUIDE.md#cloud-agents-on-github-actions) |
 | Chat gateways: Telegram, Slack, Discord | Released, lightly tested | [Gateways](GATEWAYS.md) |
-| Chat gateways: WhatsApp, Mattermost, Matrix, Signal, email | Unreleased | [Gateways](GATEWAYS.md) |
-| A2A 1.0/0.3 server (`oasis a2a serve`) and `remote_agent` client | Unreleased | [A2A](A2A.md) |
+| Chat gateways: WhatsApp, Mattermost, Matrix, Signal, email | Released, lightly tested | [Gateways](GATEWAYS.md) |
+| A2A 1.0/0.3 server (`oasis a2a serve`) and `remote_agent` client | Released, lightly tested | [A2A](A2A.md) |
 
 ## Execution environments
 
@@ -108,9 +108,9 @@ performance claim.
 | bubblewrap (Linux) and Docker sandboxes | Stable | [Execution backends](EXECUTION-BACKENDS.md) |
 | macOS Seatbelt profile | Released; unit-tested only | [Execution backends](EXECUTION-BACKENDS.md) |
 | Podman, SSH remote machines | Released, lightly tested | [Execution backends](EXECUTION-BACKENDS.md) |
-| Daytona and Modal cloud sandboxes, Apptainer/Singularity, gVisor (`runsc`) runtime | Unreleased | [Execution backends](EXECUTION-BACKENDS.md) |
+| Daytona and Modal cloud sandboxes, Apptainer/Singularity, gVisor (`runsc`) runtime | Released, lightly tested | [Execution backends](EXECUTION-BACKENDS.md) |
 | Built-in Chrome browser tool over CDP (`--chrome`), with session recordings | Released, lightly tested | [User guide](USER-GUIDE.md) |
-| Desktop computer use (`--computer-use`) on Linux, macOS and Windows | Unreleased, experimental | [Computer use](COMPUTER_USE.md) |
+| Desktop computer use (`--computer-use`) on Linux, macOS and Windows | Experimental | [Computer use](COMPUTER_USE.md) |
 
 ## Models and integrations
 
@@ -123,8 +123,8 @@ performance claim.
 | 48 built-in app connectors with an in-chat Connect card | Released, lightly tested | [Extending OASIS](EXTENDING.md) |
 | Claude Code plugins, skills, hooks and settings; Codex plugins and Gemini CLI extensions converted on install | Stable for Claude Code plugins; others released, lightly tested | [Compatibility](COMPATIBILITY.md) |
 | `generate_image`, `text_to_speech` through OpenAI-compatible APIs | Released, lightly tested | [Configuration](CONFIGURATION.md) |
-| Honcho user modeling, Home Assistant tools, `/personality` | Unreleased | [Configuration](CONFIGURATION.md) |
-| Trajectory export for training (`--compress`, `--format hermes`) | Unreleased | [Compatibility](COMPATIBILITY.md#imports-and-data-formats) |
+| Honcho user modeling, Home Assistant tools, `/personality` | Released, lightly tested | [Configuration](CONFIGURATION.md) |
+| Trajectory export for training (`--compress`, `--format hermes`) | Released, lightly tested | [Compatibility](COMPATIBILITY.md#imports-and-data-formats) |
 
 ## Pending
 

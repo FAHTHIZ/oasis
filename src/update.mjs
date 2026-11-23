@@ -7,6 +7,7 @@ import { fetchLatestRelease, resolveTagCommit } from './github-release.mjs';
 import { releaseTarballAssets } from './update-verify.mjs';
 import semverParse from 'semver/functions/parse.js';
 import semverCompare from 'semver/functions/compare.js';
+import { canonicalVersion, describeVersion } from './version-lineage.mjs';
 
 const execFileAsync = promisify(execFile);
 const UPDATE_REPO = 'FAHTHIZ/oasis';
@@ -85,9 +86,11 @@ export async function gitCommitsAheadOfRelease(installed, latest, options = {}) 
 
 // Whether an npm or Homebrew install already has a later version than the
 // release (for example one installed from main), so updating would downgrade it.
+// Versions are compared in lineage order, so an install still on the retired
+// 1.x numbers (1.8.0 is 0.9.0) is older than every 0.10+ release, not newer.
 function newerThanRelease(installed, latest) {
-  const mine = semverParse(String(installed.version || '').trim());
-  const theirs = semverParse(String(latest.tag || '').trim().replace(/^v/, ''));
+  const mine = semverParse(canonicalVersion(String(installed.version || '').trim()));
+  const theirs = semverParse(canonicalVersion(String(latest.tag || '').trim().replace(/^v/, '')));
   return Boolean(mine && theirs && semverCompare(mine, theirs) > 0);
 }
 
@@ -121,7 +124,7 @@ export function updatePlan(installed, latest) {
 
 export function describeUpdate(installed, latest, plan) {
   const lines = [
-    'Installed: ' + (installed.commit ? installed.commit.slice(0, 7) : installed.version ? 'v' + installed.version : 'unknown commit') + ' (' + installed.kind + ' install)',
+    'Installed: ' + (installed.commit ? installed.commit.slice(0, 7) : installed.version ? 'v' + describeVersion(installed.version) : 'unknown commit') + ' (' + installed.kind + ' install)',
     'Latest stable release: ' + latest.tag + ' (' + latest.sha.slice(0, 7) + ')' + (latest.message ? ' - ' + latest.message : '') + (latest.date ? ' (' + latest.date.slice(0, 10) + ')' : '')
   ];
   if (plan.ahead) lines.push('This checkout already includes ' + latest.tag + ' and is ' + plan.ahead + ' commit' + (plan.ahead === 1 ? '' : 's') + ' newer, so oasis update leaves it alone. To follow main, run: git -C ' + JSON.stringify(installed.root) + ' pull');

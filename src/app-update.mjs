@@ -16,6 +16,7 @@ import { fetchLatestRelease, githubApiHeaders } from './github-release.mjs';
 import semverParse from 'semver/functions/parse.js';
 import semverCompare from 'semver/functions/compare.js';
 import { replaceFileDurably } from './atomic-write.mjs';
+import { canonicalVersion } from './version-lineage.mjs';
 const semver = { parse: semverParse, compare: semverCompare };
 
 const UPDATE_REPOSITORY = 'FAHTHIZ/oasis';
@@ -32,9 +33,11 @@ export function parseVersion(value) {
   return parsed ? { major: parsed.major, minor: parsed.minor, patch: parsed.patch, prerelease: parsed.prerelease.map(String) } : null;
 }
 
+// Compared in lineage order: the retired 1.x numbers read as their 0.x
+// equivalents (src/version-lineage.mjs), so an app still on 1.8.0 sees 0.10.0 as newer.
 export function compareVersions(a, b) {
-  const left = semver.parse(String(a || '').trim());
-  const right = semver.parse(String(b || '').trim());
+  const left = semver.parse(canonicalVersion(String(a || '').trim()));
+  const right = semver.parse(canonicalVersion(String(b || '').trim()));
   if (!left || !right) throw new Error('Cannot compare versions ' + JSON.stringify(a) + ' and ' + JSON.stringify(b) + '.');
   return semver.compare(left, right);
 }

@@ -1,7 +1,7 @@
 # Live run: non-code eval tasks on a 1.5B local model (23 November 2026)
 
 - Command: `OASIS_CONFIG_DIR=… node src/cli.mjs eval --task archive-old-logs,conflicting-sources-answer,meeting-action-items,project-schedule-plan,release-notes-brief,remove-hardcoded-key,sales-region-report --trials 1 --timeout-seconds 1500 --yes`
-- OASIS 1.8.0 at `8de92c59`, Node 22.21.1, Linux x64, 2 CPU cores, no GPU.
+- OASIS 0.9.0 (published as 1.8.0) at `8de92c59`, Node 22.21.1, Linux x64, 2 CPU cores, no GPU.
 - Model: `qwen2.5:1.5b` through Ollama 0.40.17 (OpenAI-compatible endpoint), 16,384-token window (`qwen2.5:1.5b-oasis`), `maxSteps` 30, permission mode auto. No API charge; hardware and power not counted.
 - One trial per task: a smoke test, not a score. Raw file: [results.json](results.json).
 
