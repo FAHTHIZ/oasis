@@ -179,7 +179,7 @@ async function fetchPinnedArchiveBytes(parsed, addresses, maxBytes, signal) {
 
 // --plugin-url URL: download an HTTP(S) plugin .zip for this session only and return the plugin root
 // (the directory with .claude-plugin/plugin.json, or the single top-level folder).
-export async function fetchPluginArchive(url, { fetchImpl = globalThis.fetch, tmpRoot = null, maxBytes = 100 * 1024 * 1024, lookupImpl = lookup } = {}) {
+export async function fetchPluginArchive(url, { fetchImpl = globalThis.fetch, tmpRoot = null, maxBytes = 100 * 1024 * 1024, lookupImpl = lookup, markers = null } = {}) {
   const { mkdtemp, readdir, stat } = await import('node:fs/promises');
   const os = await import('node:os');
   const limit = Number.isFinite(maxBytes) && maxBytes > 0 ? Math.min(maxBytes, 100 * 1024 * 1024) : 100 * 1024 * 1024;
@@ -239,7 +239,7 @@ export async function fetchPluginArchive(url, { fetchImpl = globalThis.fetch, tm
   try {
     await extractZip(buffer, dir);
     const isPlugin = async (candidate) => {
-      for (const marker of [path.join('.claude-plugin', 'plugin.json'), 'plugin.json', 'skills', 'commands', 'agents']) {
+      for (const marker of markers || [path.join('.claude-plugin', 'plugin.json'), 'plugin.json', 'skills', 'commands', 'agents']) {
         try { await stat(path.join(candidate, marker)); return true; } catch {}
       }
       return false;
