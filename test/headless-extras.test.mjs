@@ -229,3 +229,27 @@ test('deniedHint names the tool that was called and only offers rules that would
   assert.match(mixed, /--allowedTools "run_command\(npm test:\*\)"/);
   assert.match(mixed, /cannot pre-approve `echo x > y`/);
 });
+
+test('deniedHint does not suggest --yes for protected configuration files, which it cannot allow', async () => {
+  const { deniedHint } = await import('../src/headless.mjs');
+  const detail = 'Warning: write_file wants to change .husky/pre-commit, a protected configuration file — commit hooks run automatically on git commit. Allow this edit?';
+  const hint = deniedHint([{ tool_name: 'write_file', tool_input: { path: '.husky/pre-commit' }, detail }], { env: {} });
+  assert.match(hint, /write_file `\.husky\/pre-commit`/);
+  assert.match(hint, /asks even with --yes/);
+  assert.match(hint, /--allowedTools "write_file\(\.husky\/pre-commit\)"/);
+  assert.match(hint, /OASIS_ALLOW_CONFIG_EDITS=1/);
+  assert.doesNotMatch(hint, /--allowedTools, --yes/);
+  const mixed = deniedHint([{ tool_name: 'write_file', tool_input: { path: '.husky/pre-commit' }, detail }, { tool_name: 'web_fetch', tool_input: {}, detail: 'Allow?' }], { env: {} });
+  assert.match(mixed, /protected configuration file/);
+  assert.match(mixed, /--allowedTools, --yes or --permission-mode auto/, 'the other tool keeps its usual advice');
+});
+
+test('a rule naming any protected path counts as explicit approval, a broad rule does not', async () => {
+  const { ruleNamesProtectedPath, protectedConfigPath } = await import('../src/protected-paths.mjs');
+  const { PROTECTED_FILES, PROTECTED_DIRS } = await import('../src/sandbox.mjs');
+  for (const rel of [...PROTECTED_FILES, ...PROTECTED_DIRS.map((dir) => dir + '/x')]) {
+    if (protectedConfigPath('/r', rel)) assert.ok(ruleNamesProtectedPath('write_file(' + rel + ')'), rel);
+  }
+  assert.ok(ruleNamesProtectedPath('write_file(.agents/agents/**)'));
+  for (const rule of ['write_file(**)', 'write_file(*.json)', 'write_file(src/**)', 'write_file(../opencode.json)', 'write_file(/etc/opencode.json)']) assert.equal(ruleNamesProtectedPath(rule), false, rule);
+});

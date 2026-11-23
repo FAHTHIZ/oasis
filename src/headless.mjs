@@ -656,9 +656,19 @@ export function deniedHint(denied, { env = process.env } = {}) {
   const tools = [];
   const rules = [];
   const unrulable = [];
+  const protectedRules = [];
   let highRisk = false;
   for (const item of denied || []) {
     const input = item && item.tool_input;
+    // Protected configuration files ask in every mode but bypassPermissions, so
+    // --yes or --permission-mode auto would not help; only a rule naming the
+    // path (or OASIS_ALLOW_CONFIG_EDITS=1) does.
+    const protectedHit = String(item && item.detail || '').match(/ wants to change (.+?), a protected configuration file/);
+    if (protectedHit && item.tool_name) {
+      const rule = item.tool_name + '(' + protectedHit[1] + ')';
+      if (!protectedRules.includes(rule)) protectedRules.push(rule);
+      continue;
+    }
     if (input && typeof input.command === 'string' && (item.tool_name === 'run_command' || item.tool_name === 'run_shell')) {
       const line = [input.command].concat(Array.isArray(input.args) ? input.args : []).join(' ').trim();
       if (!line || commands.includes(line)) continue;
@@ -676,15 +686,22 @@ export function deniedHint(denied, { env = process.env } = {}) {
       if (works) { if (!rules.includes(rule)) rules.push(rule); if (risky) highRisk = true; } else unrulable.push(line);
     } else if (item && item.tool_name && !tools.includes(item.tool_name)) tools.push(item.tool_name);
   }
-  if (!commands.length && !tools.length) return '';
+  if (!commands.length && !tools.length && !protectedRules.length) return '';
   const shownRules = rules.slice(0, 3);
-  const head = '\nNot approved in this run (nobody can approve in -p mode): ' + [...commands.map((line) => '`' + line + '`'), ...tools].slice(0, 6).join(', ') + '.\n';
+  const head = '\nNot approved in this run (nobody can approve in -p mode): ' + [...commands.map((line) => '`' + line + '`'), ...tools, ...protectedRules.map((rule) => rule.replace(/\((.*)\)$/, ' `$1`'))].slice(0, 6).join(', ') + '.\n';
+  const protectedNote = protectedRules.length ? (protectedRules.length > 1 ? 'Those are protected configuration files, which ask' : 'That is a protected configuration file, which asks') +
+    ' even with --yes, --full-auto or --permission-mode auto. To allow next time: --allowedTools "' + protectedRules.slice(0, 3).join(',') + '" (a rule naming the path) or OASIS_ALLOW_CONFIG_EDITS=1.\n' : '';
+  if (!commands.length && !tools.length) return head + protectedNote;
+  return head + protectedNote + deniedAdvice({ tools, shownRules, unrulable, highRisk, env });
+}
+
+function deniedAdvice({ tools, shownRules, unrulable, highRisk, env }) {
   const noRule = unrulable.length ? 'A permission rule cannot pre-approve ' + unrulable.slice(0, 3).map((line) => '`' + line + '`').join(', ') +
     ' (shell redirects, substitutions or a high-risk shell line always need a person); run ' + (unrulable.length > 1 ? 'them' : 'it') + ' yourself, or ask for plain commands without shell syntax.\n' : '';
-  if (!shownRules.length) return head + noRule + (unrulable.length && !tools.length ? '' : 'To allow next time: --allowedTools, --yes or --permission-mode auto.\n');
+  if (!shownRules.length) return noRule + (unrulable.length && !tools.length ? '' : 'To allow next time: --allowedTools, --yes or --permission-mode auto.\n');
   // Inline code, wrappers and the like ask even with --full-auto or --yes; only an allow rule lets them run.
-  if (highRisk) return head + noRule + 'High-risk commands (inline code, wrappers and the like) always ask, even with --full-auto. To allow next time: --allowedTools "' + shownRules.join(',') + '".\n';
+  if (highRisk) return noRule + 'High-risk commands (inline code, wrappers and the like) always ask, even with --full-auto. To allow next time: --allowedTools "' + shownRules.join(',') + '".\n';
   // --full-auto sets OASIS_SANDBOX=1; suggesting it again would not help.
   const sandboxed = String(env.OASIS_SANDBOX || '') === '1';
-  return head + noRule + 'To allow next time: ' + (sandboxed ? '' : '--full-auto (edits plus commands inside the OS sandbox), ') + '--allowedTools "' + shownRules.join(',') + '", or --permission-mode auto.\n';
+  return noRule + 'To allow next time: ' + (sandboxed ? '' : '--full-auto (edits plus commands inside the OS sandbox), ') + '--allowedTools "' + shownRules.join(',') + '", or --permission-mode auto.\n';
 }
