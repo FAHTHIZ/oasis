@@ -50,6 +50,28 @@ install. Plugin installs use the same audit (see [Plugins](#plugins)).
 In a session, `/skills` lists them and `/skill-doctor` checks a skill's front
 matter and file references.
 
+### Skill track records
+
+A skill can't vouch for itself, and finishing a task while following it isn't
+success. When a turn ends, every skill loaded for that task is credited with the
+task's checked verdict ([Task model](TASK-MODEL.md#outcomes)): `verified` and
+`independently_verified` count as successes; `rejected`, `failed` and
+`incomplete` count as failures; `unverified`, `evidenced` and `cancelled` teach
+nothing and are counted apart. Records are kept per version of the skill (a
+digest of its text), so editing a skill starts a fresh record and the old one is
+kept for comparison.
+
+When the skill is loaded again, its record comes with the instructions as
+`trackRecord`: how many decisive tasks that followed this version were verified,
+how many failed, and the last failure's reason. A version that fails more often
+than not (at least three decisive runs), or whose last three decisive runs all
+failed, is flagged, and the model is told to check each step against the task
+rather than trust it. `/skills record` lists every skill's record.
+
+Records live in `<config>/skill-record.json` (mode 0600) and hold only skill
+names, digests, verdicts, a short reason and an opaque project key. Set
+`OASIS_SKILL_RECORD=0` or `"skillRecord": false` to turn them off.
+
 ## MCP servers
 
 Stdio, streamable HTTP and SSE servers are supported, with OAuth sign-in,

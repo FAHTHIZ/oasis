@@ -463,6 +463,8 @@ export async function loadSettings(root, options = {}) {
     if (settings.compactionReflection === false) result.compactionReflection = false;
     // Agent experience recall and track record (src/agent-experience.mjs); turning it off never loosens anything.
     if (settings.agentExperience === false) result.agentExperience = false;
+    // Skill track records (src/skill-record.mjs); off never loosens anything.
+    if (settings.skillRecord === false) result.skillRecord = false;
     // The confidence calibration ledger (src/calibration.mjs); off never loosens anything.
     if (settings.calibration === false) result.calibration = false;
     // The task contract and its completion gate (src/task-model.mjs). Off
@@ -492,7 +494,7 @@ export async function loadSettings(root, options = {}) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.subagentStatusLine || settings.fileSuggestion || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
       // Any other key is also skipped until trust; say so instead of dropping it silently.
-      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'personality', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'compactionReflection', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions', 'alwaysThinkingEnabled', 'skillOverrides', 'disableBundledSkills', 'disableSkillShellExecution', 'spinnerVerbs']);
+      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'personality', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'skillRecord', 'compactionReflection', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions', 'alwaysThinkingEnabled', 'skillOverrides', 'disableBundledSkills', 'disableSkillShellExecution', 'spinnerVerbs']);
       const skipped = Object.keys(settings).filter((key) => !untrustedSafe.has(key));
       if (loosening || skipped.length) result.ignoredUntrusted.push(file);
       return;
