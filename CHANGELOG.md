@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Added
 
+- Factory droids in `.factory/droids/` and `~/.factory/droids/` are subagents for the task tool, with Droid tool categories and IDs as tool limits.
 - Factory Droid hooks run live: `~/.factory/hooks.json`, `.factory/hooks.json` (trusted workspace), the legacy `.factory/hooks/hooks.json` and `settings.json` hooks, with Droid matchers (`Execute`, `Create`, `ApplyPatch`) read as OASIS tools and Droid tool names shown to the hook. Imported Factory plugin hooks get the same bridge.
 - Factory Droid plugins (`.factory-plugin/`) install with `oasis add`: droids become agents with their tool lists, `mcp.json` servers load, and hooks run with Droid tool names (`Execute`, `Create`) and `${DROID_PLUGIN_ROOT}` translated.
 - VS Code custom agents installed from a config pack keep their tool lists: `search`, `editFiles`, `runCommands`, `fetch` and the rest become Claude Code `tools:` (before, the agent got every tool).
