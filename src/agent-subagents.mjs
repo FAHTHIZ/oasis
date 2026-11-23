@@ -6,7 +6,7 @@ import { TOOL_DEFINITIONS } from './tools.mjs';
 import { COMPUTER_TOOL_DEFINITION } from './computer-use.mjs';
 import { BROWSER_TOOL_DEFINITION } from './browser-tool.mjs';
 import { BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS } from './subagents.mjs';
-import { stopAgent, notifyParent, getAgentTeam, AGENT_TOOL_NAMES, agentRegistry, runningBackgroundCount, MAX_BACKGROUND_AGENTS, registerAgent, addAgentUsage, stopDescendants, releaseAgentEnvironment, recordAgentEvent, agentStatus, neuronNetworkSnapshot, agentEvents, createAgentTeam, agentTeamStatus, shutdownAgentTeam, sendTeamMessage, getAgent } from './agent-tasks.mjs';
+import { stopAgent, notifyParent, getAgentTeam, AGENT_TOOL_NAMES, agentRegistry, runningBackgroundCount, MAX_BACKGROUND_AGENTS, registerAgent, addAgentUsage, stopDescendants, releaseAgentEnvironment, recordAgentEvent, agentStatus, neuronNetworkSnapshot, agentEvents, createAgentTeam, agentTeamStatus, shutdownAgentTeam, sendTeamMessage, getAgent, lapseAgentDialogue } from './agent-tasks.mjs';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { atomicWriteFile } from './atomic-write.mjs';
@@ -726,6 +726,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     record.tokensUsed += runTokens;
     record.finishedAt = Date.now();
     record.status = record.stalled ? 'stalled' : record.cancelRequested || error.name === 'AbortError' ? 'cancelled' : 'failed';
+    try { lapseAgentDialogue(parent, record); } catch {}
     stopDescendants(parent, record, 'the agent that started it ' + (record.status === 'cancelled' ? 'was stopped' : record.status === 'stalled' ? 'stalled' : 'failed'));
     record.error = record.stalled ? record.stalled : error.message;
     if (record.stalled) {
@@ -756,6 +757,8 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   record.status = 'completed';
   // Background agents it started and did not wait for would report to a finished conversation.
   const orphans = stopDescendants(parent, record, 'the agent that started it finished without waiting for it');
+  // Team-dialogue obligations it never discharged (src/agent-dialogue.mjs).
+  const lapsedThreads = lapseAgentDialogue(parent, record);
   recordAgentEvent(parent, 'agent.completed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: 'tool_calls=' + Math.max(0, Number(outcome.toolCalls) || 0) });
   record.report = boundSubagentReport(outcome.text);
   record.injectionTaint = injectionTaint(child, 'agent ' + record.id);
@@ -791,6 +794,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     ...(orphans.length ? { stopped_unfinished_agents: orphans, note_on_agents: 'This agent finished while agents it had started were still running; they were stopped. Ask it (send_message) to wait for them with agent_status if their results are needed.' } : {}),
     ...(record.verificationIssues && record.verificationIssues.length ? { report_status: 'rejected', verification_issues: record.verificationIssues.map(({ domain, reason }) => ({ domain, reason })), note_on_rejection: 'OASIS rejected parts of this report: ' + record.verificationIssues.map((issue) => issue.reason).join('; ') + '. Do not repeat those claims as facts; check them yourself or ask the agent (send_message) to produce the evidence.' } : {}),
     ...(disputes.length ? { knowledge_conflicts: disputes, note_on_conflicts: 'Findings on the knowledge board disagree (' + disputes.map((item) => item.findings.join(' vs ')).join('; ') + '). Do not pick one silently: check the sources yourself or start a fact-checker agent, then retract the wrong finding with knowledge_post retract, or report both sides.' } : {}),
+    ...(lapsedThreads.length ? { open_obligations: lapsedThreads, note_on_obligations: 'This agent finished with team-dialogue obligations it never discharged: ' + lapsedThreads.map((item) => item.id + ' (' + item.act + ' ' + item.from + ' → ' + item.to + ')').join('; ') + '. Agents still waiting were told the thread lapsed; settle these yourself or ask the agent (send_message).' } : {}),
     ...(record.injectionTaint ? { untrusted_input: taintNotice(record.injectionTaint) } : {}),
     ...(record.unverifiedClaim ? { unverified_claim: record.unverifiedClaim, note_on_report: 'OASIS did not observe a passing check behind this report (' + record.unverifiedClaim + '). Treat its test or build results as unverified; run the check yourself before relying on it.' } : {}),
     ...(outcome.limitReached ? { partial: true, note: 'The agent hit its ' + (record.maxTurns ? 'maxTurns (' + record.maxTurns + ')' : 'step') + ' limit; the report may be incomplete. send_message resumes it.' } : {}),
