@@ -27,3 +27,12 @@ test('preview proxy: only a dev app posting to its own port loses its Origin', a
   await fetch(url);
   assert.deepEqual(seen, ['null', 'null', 'null', undefined, undefined]);
 });
+
+test('a malformed percent escape in a preview path is a 400, not a server error', async () => {
+  const handler = createPreviewHandler({ getRoot: () => process.cwd() });
+  const res = { writeHead(status, headers) { this.status = status; this.headers = headers; }, end() { this.ended = true; } };
+  const handled = await handler.handle({ method: 'GET', headers: {} }, res, new URL('http://127.0.0.1' + handler.base(null) + '%E0%A4%A'));
+  assert.equal(handled, true);
+  assert.equal(res.status, 400);
+  assert.match(res.headers['content-security-policy'], /^sandbox /);
+});

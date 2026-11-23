@@ -89,7 +89,9 @@ export function createPreviewHandler({ getRoot, loopbackOnly = true, ownPort = (
 
   async function serveFile(req, res, rest) {
     const headers = baseHeaders(loopbackOnly);
-    let rel = decodeURIComponent(rest || '');
+    let rel;
+    // A malformed escape ("%E0%A4%A") is a bad request, not a server error.
+    try { rel = decodeURIComponent(rest || ''); } catch { res.writeHead(400, { ...headers, 'content-type': 'text/plain; charset=utf-8' }); res.end('Bad preview path.'); return; }
     if (!rel || rel.endsWith('/')) rel += 'index.html';
     if (protectedPreviewPath(rel)) { res.writeHead(403, { ...headers, 'content-type': 'text/plain; charset=utf-8' }); res.end('This path is protected.'); return; }
     let target;
