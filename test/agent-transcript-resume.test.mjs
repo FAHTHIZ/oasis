@@ -184,3 +184,23 @@ test('a resumed subagent is told which files it knew changed while it was idle',
   assert.doesNotMatch(childPrompts[0], /other\.txt/);
   assert.match(childPrompts[0], /New message from the parent agent/);
 });
+
+test('a save that forks to a new session id still writes the agent transcripts there', async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-tr-home-'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-tr-root-'));
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  const { config } = await scriptedModel(t, Array.from({ length: 6 }, () => router));
+  const session = await createSession({ root, config, permissionMode: 'default', env });
+  await runAgentTurn(session, 'start the worker', { env });
+  const saved = await saveSession(session, { env });
+  // Another process saves the same session meanwhile.
+  const { readFile } = await import('node:fs/promises');
+  const file = path.join(path.dirname(agentTranscriptPath(root, saved.id, 'agent_1', env)), '..', saved.id + '.json');
+  const data = JSON.parse(await readFile(file, 'utf8'));
+  data.updatedAt = new Date(Date.now() + 1000).toISOString();
+  await writeFile(file, JSON.stringify(data, null, 2) + '\n');
+  const forked = await saveSession(session, { env });
+  assert.equal(forked.forkedFrom, saved.id);
+  const transcript = await loadAgentTranscript(root, forked.id, 'agent_1', env);
+  assert.ok(JSON.stringify(transcript.messages).includes('SECRET-FACT-42'));
+});
