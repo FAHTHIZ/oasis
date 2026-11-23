@@ -389,7 +389,7 @@ export async function runGateway(args = [], options = {}) {
   const kind = String(args[0] || '').toLowerCase();
   if (['pair', 'paired', 'unpair'].includes(kind)) {
     const { pairingCommand } = await import('./gateway-pairing.mjs');
-    (options.stdout || process.stdout).write(pairingCommand([kind, ...args.slice(1)], { root: options.root }) + '\n');
+    (options.stdout || process.stdout).write(pairingCommand([kind, ...args.slice(1)], { root: options.root, env: options.env || process.env }) + '\n');
     return;
   }
   const gateway = kind === 'all' ? await createAllGateways(options) : await createGateway(kind, options);

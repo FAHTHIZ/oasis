@@ -25,7 +25,7 @@ oasis gateway paired             # who is paired, and who is waiting
 oasis gateway unpair discord:1234567890
 ```
 
-Codes expire after an hour and are tied to the platform and ID that asked for them, so a code from Slack cannot approve a Telegram chat. Approvals are stored per workspace in `.oasis/gateway/pairing.json` (mode 600) and take effect immediately, without a restart. With pairing on, the `ALLOWED_*` variables become optional for Telegram, Discord, Slack, Matrix, Signal, WhatsApp and Mattermost; they still work and are checked first. Email always needs `OASIS_EMAIL_ALLOWED_SENDERS`, because replying with codes to unknown senders would turn the bot into a spam source.
+Codes expire after an hour and are tied to the platform and ID that asked for them, so a code from Slack cannot approve a Telegram chat. Approvals are stored per workspace in your own OASIS config folder (`gateway/pairing/<workspace hash>.json`, mode 600) and take effect immediately, without a restart. They are kept out of the workspace so that a cloned repository, or a file edit by the model, cannot add someone. Older versions kept them in the workspace's `.oasis/gateway/pairing.json`. That file is no longer read, and `oasis gateway paired` lists the IDs in it so you can pair them again. With pairing on, the `ALLOWED_*` variables become optional for Telegram, Discord, Slack, Matrix, Signal, WhatsApp and Mattermost; they still work and are checked first. Email always needs `OASIS_EMAIL_ALLOWED_SENDERS`, because replying with codes to unknown senders would turn the bot into a spam source.
 
 Set `OASIS_GATEWAY_PAIRING=0` to turn pairing off: strangers then only see their ID, and every gateway requires its allowlist again.
 
