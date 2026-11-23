@@ -150,6 +150,17 @@ A finding that disagrees with another agent's finding is never merged into it. W
 
 Both sides of a dispute show `contested_by` (with the detected reason, such as `500 vs 1000`) in `knowledge_search`, `status: "contested"` lists them, and a subagent's starting prompt marks them `CONTESTED by k_N`, so nobody builds on one side without knowing. A subagent whose posts opened or joined a dispute returns `knowledge_conflicts` in its result, and the parent is asked to check the sources or start a fact-checker rather than pick one silently. Retracting either side (by its author or the main agent) resolves the dispute. Test: `test/claim-conflict.test.mjs`.
 
+### Truth maintenance
+
+A conclusion is only as good as the findings it was drawn from. `knowledge_post` takes `builds_on: ["k_1", "k_4"]` to name them. When one of those premises is retracted, every live finding that builds on it, directly or through a chain, is undermined:
+
+- `knowledge_search` shows it with `undermined: "Rests on k_1 (via k_2), retracted by agent_1: <reason>. Re-check it before relying on it..."`, and `status: "undermined"` lists them all.
+- Search ranks it at half weight.
+- Its author, if still running, gets a message at its next step naming the premise that fell.
+- The retraction result lists what it `undermines`, and the coordinator's sitrep (and its alerts) shows each one.
+
+An undermined finding is not deleted, because it may stand on other grounds. Its author retracts it or posts it again with evidence of its own. A premise that is only contested marks the conclusion with `premise_contested`. It is computed from the links each time, so it is never stale, and it survives a session save. This is a justification-based truth maintenance system (Doyle, 1979) shared across agents. Test: `test/knowledge-truth-maintenance.test.mjs`.
+
 ### Calibrated confidence
 
 `knowledge_post` takes an optional `confidence` (0 to 1, or a percentage). OASIS keeps score of it. A finding is settled by what happens to it on the board, never by its author saying so:
@@ -233,6 +244,7 @@ A coordinator's state is spread over the agent registry, the message threads, th
 | 1 | `failed_agent`: a worker failed or stalled, with its error | read `agent_status`, then retry, reassign or do it yourself |
 | 1 | `missing_hypothesis`: "none of these" leads an open question | add the missing explanation |
 | 2 | `orphaned_promise`: an agent finished without delivering a commit, so its task is unowned | assign the task, or tell the agent waiting for it |
+| 2 | `undermined`: a finding builds on one that was since retracted | have it re-checked; do not report it as fact meanwhile |
 | 2 | `dispute`: two live findings contradict each other | check both against their sources and retract the wrong one |
 | 2 | `stalled_thread`: a reply owed for over 5 minutes while its owner keeps running | nudge the owner, or answer it |
 | 2 | `thin_lead`: a hypothesis leads on one agent's evidence or one source | get an independent check |
@@ -240,7 +252,7 @@ A coordinator's state is spread over the agent registry, the message threads, th
 
 A worker that calls `team_status` gets the same view with itself as the caller, so its own owed replies come first. The `summary` line counts running, finished and failed agents, open threads, disputes and open questions; at most 12 items are listed.
 
-The coordinator does not have to poll for this. Before each of its model steps, new items of the kinds that need it (a dispute between workers, an orphaned promise, "none of these" leading, a stalled thread, a reply it owes) arrive once as a short `OASIS sitrep` reminder with the next action. Failed workers are left out because their failure notice already arrives, and so are disputes the coordinator took part in, since `knowledge_post` already reported them. `OASIS_SITREP_ALERTS=0` turns the reminders off. Test: `test/team-sitrep.test.mjs`.
+The coordinator does not have to poll for this. Before each of its model steps, new items of the kinds that need it (a dispute between workers, an undermined finding, an orphaned promise, "none of these" leading, a stalled thread, a reply it owes) arrive once as a short `OASIS sitrep` reminder with the next action. Failed workers are left out because their failure notice already arrives, and so are disputes the coordinator took part in, since `knowledge_post` already reported them. `OASIS_SITREP_ALERTS=0` turns the reminders off. Test: `test/team-sitrep.test.mjs`.
 
 ## Safety boundaries
 

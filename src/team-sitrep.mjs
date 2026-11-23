@@ -9,7 +9,8 @@
 //
 //   1  act now     a request or challenge addressed to you, a failed worker,
 //                  "none of these" leading a question
-//   2  unblock     a dispute between findings, a thread stalled for minutes
+//   2  unblock     a dispute between findings, a finding whose premise was
+//                  retracted (undermined), a thread stalled for minutes
 //                  while its owner keeps running, a promise whose author
 //                  finished without delivering it (now an unowned task), a question whose leader
 //                  rests on one agent's evidence
@@ -20,7 +21,7 @@
 // pass the registry, board and clock.
 
 import { openThreads } from './agent-dialogue.mjs';
-import { openConflicts } from './knowledge-board.mjs';
+import { openConflicts, underminedFindings } from './knowledge-board.mjs';
 import { questionView } from './hypothesis-board.mjs';
 
 const STALL_SECONDS = 300;
@@ -65,6 +66,10 @@ export function buildSitrep({ registry, board, tasks = null, self = 'main', now 
     items.push({ priority: 2, kind: 'dispute', ref: a + '|' + b, authors: conflict.authors, what: a + ' (' + conflict.authors[0] + ': "' + clip(conflict.claims[0], 90) + '") contradicts ' + b + ' (' + conflict.authors[1] + ': "' + clip(conflict.claims[1], 90) + '")' + (conflict.reason ? ' [' + clip(conflict.reason, 60) + ']' : ''), do: 'Check both against their sources and retract the wrong one, or open it on the hypotheses matrix if more evidence is needed. Do not report either as fact until settled.' });
   }
 
+  for (const { entry, fallen } of board ? underminedFindings(board) : []) {
+    items.push({ priority: 2, kind: 'undermined', ref: entry.id, what: entry.id + ' (' + entry.author + ': "' + clip(entry.claim, 90) + '") builds on ' + fallen.map((item) => item.id).join(', ') + ', since retracted.', do: 'Have ' + entry.author + ' (or someone) re-check ' + entry.id + ' and retract it or re-post it on its own evidence; do not report it as fact meanwhile.' });
+  }
+
   const questions = board && board.hypotheses && Array.isArray(board.hypotheses.questions) ? board.hypotheses.questions : [];
   for (const question of questions) {
     if (question.resolved) continue;
@@ -107,7 +112,7 @@ export function buildSitrep({ registry, board, tasks = null, self = 'main', now 
 // that it has not been told about yet are delivered once as a short
 // reminder. Failed workers are left out: their failure notice already
 // arrives. OASIS_SITREP_ALERTS=0 turns this off.
-const ALERT_KINDS = new Set(['dispute', 'orphaned_promise', 'missing_hypothesis', 'stalled_thread', 'owed_by_you']);
+const ALERT_KINDS = new Set(['dispute', 'undermined', 'orphaned_promise', 'missing_hypothesis', 'stalled_thread', 'owed_by_you']);
 const MAX_ALERTED = 500;
 
 export function sitrepAlertsEnabled(env = process.env) {
