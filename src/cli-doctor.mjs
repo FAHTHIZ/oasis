@@ -154,6 +154,9 @@ export async function updateOasis(args = [], { ask } = {}) {
       '  --check   Show the installed and latest versions without changing anything.',
       '  --yes     Install without asking first.',
       '',
+      'npm installs get the release\'s own tarball, checked against SHA256SUMS, its package',
+      'version and (with gh) its signed provenance before it is installed.',
+      'OASIS_UPDATE_REQUIRE_PROVENANCE=1 refuses an update whose provenance is not verified.',
       'The web workspace shows a notice when a new version is out.',
       'Set OASIS_NO_UPDATE_CHECK=1 to turn off update notices.',
       'If GitHub rate-limits the API, OASIS reads the release from github.com instead;',
@@ -188,14 +191,27 @@ export async function updateOasis(args = [], { ask } = {}) {
     const answer = (await ask('Install the update now? [y/N] ')).trim().toLowerCase();
     if (!['y', 'yes'].includes(answer)) { stdout.write('Update skipped.\n'); return; }
   }
+  let verified = null;
+  if (plan.verified) {
+    const { downloadVerifiedRelease } = await import('./update-verify.mjs');
+    try { verified = await downloadVerifiedRelease(latest, { log: (line) => stdout.write(line + '\n') }); }
+    catch (error) { stderr.write('Update refused: ' + error.message + '\n'); process.exitCode = 1; return; }
+    for (const note of verified.notes) stdout.write(note + '\n');
+  }
+  const { VERIFIED_TARBALL } = await import('./update.mjs');
   const { spawnSync } = await import('node:child_process');
-  for (const step of plan.steps || []) {
-    const result = spawnSync(step.command, step.args, { stdio: 'inherit', shell: process.platform === 'win32' });
-    if (result.status !== 0) {
-      stderr.write('The update command failed (exit ' + result.status + ').\n');
-      process.exitCode = 1;
-      return;
+  try {
+    for (const step of plan.steps || []) {
+      const args = step.args.map((arg) => arg === VERIFIED_TARBALL ? verified.file : arg);
+      const result = spawnSync(step.command, args, { stdio: 'inherit', shell: process.platform === 'win32' });
+      if (result.status !== 0) {
+        stderr.write('The update command failed (exit ' + result.status + ').\n');
+        process.exitCode = 1;
+        return;
+      }
     }
+  } finally {
+    if (verified) { const { rm } = await import('node:fs/promises'); await rm(verified.dir, { recursive: true, force: true }).catch(() => {}); }
   }
   stdout.write('Oasis updated to ' + latest.tag + ' (' + latest.sha.slice(0, 7) + '). Restart any running oasis sessions.\n');
 }

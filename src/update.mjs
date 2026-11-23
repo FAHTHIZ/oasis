@@ -4,10 +4,13 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { access, readFile } from 'node:fs/promises';
 import { fetchLatestRelease, resolveTagCommit } from './github-release.mjs';
+import { releaseTarballAssets } from './update-verify.mjs';
 
 const execFileAsync = promisify(execFile);
 const UPDATE_REPO = 'FAHTHIZ/oasis';
 export const INSTALL_SPEC = 'https://github.com/FAHTHIZ/oasis/archive/';
+// Stands in for the verified local tarball path in a plan's npm step.
+export const VERIFIED_TARBALL = '<verified release tarball>';
 
 async function run(command, args, options = {}) {
   const { stdout } = await execFileAsync(command, args, { timeout: options.timeout || 30000, maxBuffer: 8 * 1024 * 1024, cwd: options.cwd, env: options.env || process.env });
@@ -25,7 +28,8 @@ export async function latestReleaseCommit(options = {}) {
   const releaseName = String(release.name || '').trim();
   const bodyLine = String(release.body || '').split('\n').map((line) => line.trim()).find(Boolean) || '';
   const message = (releaseName && releaseName !== tag ? releaseName : bodyLine).slice(0, 160);
-  return { sha, tag, message, date: String(release.published_at || '') };
+  const tarball = releaseTarballAssets(release, tag);
+  return { sha, tag, message, date: String(release.published_at || ''), ...(tarball ? { tarball } : {}) };
 }
 
 // Homebrew installs the CLI formula under <prefix>/Cellar/oasis-cli/<version>/.
@@ -57,7 +61,9 @@ export async function installedVersion(appRoot, options = {}) {
     const resolved = String(entry && (entry.resolved || entry.version) || '');
     const match = resolved.match(/(?:#|\/)([0-9a-f]{40})(?:\.tar\.gz)?\b/);
     if (match) return { kind: 'npm', commit: match[1], root: appRoot, ...(options.npmPrefix ? { npmPrefix: options.npmPrefix } : {}) };
-    if (entry) return { kind: 'npm', commit: '', root: appRoot, ...(options.npmPrefix ? { npmPrefix: options.npmPrefix } : {}) };
+    // A verified update installs the release tarball from a local file, so
+    // npm records no commit; the package version identifies the release.
+    if (entry) return { kind: 'npm', commit: '', version: String(entry.version || ''), root: appRoot, ...(options.npmPrefix ? { npmPrefix: options.npmPrefix } : {}) };
   } catch {}
   return { kind: 'unknown', commit: '', root: appRoot };
 }
@@ -89,6 +95,13 @@ export function updatePlan(installed, latest) {
       { command: 'git', args: ['-C', installed.root, 'checkout', '--detach', latest.sha] }
     ] };
   }
+  if (installed.kind === 'npm' && !installed.commit && installed.version && 'v' + installed.version === latest.tag) return { upToDate: true };
+  // The release's own npm tarball, downloaded and checked (SHA256SUMS,
+  // package name and version, provenance) before npm sees it.
+  if (latest.tarball) return { upToDate: false, verified: true, steps: [{
+    command: 'npm',
+    args: ['install', '-g', ...(installed.npmPrefix ? ['--prefix', installed.npmPrefix] : []), VERIFIED_TARBALL]
+  }] };
   return { upToDate: false, steps: [{
     command: 'npm',
     args: ['install', '-g', ...(installed.npmPrefix ? ['--prefix', installed.npmPrefix] : []), INSTALL_SPEC + latest.sha + '.tar.gz']
@@ -104,8 +117,10 @@ export function describeUpdate(installed, latest, plan) {
   else if (plan.upToDate) lines.push('Oasis is up to date.');
   else if (plan.blocked) lines.push(plan.blocked);
   else {
-    lines.push('Update with:');
-    for (const step of plan.steps || []) lines.push('  ' + step.command + ' ' + step.args.map((arg) => JSON.stringify(arg)).join(' '));
+    if (plan.verified) lines.push('Update: download ' + latest.tarball.tarball.name + ' from the release, check it against SHA256SUMS, its package version and (with gh) its signed provenance, then install it with:');
+    else lines.push('Update with:');
+    for (const step of plan.steps || []) lines.push('  ' + step.command + ' ' + step.args.map((arg) => arg === VERIFIED_TARBALL ? arg : JSON.stringify(arg)).join(' '));
+    if (!plan.verified && installed.kind !== 'git' && installed.kind !== 'homebrew') lines.push('This release has no npm tarball with SHA256SUMS, so the source archive is installed unchecked.');
   }
   return lines.join('\n');
 }

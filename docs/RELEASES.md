@@ -59,6 +59,16 @@ cmp mine.cdx.json oasis-oss-<version>.cdx.json
 
 The release job packs the tarball twice and fails if the two digests differ, so a nondeterministic step (a timestamp, an unordered directory listing, a download during `prepack`) is caught before it ships.
 
+### What `oasis update` checks
+
+On an npm install, `oasis update` installs the release's own npm tarball (`oasis-oss-VERSION.tgz`, the file the release job packed twice and attested), not a GitHub source archive. Before npm sees it, OASIS:
+
+1. checks its SHA-256 against the release's `SHA256SUMS`;
+2. reads `package/package.json` from inside it and requires `oasis-oss` at the release's version, so a valid file from an older release (a downgrade) or another package is refused;
+3. when the GitHub CLI is installed, runs `gh attestation verify` pinned to this repository's release workflow, the release tag (`--source-ref refs/tags/vX.Y.Z`), the release commit (`--source-digest`) and GitHub-hosted runners. A verification that fails blocks the install.
+
+The update prints each result. `SHA256SUMS` comes from the same release, so on its own it catches corruption and truncation; the signed provenance is what ties the file to the release workflow. Releases made before attestations existed, or machines without `gh`, get the first two checks and a note that provenance was not verified. `OASIS_UPDATE_REQUIRE_PROVENANCE=1` refuses any update whose provenance could not be verified. Git checkouts update by fetching the tag and checking out its commit, and Homebrew installs go through `brew upgrade`, which checks the formula's own SHA-256.
+
 ## How releases are published
 
 `.github/workflows/release.yml`:
