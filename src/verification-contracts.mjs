@@ -142,3 +142,43 @@ export function checkReport(text, events, { domains = [] } = {}) {
   if (analysisApplies(events, declared)) issues.push(...analysisContract(text, events));
   return issues;
 }
+
+/**
+ * Like checkReport, and also says what was checked. `claims` counts, per
+ * kind, how many claims the contracts examined and how many the evidence
+ * supported:
+ *
+ *   checks     the report says tests/builds pass (0 or 1)
+ *   citations  URLs the report cites
+ *   quotes     direct quotes next to a cited, fetched page
+ *   numbers    result-like numbers, when the analysis contract applies
+ *
+ * `checked` and `supported` are the totals. A report with no checkable claim
+ * has checked 0: it is not evidence of anything, which is different from a
+ * report whose claims were all supported.
+ */
+export function assessReport(text, events, { domains = [] } = {}) {
+  const declared = (Array.isArray(domains) ? domains : [domains]).map((domain) => String(domain || '').toLowerCase()).filter((domain) => CONTRACT_DOMAINS.includes(domain));
+  const code = codeContract(text, events);
+  const research = researchContract(text, events);
+  const quotes = quoteContract(text, events);
+  const analysisOn = analysisApplies(events, declared);
+  const analysis = analysisOn ? analysisContract(text, events) : [];
+  const cited = citedUrls(text);
+  const unread = research.length ? research[0].urls.length : 0;
+  const fetched = fetchedUrls(events);
+  const quoteCheck = fetched.size ? checkQuotes(text, citedUrls, { fetched }) : { checked: 0, misquotes: [] };
+  const numbers = analysisOn ? reportedNumbers(text) : [];
+  const missingNumbers = analysis.length ? new Set(analysis[0].numbers).size : 0;
+  const distinctNumbers = new Set(numbers.map((number) => number.raw)).size;
+  const claims = {
+    checks: { checked: claimsPassing(text) ? 1 : 0, supported: claimsPassing(text) && !code.length ? 1 : 0 },
+    citations: { checked: cited.length, supported: cited.length - unread },
+    quotes: { checked: quoteCheck.checked, supported: quoteCheck.checked - quoteCheck.misquotes.length },
+    numbers: { checked: distinctNumbers, supported: distinctNumbers - missingNumbers }
+  };
+  let checked = 0;
+  let supported = 0;
+  for (const entry of Object.values(claims)) { checked += entry.checked; supported += entry.supported; }
+  return { issues: [...code, ...research, ...quotes, ...analysis], claims, checked, supported };
+}

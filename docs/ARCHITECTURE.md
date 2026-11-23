@@ -33,7 +33,8 @@ The model proposes responses and tool calls. OASIS owns the runtime decisions ar
 | Turn support | `src/system-prompt.mjs`, `src/project-profile.mjs`, `src/steering.mjs`, `src/turn-guards.mjs`, `src/verification-summary.mjs`, `src/tool-results.mjs`, `src/compaction-history.mjs`, `src/context-window.mjs`, `src/plan-mode.mjs`, `src/ask-user.mjs`, `src/web-access.mjs` | The pieces of a turn that do not need the loop itself: the system prompt and project profile, mid-turn steering, verification and nudges, what the model sees from each tool, compaction helpers, context-window discovery from provider overflow errors, plan-mode hand-off, user questions and per-site web approval. |
 | Provider policy | `src/provider-request.mjs`, `src/provider-retry.mjs`, `src/model-budgets.mjs`, `src/usage-estimate.mjs`, `src/api-error.mjs` | Prompt-cache breakpoints and reasoning replay, retry and backoff, per-model output and thinking budgets, token usage normalization and readable provider errors. |
 | Provider request adapters | `src/provider-requests.mjs` | Builds OpenAI Chat Completions, OpenAI Responses and Anthropic request bodies; normalizes endpoints and tool schemas. |
-| Completion gates | `src/completion-gates.mjs` | What a reply without a tool call leads to. An ordered pipeline (steering, automatic tests and static parsing, invented tool calls, replies that describe instead of act, open checklist steps, empty replies, the post-edit verification gate, unbacked claims, standing corrections, Stop and TeammateIdle hooks) returns `continue`, `apply` (harness-made tool calls) or `finish`. Per-turn nudge counters live in one state object, and the agent's own helpers are passed in, so the gates are tested without a provider. |
+| Task model | `src/task-model.mjs`, `src/task-tools.mjs` | The universal task spec shared by the main turn, delegated agents and the experience store: intent, domains, complexity, risk, deliverables, acceptance criteria, permissions, evidence requirements, autonomy and an outcome that keeps execution, evidence, claims, acceptance and independent review apart. See [Task model](TASK-MODEL.md). |
+| Completion gates | `src/completion-gates.mjs` | What a reply without a tool call leads to. An ordered pipeline (steering, automatic tests and static parsing, invented tool calls, replies that describe instead of act, open checklist steps, empty replies, the post-edit verification gate, unbacked claims, standing corrections, the dissent gate, the task contract, Stop and TeammateIdle hooks) returns `continue`, `apply` (harness-made tool calls) or `finish`. Per-turn nudge counters live in one state object, and the agent's own helpers are passed in, so the gates are tested without a provider. |
 | Provider streaming | `src/provider-stream.mjs` | Parses provider SSE streams, normalizes streamed events and tool-call deltas, preserves provider usage metadata, and assembles the completed streamed response. |
 | Tool input validation | `src/tool-schema-validation.mjs` | Validates model-supplied arguments against the advertised JSON Schema before permission checks or execution; caches compiled validators. |
 | Tool scheduling | `src/tool-batch-scheduler.mjs` | Groups adjacent read-only, specialist-review and subagent calls without crossing side-effect ordering barriers. |
@@ -50,12 +51,13 @@ The model proposes responses and tool calls. OASIS owns the runtime decisions ar
 ## A typical agent turn
 
 1. An interface creates or resumes a project-scoped session.
-2. OASIS loads provider configuration, applicable settings, permission rules and available tools.
+2. OASIS loads provider configuration, applicable settings, permission rules and available tools, and reads the request into a task spec (`src/task-model.mjs`).
 3. The model receives the conversation context and tool definitions supported by the selected provider protocol.
 4. A returned tool call is normalized and passed through the runtime's permission and safety checks.
 5. Approved tools operate on the configured workspace or invoke an enabled integration.
 6. Tool results are returned to the model, which may continue working or produce a final response.
-7. Verification state, usage and session data are updated as the turn progresses.
+7. Before a final answer ends the turn, the completion gates check it, including the task's acceptance criteria against the turn's tool results; the result carries the task outcome.
+8. Verification state, usage and session data are updated as the turn progresses.
 
 The exact sequence varies by tool, provider protocol and interface. A model response saying that work is complete is not itself verification evidence.
 

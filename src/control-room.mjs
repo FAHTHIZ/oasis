@@ -237,7 +237,7 @@ export function experienceActivity({ env = process.env, now = Date.now(), days =
   try { rows = store.runs({ since: now - days * 86400000, limit: 5000 }); } catch { return { available: false, days, records: [] }; }
   const records = trackRecord(rows, { by: ['agentType', 'model'] }).slice(0, limit).map((item) => ({
     agentType: item.agentType, model: item.model, runs: item.runs, succeeded: item.succeeded, verified: item.verified,
-    failed: item.failed, rejected: item.rejected, successRate: item.successRate, avgTokens: item.avgTokens,
+    failed: item.failed, rejected: item.rejected, decisive: item.decisive, unchecked: item.unchecked, successRate: item.successRate, avgTokens: item.avgTokens,
     avgCostUsd: item.avgCostUsd, avgDurationMs: item.avgDurationMs, lastAt: item.lastAt
   }));
   return { available: true, days, runs: rows.length, records };
@@ -309,7 +309,7 @@ export function formatControlRoom(snapshot, { now = Date.now() } = {}) {
   const experience = snapshot.experience;
   if (experience && experience.records && experience.records.length) {
     lines.push('', 'Track record (last ' + experience.days + ' days, outcomes from evidence):');
-    for (const item of experience.records.slice(0, 10)) lines.push('  ' + (item.agentType + ' / ' + (item.model || '?')).slice(0, 48).padEnd(48) + '  ' + String(item.runs).padStart(4) + ' runs  ' + String(Math.round(item.successRate * 100)).padStart(3) + '% ok  ' + item.verified + ' verified  ' + item.failed + ' failed  ' + item.rejected + ' rejected');
+    for (const item of experience.records.slice(0, 10)) lines.push('  ' + (item.agentType + ' / ' + (item.model || '?')).slice(0, 48).padEnd(48) + '  ' + String(item.runs).padStart(4) + ' runs  ' + String(Math.round(item.successRate * 100)).padStart(3) + '% ok  ' + item.verified + ' verified  ' + (item.unchecked || 0) + ' unchecked  ' + item.failed + ' failed  ' + item.rejected + ' rejected');
   }
   const communication = snapshot.communication;
   if (communication && communication.messages.length) {

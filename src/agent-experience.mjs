@@ -6,9 +6,16 @@
 // outcome comes from the evidence ledger and the return-time verification
 // gate in src/agent-subagents.mjs:
 //
-//   verified    completed, and its claims were backed by evidence the runtime
-//               saw (a passing check, fetched pages, executions)
-//   clean       completed with no checkable claims and no rejected ones
+//   verified    completed, and claims in its report were checked against the
+//               evidence the runtime saw and all held (a claimed check that
+//               passed, cited pages that were fetched, numbers an execution
+//               printed), or it changed files and a check passed afterwards.
+//               Tool activity alone is not verification: a run that fetched
+//               pages or ran code but whose report made no checkable claim
+//               is `clean`, not `verified`.
+//   clean       completed with no checkable claims and no rejected ones. It
+//               says nothing about quality either way, so track records
+//               leave it out of the success rate (schema 2).
 //   unverified  completed, but claimed a check passed without one observed
 //   rejected    completed, but the verification gate rejected claims
 //   partial     hit its step limit
@@ -27,7 +34,9 @@
 //    `oasis agents experience` and the control room, and used, when
 //    modelRouting.subagents is "experience", to start a subagent on the
 //    cheapest allowed model whose record on this kind of work is as good as
-//    the default model's (see chooseExperienceModel).
+//    the default model's (see chooseExperienceModel). The success rate is
+//    verified runs over decisive runs (everything but clean and cancelled):
+//    a model is not rewarded for finishing work nobody could check.
 //
 // Everything is local and best-effort: a missing node:sqlite or a read-only
 // disk turns it off and orchestration carries on. OASIS_AGENT_EXPERIENCE=0
@@ -41,11 +50,16 @@ import MiniSearch from 'minisearch';
 import { getConfigDirectory } from './config.mjs';
 import { memoryProjectRoot, redactSecrets, tokenize } from './auto-memory.mjs';
 import { classifyTaskClass } from './capability-router.mjs';
+import { normalizeDomain, primaryDomain } from './task-model.mjs';
 import { stripInvisible } from './untrusted-content.mjs';
 
-export const EXPERIENCE_SCHEMA_VERSION = 1;
+// 2: outcomes decided by checked claims (see classifyOutcome); rows carry
+// the rule they were decided under, claim counts and the task-model verdict.
+export const EXPERIENCE_SCHEMA_VERSION = 2;
 export const OUTCOMES = Object.freeze(['verified', 'clean', 'unverified', 'rejected', 'partial', 'failed', 'stalled', 'cancelled']);
-const SUCCESS = new Set(['verified', 'clean']);
+const SUCCESS = new Set(['verified']);
+// Outcomes that say nothing about quality: left out of success rates.
+const NEUTRAL = new Set(['clean', 'cancelled']);
 const RETENTION_MS = 180 * 24 * 60 * 60 * 1000;
 const MAX_ROWS = 20000;
 const RECALL_BUDGET_CHARS = 2400;
@@ -102,37 +116,35 @@ export function cleanExperienceText(value, max) {
   return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').replace(/\s+\n/g, '\n').trim().slice(0, max) || null;
 }
 
-const DOMAIN_SIGNALS = [
-  ['computer', /\b(?:click|screenshot|desktop|screen|window|gui|launch_app|browser|web ?page form|fill (?:in|out)|log ?in to|navigate to)\b/gi],
-  ['review', /\b(?:review|audit|critique|second opinion|look for (?:bugs|issues)|code review|security review)\b/gi],
-  ['research', /\b(?:research|search|find (?:out|sources|papers)|look up|sources?|citations?|compare|survey|literature|docs?|documentation|news|latest)\b/gi],
-  ['analysis', /\b(?:analy[sz]e|analysis|data(?:set)?|csv|spreadsheet|statistic|chart|plot|calculate|compute|metrics?|benchmark)\b/gi],
-  ['code', /\b(?:implement|fix|bug|refactor|test(?:s|ing)?|compile|build|function|class|module|endpoint|stack trace|regression|lint|typescript|python|javascript|\w+\.(?:m?js|ts|tsx|py|go|rs|java|rb|c|cpp|h))\b/gi],
-  ['ops', /\b(?:deploy|install|configure|docker|container|server|ci|pipeline|kubernetes|systemd|nginx|migrate|backup)\b/gi],
-  ['writing', /\b(?:write|draft|rewrite|summari[sz]e|translate|explain|document|blog|email|essay|outline|copy)\b/gi]
-];
-
 /**
- * A coarse task domain from the prompt: research, code, review, analysis,
- * writing, computer or ops ('general' when nothing stands out). Coarse on
- * purpose: track records need enough runs per bucket to mean anything.
+ * The task domain from the prompt, in the task model's vocabulary
+ * (src/task-model.mjs): software, security, research, analysis, writing,
+ * planning, automation, computer, operations or general. One classifier for
+ * routing, track records and the task model.
  */
 export function taskDomain(prompt) {
-  const text = String(prompt || '').slice(0, 6000);
-  let best = 'general';
-  let bestScore = 0;
-  for (const [name, pattern] of DOMAIN_SIGNALS) {
-    const score = (text.match(pattern) || []).length;
-    if (score > bestScore) { best = name; bestScore = score; }
-  }
-  return best;
+  return primaryDomain(prompt);
+}
+
+// Schema 1 rows were decided by an older rule that called a run verified
+// when it had fetched a page or executed code, whatever its report said. Such
+// a row is only trusted as verified when a passing check backed it.
+function legacyOutcome(row) {
+  if ((Number(row.rule) || 1) >= 2) return row.outcome;
+  if (row.outcome === 'verified' && !(Number(row.checks_passed) > 0)) return 'clean';
+  return row.outcome;
 }
 
 /**
  * The outcome of one run, decided from the runtime's own record: status,
- * the verification gate, and evidence counts. Never from the agent's words.
+ * the verification gate, the claims it checked, and evidence counts. Never
+ * from the agent's words, and never from tool activity alone.
+ *
+ * `claims` is { checked, supported } from assessReport
+ * (src/verification-contracts.mjs). `verified` needs at least one checked
+ * claim, all supported, or a change (edits) followed by a passing check.
  */
-export function classifyOutcome({ status, verificationIssues = [], unverifiedClaim = null, partial = false, evidence = null } = {}) {
+export function classifyOutcome({ status, verificationIssues = [], unverifiedClaim = null, partial = false, evidence = null, claims = null } = {}) {
   if (status === 'failed' || status === 'stalled' || status === 'cancelled') return status;
   if (status !== 'completed') return 'failed';
   if (Array.isArray(verificationIssues) && verificationIssues.length) return 'rejected';
@@ -140,7 +152,10 @@ export function classifyOutcome({ status, verificationIssues = [], unverifiedCla
   if (partial) return 'partial';
   const counts = (evidence && evidence.counts) || {};
   const check = evidence && evidence.lastCheck;
-  if ((check && check.passed && !check.stale) || int(counts.fetch) > 0 || int(counts.execution) > 0) return 'verified';
+  const checked = int(claims && claims.checked);
+  const supported = int(claims && claims.supported);
+  if (checked > 0 && supported >= checked) return 'verified';
+  if (check && check.passed && !check.stale && int(counts.edit) > 0) return 'verified';
   return 'clean';
 }
 
@@ -173,18 +188,25 @@ export function openExperienceStore(file) {
     db.exec('PRAGMA journal_mode = WAL');
     db.exec('PRAGMA synchronous = NORMAL');
     db.exec(SCHEMA);
+    const columns = new Set(db.prepare('PRAGMA table_info(agent_runs)').all().map((column) => column.name));
+    for (const [name, type] of [['rule', 'INTEGER'], ['claims_checked', 'INTEGER'], ['claims_supported', 'INTEGER'], ['verdict', 'TEXT'], ['acceptance_met', 'INTEGER'], ['acceptance_unmet', 'INTEGER']]) {
+      if (!columns.has(name)) db.exec('ALTER TABLE agent_runs ADD COLUMN ' + name + ' ' + type);
+    }
     db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('version', ?)").run(String(EXPERIENCE_SCHEMA_VERSION));
   } catch (error) { db.close(); throw error; }
   try { chmodSync(file, 0o600); } catch {}
   const insert = db.prepare(`INSERT INTO agent_runs
     (at, project, session_id, agent_id, agent_type, model, domain, task_class, description, task, outcome, detail, lesson,
-     tool_calls, tokens, cost_usd, duration_ms, checks_passed, fetches, edits)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+     tool_calls, tokens, cost_usd, duration_ms, checks_passed, fetches, edits,
+     rule, claims_checked, claims_supported, verdict, acceptance_met, acceptance_unmet)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   let open = true;
   const shape = (row) => ({
     seq: Number(row.seq), at: Number(row.at), project: row.project, sessionId: row.session_id, agentId: row.agent_id,
-    agentType: row.agent_type, model: row.model || '', domain: row.domain || 'general', taskClass: row.task_class || '',
-    description: row.description || '', task: row.task || '', outcome: row.outcome, detail: row.detail || '', lesson: row.lesson || '',
+    agentType: row.agent_type, model: row.model || '', domain: normalizeDomain(row.domain), taskClass: row.task_class || '',
+    description: row.description || '', task: row.task || '', outcome: legacyOutcome(row), detail: row.detail || '', lesson: row.lesson || '',
+    rule: Number(row.rule) || 1, claimsChecked: Number(row.claims_checked) || 0, claimsSupported: Number(row.claims_supported) || 0,
+    verdict: row.verdict || '', acceptanceMet: Number(row.acceptance_met) || 0, acceptanceUnmet: Number(row.acceptance_unmet) || 0,
     toolCalls: Number(row.tool_calls) || 0, tokens: Number(row.tokens) || 0, costUsd: Number(row.cost_usd) || 0,
     durationMs: Number(row.duration_ms) || 0, checksPassed: Number(row.checks_passed) || 0, fetches: Number(row.fetches) || 0, edits: Number(row.edits) || 0
   });
@@ -200,7 +222,8 @@ export function openExperienceStore(file) {
         cleanExperienceText(row.model, 200), cleanExperienceText(row.domain, 40), cleanExperienceText(row.taskClass, 60),
         cleanExperienceText(row.description, 200), cleanExperienceText(row.task, 800), outcome,
         cleanExperienceText(row.detail, 400), cleanExperienceText(row.lesson, 700),
-        int(row.toolCalls), int(row.tokens), money(row.costUsd), int(row.durationMs), int(row.checksPassed), int(row.fetches), int(row.edits));
+        int(row.toolCalls), int(row.tokens), money(row.costUsd), int(row.durationMs), int(row.checksPassed), int(row.fetches), int(row.edits),
+        EXPERIENCE_SCHEMA_VERSION, int(row.claimsChecked), int(row.claimsSupported), cleanExperienceText(row.verdict, 40), int(row.acceptanceMet), int(row.acceptanceUnmet));
       return true;
     },
     /** Newest-first runs, filtered by project and/or agent type. */
@@ -275,7 +298,9 @@ export function recordAgentExperience(parent, record, run = {}, { env } = {}) {
     const resolvedEnv = sessionEnv(parent, env);
     const store = sharedExperienceStore(resolvedEnv, parent && parent.settings);
     if (!store) return false;
-    const outcome = classifyOutcome({ status: record.status, verificationIssues: record.verificationIssues, unverifiedClaim: record.unverifiedClaim, partial: run.partial, evidence: run.evidence || record.evidence });
+    const outcome = classifyOutcome({ status: record.status, verificationIssues: record.verificationIssues, unverifiedClaim: record.unverifiedClaim, partial: run.partial, evidence: run.evidence || record.evidence, claims: run.claims || record.claims });
+    const claims = run.claims || record.claims || {};
+    const taskOutcome = run.taskOutcome || record.taskOutcome || null;
     const counts = (run.evidence && run.evidence.counts) || {};
     const check = run.evidence && run.evidence.lastCheck;
     const prompt = String(run.prompt || '');
@@ -292,7 +317,9 @@ export function recordAgentExperience(parent, record, run = {}, { env } = {}) {
       domain: taskDomain(prompt || record.description), taskClass: classifyTaskClass(prompt), description: record.description,
       task: prompt, outcome, detail, lesson,
       toolCalls: run.toolCalls, tokens: run.tokens, costUsd: run.costUsd, durationMs: run.durationMs,
-      checksPassed: check && check.passed && !check.stale ? 1 : 0, fetches: counts.fetch, edits: counts.edit
+      checksPassed: check && check.passed && !check.stale ? 1 : 0, fetches: counts.fetch, edits: counts.edit,
+      claimsChecked: claims.checked, claimsSupported: claims.supported,
+      verdict: taskOutcome ? taskOutcome.verdict : '', acceptanceMet: taskOutcome ? taskOutcome.acceptance.met : 0, acceptanceUnmet: taskOutcome ? taskOutcome.acceptance.unmet : 0
     });
   } catch { return false; }
 }
@@ -332,7 +359,7 @@ function sharedTerms(queryTerms, row) {
 }
 
 const OUTCOME_LABEL = {
-  verified: 'succeeded, verified by evidence', clean: 'succeeded', partial: 'ran out of steps',
+  verified: 'succeeded, verified by evidence', clean: 'finished, nothing checkable', partial: 'ran out of steps',
   failed: 'failed', stalled: 'stalled'
 };
 
@@ -388,15 +415,18 @@ export function experiencePromptSection(parent, agentType, prompt, { env, budget
  */
 export function trackRecord(rows, { by = ['agentType', 'model', 'domain'] } = {}) {
   const groups = new Map();
+  const value = (row, field) => field === 'domain' ? normalizeDomain(row.domain) : row[field] || '';
   for (const row of rows || []) {
-    const key = by.map((field) => row[field] || '').join('\u0000');
+    const key = by.map((field) => value(row, field)).join('\u0000');
     let group = groups.get(key);
     if (!group) {
-      group = { ...Object.fromEntries(by.map((field) => [field, row[field] || ''])), runs: 0, succeeded: 0, verified: 0, failed: 0, rejected: 0, tokens: 0, costUsd: 0, durationMs: 0, lastAt: 0, outcomes: {} };
+      group = { ...Object.fromEntries(by.map((field) => [field, value(row, field)])), runs: 0, decisive: 0, unchecked: 0, succeeded: 0, verified: 0, failed: 0, rejected: 0, tokens: 0, costUsd: 0, durationMs: 0, lastAt: 0, outcomes: {} };
       groups.set(key, group);
     }
     group.runs += 1;
     group.outcomes[row.outcome] = (group.outcomes[row.outcome] || 0) + 1;
+    if (!NEUTRAL.has(row.outcome)) group.decisive += 1;
+    if (row.outcome === 'clean') group.unchecked += 1;
     if (SUCCESS.has(row.outcome)) group.succeeded += 1;
     if (row.outcome === 'verified') group.verified += 1;
     if (row.outcome === 'failed' || row.outcome === 'stalled') group.failed += 1;
@@ -408,10 +438,11 @@ export function trackRecord(rows, { by = ['agentType', 'model', 'domain'] } = {}
   }
   return [...groups.values()].map((group) => ({
     ...group,
-    successRate: group.runs ? group.succeeded / group.runs : 0,
+    // Success is verified runs over decisive ones. Clean runs (nothing
+    // checkable) and cancelled runs say nothing about the agent's quality.
+    successRate: group.decisive ? group.succeeded / group.decisive : 0,
     verifiedRate: group.runs ? group.verified / group.runs : 0,
-    // Cancelled runs say nothing about the agent; leave them out of the bound.
-    successLowerBound: wilsonLower(group.succeeded, group.runs - (group.outcomes.cancelled || 0)),
+    successLowerBound: wilsonLower(group.succeeded, group.decisive),
     avgTokens: group.runs ? Math.round(group.tokens / group.runs) : 0,
     avgCostUsd: group.runs ? group.costUsd / group.runs : 0,
     avgDurationMs: group.runs ? Math.round(group.durationMs / group.runs) : 0
@@ -443,28 +474,31 @@ export function wilsonLower(successes, trials, z = 1.645) {
  */
 export function chooseExperienceModel({ rows = [], agentType, domain, baseModel, candidates = [], price = () => null, minRuns = 5, maxDrop = 0.05 } = {}) {
   const base = String(baseModel || '');
-  const relevant = rows.filter((row) => row.agentType === agentType && (row.domain || 'general') === (domain || 'general'));
+  const wanted = normalizeDomain(domain);
+  const relevant = rows.filter((row) => row.agentType === agentType && normalizeDomain(row.domain) === wanted);
   const records = new Map(trackRecord(relevant, { by: ['model'] }).map((item) => [item.model, item]));
   const baseRecord = records.get(base);
-  if (!baseRecord || baseRecord.runs < minRuns) {
-    return { model: base, changed: false, reason: 'not enough history for ' + agentType + ' on ' + (domain || 'general') + ' work with ' + base + ' (' + (baseRecord ? baseRecord.runs : 0) + ' of ' + minRuns + ' runs)' };
+  // Only decisive runs (verified, rejected, unverified, partial, failed,
+  // stalled) count toward the history a decision needs.
+  if (!baseRecord || baseRecord.decisive < minRuns) {
+    return { model: base, changed: false, reason: 'not enough checked history for ' + agentType + ' on ' + wanted + ' work with ' + base + ' (' + (baseRecord ? baseRecord.decisive : 0) + ' of ' + minRuns + ' decisive runs)' };
   }
   const basePrice = price(base);
   let best = null;
   for (const model of [...new Set(candidates.map(String).filter(Boolean))]) {
     if (model === base) continue;
     const record = records.get(model);
-    if (!record || record.runs < minRuns) continue;
+    if (!record || record.decisive < minRuns) continue;
     if (record.successLowerBound + maxDrop < baseRecord.successLowerBound) continue;
     const cost = price(model);
     if (cost === null || cost === undefined || !Number.isFinite(cost)) continue;
     if (basePrice !== null && basePrice !== undefined && Number.isFinite(basePrice) && cost >= basePrice) continue;
     if (!best || cost < best.cost || (cost === best.cost && record.successLowerBound > best.record.successLowerBound)) best = { model, cost, record };
   }
-  if (!best) return { model: base, changed: false, reason: 'no cheaper configured model matches ' + base + ' on ' + agentType + ' ' + (domain || 'general') + ' work (' + Math.round(baseRecord.successRate * 100) + '% of ' + baseRecord.runs + ' runs)' };
+  if (!best) return { model: base, changed: false, reason: 'no cheaper configured model matches ' + base + ' on ' + agentType + ' ' + wanted + ' work (' + Math.round(baseRecord.successRate * 100) + '% verified of ' + baseRecord.decisive + ' decisive runs)' };
   return {
     model: best.model, changed: true,
-    reason: 'experience: ' + best.model + ' succeeded on ' + best.record.succeeded + ' of ' + best.record.runs + ' ' + agentType + ' ' + (domain || 'general') + ' runs (' + base + ': ' + baseRecord.succeeded + ' of ' + baseRecord.runs + ') and costs less'
+    reason: 'experience: ' + best.model + ' was verified on ' + best.record.succeeded + ' of ' + best.record.decisive + ' decisive ' + agentType + ' ' + wanted + ' runs (' + base + ': ' + baseRecord.succeeded + ' of ' + baseRecord.decisive + ') and costs less'
   };
 }
 
@@ -472,11 +506,11 @@ export function chooseExperienceModel({ rows = [], agentType, domain, baseModel,
 export function formatTrackRecord(records, { now = Date.now() } = {}) {
   if (!records.length) return 'No agent experience recorded yet. Every subagent run adds a row once it finishes.';
   const pct = (value) => Math.round(value * 100) + '%';
-  const lines = ['Agent track record (outcomes decided from evidence; success = verified + clean)', ''];
+  const lines = ['Agent track record (outcomes decided from evidence; success = verified runs over decisive runs, unchecked and cancelled runs left out)', ''];
   for (const item of records) {
     const label = [item.agentType, item.model, item.domain].filter(Boolean).join(' / ');
     lines.push(label);
-    lines.push('  ' + item.runs + ' runs, ' + pct(item.successRate) + ' succeeded (' + pct(item.verifiedRate) + ' verified), ' + item.failed + ' failed, ' + item.rejected + ' rejected or unverified; avg ' + item.avgTokens.toLocaleString('en-US') + ' tokens, $' + item.avgCostUsd.toFixed(4) + ', ' + Math.round(item.avgDurationMs / 1000) + 's; last ' + age(item.lastAt, now));
+    lines.push('  ' + item.runs + ' runs, ' + pct(item.successRate) + ' verified of ' + item.decisive + ' decisive (' + item.unchecked + ' unchecked), ' + item.failed + ' failed, ' + item.rejected + ' rejected or unverified; avg ' + item.avgTokens.toLocaleString('en-US') + ' tokens, $' + item.avgCostUsd.toFixed(4) + ', ' + Math.round(item.avgDurationMs / 1000) + 's; last ' + age(item.lastAt, now));
   }
   return lines.join('\n');
 }

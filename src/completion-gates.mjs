@@ -28,7 +28,8 @@ import { extractFollowups, recordFollowups, followupsEnabled } from './followups
 import { deliverSteering, pendingSteering } from './steering.mjs';
 import { formatLspVerificationBlocker, verificationSummary } from './verification-summary.mjs';
 import { permissionMode } from './plan-mode.mjs';
-import { sessionEvidence, recordEvidence } from './evidence-ledger.mjs';
+import { evidenceSince, sessionEvidence, recordEvidence } from './evidence-ledger.mjs';
+import { admitsShortfall, assessOutcome, gateNotice, gateProblems, specSummary, taskGateNudge } from './task-model.mjs';
 import {
   ACTION_NUDGE, CONTINUE_NUDGE, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, providerStopNotice, providerCutNotice,
   REFUSAL_NUDGE, SOURCE_EXTENSIONS, UNREADABLE_CALL_NUDGE, GATE_FOLLOWUP_NUDGE, NEW_TEST_FOLLOWUP_NUDGE, announcesNextStep, announcesTerseStep, appendLspUnavailableNotice, asksForAction,
@@ -66,6 +67,7 @@ export function newGateState() {
     emptyReply: false,
     correctionNudged: false,
     dissentNudged: false,
+    taskNudged: false,
     stopHookContinuations: 0,
     // Set by the tool loop when todo_write succeeds: only a checklist this
     // turn worked on may hold the answer back.
@@ -393,6 +395,32 @@ export async function runCompletionGates(turn, host) {
       return CONTINUE;
     }
   }
+  // The task contract (src/task-model.mjs): criteria the runtime can check
+  // (a file written, a length limit, sources cited and read) and claims in
+  // the answer (cited pages, quotes, computed numbers) are evaluated against
+  // this turn's tool results. A miss goes back once; what is still unmet
+  // after that is named to the user, and the outcome is returned either way.
+  let taskOutcome = null;
+  let taskProblems = [];
+  if (!options.isSubagent && session.task && text && !options.planOnly && permissionMode(session, options) !== 'plan') {
+    try {
+      const events = evidenceSince(sessionEvidence(session), session.taskEvidenceFrom || 0);
+      taskOutcome = assessOutcome(session.task, { events, reply: text, root: session.root, reviews: Array.isArray(session.taskReviews) ? session.taskReviews : [] });
+      taskProblems = admitsShortfall(text) ? [] : gateProblems(taskOutcome);
+    } catch { taskOutcome = null; taskProblems = []; }
+    if (taskProblems.length && !g.taskNudged) {
+      g.taskNudged = true;
+      if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind: 'task-contract' }); } catch {} }
+      if (options.onText) await emitDisplayText(session, options, text);
+      session.messages.push({ role: 'user', content: taskGateNudge(taskProblems) });
+      recordSessionEvent(session, { type: 'task_gate', task: session.task.id, problems: taskProblems.map((item) => item.kind).join(', ').slice(0, 300) }, options.env);
+      return CONTINUE;
+    }
+    if (taskOutcome) {
+      session.task = { ...session.task, outcome: taskOutcome, updatedAt: Date.now() };
+      recordSessionEvent(session, { type: 'task_outcome', task: session.task.id, verdict: taskOutcome.verdict, met: taskOutcome.acceptance.met, unmet: taskOutcome.acceptance.unmet, claimsChecked: taskOutcome.claims.checked, claimsSupported: taskOutcome.claims.supported }, options.env);
+    }
+  }
   const stopEvent = options.isSubagent ? 'SubagentStop' : 'Stop';
   if (session.hooks && hasHooks(session.hooks, stopEvent) && g.stopHookContinuations < 3) {
     const stop = await runHooks(stopEvent, { session_id: session.sessionId || 'unsaved', stop_hook_active: g.stopHookContinuations > 0, last_assistant_message: stopHookMessage(text), ...(options.isSubagent ? { agent_type: options.agentType, agent_id: options.agentId } : {}) }, hookOptions(session, options.env));
@@ -416,7 +444,9 @@ export async function runCompletionGates(turn, host) {
     }
   }
   const shownText = assistant.providerStop && text ? text.replace(/\s+$/, '') + '\n\n' + providerCutNotice(assistant.providerStop) : text;
-  const finalText = g.emptyReply ? (assistant.providerStop ? providerStopNotice(assistant.providerStop) : EMPTY_REPLY_NOTICE) : appendFailedEditNotice(issues.length ? appendUnverifiedNotice(shownText, issues, verification, claimState) : appendLspUnavailableNotice(shownText, verification), claimState);
+  const taskNotice = g.taskNudged ? gateNotice(taskProblems) : '';
+  const noticedText = taskNotice && shownText ? shownText.replace(/\s+$/, '') + '\n\n' + taskNotice : shownText;
+  const finalText = g.emptyReply ? (assistant.providerStop ? providerStopNotice(assistant.providerStop) : EMPTY_REPLY_NOTICE) : appendFailedEditNotice(issues.length ? appendUnverifiedNotice(noticedText, issues, verification, claimState) : appendLspUnavailableNotice(noticedText, verification), claimState);
   assistantMessage.content = finalText;
   let followupsAdded = [];
   if (!options.isSubagent && !options.planOnly && followupsEnabled(session, options.env || process.env)) {
@@ -435,6 +465,7 @@ export async function runCompletionGates(turn, host) {
     verification: verificationSummary(verification),
     budgetExceeded: (totals.budgetTokensUsed ?? totals.tokensUsed) > totals.tokenBudget,
     ...(g.emptyReply ? { emptyReply: true } : {}),
+    ...(taskOutcome && session.task ? { task: specSummary(session.task) } : {}),
     ...(followupsAdded.length ? { followupsAdded: followupsAdded.map((item) => ({ id: item.id, text: item.text })) } : {})
   } };
 }
