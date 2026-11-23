@@ -89,3 +89,16 @@ test('agent events carry the budget line the web app shows', async () => {
   recordAgentEvent(session, 'team.created', {});
   assert.equal(seen[1].budget, undefined);
 });
+
+test('stalled agents keep their status in the network view and can be filtered', () => {
+  const agents = new Map([
+    ['agent_1', { id: 'agent_1', status: 'stalled', depth: 1, startedAt: 1 }],
+    ['agent_2', { id: 'agent_2', status: 'completed', depth: 1, startedAt: 2 }]
+  ]);
+  const snapshot = buildNeuronNetworkSnapshot({ agents });
+  assert.equal(snapshot.nodes.find((node) => node.id === 'agent_1').status, 'stalled');
+  assert.equal(snapshot.summary.stalled_agents, 1);
+  assert.equal(snapshot.summary.interrupted_agents, 0);
+  const filtered = buildNeuronNetworkSnapshot({ agents }, { status: 'stalled' });
+  assert.deepEqual(filtered.nodes.map((node) => node.id), ['main', 'agent_1']);
+});
