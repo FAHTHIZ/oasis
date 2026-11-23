@@ -97,6 +97,11 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - Commit: see `git log -- test/git-safety.test.mjs` ("Take the git safety snapshot after approval").
 - Found by auditing every snapshot taken before an approval prompt, after the lab's effect-snapshot finding. The git safety snapshot (the only copy of what a discarding git command destroys) missed edits made while the prompt was open; `test/git-safety.test.mjs` shows the prompt-time edit missing from the snapshot without the fix and present with it. `run_shell` already took it after approval.
 
+### World drift for chats and subagents
+
+- Commit: see `git log -- docs/CONTINUITY.md` ("Tell resumed chats and subagents what moved").
+- Gateway `/resume` replies append the drift summary; subagent transcripts store a per-agent world fingerprint (captured in the agent's own root) and the first message after a resume starts with `<workspace-drift>`. `test/agent-transcript-resume.test.mjs` fails without the resume change (the note is missing) and passes with it; `test/gateway-resume.test.mjs` covers the chat core and Telegram.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |
@@ -112,11 +117,10 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### Immediate improvements
 
-- World drift for subagent transcripts and gateway sessions, which resume through other paths.
+- Approval answer "apply the rehearsal" in the app's approval cards (the terminal has it).
 
 ### Ready for implementation
 
-- Approval answer "apply the rehearsal" in the app's approval cards (the terminal has it).
 - Rehearsal on macOS: no overlay mount there, but an APFS clone (`clonefile`) of the workspace plus Seatbelt would give the same change list for small workspaces; acceptance would be the same 16-command benchmark.
 
 ### Experimental

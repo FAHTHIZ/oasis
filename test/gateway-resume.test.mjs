@@ -63,3 +63,16 @@ test('telegram supports /resume too', async () => {
   assert.match(calls.at(-1).text, /Resumed/);
   assert.equal(gateway.chats.get('42').session.sessionId, saved[0].id);
 });
+
+test('a chat that resumes a session hears what moved in the workspace', async () => {
+  const sent = [];
+  const drift = { since: '2026-11-21T11:30:00Z', files: { changed: ['src/app.js'], deleted: [], created: [] }, head: null, branch: null };
+  const agent = { createSession: async (options) => ({ messages: options.restore.messages.slice(), sessionId: options.restore.id, worldDrift: drift }), runAgentTurn: async () => ({ text: '' }) };
+  const core = createChatCore({ platform: 'slack', root: '/w', env: {}, deps: { agent, config: { loadConfig: async () => ({}) }, sessions: store() }, send: async (_key, text) => { sent.push(text); }, log: () => {} });
+  await core.handleText('C1', '/resume 1');
+  assert.match(sent.at(-1), /Resumed .*\n\nThe workspace changed since then: Changed: src\/app\.js\. OASIS will tell the model/s);
+  const calls = [];
+  const gateway = createTelegramGateway({ token: '123456:' + 'a'.repeat(30), allowedChats: new Set(['42']), env: {}, deps: { agent, config: { loadConfig: async () => ({}) }, sessions: store() }, fetchImpl: async (url, init) => { calls.push(JSON.parse(init.body)); return new Response(JSON.stringify({ ok: true, result: true })); }, log: () => {} });
+  await gateway.handleUpdate({ update_id: 1, message: { chat: { id: 42 }, text: '/resume last' } });
+  assert.match(calls.at(-1).text, /The workspace changed since then: Changed: src\/app\.js\./);
+});

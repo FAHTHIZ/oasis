@@ -16,6 +16,11 @@ On resume (`oasis --resume`, `oasis --continue`, `/resume`), the fingerprint is 
 - the first turn starts with a `<workspace-drift>` note for the model naming the new commits (with subjects), a branch switch, a HEAD that moved back or to unrelated history (rebase, reset, amend), and each known file that changed, was deleted or now exists, with the instruction to read those files again before relying on them;
 - a `world_drift` session event is recorded.
 
+### Chats and subagents
+
+- A chat gateway (Slack, Discord, Telegram and the others) that continues a session with `/resume` adds the same summary to its reply (`The workspace changed since then: ...`), and the model gets the `<workspace-drift>` note before the next message.
+- A subagent transcript saved with the session (`<session>.agents/agent_N.json`) carries its own fingerprint of the files that agent read or wrote, in its own checkout when it worked in a worktree. When the parent sends a message to that agent after a restart, the message starts with a `<workspace-drift>` note if any of those files changed, so the agent does not act on what it read before. Files only the parent or other agents touched are not named. An `agent.world_drift` event is recorded.
+
 Content hashes, not modification times, decide: a `touch`, or a checkout that restores the same bytes, is not drift. Nothing is shown when nothing moved.
 
 `OASIS_WORLD_DRIFT=0` or `"worldDrift": false` in settings turns it off (nothing is recorded or compared).
