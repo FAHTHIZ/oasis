@@ -71,6 +71,8 @@ An agent does not certify its own work by finishing it. A review counts when a s
 
 The verdict is read from the report rather than trusted. Reviewers are asked to end with `VERDICT: PASS`, `FAIL` or `INCONCLUSIVE`; without that line, "no actionable defects" reads as a pass and a critical or high finding as a fail. A pass is downgraded to `inconclusive` when the reviewer inspected nothing, stopped at a limit, or named a severe finding in the same report. With several current reviews, any fail fails; otherwise any pass passes.
 
+A delegated agent that edits the parent's tree (not an isolated worktree) moves the parent's epoch on too, so a review from before its edits stops counting, and the next review is credited to, or held against, that agent's run in the [experience store](SUBAGENTS.md#experience).
+
 A failed review rejects the outcome even when the tests passed. An inconclusive one neither rejects nor verifies: the `independent_review` criterion stays unknown. The tool result the parent receives carries `review_verdict` and `review_note`; `run_specialist_review` returns `verdict`.
 
 ## Claims
