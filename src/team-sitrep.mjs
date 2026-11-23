@@ -62,7 +62,7 @@ export function buildSitrep({ registry, board, tasks = null, self = 'main', now 
 
   for (const conflict of board ? openConflicts(board) : []) {
     const [a, b] = conflict.findings;
-    items.push({ priority: 2, kind: 'dispute', ref: a + '|' + b, what: a + ' (' + conflict.authors[0] + ': "' + clip(conflict.claims[0], 90) + '") contradicts ' + b + ' (' + conflict.authors[1] + ': "' + clip(conflict.claims[1], 90) + '")' + (conflict.reason ? ' [' + clip(conflict.reason, 60) + ']' : ''), do: 'Check both against their sources and retract the wrong one, or open it on the hypotheses matrix if more evidence is needed. Do not report either as fact until settled.' });
+    items.push({ priority: 2, kind: 'dispute', ref: a + '|' + b, authors: conflict.authors, what: a + ' (' + conflict.authors[0] + ': "' + clip(conflict.claims[0], 90) + '") contradicts ' + b + ' (' + conflict.authors[1] + ': "' + clip(conflict.claims[1], 90) + '")' + (conflict.reason ? ' [' + clip(conflict.reason, 60) + ']' : ''), do: 'Check both against their sources and retract the wrong one, or open it on the hypotheses matrix if more evidence is needed. Do not report either as fact until settled.' });
   }
 
   const questions = board && board.hypotheses && Array.isArray(board.hypotheses.questions) ? board.hypotheses.questions : [];
@@ -99,4 +99,39 @@ export function buildSitrep({ registry, board, tasks = null, self = 'main', now 
   };
   const summary = counts.running + ' running, ' + counts.finished + ' finished, ' + counts.failed + ' failed; ' + counts.open_threads + ' open thread' + (counts.open_threads === 1 ? '' : 's') + ', ' + counts.disputes + ' dispute' + (counts.disputes === 1 ? '' : 's') + ', ' + counts.open_questions + ' open question' + (counts.open_questions === 1 ? '' : 's') + '.';
   return { summary, counts, attention: items.slice(0, MAX_ITEMS), ...(items.length > MAX_ITEMS ? { more: items.length - MAX_ITEMS } : {}), ...(items.length ? {} : { note: 'Nothing needs your attention.' }) };
+}
+
+// Attention alerts. The coordinator should not have to poll team_status to
+// learn that two workers now contradict each other or that a promise was
+// orphaned. Before each model step of the main agent, items of these kinds
+// that it has not been told about yet are delivered once as a short
+// reminder. Failed workers are left out: their failure notice already
+// arrives. OASIS_SITREP_ALERTS=0 turns this off.
+const ALERT_KINDS = new Set(['dispute', 'orphaned_promise', 'missing_hypothesis', 'stalled_thread', 'owed_by_you']);
+const MAX_ALERTED = 500;
+
+export function sitrepAlertsEnabled(env = process.env) {
+  return !/^(0|false|off|no)$/i.test(String(env.OASIS_SITREP_ALERTS || '').trim());
+}
+
+/** New attention items for the main agent since the last call, as a reminder; '' when none. */
+export function sitrepAlerts(session, { env = process.env, now = Date.now() } = {}) {
+  if (!session || !sitrepAlertsEnabled(env)) return '';
+  const registry = session.agentTasks;
+  const hasAgents = registry && registry.agents instanceof Map && registry.agents.size > 0;
+  const board = session.knowledgeBoard;
+  const hasQuestions = board && board.hypotheses && Array.isArray(board.hypotheses.questions) && board.hypotheses.questions.length > 0;
+  if (!hasAgents && !hasQuestions) return '';
+  const seen = session.sitrepAlerted instanceof Set ? session.sitrepAlerted : (session.sitrepAlerted = new Set());
+  const self = session.agentId || 'main';
+  let sitrep;
+  try { sitrep = buildSitrep({ registry, board, tasks: session.sharedTasks, self, now }); } catch { return ''; }
+  // A dispute the coordinator took part in was already reported to it by knowledge_post.
+  const fresh = sitrep.attention.filter((item) => ALERT_KINDS.has(item.kind) && !seen.has(item.kind + ':' + item.ref) && !(item.kind === 'dispute' && item.authors.includes(self)));
+  if (!fresh.length) return '';
+  for (const item of fresh) seen.add(item.kind + ':' + item.ref);
+  if (seen.size > MAX_ALERTED) for (const key of [...seen].slice(0, seen.size - MAX_ALERTED)) seen.delete(key);
+  return '<system-reminder>OASIS sitrep: ' + fresh.length + ' new item' + (fresh.length === 1 ? '' : 's') + ' need' + (fresh.length === 1 ? 's' : '') + ' your attention.\n'
+    + fresh.map((item) => '- ' + item.what + ' Next: ' + item.do).join('\n')
+    + '\nteam_status shows the full ranked list.</system-reminder>';
 }
