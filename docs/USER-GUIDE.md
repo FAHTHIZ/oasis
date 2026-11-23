@@ -223,6 +223,10 @@ Pick a bounded first task with a visible outcome, such as explaining a function,
 4. Check the tests OASIS ran, their exit status and output.
 5. Commit only after you understand and accept the diff.
 
+### Do the tests catch a bug in the change?
+
+A passing run shows the tests pass, not that they test what changed. After tests pass on a fix or feature, the agent can call `mutation_probe` with the narrowest test command (you can also ask for it: "probe the tests for this change"). It runs the check once, then once more with your changed source files put back to the committed version, then once per planted bug on the changed lines (`>=` to `>`, `&&` to `||`, `true` to `false`, a negated `if`, an off-by-one constant). The report says whether the tests fail without the change, and lists every planted bug the tests let through with `file:line`, which is usually a missing boundary or branch assertion. Test files are never changed, files are restored byte for byte after every run (with their modification time), one approval covers the whole probe, and a journal under `.oasis/mutation-probe/` puts files back if OASIS stops mid-run. Do not run it while other agents edit or test the same folder.
+
 `/export review.html` writes a standalone review page; `/export notes.md` writes Markdown. A model saying "done" is not a test result; see [Benchmark methodology](development/BENCHMARKS.md).
 
 Saved sessions keep an audit trail next to the conversation: every tool call and its result, each approval decision (yours, a hook's or auto mode's), the checks that ran, automatic model fallbacks, and who started each turn (`turn_start` with origin `person`, `automatic` for loop and goal follow-ups, `routine` or `webhook`), so work that ran while nobody was watching is easy to find. `oasis sessions events ID` prints it (`--type approval` filters, `--json` for scripts). Secrets are redacted before writing, and `oasis sessions clear ID` deletes the trail with the session.

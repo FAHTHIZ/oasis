@@ -37,6 +37,8 @@ const TOOL_ALIASES = {
   diagnostics: ['diagnostics'],
   securityscan: ['security_scan'],
   scan: ['security_scan'],
+  mutationprobe: ['mutation_probe'],
+  mutation: ['mutation_probe'],
   lsp: ['lsp'],
   git: ['git_commit', 'git_branch', 'git_push', 'create_pull_request'],
   gitcommit: ['git_commit'],

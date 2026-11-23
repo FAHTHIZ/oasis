@@ -48,6 +48,7 @@ import { readTextFile, encodeText, detectTextEncoding } from './text-encoding.mj
 import { BUILTIN_PROVIDERS, getProvider, providerApiKey, providerRegistry, sameBaseURL } from './provider-registry.mjs';
 import { DIAGNOSTICS_TOOL_DEFINITION, runDiagnostics } from './diagnostics.mjs';
 import { SECURITY_SCAN_TOOL_DEFINITION } from './security-scan.mjs';
+import { MUTATION_PROBE_TOOL_DEFINITION } from './mutation-probe.mjs';
 import { MONITOR_TOOL_DEFINITION } from './monitor-definition.mjs';
 import { assertNotAgentIgnored, filterAgentIgnored } from './agent-ignore.mjs';
 import { startCommandMonitor, startWsMonitor, backgroundExitNotifier, backgroundStuckNotifier } from './monitors.mjs';
@@ -2280,6 +2281,18 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         sandbox: context.sandbox
       });
     }
+    case 'mutation_probe': {
+      const { runMutationProbe } = await import('./mutation-probe.mjs');
+      return await runMutationProbe(root, args, {
+        approval: context.approval,
+        autoApprove: Boolean(context.autoApprove),
+        ruleAllowed: Boolean(context.ruleAllowed),
+        env: context.env || process.env,
+        signal: context.signal,
+        sandbox: context.sandbox,
+        injectionHold: injectionHoldReason(context.session)
+      });
+    }
     case 'diagnostics':
       return await runDiagnostics(root, args, {
         approval: context.approval,
@@ -2318,6 +2331,7 @@ TOOL_DEFINITIONS.push(...POWER_TOOL_DEFINITIONS);
 TOOL_DEFINITIONS.push(WEB_SEARCH_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(DIAGNOSTICS_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(SECURITY_SCAN_TOOL_DEFINITION);
+TOOL_DEFINITIONS.push(MUTATION_PROBE_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(LSP_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(MONITOR_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(...GIT_TOOL_DEFINITIONS);

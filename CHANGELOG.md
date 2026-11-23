@@ -4,6 +4,14 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Added
+
+- `mutation_probe`: checks whether the tests would catch a bug in the code that changed, not only whether they pass. It runs the check, reruns it with the changed source files reverted to the committed version (a pass there means the tests do not cover the change), then plants one small bug at a time on the changed lines (comparisons, boundaries, `&&`/`||`, booleans, negated conditions, off-by-one constants, `+`/`-`, returned values) and reports a score and each surviving mutant with `file:line`. Mutants that only break the build are left out of the score. Test files are never mutated; every file is restored byte for byte with its modification time, one approval covers the whole probe, a prompt-injection hold still needs a person, and a crash journal restores files on the next run. See [Do the tests catch a bug in the change?](docs/USER-GUIDE.md#do-the-tests-catch-a-bug-in-the-change).
+
+### Fixed
+
+- `npm run check` passes again: the harness benchmark judged a test diff that only rewrites expected values without the request that decides it, so its honest-typo case counted as weakened tests.
+
 ## [1.7.2] - 2026-11-22
 
 ### Security
