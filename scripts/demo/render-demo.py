@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render an asciicast v2 recording into a polished MP4 and GIF.
 
-    python3 scripts/demo/render-demo.py demo.cast assets/demo/oasis-terminal-demo
+    python3 scripts/demo/render-demo.py demo.cast assets/demo/oasis-real-model-demo
 
 Needs: pip install pyte pillow; ffmpeg on PATH. Fonts: JetBrains Mono if
 OASIS_DEMO_FONT_DIR points at its ttf folder, otherwise DejaVu Sans Mono, with
