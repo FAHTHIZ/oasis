@@ -181,3 +181,29 @@ test('a command that runs too long is stopped and reported', { skip }, async () 
     await disposeRehearsal(result);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('an unapproved rehearsal cannot read credential folders or secret variables into file names', { skip }, async (t) => {
+  const root = await workspace();
+  const home = await mkdtemp(path.join(os.homedir(), '.oasis-rehearsal-home-'));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(home, { recursive: true, force: true }); });
+  await mkdir(path.join(home, '.aws'));
+  await writeFile(path.join(home, '.aws', 'credentials'), 'TOPSECRETAWSVALUE\n');
+  await writeFile(path.join(home, '.netrc'), 'machine x password NETRCSECRET\n');
+  const line = 'touch "x$(rev < "$HOME/.aws/credentials")" "y$(rev < "$HOME/.netrc" | tr -cd A-Z)" "z$(printenv GITHUB_TOKEN | rev)" ok';
+  const result = await rehearseForApproval({ root, line, env: { ...process.env, HOME: home, GITHUB_TOKEN: 'tokenvalueABCDEF', OASIS_REHEARSE: '1' } });
+  assert.ok(result.summary, JSON.stringify(result));
+  const names = result.summary.created.join(' ');
+  assert.match(names, /\bok\b/, 'the rehearsal itself still ran');
+  assert.doesNotMatch(names, /EULAVSWATERCESPOT|TERCESCRTEN|FEDCBAeulavnekot/);
+  assert.deepEqual(result.summary.created.sort(), ['ok', 'x', 'y', 'z']);
+});
+
+test('a declined command says it only ran as a rehearsal', { skip }, async (t) => {
+  const root = await workspace();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const result = await runWorkspaceCommand(root, 'touch', ['new.txt'], { approval: async () => false, env: { ...process.env, OASIS_REHEARSE: '1' }, readOnlyCommands: false });
+  assert.equal(result.approved, false);
+  assert.deepEqual(result.rehearsal && result.rehearsal.created, ['new.txt']);
+  assert.match(result.message, /only ran as a rehearsal/);
+  assert.doesNotMatch(result.message, /No process was started/);
+});

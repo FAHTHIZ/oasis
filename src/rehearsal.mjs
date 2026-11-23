@@ -32,7 +32,7 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rename, rm, 
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tmpToolchainMounts, unixSocketFilterPath } from './sandbox.mjs';
+import { collectSensitivePaths, tmpToolchainMounts, unixSocketFilterPath } from './sandbox.mjs';
 
 export const REHEARSAL_TIMEOUT_MS = 30_000;
 const MAX_OUTPUT = 64 * 1024;
@@ -112,6 +112,17 @@ export async function rehearseCommand({ root, command, args = [], env = process.
   for (const dir of ['/run', '/var/run', '/dev/shm', env.XDG_RUNTIME_DIR || '']) {
     if (dir && !pathContains(dir, lower) && await isDir(dir)) bwrapArgs.push('--tmpfs', dir);
   }
+  // The command has not been approved yet, and the names of the files it
+  // creates are shown to the model. It gets the same view as a real sandboxed
+  // run: credential folders and files (~/.ssh, ~/.aws, OASIS's own config and
+  // the rest of the sandbox's list) are hidden, and secret environment
+  // variables are removed below. Without this, a command could read a key and
+  // put it in a file name before anyone approved it.
+  for (const item of collectSensitivePaths(env)) {
+    if (pathContains(item.path, lower) || pathContains(lower, item.path) || pathContains('/tmp', item.path)) continue;
+    if (item.type === 'directory') bwrapArgs.push('--tmpfs', item.path);
+    else bwrapArgs.push('--ro-bind', '/dev/null', item.path);
+  }
   // Toolchains installed under /tmp (and this Node binary) stay visible over the fresh /tmp.
   for (const dir of new Set([...tmpToolchainMounts(command, env), ...tmpToolchainMounts(process.execPath, env)])) {
     if (!pathContains(dir, lower) && !pathContains(lower, dir)) bwrapArgs.push('--ro-bind', dir, dir);
@@ -122,7 +133,8 @@ export async function rehearseCommand({ root, command, args = [], env = process.
   bwrapArgs.push('--unshare-pid', '--unshare-ipc', '--unshare-uts', '--die-with-parent', '--new-session');
   if (!network) bwrapArgs.push('--unshare-net');
   bwrapArgs.push('--chdir', path.resolve(cwd), '--', process.execPath, LISTER, upper, lower, path.join(report, 'merged.json'), '--', ...(filter ? [filter] : []), command, ...args);
-  const child = spawn('bwrap', bwrapArgs, { env: { ...env, OASIS_REHEARSAL: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const { scrubEnvironment } = await import('./tools.mjs');
+  const child = spawn('bwrap', bwrapArgs, { env: { ...scrubEnvironment(env), OASIS_REHEARSAL: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (chunk) => { stdout = tail(stdout + chunk); });

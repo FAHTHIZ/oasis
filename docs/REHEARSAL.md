@@ -19,6 +19,7 @@ bubblewrap (0.11 or later) mounts an overlay on the workspace path. The real wor
 - the network, PID, IPC and UTS namespaces are private (no network unless `oasis rehearse --network`);
 - `/run`, `/var/run`, `/dev/shm` and `$XDG_RUNTIME_DIR` are empty, and where the seccomp helper from `@anthropic-ai/sandbox-runtime` is present, Unix sockets cannot be opened at all, so host daemons (Docker, an SSH agent, D-Bus) are out of reach;
 - the command is stopped after 30 seconds and reports what it changed so far.
+- the command has not been approved yet, so it sees no more than a sandboxed command would: the credential folders and files the OS sandbox hides (`~/.ssh`, `~/.aws`, `~/.netrc`, `~/.config/oasis` and the rest) are empty, and secret environment variables are removed as for a real run. Otherwise it could read a key and put it into the name of a file it creates, and that name goes into the prompt and the tool result the model sees.
 
 When the command exits, the upper layer is the exact change set: a file or symlink is created, or modified when it differs from the lower one (content, mode or link target); a character device 0/0 is a whiteout, so the path was deleted. A directory that replaced a lower one (`rm -r d; mkdir d`) is opaque; instead of reading overlay extended attributes, a small helper lists the merged directory from inside the sandbox before it exits, and the names missing from it were deleted. Changes inside `.git` are counted separately.
 
