@@ -80,7 +80,9 @@ function installDeeplink(text) {
     const raw = url.searchParams.get('config') || '';
     config = parse(raw) || parse(decode(raw));
   } else if (/^vscode(-insiders)?:/i.test(url.protocol) && /mcp\/install/.test(where)) {
-    config = parse(decodeURIComponent(url.search.slice(1)));
+    let query = '';
+    try { query = decodeURIComponent(url.search.slice(1)); } catch { query = ''; }
+    config = parse(query);
     if (config && config.name) name = config.name;
   } else if (/(^|\.)vscode\.dev$/.test(host) && /\/redirect\/mcp\/install/.test(url.pathname)) {
     config = parse(url.searchParams.get('config') || '');
