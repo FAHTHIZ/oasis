@@ -7,6 +7,7 @@
 //   Cursor plugin          .cursor-plugin/plugin.json, rules/*.mdc, mcp.json, skills/, agents/
 //   Copilot CLI plugin     .plugin/plugin.json, .github/plugin/plugin.json or a bare plugin.json
 //   Kiro power             POWER.md, mcp.json, steering/*.md
+//   Factory Droid plugin   .factory-plugin/plugin.json, droids/*.md, mcp.json, hooks/
 //   MCP Bundle             manifest.json (manifest_version / dxt_version), .mcpb / .dxt
 //   Config pack            VS Code / Copilot, Continue, Cursor, Windsurf, Cline,
 //                          OpenCode, Antigravity and Gemini project files (config-packs.mjs)
@@ -61,6 +62,11 @@ export async function detectForeignPlugin(dir) {
   if (codex && codex.name) return { format: 'codex', label: 'Codex plugin', name: slug(codex.name), description: String(codex.description || ''), version: String(codex.version || ''), manifest: codex };
   const cursor = await readJson(path.join(dir, '.cursor-plugin', 'plugin.json'));
   if (cursor && cursor.name) return { format: 'cursor', label: 'Cursor plugin', name: slug(cursor.name), description: String(cursor.description || ''), version: String(cursor.version || ''), manifest: cursor };
+  // Factory Droid: .factory-plugin/ marks the layout; Droid does not need the fields in it.
+  if (existsSync(path.join(dir, '.factory-plugin'))) {
+    const droid = await readJson(path.join(dir, '.factory-plugin', 'plugin.json')) || {};
+    if (droid && typeof droid === 'object' && !Array.isArray(droid)) return { format: 'factory', label: 'Factory Droid plugin', name: slug(droid.name || path.basename(dir)), description: String(droid.description || ''), version: String(droid.version || ''), manifest: droid };
+  }
   // Copilot CLI's legacy manifest locations, in the order it checks them. A bare
   // plugin.json with schemaVersion is an OASIS native package, not this.
   for (const rel of [['.plugin', 'plugin.json'], ['plugin.json'], ['.github', 'plugin', 'plugin.json']]) {
@@ -265,7 +271,7 @@ export async function describeForeignPlugin(dir, info) {
   const parts = [];
   const commands = files.filter((f) => /^commands\/.+\.(toml|md)$/i.test(f)).length;
   const skills = files.filter((f) => /^skills\/[^/]+\/SKILL\.md$/i.test(f)).length;
-  const agents = files.filter((f) => /^agents\/.+\.md$/i.test(f)).length;
+  const agents = files.filter((f) => /^agents\/.+\.md$/i.test(f) || (info.format === 'factory' && /^droids\/[^/]+\.md$/i.test(f))).length;
   if (commands) parts.push(commands + ' command' + (commands === 1 ? '' : 's'));
   if (skills) parts.push(skills + ' skill' + (skills === 1 ? '' : 's'));
   if (agents) parts.push(agents + ' agent' + (agents === 1 ? '' : 's'));
@@ -381,6 +387,7 @@ export async function convertToClaudePlugin(srcDir, destDir, info) {
     if (skillsRel && skillsRel !== 'skills') manifest.skills = './' + skillsRel;
     if (info.format === 'cursor' || info.format === 'copilot') await adaptCursorOrCopilot(destDir, info, manifest, files);
     if (info.format === 'kiro-power') await adaptKiroPower(destDir, info, files);
+    if (info.format === 'factory') await adaptFactory(destDir, info, manifest, files);
   }
   await mkdir(path.join(destDir, '.claude-plugin'), { recursive: true });
   await writeFile(path.join(destDir, '.claude-plugin', 'plugin.json'), JSON.stringify(manifest, null, 2) + '\n');
@@ -441,6 +448,72 @@ async function adaptCursorOrCopilot(destDir, info, manifest, files) {
   }
   const skillsRels = [].concat(m.skills || []).map(insideRel).filter(Boolean);
   if (skillsRels.length > 1) manifest.skills = skillsRels.map((rel) => './' + rel);
+}
+
+// Factory Droid tool IDs and categories -> Claude Code tool names.
+const DROID_TOOLS = { Execute: ['Bash'], Create: ['Write'], ApplyPatch: ['Edit'], FetchUrl: ['WebFetch'], Read: ['Read'], LS: ['LS'], Grep: ['Grep'], Glob: ['Glob'], Edit: ['Edit'], MultiEdit: ['MultiEdit'], WebSearch: ['WebSearch'], TodoWrite: ['TodoWrite'], Task: ['Task'], Skill: ['Skill'] };
+const DROID_CATEGORIES = { 'read-only': ['Read', 'Grep', 'Glob', 'LS'], edit: ['Edit', 'MultiEdit', 'Write'], execute: ['Bash'], web: ['WebFetch', 'WebSearch'] };
+
+/** Claude Code tools for a droid's tools field (a category or a list of IDs), or null for all tools. */
+export function droidToolNames(tools) {
+  if (tools === undefined || tools === null || tools === '') return null;
+  if (typeof tools === 'string' && DROID_CATEGORIES[tools.trim()]) return DROID_CATEGORIES[tools.trim()];
+  const list = Array.isArray(tools) ? tools : String(tools).split(',');
+  const names = [...new Set(list.map((t) => String(t).trim()).filter(Boolean).flatMap((t) => DROID_TOOLS[t] || DROID_CATEGORIES[t] || (/^[A-Za-z][A-Za-z0-9_]*$/.test(t) ? [t] : [])))];
+  return names.length ? names : null;
+}
+
+/** A hook matcher under Droid tool names, rewritten to Claude Code's. */
+export function droidMatcher(matcher) {
+  if (typeof matcher !== 'string' || !matcher) return matcher;
+  return matcher.replace(/\b(Execute|Create|ApplyPatch|FetchUrl)\b/g, (name) => DROID_TOOLS[name][0] === 'Edit' ? 'Edit' : DROID_TOOLS[name][0]);
+}
+
+const droidVars = (value) => typeof value === 'string'
+  ? value.replace(/\$\{DROID_PLUGIN_ROOT\}|\$DROID_PLUGIN_ROOT\b/g, '${CLAUDE_PLUGIN_ROOT}').replace(/\$\{FACTORY_PROJECT_DIR\}|\$FACTORY_PROJECT_DIR\b/g, '${CLAUDE_PROJECT_DIR}')
+  : value;
+
+// Factory Droid plugins use Claude Code's layout with droids/ for agents,
+// mcp.json for servers and Droid tool names (Execute, Create) in hook matchers.
+async function adaptFactory(destDir, info, manifest, files) {
+  const m = info.manifest;
+  for (const rel of files.filter((f) => /^droids\/[^/]+\.md$/i.test(f))) {
+    const text = await readFile(path.join(destDir, rel), 'utf8').catch(() => '');
+    const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
+    if (!match || !match[2].trim()) continue;
+    const { parse } = await import('yaml');
+    let front = {};
+    try { front = parse(match[1]) || {}; } catch { continue; }
+    const name = slug(front.name || path.posix.basename(rel, '.md'), 'droid');
+    const tools = droidToolNames(front.tools);
+    const lines = ['---', 'name: ' + name, 'description: ' + JSON.stringify(String(front.description || 'The ' + name + ' droid'))];
+    if (tools) lines.push('tools: ' + tools.join(', '));
+    if (typeof front.model === 'string' && /^(sonnet|opus|haiku|inherit)$/.test(front.model)) lines.push('model: ' + front.model);
+    const dest = path.join(destDir, 'agents', name + '.md');
+    if (existsSync(dest)) continue;
+    await mkdir(path.dirname(dest), { recursive: true });
+    await writeFile(dest, lines.join('\n') + '\n---\n\n' + droidVars(match[2].trim()) + '\n');
+  }
+  // Hooks: hooks/hooks.json (or a root hooks.json), then the manifest's hooks field.
+  const docs = [];
+  const fileDoc = await readJson(path.join(destDir, 'hooks', 'hooks.json')) || (existsSync(path.join(destDir, 'hooks', 'hooks.json')) ? null : await readJson(path.join(destDir, 'hooks.json')));
+  if (fileDoc) docs.push(fileDoc);
+  if (typeof m.hooks === 'string') { const doc = await readJson(path.resolve(destDir, m.hooks)); if (doc && !path.relative(destDir, path.resolve(destDir, m.hooks)).startsWith('..')) docs.push(doc); }
+  else if (m.hooks && typeof m.hooks === 'object') docs.push(m.hooks);
+  const merged = {};
+  for (const doc of docs) {
+    const map = doc.hooks && typeof doc.hooks === 'object' && !Array.isArray(doc.hooks) ? doc.hooks : doc;
+    for (const [event, groups] of Object.entries(map)) {
+      if (!CLAUDE_EVENTS.has(event) || !Array.isArray(groups)) continue;
+      (merged[event] ||= []).push(...JSON.parse(JSON.stringify(groups), (key, value) => droidVars(value)).map((g) => ({ ...g, ...(g.matcher ? { matcher: droidMatcher(g.matcher) } : {}) })));
+    }
+  }
+  delete manifest.hooks;
+  await rm(path.join(destDir, 'hooks', 'hooks.json'), { force: true });
+  if (Object.keys(merged).length) manifest.hooks = merged;
+  if (manifest.mcpServers) manifest.mcpServers = JSON.parse(JSON.stringify(manifest.mcpServers), (key, value) => droidVars(value));
+  const root = await readJson(path.join(destDir, '.mcp.json'));
+  if (root) await writeFile(path.join(destDir, '.mcp.json'), JSON.stringify(JSON.parse(JSON.stringify(root), (key, value) => droidVars(value)), null, 2) + '\n');
 }
 
 // A Kiro power is a POWER.md guide (plus optional steering files) next to an
