@@ -207,3 +207,26 @@ test('VS Code / Copilot prompt files become slash commands with ${input:...} fil
   assert.equal(two.prompt, 'Compare react with vue 3. ${selection}');
   assert.equal((await resolveCustomCommand(root, '/plain for utils.js', { commands })).prompt, 'Write tests.\n\nfor utils.js');
 });
+
+test('Continue prompt files (.prompt and .md) become slash commands with {{{ input }}} and @file filled in', async (t) => {
+  const { root, home, env } = await setup(t, {
+    '.continue/prompts/test.prompt': '# a comment\ntemperature: 0.5\ndescription: Write unit tests\n---\n<system>\nYou are an expert programmer\n</system>\n{{{ input }}}\n\nWrite tests for {{{ currentFile }}}. See @NOTES.md',
+    '.continue/prompts/review.md': '---\nname: Review\ndescription: Review the diff\ninvokable: true\n---\nReview {{ diff }} carefully.',
+    '.continue/prompts/off.md': '---\ninvokable: false\n---\nNot a command.',
+    '.continue/prompts/bare.prompt': 'Explain this --- or that.',
+    'NOTES.md': 'note body',
+    '~/.continue/prompts/standup.prompt': 'Write my standup.'
+  });
+  const commands = await loadCustomCommands(root, { env, home });
+  assert.equal(commands.get('test').description, 'Write unit tests (Continue)');
+  assert.equal(commands.get('review').description, 'Review the diff (Continue)');
+  assert.ok(!commands.has('off'));
+  assert.ok(commands.has('standup'));
+  assert.equal(commands.get('bare').body, 'Explain this --- or that.');
+  const run = await resolveCustomCommand(root, '/test only the parser', { commands });
+  assert.match(run.prompt, /^System instructions: You are an expert programmer\n\nonly the parser\n\nWrite tests for \(the file being worked on\)\./);
+  assert.doesNotMatch(run.prompt, /temperature/);
+  assert.match(run.prompt, /<file path="NOTES.md">\nnote body/);
+  assert.equal(run.shell.length, 0);
+  assert.equal((await resolveCustomCommand(root, '/review now', { commands })).prompt, 'Review (the current git diff) carefully.\n\nnow');
+});

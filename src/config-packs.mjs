@@ -280,7 +280,11 @@ async function scanPack(dir) {
       const file = path.join(dir, '.continue', sub, entry.name);
       if (/\.ya?ml$/i.test(entry.name)) blocks.push(await readYamlFile(file));
       else if (sub === 'rules' && /\.md$/i.test(entry.name)) { const { meta, body } = front(await readText(file)); if (body) blocks.push({ rules: [{ name: meta.name || entry.name.replace(/\.md$/i, ''), rule: body, globs: meta.globs, description: meta.description }] }); }
-      else if (sub === 'prompts' && /\.(md|prompt)$/i.test(entry.name)) { const { meta, body } = front(await readText(file)); if (body) blocks.push({ prompts: [{ name: meta.name || entry.name.replace(/\.(md|prompt)$/i, ''), description: meta.description, prompt: body }] }); }
+      else if (sub === 'prompts' && /\.(md|prompt)$/i.test(entry.name)) {
+        const { parseContinuePrompt } = await import('./commands.mjs');
+        const { meta, body } = parseContinuePrompt(await readText(file), entry.name);
+        if (body && String(meta.invokable) !== 'false') blocks.push({ prompts: [{ name: entry.name.replace(/\.(md|prompt)$/i, ''), description: meta.description, prompt: body }] });
+      }
     }
   }
   for (const name of ['config.yaml', 'config.yml']) { const doc = await readYamlFile(path.join(dir, '.continue', name)); if (doc) blocks.push(doc); }
@@ -290,7 +294,11 @@ async function scanPack(dir) {
     const block = continueBlock(doc);
     if (block.rules.length || block.prompts.length || Object.keys(block.servers).length) found.tools.add('Continue');
     for (const rule of block.rules) found.rules.push({ name: slug(rule.name), text: rule.text, globs: rule.globs, description: rule.description });
-    for (const prompt of block.prompts) found.commands.push({ name: slug(prompt.name), body: (prompt.description ? '---\ndescription: ' + JSON.stringify(String(prompt.description)) + '\n---\n\n' : '') + prompt.prompt.trim() + (prompt.prompt.includes('$ARGUMENTS') ? '' : '\n\n$ARGUMENTS') + '\n' });
+    for (const prompt of block.prompts) {
+      // Continue's {{{ input }}} is Claude Code's $ARGUMENTS.
+      const text = prompt.prompt.trim().replace(/\{\{\{?\s*input\s*\}?\}\}/g, '$ARGUMENTS');
+      found.commands.push({ name: slug(prompt.name), body: (prompt.description ? '---\ndescription: ' + JSON.stringify(String(prompt.description)) + '\n---\n\n' : '') + text + (text.includes('$ARGUMENTS') ? '' : '\n\n$ARGUMENTS') + '\n' });
+    }
     Object.assign(found.servers, block.servers);
   }
   // Project files `oasis import` reads (Cursor, Windsurf, Cline, OpenCode,
