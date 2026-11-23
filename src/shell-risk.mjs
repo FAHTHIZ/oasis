@@ -596,7 +596,7 @@ function nestedLines(cmd) {
 // Inline code for python/node/perl/ruby/php. Shell strings handed to
 // system()/exec()/subprocess are analyzed as shell lines, and APIs that delete
 // a home or root directory recursively are refused.
-const HOME_OR_ROOT = /(expanduser\(\s*['"]~['"]\s*\)|Path\.home\(\)|os\.homedir\(\)|process\.env\.(HOME|USERPROFILE)|os\.environ(\.get\(\s*|\[\s*)['"]HOME['"]|ENV\[\s*['"]HOME['"]\s*\]|\$ENV\{\s*HOME\s*\}|getenv\(\s*['"]HOME['"]\s*\)|Dir\.home|['"](~|\/|\/home\/[^'"\/]+|\/Users\/[^'"\/]+|[A-Za-z]:\\\\?)['"])/;
+const HOME_OR_ROOT = /(expanduser\(\s*['"]~['"]\s*\)|Path\.home\(\)|\bhomedir\(\)|process\.env\.(HOME|USERPROFILE)|os\.environ(\.get\(\s*|\[\s*)['"]HOME['"]|ENV\[\s*['"]HOME['"]\s*\]|\$ENV\{\s*HOME\s*\}|getenv\(\s*['"]HOME['"]\s*\)|Dir\.home|['"](~|\/|\/home\/[^'"\/]+|\/Users\/[^'"\/]+|[A-Za-z]:\\\\?)['"])/;
 const RECURSIVE_DELETE_API = /(shutil\.rmtree|rmSync|rmdirSync|fs\.rm\b|fs\.promises\.rm|rimraf|rm_rf|rm_r\b|remove_tree|rmtree|FileUtils\.rm|remove_dir_all|File\.Delete|Directory\.Delete)/;
 function inlineCode(cmd) {
   const { name, args } = programOf(cmd.tokens);
@@ -609,8 +609,16 @@ function inlineCode(cmd) {
   }
   // Short flags combine: `node -pe CODE`, `perl -le CODE`, `python3 -Ic CODE`.
   const letters = flagsFor.filter((flag) => /^-[a-zA-Z]$/.test(flag)).map((flag) => flag[1]);
-  const at = args.findIndex((a) => flagsFor.includes(a) || (/^-[a-zA-Z]{2,}$/.test(a) && [...a.slice(1)].some((letter) => letters.includes(letter))));
-  return at !== -1 && args[at + 1] !== undefined ? args[at + 1] : null;
+  // The code flag ends a cluster, and the word after it is the code, not
+  // another option: in `ruby -rfileutils -e CODE` and `ruby -rsecure -e CODE`
+  // the first word is a -r value that happens to contain an e.
+  for (let at = 0; at < args.length - 1; at++) {
+    const a = args[at];
+    const flag = flagsFor.includes(a) || (/^-[a-zA-Z]{2,}$/.test(a) && letters.includes(a[a.length - 1]));
+    // Only a bare option word is skipped; `-require('fs')...` is still code.
+    if (flag && !/^-[a-zA-Z-]*$/.test(args[at + 1])) return args[at + 1];
+  }
+  return null;
 }
 
 function analyzeInlineCode(code, depth) {
