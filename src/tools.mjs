@@ -257,6 +257,20 @@ function workspacePathHint(rootReal, target) {
   return ' Use paths relative to the workspace (' + rootReal + ').';
 }
 
+// Nobody can answer an approval in an unattended run (oasis eval, -p without a
+// terminal, background agents), so "tell the user" is a dead end. Say why the
+// command needed a person and what runs without one; the check itself stands.
+export function unattendedCommandMessage(highRisk, kind = 'command') {
+  const why = highRisk ? ' It needs a person because it ' + String(highRisk).replace(/^this command /, '') + ', and auto-approval does not apply to that.' : kind === 'shell' ? ' run_shell lines are not auto-approved outside an OS sandbox.' : '';
+  const inline = /inline code/.test(String(highRisk || ''));
+  const next = inline
+    ? ' To run code, save it to a file in the workspace with write_file and run that file with run_command (for example command "python3", args ["report.py"]).'
+    : kind === 'shell'
+      ? ' Use run_command with a program and an argument list instead (no pipes, redirects or heredocs); to run code, save it to a file with write_file and run the file.'
+      : '';
+  return 'Not run: no one is available to approve commands in this session.' + why + next + ' Do not repeat the same command.';
+}
+
 export async function resolveWorkspacePath(root, rawPath, options = {}) {
   const rootReal = await realpath(root);
   const input = String(rawPath || '.');
@@ -783,6 +797,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     } finally {
       if (rehearsal.kept) { const { disposeRehearsal } = await import('./rehearsal.mjs'); await disposeRehearsal(rehearsal.kept); }
     }
+    if (!ok && (!approval || options.noApprover)) return { approved: false, command, args, unattended: true, message: unattendedCommandMessage(highRisk) };
     if (!ok) return { approved: false, command, args, ...(rehearsal.summary ? { rehearsal: rehearsal.summary } : {}), message: 'Command was not approved. ' + (rehearsal.summary ? 'It only ran as a rehearsal in a throwaway copy of the workspace, and nothing it did was kept.' : 'No process was started.') + ' Do not retry it or ask for approval again this turn; finish what you can without it and tell the user the exact command to run.' };
   }
   if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before the command started.' };
@@ -2184,6 +2199,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       const rehearsalSink = {};
       const commandResult = await runWorkspaceCommand(root, args.command, args.args || [], {
         approval,
+        noApprover: Boolean(context.noApprover),
         autoApprove: Boolean(context.autoApprove) && !install.forceAsk,
         timeoutSeconds: Math.min(args.timeoutSeconds || context.maxCommandSeconds || 120, context.maxCommandSeconds || 600),
         env: context.env || process.env,
