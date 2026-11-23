@@ -56,6 +56,12 @@ test('a Gemini CLI extension installs as a working plugin: commands, context, se
   assert.ok('DEMO_API_KEY' in servers.tool.env);
   const hooks = (await pluginHooks(plugins, { env, root })).map((h) => h.hooks);
   assert.deepEqual(Object.keys(Object.assign({}, ...hooks)), ['PreToolUse']);
+  // Through the Gemini protocol bridge: its matcher is compared with Gemini tool names.
+  const gemini = Object.assign({}, ...hooks).PreToolUse.flatMap((group) => group.hooks)[0];
+  assert.equal(gemini.protocol, 'gemini');
+  assert.equal(gemini.foreignEvent, 'BeforeTool');
+  assert.equal(gemini.foreignMatcher, 'run_shell_command');
+  assert.match(gemini.command, /check\.sh$/);
   assert.deepEqual(result.needs, { 'demo-ext@repo-demo-ext': ['DEMO_API_KEY', 'DEMO_REGION'] });
   const saved = await addAnything('demo-ext', { root, env, values: { DEMO_REGION: 'eu' }, approve: async () => true });
   assert.equal(saved.kind, 'configure');

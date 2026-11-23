@@ -158,3 +158,26 @@ test('Copilot exit codes: preToolUse fails closed, exit 2 elsewhere only warns, 
   const anchored = await runHooks('PreToolUse', shell('ls'), { hooks: hooksFor('copilot', { preToolUse: [{ type: 'command', matcher: 'ba', bash: command(log('r'), JSON.stringify({ permissionDecision: 'deny', permissionDecisionReason: 'x' })) }] }), root });
   assert.equal(anchored.permissionDecision, null, '"ba" does not match "bash" once anchored');
 });
+
+test('Gemini CLI replies map to Claude Code ones', () => {
+  const ok = (json) => ({ exitCode: 0, stdout: JSON.stringify(json), stderr: '' });
+  const payload = { tool_name: 'Edit', oasis_tool_name: 'edit_file', tool_input: { path: 'a.txt', old_string: 'x', new_string: 'y' } };
+  const rewritten = JSON.parse(fromForeignOutput('gemini', 'BeforeTool', ok({ hookSpecificOutput: { tool_input: { new_string: 'z' } } }), { payload }).stdout);
+  assert.deepEqual(rewritten.hookSpecificOutput.updatedInput, { path: 'a.txt', old_string: 'x', new_string: 'z' });
+  const allow = fromForeignOutput('gemini', 'BeforeTool', ok({ decision: 'allow' }), { payload });
+  assert.equal(allow.stdout, '', 'allow is not a permission grant');
+  const hidden = JSON.parse(fromForeignOutput('gemini', 'AfterTool', ok({ decision: 'deny', reason: 'secret' }), { payload }).stdout);
+  assert.deepEqual(hidden.hookSpecificOutput.updatedToolOutput, { output: 'secret' });
+  const retry = JSON.parse(fromForeignOutput('gemini', 'AfterAgent', ok({ decision: 'deny', reason: 'add tests' }), {}).stdout);
+  assert.deepEqual(retry, { decision: 'block', reason: 'add tests' });
+  const context = JSON.parse(fromForeignOutput('gemini', 'BeforeAgent', ok({ hookSpecificOutput: { additionalContext: 'today is Monday' } }), {}).stdout);
+  assert.equal(context.hookSpecificOutput.additionalContext, 'today is Monday');
+  const blocked = fromForeignOutput('gemini', 'AfterTool', { exitCode: 2, stdout: '', stderr: 'redacted' }, { payload });
+  assert.equal(JSON.parse(blocked.stdout).hookSpecificOutput.updatedToolOutput.output, 'redacted');
+  assert.equal(fromForeignOutput('gemini', 'PreCompress', { exitCode: 2, stdout: '', stderr: 'x' }, {}).exitCode, 1);
+  const input = toForeignPayload('gemini', 'BeforeTool', { tool_name: 'LS', oasis_tool_name: 'list_files', tool_input: { path: 'src' } });
+  assert.equal(input.tool_name, 'list_directory');
+  assert.equal(input.tool_input.dir_path, 'src');
+  assert.equal(toForeignPayload('gemini', 'BeforeTool', { tool_name: 'mcp__gh__search', tool_input: {} }).tool_name, 'mcp_gh_search');
+  assert.equal(toForeignPayload('gemini', 'SessionStart', { source: 'resume' }, { foreignMatcher: 'startup' }), null);
+});
