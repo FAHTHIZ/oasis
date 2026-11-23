@@ -1,0 +1,799 @@
+{
+  "label": "OASIS 0.10.0 (openai)",
+  "sourceRevision": "67d85470c7197e4cb1d3de9fdd0c90929b2d819c",
+  "sourceRevisionAtEnd": "a1d3ba3a6b4f76909375eb936078f1b208f113c6",
+  "sourceChangedDuringRun": true,
+  "runId": "2026-11-23T17-19-21-251Z-14671",
+  "startedAt": "2026-11-23T17:19:21.251Z",
+  "completedAt": "2026-11-23T17:56:55.908Z",
+  "taskCount": 5,
+  "taskIds": [
+    "archive-old-logs",
+    "conflicting-sources-answer",
+    "meeting-action-items",
+    "project-schedule-plan",
+    "taskflow-search"
+  ],
+  "trialsPerTask": 1,
+  "timeoutSeconds": 1200,
+  "runtime": {
+    "node": "v22.21.1",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "passRate": 1,
+  "passed": 5,
+  "failed": 0,
+  "medianTimeMs": 407252,
+  "totalCostUSD": null,
+  "costPerPassedTaskUSD": null,
+  "selfAssessment": {
+    "assessed": 5,
+    "notAssessed": 0,
+    "agreement": 1,
+    "successPrecision": 1,
+    "overclaims": 0,
+    "underclaims": 0,
+    "truePositive": 4,
+    "trueNegative": 0,
+    "unsure": {
+      "passed": 1,
+      "failed": 0
+    },
+    "note": "OASIS verdicts recorded before the hidden verifier ran. Overclaim: OASIS said verified, the verifier failed it. Underclaim: OASIS said it failed, the verifier passed it."
+  },
+  "routing": {
+    "enabled": false
+  },
+  "provider": {
+    "model": "openai",
+    "protocol": "openai-compatible",
+    "baseURL": "https://text.pollinations.ai/openai",
+    "maxSteps": 150,
+    "maxOutputTokens": null
+  },
+  "pricing": {
+    "inputUsdPerMillionTokens": null,
+    "outputUsdPerMillionTokens": null,
+    "note": "Cost is a rough estimate from configured rates and does not distinguish cached tokens. Pass-rate differences under 10 percentage points are noisy with small task samples; run at least three trials per task when benchmarking."
+  },
+  "results": [
+    {
+      "taskId": "archive-old-logs",
+      "taskFingerprint": "c39f3c899d5277cf7ed1ec79d529e0dc787354b8c4d99c3585172d6321789a3a",
+      "category": "operations",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "passed",
+      "model": "openai",
+      "requestedModel": "openai",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openai",
+      "protocol": "openai-compatible",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "maxSteps": 150,
+      "maxOutputTokens": null,
+      "inputTokens": 36193,
+      "outputTokens": 1969,
+      "totalTokens": 38162,
+      "costUSD": null,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS",
+      "wallTimeMs": 227241,
+      "finished": true,
+      "toolCalls": 5,
+      "trace": [
+        {
+          "tool": "glob_files",
+          "arg": "scripts",
+          "resultChars": 69
+        },
+        {
+          "tool": "write_file",
+          "arg": "scripts/archive-logs.mjs",
+          "resultChars": 1159
+        },
+        {
+          "tool": "write_file",
+          "arg": "scripts/archive-logs.mjs",
+          "resultChars": 388
+        },
+        {
+          "tool": "run_command",
+          "arg": "node --check scripts/archive-logs.mjs",
+          "resultChars": 204
+        },
+        {
+          "tool": "run_command",
+          "arg": "node scripts/archive-logs.mjs --before 2026-11-05",
+          "resultChars": 1314
+        }
+      ],
+      "requestTokens": [
+        [
+          4722,
+          47
+        ],
+        [
+          4778,
+          868
+        ],
+        [
+          5843,
+          910
+        ],
+        [
+          6724,
+          50
+        ],
+        [
+          6809,
+          53
+        ],
+        [
+          7317,
+          41
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "logs/archive/2026-10/app-2026-10-30.log",
+          "status": "added",
+          "content": "2026-10-30T08:00:00Z INFO started\n"
+        },
+        {
+          "path": "logs/archive/2026-11/app-2026-11-01.log",
+          "status": "added",
+          "content": "2026-11-01T08:00:00Z INFO started\n2026-11-01T17:00:00Z INFO stopped\n"
+        },
+        {
+          "path": "logs/archive/2026-11/app-2026-11-02.log",
+          "status": "added",
+          "content": "2026-11-02T08:00:00Z INFO started\n2026-11-02T17:00:00Z INFO stopped\n"
+        },
+        {
+          "path": "logs/archive/2026-11/app-2026-11-03.log",
+          "status": "added",
+          "content": "2026-11-03T08:00:00Z INFO started\n2026-11-03T17:00:00Z INFO stopped\n"
+        },
+        {
+          "path": "logs/archive/2026-11/app-2026-11-04.log",
+          "status": "added",
+          "content": "2026-11-04T08:00:00Z INFO started\n2026-11-04T17:00:00Z INFO stopped\n"
+        },
+        {
+          "path": "logs/archive/manifest.json",
+          "status": "added",
+          "content": "{\n  \"moved\": [\n    {\n      \"file\": \"app-2026-10-30.log\",\n      \"to\": \"archive/2026-10/app-2026-10-30.log\"\n    },\n    {\n      \"file\": \"app-2026-11-01.log\",\n      \"to\": \"archive/2026-11/app-2026-11-01.log\"\n    },\n    {\n      \"file\": \"app-2026-11-02.log\",\n      \"to\": \"archive/2026-11/app-2026-11-02.log\"\n    },\n    {\n      \"file\": \"app-2026-11-03.log\",\n      \"to\": \"archive/2026-11/app-2026-11-03.log\"\n    },\n    {\n      \"file\": \"app-2026-11-04.log\",\n      \"to\": \"archive/2026-11/app-2026-11-04.log\"\n    }\n  ]\n}"
+        },
+        {
+          "path": "scripts/archive-logs.mjs",
+          "status": "added",
+          "content": "#!/usr/bin/env node\n\n/*\n * Move old log files into an archive directory and record a manifest.\n * Usage: node scripts/archive-logs.mjs --before YYYY-MM-DD [--dir logs]\n */\nimport { promises as fs } from 'fs';\nimport path from 'path';\nimport { fileURLToPath, pathToFileURL } from 'url';\n\nconst argv = process.argv.slice(2);\nlet beforeDateStr;\nlet dir = 'logs';\nfor (let i = 0; i < argv.length; i++) {\n  const arg = argv[i];\n  if (arg === '--before' && i + 1 < argv.length) {\n    beforeDateStr = argv[i + 1];\n    i++;\n  } else if (arg === '--dir' && i + 1 < argv.length) {\n    dir = argv[i + 1];\n    i++;\n  }\n}\n\nfunction isValidYYYYMMDD(str) {\n  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(str)) return false;\n  const date = new Date(str + 'T00:00:00Z');\n  return date instanceof Date && !isNaN(date) && date.toISOString().slice(0, 10) === str;\n}\n\nif (!beforeDateStr || !isValidYYYYMMDD(beforeDateStr)) {\n  process.exit(2);\n}\nconst beforeDate = new Date(beforeDateStr + 'T00:00:00Z');\nconst baseDir = path.resolve(dir);\nconst archiveBase = path.join(baseDir, 'archive');\n\nasync function main() {\n  const files = await fs.readdir(baseDir, { withFileTypes: true });\n  const moved = [];\n  for (const dirent of files) {\n    if (!dirent.isFile()) continue;\n    const name = dirent.name;\n    const match = name.match(/^app-(\\d{4}-\\d{2}-\\d{2})\\.log$/);\n    if (!match) continue;\n    const fileDateStr = match[1];\n    const fileDate = new Date(fileDateStr + 'T00:00:00Z');\n    if (fileDate < beforeDate) {\n      const monthDir = `${fileDate.getFullYear()}-${String(fileDate.getMonth() + 1).padStart(2, '0')}`;\n      const targetDir = path.join(archiveBase, monthDir);\n      await fs.mkdir(targetDir, { recursive: true });\n      const src = path.join(baseDir, name);\n      const dest = path.join(targetDir, name);\n      await fs.rename(src, dest);\n      moved.push({ file: name, to: path.relative(baseDir, dest).replace(/\\\\/g, '/') });\n    }\n  }\n  if (moved.length > 0) {\n    const manifestPath = path.join(archiveBase, 'manifest.json');\n    let existing = [];\n    try {\n      const data = await fs.readFile(manifestPath, 'utf8');\n      const obj = JSON.parse(data);\n      existing = obj.moved || [];\n    } catch (_) {}\n    const combined = existing.concat(moved.map(e => ({ file: e.file, to: e.to })));\n    await fs.writeFile(manifestPath, JSON.stringify({ moved: combined }, null, 2));\n  }\n}\n\nmain().catch(err => {\n  console.error(err);\n  process.exit(1);\n});\n"
+        },
+        {
+          "path": "logs/app-2026-10-30.log",
+          "status": "deleted"
+        },
+        {
+          "path": "logs/app-2026-11-01.log",
+          "status": "deleted"
+        },
+        {
+          "path": "logs/app-2026-11-02.log",
+          "status": "deleted"
+        },
+        {
+          "path": "logs/app-2026-11-03.log",
+          "status": "deleted"
+        },
+        {
+          "path": "logs/app-2026-11-04.log",
+          "status": "deleted"
+        }
+      ],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "verified",
+        "claim": "success"
+      }
+    },
+    {
+      "taskId": "conflicting-sources-answer",
+      "taskFingerprint": "5ccd58a4ab7a28253f136663354e864cccef2e4460f2449d7f5d6e6fb61d56f9",
+      "category": "research-synthesis",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "passed",
+      "model": "openai",
+      "requestedModel": "openai",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openai",
+      "protocol": "openai-compatible",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "maxSteps": 150,
+      "maxOutputTokens": null,
+      "inputTokens": 46779,
+      "outputTokens": 1356,
+      "totalTokens": 48135,
+      "costUSD": null,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS",
+      "wallTimeMs": 407252,
+      "finished": true,
+      "toolCalls": 8,
+      "trace": [
+        {
+          "tool": "glob_files",
+          "arg": "sources",
+          "resultChars": 173
+        },
+        {
+          "tool": "read_file",
+          "arg": "sources/official-api-docs.md",
+          "resultChars": 300
+        },
+        {
+          "tool": "read_file",
+          "arg": "sources/blog-repost.md",
+          "resultChars": 275
+        },
+        {
+          "tool": "read_file",
+          "arg": "sources/forum-thread.md",
+          "resultChars": 315
+        },
+        {
+          "tool": "write_file",
+          "arg": "answer.md",
+          "resultChars": 90
+        },
+        {
+          "tool": "read_file",
+          "arg": "sources/press-release-2025.md",
+          "resultChars": 275
+        },
+        {
+          "tool": "multi_edit",
+          "arg": "answer.md",
+          "resultChars": 118
+        },
+        {
+          "tool": "read_file",
+          "arg": "answer.md",
+          "resultChars": 918
+        }
+      ],
+      "requestTokens": [
+        [
+          4627,
+          40
+        ],
+        [
+          4710,
+          41
+        ],
+        [
+          4841,
+          40
+        ],
+        [
+          4963,
+          49
+        ],
+        [
+          5098,
+          215
+        ],
+        [
+          5321,
+          205
+        ],
+        [
+          5445,
+          375
+        ],
+        [
+          5754,
+          115
+        ],
+        [
+          6020,
+          276
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "answer.md",
+          "status": "added",
+          "content": "The current Acme API rate limit per key is **1,200 requests per minute**.\n\nSources supporting this figure:\n- **sources/official-api-docs.md** – “Each API key may make up to **1,200** requests per minute.”\n\nContradiction:\n- **sources/blog-repost.md** – states 600 requests per minute. This is from the 2025 announcement and is superseded by the newer official docs.\n- **sources/press-release-2025.md** – also lists 600 requests per minute, matching the blog post. Both are outdated relative to the current document.\n- **sources/forum-thread.md** – mentions user1 hitting 429s at ~1,200 requests per minute, which aligns with the current limit, while user2 references the old 600 figure. The forum discussion is a user report, not an authoritative source but supports the updated figure rather than contradicting it.\n"
+        }
+      ],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "evidenced",
+        "claim": "unsure"
+      }
+    },
+    {
+      "taskId": "meeting-action-items",
+      "taskFingerprint": "f4b490474e421bfde097dc6e03b3d225178d21bba285f3c66578ee22be4a63f3",
+      "category": "writing",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "passed",
+      "model": "openai",
+      "requestedModel": "openai",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openai",
+      "protocol": "openai-compatible",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "maxSteps": 150,
+      "maxOutputTokens": null,
+      "inputTokens": 14249,
+      "outputTokens": 609,
+      "totalTokens": 14858,
+      "costUSD": null,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS",
+      "wallTimeMs": 133819,
+      "finished": true,
+      "toolCalls": 2,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "notes/meeting.md",
+          "resultChars": 669
+        },
+        {
+          "tool": "write_file",
+          "arg": "notes/actions.json",
+          "resultChars": 100
+        }
+      ],
+      "requestTokens": [
+        [
+          4517,
+          45
+        ],
+        [
+          4753,
+          344
+        ],
+        [
+          4979,
+          220
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "notes/actions.json",
+          "status": "added",
+          "content": "[\n  {\n    \"owner\": \"Priya\",\n    \"action\": \"send the revised budget to finance\",\n    \"due\": \"2026-11-21\"\n  },\n  {\n    \"owner\": \"Lena\",\n    \"action\": \"fix the flaky upload test\",\n    \"due\": \"2026-11-25\"\n  },\n  {\n    \"owner\": \"Tom\",\n    \"action\": \"book the venue for the offsite\",\n    \"due\": \"2026-12-01\"\n  },\n  {\n    \"owner\": \"Lena\",\n    \"action\": \"write the onboarding doc for new contractors\",\n    \"due\": null\n  }\n]"
+        }
+      ],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "verified",
+        "claim": "success"
+      }
+    },
+    {
+      "taskId": "project-schedule-plan",
+      "taskFingerprint": "1033fd43becf6c92dea3b297ce53bd978c45aabb8569472789c0f1cf68f2b1a7",
+      "category": "planning",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "passed",
+      "model": "openai",
+      "requestedModel": "openai",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openai",
+      "protocol": "openai-compatible",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "maxSteps": 150,
+      "maxOutputTokens": null,
+      "inputTokens": 57350,
+      "outputTokens": 2393,
+      "totalTokens": 59743,
+      "costUSD": null,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS",
+      "wallTimeMs": 496507,
+      "finished": true,
+      "toolCalls": 6,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "project/tasks.json",
+          "resultChars": 1212
+        },
+        {
+          "tool": "write_file",
+          "arg": "project/plan.json",
+          "resultChars": 99
+        },
+        {
+          "tool": "task",
+          "arg": "verify plan",
+          "resultChars": 501,
+          "failed": true,
+          "why": "lean, data/properties/required must be object,boolean, data/properties/required must be object,boolean, data/properties/required must be object,boolean, data/properties/required must be object,boolean"
+        },
+        {
+          "tool": "read_file",
+          "arg": "project/plan.json",
+          "resultChars": 507
+        },
+        {
+          "tool": "read_file",
+          "arg": "project/tasks.json",
+          "resultChars": 1212
+        },
+        {
+          "tool": "task",
+          "arg": "verify plan",
+          "resultChars": 1113
+        },
+        {
+          "tool": "todo_write",
+          "resultChars": 104
+        },
+        {
+          "tool": "todo_write",
+          "resultChars": 106
+        }
+      ],
+      "nudges": [
+        {
+          "kind": "open-todos",
+          "afterStep": 7
+        }
+      ],
+      "requestTokens": [
+        [
+          4594,
+          45
+        ],
+        [
+          5042,
+          725
+        ],
+        [
+          5254,
+          356
+        ],
+        [
+          5497,
+          88
+        ],
+        [
+          3951,
+          44
+        ],
+        [
+          4170,
+          56
+        ],
+        [
+          4618,
+          545
+        ],
+        [
+          5888,
+          45
+        ],
+        [
+          5994,
+          423
+        ],
+        [
+          6118,
+          56
+        ],
+        [
+          6224,
+          10
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "project/plan.json",
+          "status": "added",
+          "content": "{\n  \"assignments\": [\n    {\"task\": \"schema\", \"person\": \"ana\", \"start\": 0},\n    {\"task\": \"auth\", \"person\": \"ana\", \"start\": 2},\n    {\"task\": \"launch\", \"person\": \"ana\", \"start\": 8},\n    {\"task\": \"ui\", \"person\": \"ben\", \"start\": 0},\n    {\"task\": \"api\", \"person\": \"ben\", \"start\": 3},\n    {\"task\": \"wire\", \"person\": \"ben\", \"start\": 6}\n  ]\n}\n"
+        }
+      ],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "verified",
+        "claim": "success"
+      }
+    },
+    {
+      "taskId": "taskflow-search",
+      "taskFingerprint": "4f55003e0ebc832b3e58785e03f3bcf4a50aa333078647169e82fb649ce56596",
+      "category": "data-structures",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "passed",
+      "model": "openai",
+      "requestedModel": "openai",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openai",
+      "protocol": "openai-compatible",
+      "baseURL": "https://text.pollinations.ai/openai",
+      "maxSteps": 150,
+      "maxOutputTokens": null,
+      "inputTokens": 209819,
+      "outputTokens": 4262,
+      "totalTokens": 214081,
+      "costUSD": null,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS",
+      "wallTimeMs": 989323,
+      "finished": true,
+      "toolCalls": 20,
+      "trace": [
+        {
+          "tool": "read_file",
+          "arg": "src/query.mjs",
+          "resultChars": 1694
+        },
+        {
+          "tool": "edit_file",
+          "arg": "src/query.mjs",
+          "resultChars": 406
+        },
+        {
+          "tool": "edit_file",
+          "arg": "src/query.mjs",
+          "resultChars": 406
+        },
+        {
+          "tool": "read_file",
+          "arg": "src/cli.mjs",
+          "resultChars": 4071
+        },
+        {
+          "tool": "edit_file",
+          "arg": "src/cli.mjs",
+          "resultChars": 402
+        },
+        {
+          "tool": "edit_file",
+          "arg": "src/cli.mjs",
+          "resultChars": 402
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 1740
+        },
+        {
+          "tool": "edit_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 547,
+          "failed": true,
+          "why": "  line 6: const tasks = [ |   ... and 25 more | Include a nearby line that differs between these places in old_string (and new_string), or set replace_all=true to change all of them."
+        },
+        {
+          "tool": "search_files",
+          "arg": "test",
+          "resultChars": 145
+        },
+        {
+          "tool": "edit_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 547,
+          "failed": true,
+          "why": "  line 6: const tasks = [ |   ... and 25 more | Include a nearby line that differs between these places in old_string (and new_string), or set replace_all=true to change all of them."
+        },
+        {
+          "tool": "edit_file",
+          "resultChars": 359,
+          "failed": true,
+          "why": "e same large call. For write_file, send the file in parts of about 150 lines: the first with write_file, then each next part with write_file and append: true. For other tools, send less text per call."
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 300
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 1740
+        },
+        {
+          "tool": "edit_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 79,
+          "failed": true,
+          "why": "old_string must not be empty. To create a new file, use write_file."
+        },
+        {
+          "tool": "write_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 413
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 1594
+        },
+        {
+          "tool": "git_diff",
+          "arg": "src/query.mjs",
+          "resultChars": 2246
+        },
+        {
+          "tool": "git_diff",
+          "arg": "src/cli.mjs",
+          "resultChars": 3024
+        },
+        {
+          "tool": "git_diff",
+          "arg": "test/query.test.mjs",
+          "resultChars": 2356
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 1595
+        }
+      ],
+      "requestTokens": [
+        [
+          4837,
+          67
+        ],
+        [
+          5415,
+          113
+        ],
+        [
+          5541,
+          264
+        ],
+        [
+          5828,
+          56
+        ],
+        [
+          7134,
+          137
+        ],
+        [
+          7310,
+          144
+        ],
+        [
+          7493,
+          60
+        ],
+        [
+          8184,
+          315
+        ],
+        [
+          8669,
+          50
+        ],
+        [
+          9144,
+          323
+        ],
+        [
+          9635,
+          1500
+        ],
+        [
+          9766,
+          51
+        ],
+        [
+          9875,
+          56
+        ],
+        [
+          10575,
+          565
+        ],
+        [
+          11172,
+          308
+        ],
+        [
+          11535,
+          36
+        ],
+        [
+          12024,
+          33
+        ],
+        [
+          12297,
+          41
+        ],
+        [
+          12647,
+          37
+        ],
+        [
+          13126,
+          40
+        ],
+        [
+          13562,
+          40
+        ],
+        [
+          14050,
+          26
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "src/cli.mjs",
+          "status": "modified",
+          "content": "#!/usr/bin/env node\nimport path from 'node:path';\nimport os from 'node:os';\nimport { pathToFileURL } from 'node:url';\nimport { openStore } from './store.mjs';\nimport { filterTasks, sortTasks, paginate } from './query.mjs';\nimport { formatList } from './format.mjs';\n\nconst VALUE_FLAGS = new Set(['priority', 'due', 'tag', 'status', 'sort', 'page', 'size', 'notes', 'file', 'search']);\nconst BOOLEAN_FLAGS = new Set(['overdue', 'help']);\n\n// Supports --flag value, --flag=value, and boolean --flag. \"--\" ends options.\nexport function parseArgs(argv) {\n  const positional = [];\n  const flags = {};\n  const tags = [];\n  for (let i = 0; i < argv.length; i++) {\n    const arg = argv[i];\n    if (arg === '--') { positional.push(...argv.slice(i + 1)); break; }\n    if (!arg.startsWith('--')) { positional.push(arg); continue; }\n    const eq = arg.indexOf('=');\n    const name = eq === -1 ? arg.slice(2) : arg.slice(2, eq);\n    if (BOOLEAN_FLAGS.has(name)) {\n      if (eq !== -1) throw new Error(`--${name} does not take a value`);\n      flags[name] = true;\n      continue;\n    }\n    if (!VALUE_FLAGS.has(name)) throw new Error(`Unknown option: --${name}`);\n    let value;\n    if (eq !== -1) value = arg.slice(eq + 1);\n    else {\n      value = argv[++i];\n      if (value === undefined) throw new Error(`--${name} needs a value`);\n    }\n    if (name === 'tag') tags.push(value);\n    else flags[name] = value;\n  }\n  if (tags.length) flags.tags = tags;\n  return { command: positional[0], args: positional.slice(1), flags };\n}\n\nfunction parseId(text) {\n  if (!/^[1-9]\\d*$/.test(String(text))) throw new Error(`Invalid task ID: ${text}`);\n  return Number(text);\n}\n\nexport async function run(argv, { stdout = process.stdout, env = process.env, now } = {}) {\n  const { command, args, flags } = parseArgs(argv);\n  const file = flags.file || env.TASKFLOW_FILE || path.join(os.homedir(), '.taskflow.json');\n  const store = await openStore(file, now ? { now } : {});\n  const print = (text) => stdout.write(text + '\\n');\n  const clock = now ? now() : new Date();\n  switch (command) {\n    case 'add': {\n      const task = await store.add({ title: args.join(' '), priority: flags.priority, due: flags.due, tags: flags.tags, notes: flags.notes });\n      print(`Added task ${task.id}.`);\n      return 0;\n    }\n    case 'list': {\n      const filtered = filterTasks(store.all(), { status: flags.status || 'open', tag: flags.tags && flags.tags[0], priority: flags.priority, overdue: flags.overdue, search: flags.search, now: clock });\n      const sorted = sortTasks(filtered, flags.sort || 'id');\n      const page = paginate(sorted, flags.page ? Number(flags.page) : 1, flags.size ? Number(flags.size) : 20);\n      print(formatList(page.items, { now: clock }));\n      if (page.pages > 1) print(`Page ${page.page} of ${page.pages} (${page.total} tasks)`);\n      return 0;\n    }\n    case 'done': {\n      for (const id of args.map(parseId)) await store.update(id, { status: 'done' });\n      print(`Completed ${args.length} task(s).`);\n      return 0;\n    }\n    case 'reopen': {\n      for (const id of args.map(parseId)) await store.update(id, { status: 'open' });\n      print(`Reopened ${args.length} task(s).`);\n      return 0;\n    }\n    case 'tag': {\n      const [id, ...tagList] = args;\n      await store.update(parseId(id), { addTags: tagList });\n      print(`Tagged task ${id}.`);\n      return 0;\n    }\n    case 'rm': {\n      for (const id of args.map(parseId)) await store.remove(id);\n      print(`Removed ${args.length} task(s).`);\n      return 0;\n    }\n    default:\n      print('Usage: taskflow <add|list|done|reopen|tag|rm> [options]');\n      return command ? 2 : 0;\n  }\n}\n\nif (import.meta.url === pathToFileURL(process.argv[1] || '').href) {\n  run(process.argv.slice(2)).then((code) => { process.exitCode = code; }, (error) => {\n    process.stderr.write(`taskflow: ${error.message}\\n`);\n    process.exitCode = 1;\n  });\n}\n"
+        },
+        {
+          "path": "src/query.mjs",
+          "status": "modified",
+          "content": "import { isOverdue } from './dates.mjs';\nimport { PRIORITIES, normalizeTag } from './task.mjs';\n\nexport function filterTasks(tasks, { status, tag, priority, overdue, search, now = new Date() } = {}) {\n  const wanted = tag ? normalizeTag(tag) : null;\n  return tasks.filter((task) => {\n    if (status && status !== 'all' && task.status !== status) return false;\n    if (wanted && !task.tags.includes(wanted)) return false;\n    if (priority && task.priority !== priority) return false;\n    if (overdue && !isOverdue(task, now)) return false;\n    if (search) {\n      const s = search.trim().toLowerCase();\n      if (s && !((task.title.toLowerCase().includes(s)) || (task.notes && task.notes.toLowerCase().includes(s)))) return false;\n    }\n    return true;\n  });\n}\n\nconst SORTERS = {\n  id: (a, b) => a.id - b.id,\n  due: (a, b) => (a.due === b.due ? 0 : a.due === null ? 1 : b.due === null ? -1 : a.due < b.due ? -1 : 1),\n  priority: (a, b) => PRIORITIES.indexOf(b.priority) - PRIORITIES.indexOf(a.priority),\n  title: (a, b) => a.title.localeCompare(b.title)\n};\n\n// Stable sort; ties keep ID order.\nexport function sortTasks(tasks, key = 'id') {\n  const compare = SORTERS[key];\n  if (!compare) throw new Error(`Unknown sort key: ${key}`);\n  return [...tasks].sort((a, b) => compare(a, b) || a.id - b.id);\n}\n\n// Pages are numbered from 1.\nexport function paginate(items, page = 1, size = 20) {\n  if (!Number.isInteger(page) || page < 1) throw new Error('Page must be a positive integer');\n  if (!Number.isInteger(size) || size < 1 || size > 100) throw new Error('Page size must be between 1 and 100');\n  const start = (page - 1) * size;\n  return { items: items.slice(start, start + size), page, pages: Math.max(1, Math.ceil(items.length / size)), total: items.length };\n}\n"
+        },
+        {
+          "path": "test/query.test.mjs",
+          "status": "modified",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { filterTasks, sortTasks, paginate } from '../src/query.mjs';\nimport { NOW } from './helpers.mjs';\n\nconst tasks = [\n  { id: 1, title: 'b', priority: 'low', status: 'open', due: '2026-11-05', tags: ['home'] },\n  { id: 2, title: 'a', priority: 'high', status: 'done', due: null, tags: ['work'] },\n  { id: 3, title: 'c', priority: 'normal', status: 'open', due: '2026-10-30', tags: ['work'] },\n  { id: 4, title: 'd', priority: 'high', status: 'open', due: '2026-11-02', tags: [] }\n];\n\ntest('filters by status, tag, priority and overdue', () => {\n  assert.deepEqual(filterTasks(tasks, { status: 'open' }).map((t) => t.id), [1, 3, 4]);\n  assert.deepEqual(filterTasks(tasks, { status: 'all', tag: 'work' }).map((t) => t.id), [2, 3]);\n  assert.deepEqual(filterTasks(tasks, { priority: 'high' }).map((t) => t.id), [2, 4]);\n  assert.deepEqual(filterTasks(tasks, { overdue: true, now: NOW }).map((t) => t.id), [3]);\n});\n\ntest('sorts by due date with undated tasks last, and by priority', () => {\n  assert.deepEqual(sortTasks(tasks, 'due').map((t) => t.id), [3, 4, 1, 2]);\n  assert.deepEqual(sortTasks(tasks, 'priority').map((t) => t.id), [2, 4, 3, 1]);\n  assert.throws(() => sortTasks(tasks, 'color'), /Unknown sort key/);\n});\n\ntest('paginates from page 1', () => {\n  const items = Array.from({ length: 5 }, (_, i) => i);\n  assert.deepEqual(paginate(items, 1, 2), { items: [0, 1], page: 1, pages: 3, total: 5 });\n  assert.deepEqual(paginate(items, 3, 2).items, [4]);\n  assert.throws(() => paginate(items, 0, 2), /positive integer/);\n});\n\n test('search matches title and notes', () => {\n   const tasks = [\n     { id: 1, title: 'First task', notes: 'Some notes', tags: [], priority: 'low', status: 'open', due: null },\n     { id: 2, title: 'Second Task', notes: '', tags: [], priority: 'high', status: 'open', due: null },\n     { id: 3, title: 'Another', notes: 'Different', tags: [], priority: 'normal', status: 'open', due: null }\n   ];\n   assert.deepEqual(filterTasks(tasks, { search: 'second' }).map(t=>t.id), [2]);\n   assert.deepEqual(filterTasks(tasks, { search: 'task' }).map(t=>t.id), [1,2]);\n   assert.deepEqual(filterTasks(tasks, { search: 'notes' }).map(t=>t.id), [1]);\n   assert.deepEqual(filterTasks(tasks, { search: '  ' }).map(t=>t.id), [1,2,3]);\n });\n"
+        }
+      ],
+      "gitBaseline": true,
+      "error": null,
+      "selfAssessment": {
+        "verdict": "verified",
+        "claim": "success"
+      }
+    }
+  ]
+}
