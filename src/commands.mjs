@@ -27,7 +27,8 @@
 // .agent/workflows and ~/.gemini/config/workflows, Cline .clinerules/workflows,
 // Roo Code .roo/commands and ~/.roo/commands (their `mode:` is not applied),
 // VS Code / Copilot prompt files .github/prompts/*.prompt.md and the VS Code
-// profile's User/prompts (see renderVscodePrompt).
+// profile's User/prompts (see renderVscodePrompt), Continue .continue/prompts
+// and ~/.continue/prompts (*.prompt and *.md, see parseContinuePrompt).
 // Their files are plain prompts: inline shell and allowed-tools are not honoured.
 // OpenCode .opencode/commands (and command/), ~/.config/opencode/commands and opencode.json
 // "commands" keep OpenCode's $ARGUMENTS/$N and !`cmd` rules (see renderOpencodeTemplate).
@@ -132,6 +133,40 @@ export function renderVscodePrompt(body, argumentText = '') {
   return { text: String(body).replace(/\$\{input:([A-Za-z0-9_-]+)(?::([^}]*))?\}/g, (m, name, placeholder) => value(name) || (placeholder ? '[' + placeholder + ']' : '')), usedArguments: true };
 }
 
+// Continue prompt files (continuedev/continue core/promptFiles; reimplemented
+// from the documented format). A .prompt file has an optional YAML preamble
+// above a bare `---` line (no opening fence); a .md prompt has ordinary front
+// matter. In the body, <system>...</system> is a system note, {{{ input }}}
+// is what follows the slash command, and other {{{ provider }}} references
+// name IDE context, which here becomes a plain request to look it up.
+const CONTINUE_CONTEXT = { currentFile: 'the file being worked on', diff: 'the current git diff', terminal: 'the latest terminal output', problems: 'the current errors and warnings', codebase: 'the relevant code in the repository', tree: 'the project file tree', 'repo-map': 'the repository layout', open: 'the files being worked on', os: 'the operating system', clipboard: 'the clipboard contents', debugger: 'the debugger state' };
+export function parseContinuePrompt(text, fileName = '') {
+  let source = String(text || '').replace(/^\uFEFF/, '');
+  if (/\.prompt$/i.test(fileName) && !/^---[ \t]*\r?\n/.test(source)) {
+    const split = /^([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(source);
+    if (split && split[1].split(/\r?\n/).every((line) => !line.trim() || /^\s*#/.test(line) || /^\s*[A-Za-z][\w-]*\s*:/.test(line) || /^\s+/.test(line) || /^\s*-\s/.test(line))) {
+      source = '---\n' + split[1].split(/\r?\n/).filter((line) => !/^\s*#/.test(line)).join('\n') + '\n---\n' + source.slice(split[0].length);
+    }
+  }
+  const { data, body } = parseFrontMatter(source);
+  const cleaned = body.replace(/<system>([\s\S]*?)<\/system>/gi, (m, inner) => inner.trim() ? 'System instructions: ' + inner.trim() + '\n' : '').trim();
+  return { meta: data || {}, body: cleaned };
+}
+
+export function renderContinuePrompt(body, argumentText = '') {
+  const args = String(argumentText || '').trim();
+  let usedArguments = false;
+  const text = String(body).replace(/\{\{\{?\s*([A-Za-z][\w-]*)((?:\s+"[^"]*")*)\s*\}?\}\}/g, (m, name, argText) => {
+    if (name === 'input') { usedArguments = true; return args; }
+    if (CONTINUE_CONTEXT[name]) return '(' + CONTINUE_CONTEXT[name] + ')';
+    const arg = (/"([^"]*)"/.exec(argText) || [])[1];
+    if (name === 'url' && arg) return arg;
+    if (name === 'file' && arg) return '@' + arg;
+    return '(' + name + (arg ? ' ' + arg : '') + ')';
+  });
+  return { text, usedArguments };
+}
+
 /** Command and workflow folders of other coding agents, lowest precedence first. */
 export async function foreignCommandDirectories(root, env = process.env, home = os.homedir()) {
   if (env.OASIS_OTHER_AGENT_RULES === '0') return [];
@@ -143,6 +178,7 @@ export async function foreignCommandDirectories(root, env = process.env, home = 
     { dir: path.join(home, '.cursor', 'commands'), scope: 'user', foreign: 'Cursor' },
     { dir: path.join(home, '.roo', 'commands'), scope: 'user', foreign: 'Roo Code' },
     ...vscodeUserPromptDirs(env, home).map((dir) => ({ dir, scope: 'user', foreign: 'VS Code', vscode: true })),
+    { dir: path.join(home, '.continue', 'prompts'), scope: 'user', foreign: 'Continue', continueDev: true },
     { dir: path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'opencode', 'command'), scope: 'user', foreign: 'OpenCode', opencode: true },
     { dir: path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'opencode', 'commands'), scope: 'user', foreign: 'OpenCode', opencode: true },
     { dir: path.join(workspace, '.clinerules', 'workflows'), scope: 'project', foreign: 'Cline' },
@@ -151,6 +187,7 @@ export async function foreignCommandDirectories(root, env = process.env, home = 
     { dir: path.join(workspace, '.cursor', 'commands'), scope: 'project', foreign: 'Cursor' },
     { dir: path.join(workspace, '.roo', 'commands'), scope: 'project', foreign: 'Roo Code' },
     { dir: path.join(workspace, '.github', 'prompts'), scope: 'project', foreign: 'VS Code', vscode: true },
+    { dir: path.join(workspace, '.continue', 'prompts'), scope: 'project', foreign: 'Continue', continueDev: true },
     { dir: path.join(workspace, '.gemini', 'commands'), scope: 'project', foreign: 'Gemini CLI', gemini: true },
     { dir: path.join(workspace, '.opencode', 'command'), scope: 'project', foreign: 'OpenCode', opencode: true },
     { dir: path.join(workspace, '.opencode', 'commands'), scope: 'project', foreign: 'OpenCode', opencode: true }
@@ -189,7 +226,7 @@ export async function loadCustomCommands(root, options = {}) {
   const workspaceReal = await realpath(path.resolve(root)).catch(() => path.resolve(root));
   let parseToml = null;
   const opencodeJsonRead = new Set();
-  for (const { dir, scope, foreign, outside, gemini, opencode, vscode } of [...await foreignCommandDirectories(root, env, home), ...commandDirectories(root, env, home)]) {
+  for (const { dir, scope, foreign, outside, gemini, opencode, vscode, continueDev } of [...await foreignCommandDirectories(root, env, home), ...commandDirectories(root, env, home)]) {
     // OpenCode commands defined under "commands" (or legacy "command") in opencode.json(c);
     // Markdown commands of the same scope override them.
     if (opencode && !opencodeJsonRead.has(scope)) {
@@ -203,6 +240,7 @@ export async function loadCustomCommands(root, options = {}) {
     // Other agents' folders are flat, except Gemini CLI's and OpenCode's, whose sub-folders are
     // namespaces as in OASIS's own (git/commit.toml -> /git:commit; OpenCode's /team/review is /team:review).
     await collect(dir, [], foreign && !gemini && !opencode ? MAX_DEPTH : 0, found, gemini ? '.toml' : vscode ? '.prompt.md' : '.md');
+    if (continueDev) await collect(dir, [], MAX_DEPTH, found, '.prompt');
     for (const { file, parts } of found) {
       const name = parts.join(':').toLowerCase();
       if (!/^[a-z0-9][a-z0-9:_-]{0,100}$/.test(name)) continue;
@@ -237,6 +275,23 @@ export async function loadCustomCommands(root, options = {}) {
           scope,
           foreign,
           gemini: true
+        });
+        continue;
+      }
+      if (continueDev) {
+        const { meta: preamble, body: promptBody } = parseContinuePrompt(text, file);
+        if (!promptBody || String(preamble.invokable) === 'false') continue;
+        const promptFirst = promptBody.split('\n').find((line) => line.trim()) || '';
+        commands.set(name, {
+          name,
+          description: (String(preamble.description || preamble.name || promptFirst.replace(/^#+\s*/, '')).slice(0, 180) + ' (' + foreign + ')').trim(),
+          argumentHint: '',
+          model: null, allowedTools: null, effort: null, context: null, agent: null,
+          body: promptBody,
+          file,
+          scope,
+          foreign,
+          continueDev: true
         });
         continue;
       }
@@ -580,6 +635,14 @@ export async function resolveCustomCommand(root, rawInput, options = {}) {
     const rendered = renderVscodePrompt(command.body, argumentText);
     const prompt = rendered.text + (argumentText.trim() && !rendered.usedArguments ? '\n\n' + argumentText.trim() : '');
     return { name: command.name, args: argumentText, command, prompt, mentions: [], shell: [], grantTools: null };
+  }
+  if (command.continueDev) {
+    // Continue prompts: {{{ input }}} is the arguments and @path lines are
+    // files to read (workspace only); there is no inline shell.
+    const rendered = renderContinuePrompt(command.body, argumentText);
+    const prompt = rendered.text + (argumentText.trim() && !rendered.usedArguments ? '\n\n' + argumentText.trim() : '');
+    const expanded = await expandFileMentions(root, prompt);
+    return { name: command.name, args: argumentText, command, prompt: expanded.text, mentions: expanded.files, shell: [], grantTools: null };
   }
   if (command.opencode) {
     // OpenCode runs !`cmd` blocks (after placeholders) and leaves @path as plain text.
