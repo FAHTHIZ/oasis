@@ -152,3 +152,15 @@ test('a reworded shell prompt keeps package warnings, app warnings and where the
   const ssh = formatApprovalMessage('Run this command in the workspace?\n  make deploy\nCommands can change project files.\nIt will run on build-box over SSH.', { tool: 'run_command', input: { command: 'make', args: ['deploy'] } }).message;
   assert.match(ssh, /\nIt will run on build-box over SSH\./);
 });
+
+test('reworded file and package prompts keep protected-file and package-check warnings', () => {
+  const del = formatApprovalMessage('Warning: .oasis/settings.json is a protected configuration file — it holds permission rules. Deleting it can remove deny rules or safety hooks.\nDelete the workspace file .oasis/settings.json? Its current contents will be backed up first.', { tool: 'delete_file', input: { path: '.oasis/settings.json' } }).message;
+  assert.match(del, /\nWarning: \.oasis\/settings\.json is a protected configuration file — it holds permission rules\./);
+  const edit = formatApprovalMessage('Warning: edit_file wants to change .git/hooks/pre-commit, a protected configuration file — git runs it on commit. A prompt-injected model could use this to grant itself permissions that apply on the next run. Allow this edit?', { tool: 'edit_file', input: { path: '.git/hooks/pre-commit' } }).message;
+  assert.match(edit, /OASIS wants to change the file/);
+  assert.match(edit, /\nWarning: edit_file wants to change \.git\/hooks\/pre-commit, a protected configuration file — git runs it on commit\. A prompt-injected model/);
+  const install = formatApprovalMessage('Install package reqeusts using pip "install" "reqeusts"\nUses pip.\nPackage check: reqeusts looks like a typo of requests.\nThis changes your environment and may execute third-party installer scripts.', { tool: 'install_package', input: { packageName: 'reqeusts' } }).message;
+  assert.match(install, /\nPackage check: reqeusts looks like a typo of requests\./);
+  const plain = formatApprovalMessage('Delete the workspace file a.txt? Its current contents will be backed up first.', { tool: 'delete_file', input: { path: 'a.txt' } }).message;
+  assert.doesNotMatch(plain, /Warning:/);
+});
