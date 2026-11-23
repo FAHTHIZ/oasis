@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readFile, rm, writeFile, readdir } from 'node:fs/promises';
-import { exportPlugin, formatExportReport, inspectPlugin, formatInspectReport, commandToGeminiToml, geminiMatcher } from '../src/plugin-export.mjs';
+import { exportPlugin, formatExportReport, inspectPlugin, formatInspectReport, scaffoldPlugin, exportInPlace, commandToGeminiToml, geminiMatcher } from '../src/plugin-export.mjs';
 import { detectForeignPlugin } from '../src/plugin-convert.mjs';
 import { validatePath } from '../src/claude-plugins.mjs';
 import { parse as parseToml } from 'smol-toml';
@@ -154,4 +154,33 @@ test('inspect reports what a plugin becomes in OASIS and every other agent witho
   assert.ok(foreign.contents.some((c) => /^1 command\b/.test(c)));
   assert.match(formatInspectReport(foreign), /OASIS converts it on install/);
   await assert.rejects(inspectPlugin(path.join(base, 'nope')), /No plugin folder/);
+});
+
+test('plugin new writes a universal plugin and export --in-place refreshes only generated files', async (t) => {
+  const { base } = await fixture(t, {});
+  const dir = path.join(base, 'my-kit');
+  const made = await scaffoldPlugin('my-kit', { dir, description: 'Kit for tests' });
+  assert.equal(made.name, 'my-kit');
+  for (const rel of ['.claude-plugin/plugin.json', '.codex-plugin/plugin.json', 'gemini-extension.json', '.cursor-plugin/plugin.json', '.plugin/plugin.json', 'commands/hello.md', 'commands/hello.toml', 'skills/my-kit/SKILL.md', 'agents/reviewer.md', 'copilot/agents/reviewer.agent.md', 'codex/skills/hello/SKILL.md', 'README.md']) {
+    await readFile(path.join(dir, rel), 'utf8');
+  }
+  assert.equal((await validatePath(dir)).ok, true);
+  assert.equal((await detectForeignPlugin(dir)) !== null, true);
+  await assert.rejects(scaffoldPlugin('Bad Name', { dir: path.join(base, 'x') }), /lowercase/);
+  await assert.rejects(scaffoldPlugin('my-kit', { dir }), /not empty/);
+
+  // Remove the example command, add another, refresh in place.
+  await rm(path.join(dir, 'commands', 'hello.md'));
+  await writeFile(path.join(dir, 'commands', 'ship.md'), '---\ndescription: Ship it\n---\nShip $ARGUMENTS.\n');
+  await writeFile(path.join(dir, 'NOTES.txt'), 'mine');
+  const refreshed = await exportInPlace(dir);
+  assert.equal(refreshed.dir, dir);
+  const has = async (rel) => readFile(path.join(dir, rel), 'utf8').then(() => true, () => false);
+  assert.equal(await has('commands/hello.toml'), false);
+  assert.equal(await has('codex/skills/hello/SKILL.md'), false);
+  assert.equal(await has('commands/ship.toml'), true);
+  assert.equal(await has('codex/skills/ship/SKILL.md'), true);
+  assert.equal(await readFile(path.join(dir, 'NOTES.txt'), 'utf8'), 'mine');
+  assert.equal(JSON.parse(await readFile(path.join(dir, '.claude-plugin', 'plugin.json'), 'utf8')).description, 'Kit for tests');
+  await assert.rejects(exportInPlace(path.join(base, 'src')), /needs an OASIS or Claude Code plugin|No plugin folder/);
 });
