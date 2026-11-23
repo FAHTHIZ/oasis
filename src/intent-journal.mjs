@@ -178,8 +178,8 @@ async function appendDurably(file, record) {
 // Keep the unresolved intents and the most recent records; drop the rest.
 export async function compactJournal(file) {
   const records = await readJournal(file);
-  const done = new Set(records.filter((record) => record.t === 'done').map((record) => record.call));
-  const open_ = records.filter((record) => record.t === 'intent' && !done.has(record.call));
+  const done = new Set(records.filter((record) => record.t === 'done').map((record) => record.seq));
+  const open_ = records.filter((record) => record.t === 'intent' && !done.has(record.seq));
   const recent = records.slice(-400);
   const keep = [...new Map([...open_, ...recent].map((record) => [record.t + ':' + record.seq, record])).values()].sort((a, b) => a.seq - b.seq);
   const tmp = file + '.' + process.pid + '.tmp';
@@ -281,15 +281,27 @@ export async function checkProbes(root, probes = []) {
 export async function reconcileJournal(root, file, messages = [], { interruptedText = 'Interrupted:' } = {}) {
   const records = await readJournal(file);
   if (!records.length) return { actions: [], records: 0 };
-  const intents = new Map();
+  // A done record carries its intent's seq. Call IDs are not unique across
+  // turns (text-parsed calls are numbered per turn, and some servers reuse
+  // IDs), so outcomes pair by seq, and the n-th intent with an ID reads the
+  // n-th transcript result with that ID.
+  const intents = records.filter((record) => record.t === 'intent');
   const done = new Map();
-  for (const record of records) (record.t === 'intent' ? intents : done).set(record.call || ('#' + record.seq), record);
+  for (const record of records) if (record.t === 'done') done.set(record.seq, record);
   const toolResults = new Map();
-  for (const message of messages) if (message && message.role === 'tool' && message.tool_call_id) toolResults.set(message.tool_call_id, typeof message.content === 'string' ? message.content : '');
+  for (const message of messages) {
+    if (!message || message.role !== 'tool' || !message.tool_call_id) continue;
+    if (!toolResults.has(message.tool_call_id)) toolResults.set(message.tool_call_id, []);
+    toolResults.get(message.tool_call_id).push(typeof message.content === 'string' ? message.content : '');
+  }
+  const uses = new Map();
   const actions = [];
-  for (const [call, intent] of intents) {
-    const finished = done.get(call);
-    const transcript = toolResults.get(call);
+  for (const intent of intents) {
+    const call = intent.call || ('#' + intent.seq);
+    const finished = done.get(intent.seq);
+    const nth = uses.get(call) || 0;
+    uses.set(call, nth + 1);
+    const transcript = (toolResults.get(call) || [])[nth];
     const placeholder = transcript !== undefined && transcript.startsWith(interruptedText);
     let kind = null;
     if (!finished) kind = 'in_doubt';
