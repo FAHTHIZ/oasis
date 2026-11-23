@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Added
 
+- VS Code custom agents installed from a config pack keep their tool lists: `search`, `editFiles`, `runCommands`, `fetch` and the rest become Claude Code `tools:` (before, the agent got every tool).
 - npm OpenCode plugins run under OASIS too: the `"plugin"` list in `~/.config/opencode/opencode.json(c)` (and the project's, in a trusted workspace) is read, and each plugin runs from OpenCode's cache through the OpenCode plugin host. Local paths and `file:` entries run in place.
 - Plugin hooks now export to Cursor and Copilot CLI: `plugin export` registers a dependency-free hook shim (`hooks/oasis-hook-shim.mjs`) in `cursor/hooks.json` and `copilot/hooks.json` that runs the Claude Code-format hooks and answers in each agent's protocol (denies, argument rewrites, Stop follow-ups, added context). Before, both targets left hooks out.
 - `oasis plugin export --to opencode`: a plugin exports as a dependency-free OpenCode plugin (`opencode/index.js`) that adds its commands, agents and MCP servers and runs its Claude Code-format PreToolUse, PostToolUse, Stop and SessionStart hooks inside OpenCode. `plugin new` and `--in-place` include it.
