@@ -298,7 +298,69 @@ export function formatExportReport(result) {
   return lines.join('\n') + '\n';
 }
 
-/** oasis plugin export [SOURCE] [--to claude,codex,gemini,cursor,copilot|all] --out DIR [--force] */
+// ---------- marketplaces ----------
+
+// Local plugins a marketplace lists, from an OASIS / Claude Code
+// marketplace.json or a Codex, Cursor or Copilot one.
+async function marketplacePlugins(dir) {
+  for (const folder of ['.oasis-plugin', '.claude-plugin']) {
+    const market = await readJson(path.join(dir, folder, 'marketplace.json'));
+    if (!market || !Array.isArray(market.plugins)) continue;
+    const base = path.resolve(dir, market.metadata && typeof market.metadata.pluginRoot === 'string' ? market.metadata.pluginRoot : '.');
+    const plugins = [], skipped = [];
+    for (const entry of market.plugins) {
+      if (!entry || !entry.name) continue;
+      const src = typeof entry.source === 'string' ? entry.source : '';
+      const resolved = src ? path.resolve(base, src) : '';
+      if (!resolved || path.relative(dir, resolved).startsWith('..')) { skipped.push(String(entry.name)); continue; }
+      plugins.push({ name: slug(entry.name), description: String(entry.description || ''), version: entry.version ? String(entry.version) : '', category: entry.category ? String(entry.category) : '', path: resolved });
+    }
+    return { name: slug(market.name, 'marketplace'), owner: market.owner && typeof market.owner === 'object' ? market.owner : null, description: market.metadata && market.metadata.description ? String(market.metadata.description) : '', plugins, skipped };
+  }
+  const foreign = await (await import('./plugin-convert.mjs')).detectForeignMarketplace(dir);
+  return foreign ? { name: foreign.name, owner: null, description: '', plugins: foreign.plugins, skipped: [] } : null;
+}
+
+/** Export every local plugin in a marketplace and list them for each agent's marketplace. */
+export async function exportMarketplace(source, options = {}) {
+  const dir = path.resolve(source);
+  const market = await marketplacePlugins(dir);
+  if (!market) throw new Error(source + ' has no marketplace.json.');
+  const targets = [...new Set((options.targets && options.targets.length ? options.targets : EXPORT_TARGETS).map((t) => String(t).toLowerCase()))];
+  for (const t of targets) if (!EXPORT_TARGETS.includes(t)) throw new Error('Unknown export target "' + t + '". Use ' + EXPORT_TARGETS.join(', ') + ' or all.');
+  if (!options.out) throw new Error('Choose an output folder: --out DIR');
+  const out = path.resolve(options.out);
+  if (await exists(out)) {
+    if (!options.force && (await readdir(out)).length) throw new Error(options.out + ' is not empty; pass --force to replace it.');
+    await rm(out, { recursive: true, force: true });
+  }
+  const results = [];
+  const failed = [];
+  for (const plugin of market.plugins) {
+    try { results.push({ ...plugin, result: await exportPlugin(plugin.path, { out: path.join(out, 'plugins', plugin.name), targets }) }); } catch (error) { failed.push(plugin.name + ': ' + error.message); }
+  }
+  const owner = market.owner || { name: market.name };
+  const entry = (item) => ({ name: item.result.name, source: './plugins/' + item.name, ...(item.description ? { description: item.description } : {}), ...(item.version ? { version: item.version } : {}) });
+  const write = async (rel, doc) => { await mkdir(path.dirname(path.join(out, rel)), { recursive: true }); await writeFile(path.join(out, rel), json(doc)); };
+  const manifests = [];
+  if (targets.includes('claude')) { await write('.claude-plugin/marketplace.json', { name: market.name, owner, ...(market.description ? { metadata: { description: market.description } } : {}), plugins: results.map((item) => ({ ...entry(item), ...(item.category ? { category: item.category } : {}) })) }); manifests.push('.claude-plugin/marketplace.json'); }
+  if (targets.includes('codex')) { await write('.agents/plugins/marketplace.json', { name: market.name, plugins: results.map((item) => ({ name: item.result.name, source: { source: 'local', path: './plugins/' + item.name }, policy: { installation: 'AVAILABLE' }, ...(item.category ? { category: item.category } : {}) })) }); manifests.push('.agents/plugins/marketplace.json'); }
+  if (targets.includes('cursor')) { await write('.cursor-plugin/marketplace.json', { name: market.name, owner, plugins: results.map(entry) }); manifests.push('.cursor-plugin/marketplace.json'); }
+  if (targets.includes('copilot')) { await write('.github/plugin/marketplace.json', { name: market.name, owner, plugins: results.map(entry) }); manifests.push('.github/plugin/marketplace.json'); }
+  return { dir: out, name: market.name, plugins: results, manifests, skipped: market.skipped, failed, gemini: targets.includes('gemini') };
+}
+
+export function formatMarketplaceReport(result) {
+  const lines = ['Exported marketplace ' + result.name + ' (' + result.plugins.length + ' plugin' + (result.plugins.length === 1 ? '' : 's') + ') to ' + result.dir];
+  if (result.manifests.length) lines.push('  marketplace files: ' + result.manifests.join(', '));
+  for (const item of result.plugins) lines.push('  plugins/' + item.name + ': ' + item.result.report.map((r) => r.label).join(', '));
+  if (result.gemini) lines.push('  Gemini CLI has no marketplace file; each plugin folder is an extension (gemini extensions install DIR).');
+  if (result.skipped.length) lines.push('  not exported (not in this repository): ' + result.skipped.join(', '));
+  for (const line of result.failed) lines.push('  failed: ' + line);
+  return lines.join('\n') + '\n';
+}
+
+/** oasis plugin export [PLUGIN | MARKETPLACE] [--to claude,codex,gemini,cursor,copilot|all] --out DIR [--force] */
 export async function exportCli(root, params, write) {
   const take = (flag) => { const i = params.indexOf(flag); if (i < 0) return null; const value = params[i + 1]; params.splice(i, 2); return value; };
   const to = take('--to');
@@ -308,5 +370,13 @@ export async function exportCli(root, params, write) {
   const source = path.resolve(root, rest[0] || '.');
   const targets = !to || to === 'all' ? EXPORT_TARGETS : to.split(',').map((t) => t.trim()).filter(Boolean);
   const out = outDir ? path.resolve(root, outDir) : path.join(path.dirname(source), path.basename(source) + '-universal');
+  // A marketplace (and not itself a plugin) exports every plugin it lists.
+  const isPlugin = await exists(path.join(source, '.claude-plugin', 'plugin.json')) || await exists(path.join(source, '.oasis-plugin', 'plugin.json'));
+  if (!isPlugin && await marketplacePlugins(source).catch(() => null)) {
+    const result = await exportMarketplace(source, { out, targets, force });
+    write(formatMarketplaceReport(result));
+    if (result.failed.length) process.exitCode = 1;
+    return;
+  }
   write(formatExportReport(await exportPlugin(source, { out, targets, force })));
 }

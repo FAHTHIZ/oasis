@@ -105,3 +105,25 @@ test('oasis add installs an exported folder as the native plugin', async (t) => 
   assert.deepEqual((await pluginCommands(plugins, { env })).map((c) => c.name).sort(), ['kit:review']);
   assert.ok((await pluginHooks(plugins, { env })).some((h) => h.hooks.PreToolUse));
 });
+
+test('a marketplace exports every local plugin and a marketplace file per agent', async (t) => {
+  const { src, out } = await fixture(t, {
+    '.claude-plugin/marketplace.json': { name: 'tools', owner: { name: 'Me' }, plugins: [
+      { name: 'kit', source: './plugins/kit', description: 'A kit' },
+      { name: 'remote', source: { source: 'github', repo: 'o/r' } }] },
+    ...Object.fromEntries(Object.entries(plugin).map(([rel, body]) => ['plugins/kit/' + rel, body]))
+  });
+  const { exportMarketplace, formatMarketplaceReport } = await import('../src/plugin-export.mjs');
+  const result = await exportMarketplace(src, { out });
+  assert.deepEqual(result.plugins.map((p) => p.name), ['kit']);
+  assert.deepEqual(result.skipped, ['remote']);
+  const read = async (rel) => JSON.parse(await readFile(path.join(out, rel), 'utf8'));
+  assert.equal((await read('.claude-plugin/marketplace.json')).plugins[0].source, './plugins/kit');
+  assert.deepEqual((await read('.agents/plugins/marketplace.json')).plugins[0].source, { source: 'local', path: './plugins/kit' });
+  assert.equal((await read('.cursor-plugin/marketplace.json')).plugins[0].name, 'kit');
+  assert.equal((await read('.github/plugin/marketplace.json')).plugins[0].name, 'kit');
+  assert.ok(await read('plugins/kit/gemini-extension.json'));
+  const { detectForeignMarketplace } = await import('../src/plugin-convert.mjs');
+  assert.equal((await detectForeignMarketplace(out)).plugins[0].path, path.join(out, 'plugins', 'kit'));
+  assert.match(formatMarketplaceReport(result), /not exported \(not in this repository\): remote/);
+});
