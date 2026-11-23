@@ -886,8 +886,11 @@ async function agentsCommand(rest) {
 async function agentExperienceCommand(root, rest) {
   const { sharedExperienceStore, experienceProject, trackRecord, formatTrackRecord, experienceFile } = await import('./agent-experience.mjs');
   const value = (flag) => { const index = rest.indexOf(flag); return index >= 0 ? rest[index + 1] : ''; };
-  const unknown = rest.filter((arg, index) => arg.startsWith('-') && !['--all', '--json', '--forget', '--type', '--days'].includes(arg) && !['--type', '--days'].includes(rest[index - 1]));
-  if (unknown.length) throw new Error('Unknown option ' + unknown[0] + '. Usage: oasis agents experience [--all] [--type NAME] [--days N] [--json] [--forget]');
+  const unknown = rest.filter((arg, index) => arg.startsWith('-') && !['--all', '--json', '--forget', '--type', '--days', '--by'].includes(arg) && !['--type', '--days', '--by'].includes(rest[index - 1]));
+  if (unknown.length) throw new Error('Unknown option ' + unknown[0] + '. Usage: oasis agents experience [--all] [--type NAME] [--days N] [--by model,agentType,domain] [--json] [--forget]');
+  const by = value('--by') ? value('--by').split(',').map((field) => field.trim()).filter(Boolean) : ['agentType', 'model', 'domain'];
+  const badField = by.find((field) => !['agentType', 'model', 'domain'].includes(field));
+  if (badField) throw new Error('--by takes model, agentType and domain (comma-separated), not "' + badField + '".');
   const store = sharedExperienceStore(process.env);
   if (!store) throw new Error('Agent experience is off (OASIS_AGENT_EXPERIENCE=0) or node:sqlite is unavailable.');
   const project = rest.includes('--all') ? '' : experienceProject(root);
@@ -898,7 +901,7 @@ async function agentExperienceCommand(root, rest) {
   }
   const days = Math.max(1, Math.min(365, Number.parseInt(value('--days'), 10) || 180));
   const rows = store.runs({ project, agentType: value('--type'), since: Date.now() - days * 86400000, limit: 20000 });
-  const records = trackRecord(rows);
+  const records = trackRecord(rows, { by });
   if (rest.includes('--json')) { stdout.write(JSON.stringify({ project: project || 'all', days, runs: rows.length, records }, null, 2) + '\n'); return; }
   stdout.write(formatTrackRecord(records) + '\n');
 }

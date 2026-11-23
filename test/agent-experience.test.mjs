@@ -280,3 +280,23 @@ test('the control room shows each agent type and model track record', async (t) 
   assert.match(row.detail, /4 runs · 67% verified of decisive · 2 verified · 1 unchecked · 1 failed/);
   assert.equal(experienceActivity({ env: { ...env, OASIS_AGENT_EXPERIENCE: '0' } }).available, false);
 });
+
+test('track records report cost per verified result, failures included', () => {
+  const rows = [
+    { agentType: 'general', model: 'cheap', domain: 'software', outcome: 'verified', costUsd: 0.01, at: 1 },
+    { agentType: 'general', model: 'cheap', domain: 'software', outcome: 'failed', costUsd: 0.01, at: 2 },
+    { agentType: 'general', model: 'cheap', domain: 'software', outcome: 'rejected', costUsd: 0.01, at: 3 },
+    { agentType: 'explore', model: 'strong', domain: 'research', outcome: 'verified', costUsd: 0.02, at: 4 },
+    { agentType: 'general', model: 'strong', domain: 'software', outcome: 'verified', costUsd: 0.02, at: 5 },
+    { agentType: 'general', model: 'free', domain: 'software', outcome: 'verified', costUsd: 0, at: 6 },
+    { agentType: 'general', model: 'never', domain: 'software', outcome: 'failed', costUsd: 0.05, at: 7 }
+  ];
+  const byModel = Object.fromEntries(trackRecord(rows, { by: ['model'] }).map((item) => [item.model, item]));
+  assert.ok(Math.abs(byModel.cheap.costPerSuccessUsd - 0.03) < 1e-12, 'three runs at $0.01 for one success');
+  assert.ok(Math.abs(byModel.strong.costPerSuccessUsd - 0.02) < 1e-12);
+  assert.equal(byModel.free.costPerSuccessUsd, null, 'unknown or zero cost is not a price');
+  assert.equal(byModel.never.costPerSuccessUsd, null, 'no success, no price');
+  const text = formatTrackRecord(trackRecord(rows, { by: ['model'] }), { now: 10 });
+  assert.match(text, /cheap\n .*\$0\.0300 per verified result/);
+  assert.doesNotMatch(text.split('\n').find((line, index, all) => all[index - 1] === 'never') || '', /per verified result/);
+});
