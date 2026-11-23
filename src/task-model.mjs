@@ -55,6 +55,7 @@ import { assessReport } from './verification-contracts.mjs';
 import { buildClaims } from './claim-ledger.mjs';
 import { digestOf, fetchedUrls } from './evidence-ledger.mjs';
 import { independentSources } from './source-independence.mjs';
+import { combinedReview } from './task-reviews.mjs';
 
 export const TASK_SCHEMA_VERSION = 1;
 export const DOMAINS = Object.freeze(['software', 'security', 'research', 'analysis', 'writing', 'planning', 'automation', 'computer', 'operations', 'general']);
@@ -611,9 +612,12 @@ export function evaluateAcceptance(spec, { events = [], reply = '', root = '', r
         return set('met', effects.length + ' action(s) observed in tool results', effects.slice(-5).map((event) => event.seq));
       }
       case 'independent_review': {
-        const review = [...reviews].reverse().find(Boolean);
-        if (!review) return set('unmet', 'no independent review ran');
-        return set(review.verdict === 'pass' ? 'met' : 'unmet', (review.by || 'reviewer') + ': ' + (review.detail || review.verdict));
+        // Reviews of the current files only (src/task-reviews.mjs): an edit
+        // after a review leaves it reviewing code that no longer exists.
+        const review = combinedReview(reviews);
+        if (!review) return set('unmet', 'no independent review of the current files ran');
+        const status = review.verdict === 'pass' ? 'met' : review.verdict === 'fail' ? 'unmet' : 'unknown';
+        return set(status, (review.by || 'reviewer') + ': ' + (review.detail || review.verdict));
       }
       default:
         return set('unknown', 'needs a person (or an independent reviewer) to judge');
@@ -645,7 +649,7 @@ export function evaluateAcceptance(spec, { events = [], reply = '', root = '', r
  * Tool activity alone never raises the verdict: a run that fetched ten pages
  * and cited none of them is unverified, not verified.
  */
-export function assessOutcome(spec, { status = 'completed', partial = false, events = [], reply = '', root = '', reviews = [], domains = [] } = {}) {
+export function assessOutcome(spec, { status = 'completed', partial = false, events = [], reply = '', root = '', reviews = [], staleReviews = 0, domains = [] } = {}) {
   const counts = {};
   for (const event of events) counts[event.kind] = (counts[event.kind] || 0) + 1;
   const declaredDomains = [...new Set([...(domains || []), ...(spec ? [spec.domains.primary, ...spec.domains.secondary] : [])])].filter((domain) => domain === 'analysis');
@@ -657,14 +661,14 @@ export function assessOutcome(spec, { status = 'completed', partial = false, eve
   const acceptance = spec ? evaluateAcceptance(spec, { events, reply, root, reviews }) : [];
   const tally = { total: acceptance.length, met: 0, unmet: 0, unknown: 0 };
   for (const item of acceptance) tally[item.status === 'met' ? 'met' : item.status === 'unmet' ? 'unmet' : 'unknown'] += 1;
-  const review = reviews.length ? reviews[reviews.length - 1] : null;
-  const independent = { required: Boolean(spec && spec.autonomy && spec.autonomy.verification === 'independent'), done: Boolean(review), passed: Boolean(review && review.verdict === 'pass'), by: review ? review.by || '' : '' };
+  const review = combinedReview(reviews);
+  const independent = { required: Boolean(spec && spec.autonomy && spec.autonomy.verification === 'independent'), done: Boolean(review), passed: Boolean(review && review.verdict === 'pass'), verdict: review ? review.verdict : null, by: review ? review.by || '' : '', ...(staleReviews ? { stale: staleReviews } : {}) };
   const execution = ['failed', 'stalled', 'cancelled'].includes(status) ? status : partial ? 'partial' : status === 'completed' ? 'completed' : 'failed';
   let verdict;
   if (execution === 'cancelled') verdict = 'cancelled';
   else if (execution === 'failed' || execution === 'stalled') verdict = 'failed';
   else if (execution === 'partial') verdict = 'incomplete';
-  else if (report.issues.length || tally.unmet || (review && review.verdict !== 'pass')) verdict = 'rejected';
+  else if (report.issues.length || tally.unmet || (review && review.verdict === 'fail')) verdict = 'rejected';
   else if (!report.checked && !tally.met) verdict = 'unverified';
   else if (tally.unknown || softClaims.length) verdict = 'evidenced';
   else verdict = independent.passed ? 'independently_verified' : 'verified';

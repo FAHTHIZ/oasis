@@ -144,6 +144,7 @@ export { contextWindowFromError, isInputTokenRateLimit, useCompactToolProfile } 
 export { EFFORT_LEVELS, applyEffort, claudeEffortFor, claudeThinkingMode, inlineEffortLevel, maxOutputTokensFor, openRouterOutputCapFromError, openaiEffortFor, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, thinkingBudgetFor } from './model-budgets.mjs';
 export { announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationEnabled, claimsUnmadeChange, detectProjectTestCommand, diffReviewComplete, failureSignature, fencedFileFromReply, givesUpEarly, isVerificationCommand, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, requestedNewFile, samplingTemperature, targetFileHint, unreviewedPaths, untestedNewCode, verificationIssues, wrongFileNudge } from './turn-guards.mjs';
 export { formatWait, isHardQuotaError, isMalformedGenerationError, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs } from './provider-retry.mjs';
+import { recordTaskReview } from './task-reviews.mjs';
 import { MAX_SPECIALIST_REVIEWS_PER_TASK, runSpecialistReview, isReadOnlyAgent, runWorkflowTool, runSubagent, runAgentTool } from './agent-subagents.mjs';
 export { SPECIALIST_MAX_STEPS } from './agent-subagents.mjs';
 
@@ -2502,7 +2503,10 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
           throw new Error('This task has reached the two-specialist-review limit. Use the existing review result or ask for a focused follow-up task.');
         }
         budget.used += 1;
-        return await runSpecialistReview(session, validatedInput, executionContext, executionOptions, budget);
+        const specialistResult = await runSpecialistReview(session, validatedInput, executionContext, executionOptions, budget);
+        // A separate read-only session's verdict on the current task (src/task-reviews.mjs).
+        const recordedReview = recordTaskReview(session, { by: specialistResult.specialist, text: specialistResult.review, finished: specialistResult.finished, toolCalls: specialistResult.toolCalls, limitReached: specialistResult.verificationIncomplete });
+        return recordedReview ? { ...specialistResult, verdict: recordedReview.verdict, verdictReason: recordedReview.detail } : specialistResult;
       }
       if (name === 'task') {
         return await runSubagent(session, validatedInput, executionContext, { ...executionOptions, parentToolUseId: options.parentToolUseId });

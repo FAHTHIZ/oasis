@@ -63,6 +63,16 @@ The verdict is derived from them, weakest first:
 
 Tool activity alone never raises the verdict: a run that fetched ten pages and cited none of them is `unverified`, and an answer that accurately repeats one page is `evidenced`, not `verified`.
 
+## Independent reviews
+
+Source: `src/task-reviews.mjs`.
+
+An agent does not certify its own work by finishing it. A review counts when a separate session inspected the result: the built-in `code-review`, `security-review` or `verify` agents (a custom agent that reuses one of those names does not count), or `run_specialist_review`. Each review is recorded against the task it reviewed and the files as the reviewer first saw them (the evidence epoch). An edit after the review makes it a review of code that no longer exists: it stops counting, and the outcome reports it under `independent.stale`.
+
+The verdict is read from the report rather than trusted. Reviewers are asked to end with `VERDICT: PASS`, `FAIL` or `INCONCLUSIVE`; without that line, "no actionable defects" reads as a pass and a critical or high finding as a fail. A pass is downgraded to `inconclusive` when the reviewer inspected nothing, stopped at a limit, or named a severe finding in the same report. With several current reviews, any fail fails; otherwise any pass passes.
+
+A failed review rejects the outcome even when the tests passed. An inconclusive one neither rejects nor verifies: the `independent_review` criterion stays unknown. The tool result the parent receives carries `review_verdict` and `review_note`; `run_specialist_review` returns `verdict`.
+
 ## Claims
 
 Source: `src/claim-ledger.mjs`.

@@ -3,6 +3,7 @@
 // the request, add deliverables, criteria and constraints it missed, and see
 // how the criteria stand against the evidence so far. It cannot mark a
 // criterion met or set the outcome: those come from tool results.
+import { currentReviews } from './task-reviews.mjs';
 import { evidenceSince, sessionEvidence } from './evidence-ledger.mjs';
 import { assessOutcome, declareOnSpec, deriveTaskSpec, specSummary, CRITERION_KINDS } from './task-model.mjs';
 
@@ -48,7 +49,7 @@ export function runTaskTool(session, name, args = {}) {
   if (action === 'show') return { task: specSummary(spec) };
   if (action === 'status') {
     const events = evidenceSince(sessionEvidence(session), session.taskEvidenceFrom || 0);
-    const outcome = assessOutcome(spec, { events, reply: '', root: session.root, reviews: Array.isArray(session.taskReviews) ? session.taskReviews : [] });
+    const outcome = assessOutcome(spec, { events, reply: '', root: session.root, ...reviewContext(session) });
     return {
       task: spec.id,
       // Claims are judged on the final answer, which does not exist yet.
@@ -63,4 +64,9 @@ export function runTaskTool(session, name, args = {}) {
     return { task: next.id, added, ...(errors.length ? { errors } : {}), acceptance: next.acceptance.map(({ id, kind, description, source }) => ({ id, kind, description, source })) };
   }
   throw new Error('task_contract action must be show, status or declare.');
+}
+
+function reviewContext(session) {
+  const { current, stale } = currentReviews(session);
+  return { reviews: current, staleReviews: stale.length };
 }

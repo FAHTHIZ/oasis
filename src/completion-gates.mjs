@@ -17,6 +17,7 @@
 // Agent-owned helpers come in through `host`, which keeps this module free of
 // an import cycle with agent.mjs.
 
+import { currentReviews } from './task-reviews.mjs';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
@@ -406,7 +407,7 @@ export async function runCompletionGates(turn, host) {
   if (!options.isSubagent && session.task && text && !options.planOnly && permissionMode(session, options) !== 'plan') {
     try {
       const events = evidenceSince(sessionEvidence(session), session.taskEvidenceFrom || 0);
-      taskOutcome = assessOutcome(session.task, { events, reply: text, root: session.root, reviews: Array.isArray(session.taskReviews) ? session.taskReviews : [] });
+      taskOutcome = assessOutcome(session.task, { events, reply: text, root: session.root, ...reviewContext(session) });
       taskProblems = admitsShortfall(text) ? [] : gateProblems(taskOutcome);
     } catch { taskOutcome = null; taskProblems = []; }
     if (taskProblems.length && !g.taskNudged) {
@@ -477,4 +478,9 @@ export async function runCompletionGates(turn, host) {
     ...(taskOutcome && session.task ? { task: specSummary(session.task) } : {}),
     ...(followupsAdded.length ? { followupsAdded: followupsAdded.map((item) => ({ id: item.id, text: item.text })) } : {})
   } };
+}
+
+function reviewContext(session) {
+  const { current, stale } = currentReviews(session);
+  return { reviews: current, staleReviews: stale.length };
 }
