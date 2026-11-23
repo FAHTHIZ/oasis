@@ -123,3 +123,29 @@ test('closing a browser tab settles its waits at once, so nothing holds the proc
   assert.equal(await page.once('Page.loadEventFired', 60_000), null, 'a closed tab waits for nothing');
   assert.equal(sent.length, 1);
 });
+
+test('--restricted holds for nested agents: a grandchild cannot get a desktop environment', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-env-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = { ...baseEnv, HOME: root };
+  const seen = [];
+  const { config } = await scriptedModel(t, [(payload) => {
+    const system = String(payload.messages[0].content || '');
+    const last = payload.messages[payload.messages.length - 1];
+    seen.push((payload.tools || []).map((tool) => tool.function.name));
+    if (system.includes('PRIVATE DESKTOP')) return { content: 'grandchild ran' };
+    if (system.includes('SUBAGENT MODE')) {
+      if (last.role !== 'tool') return toolCall('inner', 'task', { description: 'inner', prompt: 'Look at the screen.', environment: 'desktop' });
+      return { content: 'child: ' + String(last.content).slice(0, 300) };
+    }
+    if (last.role === 'user') return toolCall('outer', 'task', { description: 'outer', prompt: 'Start a helper.' });
+    return { content: 'done' };
+  }]);
+  const session = await createSession({ root, settings, env, restricted: true, config: { ...config, maxSteps: 4 } });
+  t.after(() => closeSession(session));
+  assert.equal(session.restricted, true);
+  await runAgentTurn(session, 'go', { env, approval: async () => true, platform: 'linux' });
+  assert.ok(seen.every((names) => !names.includes('computer') && !names.includes('browser')), JSON.stringify(seen));
+  const report = session.messages.filter((m) => m.role === 'tool').map((m) => String(m.content)).join('\n');
+  assert.match(report, /not available in --restricted mode/);
+});
