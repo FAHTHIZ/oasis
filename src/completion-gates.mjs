@@ -29,6 +29,7 @@ import { deliverSteering, pendingSteering } from './steering.mjs';
 import { formatLspVerificationBlocker, verificationSummary } from './verification-summary.mjs';
 import { permissionMode } from './plan-mode.mjs';
 import { evidenceSince, sessionEvidence, recordEvidence } from './evidence-ledger.mjs';
+import { describeClaimCounts, logClaims } from './claim-ledger.mjs';
 import { admitsShortfall, assessOutcome, gateNotice, gateProblems, specSummary, taskGateNudge } from './task-model.mjs';
 import {
   ACTION_NUDGE, CONTINUE_NUDGE, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, providerStopNotice, providerCutNotice,
@@ -417,8 +418,16 @@ export async function runCompletionGates(turn, host) {
       return CONTINUE;
     }
     if (taskOutcome) {
+      // The answer's claims join the session's claim log, where later
+      // evidence can invalidate them (src/claim-ledger.mjs). A Stop hook that
+      // continues the turn replaces this turn's entries rather than adding more.
+      const items = taskOutcome.claims.items || [];
+      if (g.loggedClaims && Array.isArray(session.claimLog)) session.claimLog = session.claimLog.filter((claim) => !g.loggedClaims.has(claim.id));
+      g.loggedClaims = new Set(logClaims(session, items, { task: session.task.id }).map((claim) => claim.id));
+      const { items: _items, ...claimsSummary } = taskOutcome.claims;
+      taskOutcome = { ...taskOutcome, claims: claimsSummary };
       session.task = { ...session.task, outcome: taskOutcome, updatedAt: Date.now() };
-      recordSessionEvent(session, { type: 'task_outcome', task: session.task.id, verdict: taskOutcome.verdict, met: taskOutcome.acceptance.met, unmet: taskOutcome.acceptance.unmet, claimsChecked: taskOutcome.claims.checked, claimsSupported: taskOutcome.claims.supported }, options.env);
+      recordSessionEvent(session, { type: 'task_outcome', task: session.task.id, verdict: taskOutcome.verdict, met: taskOutcome.acceptance.met, unmet: taskOutcome.acceptance.unmet, claimsChecked: taskOutcome.claims.checked, claimsSupported: taskOutcome.claims.supported, claimStatus: describeClaimCounts(taskOutcome.claims.byStatus) }, options.env);
     }
   }
   const stopEvent = options.isSubagent ? 'SubagentStop' : 'Stop';

@@ -55,4 +55,8 @@ A slot needs a word such as "is", "uses", "prefers" or ":", so a plain list ("ru
 
 Subagents cannot write memory. The main agent saves what they found once it has been checked. `memory_save` with `from_finding: "k_N"` takes a finding from the session's [shared knowledge board](SUBAGENTS.md#shared-knowledge-board). The finding's claim, detail and sources become the content. If the runtime grounded the finding, its provenance becomes the memory's evidence: who posted it, who corroborated it, how many independent sources it has, and the URLs. A retracted finding is refused. So is a finding that is still [contested](SUBAGENTS.md#disagreements), until the dispute is resolved.
 
-Tests: `test/memory-revision.test.mjs`, `test/auto-memory.test.mjs`.
+### Saving what an answer claimed
+
+A memory that restates a claim from this session's answers is linked to it in the [claim log](TASK-MODEL.md#claims), by a shared URL in its evidence or a close match in wording. `memory_save` returns the linked claim ids, and says so when a linked claim was unverified, contradicted or stale. When later evidence undoes the claim (the cited page changes, a check that passed now fails), the memory is marked uncertain, or outdated if the claim was contradicted, with a verification note naming the claim and the cause.
+
+Tests: `test/memory-revision.test.mjs`, `test/auto-memory.test.mjs`, `test/claim-ledger.test.mjs`.

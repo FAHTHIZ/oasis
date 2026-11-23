@@ -767,7 +767,22 @@ export async function runMemoryTool(name, args = {}, { root, env = process.env, 
     if (args.from_finding && saved && saved.id && session && session.knowledgeBoard) {
       try { const { linkMemoryToFinding } = await import('./knowledge-board.mjs'); linkMemoryToFinding(session.knowledgeBoard, String(args.from_finding).trim(), saved.id, { root, env }); } catch {}
     }
-    return { ...saved, note: saveNote(saved) };
+    // A memory that restates claims from this session follows them too: a
+    // page that later changes or a check that later fails revises it
+    // (src/claim-ledger.mjs). Restating a claim the evidence did not back is
+    // allowed, but said.
+    let claimNote = '';
+    let linkedClaims = [];
+    if (saved && saved.id && session && Array.isArray(session.claimLog) && session.claimLog.length) {
+      try {
+        const { linkMemoryToClaims } = await import('./claim-ledger.mjs');
+        linkedClaims = linkMemoryToClaims(session, saved.id, { content: String(args.content || args.description || ''), evidence: String(args.evidence || '') });
+        const weak = session.claimLog.filter((claim) => linkedClaims.includes(claim.id) && ['unverified', 'contradicted', 'stale'].includes(claim.status));
+        if (weak.length) claimNote = ' It restates ' + weak.map((claim) => claim.id + ' (' + claim.status + ')').join(', ') + ' from this session; save it as verified only once the evidence backs it.';
+      } catch {}
+    }
+    const note = [saveNote(saved), claimNote.trim()].filter(Boolean).join(' ');
+    return { ...saved, ...(linkedClaims.length ? { claims: linkedClaims } : {}), note: note || undefined };
   }
   if (name === 'memory_search') {
     const ranked = rankMemories(await listMemories(root, { env }), args.query, { limit: Math.min(20, Number(args.limit) || 5) });

@@ -52,6 +52,7 @@
 import path from 'node:path';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { assessReport } from './verification-contracts.mjs';
+import { buildClaims } from './claim-ledger.mjs';
 import { digestOf, fetchedUrls } from './evidence-ledger.mjs';
 import { independentSources } from './source-independence.mjs';
 
@@ -649,6 +650,10 @@ export function assessOutcome(spec, { status = 'completed', partial = false, eve
   for (const event of events) counts[event.kind] = (counts[event.kind] || 0) + 1;
   const declaredDomains = [...new Set([...(domains || []), ...(spec ? [spec.domains.primary, ...spec.domains.secondary] : [])])].filter((domain) => domain === 'analysis');
   const report = assessReport(reply, events, { domains: declaredDomains });
+  const ledger = buildClaims(reply, events, { analysis: declaredDomains.includes('analysis') });
+  // Claims that rest on one reading of one source, or on inference, are
+  // evidence, not verification: the attribution was checked, the fact was not.
+  const softClaims = ledger.claims.filter((claim) => claim.status === 'inferred' || claim.status === 'stale' || (claim.status === 'reported' && (claim.independentSources || 0) < 2));
   const acceptance = spec ? evaluateAcceptance(spec, { events, reply, root, reviews }) : [];
   const tally = { total: acceptance.length, met: 0, unmet: 0, unknown: 0 };
   for (const item of acceptance) tally[item.status === 'met' ? 'met' : item.status === 'unmet' ? 'unmet' : 'unknown'] += 1;
@@ -661,13 +666,13 @@ export function assessOutcome(spec, { status = 'completed', partial = false, eve
   else if (execution === 'partial') verdict = 'incomplete';
   else if (report.issues.length || tally.unmet || (review && review.verdict !== 'pass')) verdict = 'rejected';
   else if (!report.checked && !tally.met) verdict = 'unverified';
-  else if (tally.unknown) verdict = 'evidenced';
+  else if (tally.unknown || softClaims.length) verdict = 'evidenced';
   else verdict = independent.passed ? 'independently_verified' : 'verified';
   return {
     verdict,
     execution,
     evidence: { events: events.length, counts },
-    claims: { checked: report.checked, supported: report.supported, byKind: report.claims, issues: report.issues.map(({ domain, reason }) => ({ domain, reason })) },
+    claims: { checked: report.checked, supported: report.supported, byKind: report.claims, byStatus: ledger.counts, items: ledger.claims, issues: report.issues.map(({ domain, reason }) => ({ domain, reason })) },
     acceptance: { ...tally, criteria: acceptance.map(({ id, kind, description, status: s, detail, evidence }) => ({ id, kind, description, status: s, ...(detail ? { detail } : {}), ...(evidence && evidence.length ? { evidence } : {}) })) },
     independent,
     assessedAt: Date.now()
@@ -773,7 +778,7 @@ export function specSummary(spec) {
     deliverables: spec.deliverables.map(({ id, kind, description, path: p }) => ({ id, kind, description, ...(p ? { path: p } : {}) })),
     acceptance: spec.acceptance.map(({ id, kind, description, source, status }) => ({ id, kind, description, source, status })),
     constraints: spec.constraints, dependencies: spec.dependencies || [], permissions: spec.permissions.required, evidence: spec.evidence.required,
-    autonomy: spec.autonomy, ...(spec.outcome ? { outcome: { verdict: spec.outcome.verdict, execution: spec.outcome.execution, claims: { checked: spec.outcome.claims.checked, supported: spec.outcome.claims.supported }, acceptance: { total: spec.outcome.acceptance.total, met: spec.outcome.acceptance.met, unmet: spec.outcome.acceptance.unmet, unknown: spec.outcome.acceptance.unknown }, independent: spec.outcome.independent } } : {})
+    autonomy: spec.autonomy, ...(spec.outcome ? { outcome: { verdict: spec.outcome.verdict, execution: spec.outcome.execution, claims: { checked: spec.outcome.claims.checked, supported: spec.outcome.claims.supported, ...(spec.outcome.claims.byStatus ? { byStatus: spec.outcome.claims.byStatus } : {}) }, acceptance: { total: spec.outcome.acceptance.total, met: spec.outcome.acceptance.met, unmet: spec.outcome.acceptance.unmet, unknown: spec.outcome.acceptance.unknown }, independent: spec.outcome.independent } } : {})
   };
 }
 
