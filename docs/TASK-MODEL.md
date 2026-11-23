@@ -31,7 +31,9 @@ Every criterion is evaluated against tool results the runtime recorded, never ag
 | `check_passes` | A test, build or check (optionally a named command) passed after the last edit, finished, ran tests and did not have its exit status hidden by a pipe |
 | `file_exists` | The file exists inside the workspace, is not empty and, if asked, contains given text |
 | `word_limit` | The reply or a file is within a length in words, sentences, bullets, paragraphs, lines or characters. "A 300-word summary" allows 20% either way; "a two-sentence summary" is a ceiling |
-| `cites_sources` | The result cites sources and every cited page was fetched; with `independent`, they count as independent sources (one site, or copies of one story, count once) |
+| `cites_sources` | The result cites sources and every cited page was fetched (or, for sources in the workspace, every cited file was read); with `independent`, they count as independent sources (one site, or copies of one story, count once) |
+| `sources_read` | The request confines the answer to a folder ("using only the files in sources/"), and every file in it (up to 40) was read with `read_file` or a shell command that names it |
+| `opening` | The request asks for a line that begins with exact words ("a paragraph that begins with \"Contradiction:\""); the written file, or the reply, has one. Markdown emphasis is ignored; a heading without the words is not accepted |
 | `claims_supported` | Every citation, quote and computed number in the result is backed by evidence (the report contracts in `src/verification-contracts.mjs`) |
 | `side_effect` | A tool result records the action (a commit, push, pull request, install, merge, deleted file, scheduled job). A command that exited 0 is not proof the requested action happened, so this stays `unknown` |
 | `independent_review` | A separate reviewer passed the result |
