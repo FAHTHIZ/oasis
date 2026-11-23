@@ -41,6 +41,8 @@ const TOOL_ALIASES = {
   mutation: ['mutation_probe'],
   bisect: ['bisect_regression'],
   bisectregression: ['bisect_regression'],
+  flaky: ['flaky_check'],
+  flakycheck: ['flaky_check'],
   lsp: ['lsp'],
   git: ['git_commit', 'git_branch', 'git_push', 'create_pull_request'],
   gitcommit: ['git_commit'],
