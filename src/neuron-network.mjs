@@ -2,7 +2,9 @@
 // The registry remains the source of truth; this module does not create a second worker runtime.
 
 const MAX_NEURON_DEPTH = 32;
-const VALID_STATUSES = new Set(["running", "completed", "failed", "cancelled", "interrupted"]);
+// Every status an agent record can hold (agent-subagents sets "stalled" when a
+// worker stops making progress); anything else is shown as interrupted.
+const VALID_STATUSES = new Set(["running", "completed", "failed", "cancelled", "stalled", "interrupted"]);
 
 function clean(value, max = 160) {
   return String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
@@ -120,7 +122,7 @@ export function buildNeuronNetworkSnapshot(registry, args = {}) {
   const records = registry?.agents instanceof Map ? [...registry.agents.values()] : [];
   const requestedStatus = clean(args.status, 24);
   if (requestedStatus && !VALID_STATUSES.has(requestedStatus)) {
-    throw new Error("status must be running, completed, failed, cancelled, or interrupted.");
+    throw new Error("status must be running, completed, failed, cancelled, stalled, or interrupted.");
   }
   const teamId = clean(args.team_id, 100);
   const parentId = clean(args.parent_id, 100);
@@ -212,6 +214,7 @@ export function buildNeuronNetworkSnapshot(registry, args = {}) {
       completed_agents: counts.completed,
       failed_agents: counts.failed,
       cancelled_agents: counts.cancelled,
+      stalled_agents: counts.stalled,
       interrupted_agents: counts.interrupted,
       max_depth: ordered.reduce((max, record) => Math.max(max, Math.min(MAX_NEURON_DEPTH, Math.floor(safeNumber(record.depth, 1)))), 0),
       total_tool_calls: ordered.reduce((sum, record) => sum + Math.floor(safeNumber(record.toolCalls)), 0),
