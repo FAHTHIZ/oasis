@@ -1024,6 +1024,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     try { session.fileWatchers = startHookWatchers(session, { env, liveReload, hookOptions: () => hookOptions(session, env), reload: reloadSessionSettings }); } catch {}
   }
   if (restore && Array.isArray(restore.claimLog)) restoreClaimLog(session, restore.claimLog);
+  if (restore && restore.evidenceLedger && Array.isArray(restore.evidenceLedger.events) && !(session.evidenceLedger && session.evidenceLedger.events && session.evidenceLedger.events.length)) session.evidenceLedger = restore.evidenceLedger;
   if (startMcpBackground) setTimeout(startMcpBackground, 0);
   return session;
 }
