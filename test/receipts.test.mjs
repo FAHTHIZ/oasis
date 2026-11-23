@@ -276,3 +276,36 @@ test('oasis receipt create writes a verifiable receipt for a saved session, afte
   assert.equal(await receiptCommand(['show', info.file], root, { write, env }), 0);
   assert.match(out, /Claims: {4}\d+ \w+/);
 });
+
+test('files a command changed are attested like edits, and survive a session save', async (t) => {
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const { root, env } = await fixture(t);
+  execFileSync('git', ['add', '.'], { cwd: root });
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'app'], { cwd: root });
+  const generate = toolCall('g1', 'run_command', { command: process.execPath, args: ['-e', 'require("fs").writeFileSync("gen.js", "export const v = 1;\\n")'] });
+  const { config } = await scriptedModel(t, [generate, { content: 'Generated gen.js.' }]);
+  const session = await createSession({ root, config, env: { ...env, OASIS_REHEARSE: '0' } });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'generate it', { env: { ...env, OASIS_REHEARSE: '0' }, approval: async () => true });
+  const command = session.evidenceLedger.events.find((event) => event.tool === 'run_command');
+  assert.deepEqual(command.changed, ['gen.js'], JSON.stringify(command));
+  assert.deepEqual(sanitizeEvidenceLedger(session.evidenceLedger).events.find((event) => event.tool === 'run_command').changed, ['gen.js']);
+
+  const receipt = await createReceipt(session, { env });
+  assert.deepEqual(receipt.files.map((file) => file.path), ['gen.js'], 'the generated file is attested');
+  assert.deepEqual(receipt.evidence.events.find((event) => event.tool === 'run_command').changed, ['gen.js'], 'and signed per action in the chain');
+  let verdict = await verifyReceipt(receipt, { root, env });
+  assert.equal(verdict.checks.find((check) => check.name === 'files').ok, true);
+  await writeFile(path.join(root, 'gen.js'), 'export const v = 2; // edited afterwards\n');
+  verdict = await verifyReceipt(receipt, { root, env });
+  assert.match(verdict.checks.find((check) => check.name === 'files').detail, /1 file\(s\) differ from the receipt: gen\.js/);
+});
+
+test('observed changes skip concurrent runs and paths outside the workspace', async () => {
+  const { observedChanges } = await import('../src/evidence-ledger.mjs');
+  assert.deepEqual(observedChanges({ effects: { changed: 3, files: ['src/a.js (modified)', 'b.txt (added)', 'old.js (deleted)'] } }), ['src/a.js', 'b.txt', 'old.js']);
+  assert.deepEqual(observedChanges({ effects: { changed: 1, files: ['a.js (modified)'], concurrent: true } }), []);
+  assert.deepEqual(observedChanges({ effects: { changed: 2, files: ['../x (modified)', '/etc/y (modified)'] } }), []);
+  assert.deepEqual(observedChanges({}), []);
+});

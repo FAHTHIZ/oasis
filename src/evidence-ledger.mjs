@@ -160,6 +160,21 @@ function filteredRun(command) {
   return TEST_FILTER.test(' ' + tail) || envFiltered(text);
 }
 
+// Files a command was observed to change (src/effect-contracts.mjs), so receipts can
+// attest them like edits. Changes made while another command ran in the same tree are
+// real but not attributable, and are left out.
+const MAX_CHANGED_PATHS = 30;
+export function observedChanges(result) {
+  const effects = result && result.effects;
+  if (!effects || effects.concurrent || !Array.isArray(effects.files)) return [];
+  const paths = [];
+  for (const label of effects.files.slice(0, MAX_CHANGED_PATHS)) {
+    const match = /^(.+) \((?:added|modified|deleted|created|renamed|typechange|[a-z-]+)\)$/.exec(String(label));
+    if (match && !match[1].startsWith('/') && !match[1].split('/').includes('..')) paths.push(match[1].slice(0, 400));
+  }
+  return paths;
+}
+
 export function evidenceFromToolResult(name, args = {}, result = {}, context = {}) {
   if (!result || typeof result !== 'object') return null;
   if (PACK_FETCH.test(name) || PACK_SEARCH.test(name)) return packEvidence(name, args || {}, result, digestOf(result));
@@ -169,14 +184,16 @@ export function evidenceFromToolResult(name, args = {}, result = {}, context = {
     const command = name === 'run_shell' ? String(args.command || '') : [args.command].concat(Array.isArray(args.args) ? args.args : []).filter(Boolean).join(' ');
     const exitCode = Number.isInteger(result.exitCode) ? result.exitCode : null;
     const finished = exitCode !== null && !result.timedOut && !result.cancelled;
+    const changed = observedChanges(result);
+    const changedField = changed.length ? { changed } : {};
     if (context.isCheck) {
       const noTests = finished && exitCode === 0 && ranNoTests(outputText(result));
       const filtered = (context.checkKind || 'test') === 'test' && filteredRun(command);
-      return { kind: 'check', tool: name, command: command.slice(0, 300), checkKind: context.checkKind || 'test', exitCode, masked: Boolean(context.masked), finished, passed: finished && !context.masked ? exitCode === 0 : null, ...(noTests ? { noTests: true } : {}), ...(filtered ? { filtered: true } : {}), digest };
+      return { kind: 'check', tool: name, command: command.slice(0, 300), checkKind: context.checkKind || 'test', exitCode, masked: Boolean(context.masked), finished, passed: finished && !context.masked ? exitCode === 0 : null, ...(noTests ? { noTests: true } : {}), ...(filtered ? { filtered: true } : {}), ...changedField, digest };
     }
     const text = outputText(result);
     const execution = EXECUTION_COMMAND.test(command.trim());
-    return { kind: execution ? 'execution' : 'command', tool: name, command: command.slice(0, 300), exitCode, finished, numbers: finished ? numbersIn(text) : [], ...(context.mayEdit ? { mayEdit: true } : {}), digest };
+    return { kind: execution ? 'execution' : 'command', tool: name, command: command.slice(0, 300), exitCode, finished, numbers: finished ? numbersIn(text) : [], ...(context.mayEdit ? { mayEdit: true } : {}), ...changedField, digest };
   }
   if (name === 'execute_code') {
     const failed = typeof result.error === 'string';

@@ -107,6 +107,11 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - Commit: see `git log -- app/index.html` ("Show the rehearsal in approvals and offer it in the app").
 - Building the app button exposed that `formatApprovalMessage` (shared by the terminal and the web server) rewrote command prompts down to the command line, so no person had ever seen a rehearsal's file list or a high-risk reason. Fixed and tested in `test/approval-language.test.mjs`; the end-to-end web test in `test/rehearsal.test.mjs` checks the card text, the `rehearsal` flag, the answer and that the command landed once.
 
+### Command effects in receipts
+
+- Commit: see `git log -- docs/RECEIPTS.md` ("Attest files that commands changed in receipts").
+- Receipts attested only paths from edit tools, so a file produced by a formatter or generator was outside the signature. Command and check evidence events now carry the observed `changed` paths (from effect contracts, skipped when unattributable), saved with the session, signed in the chain and digested in `files`. `test/receipts.test.mjs` runs a real generating command through the agent, verifies the receipt, alters the file and sees `files` fail; without the change the generated file is not in the receipt.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |
@@ -136,4 +141,4 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 ### Long term
 
 - Network effect rehearsal through a recording proxy, so a rehearsal can show which hosts a command would contact and what it would send.
-- Signed per-action effect records inside work receipts, so a reviewer can verify not only checks but each file change against a rehearsal.
+- Rehearsal records inside work receipts (what was rehearsed versus what landed, per action), building on the per-action `changed` lists receipts now carry.
