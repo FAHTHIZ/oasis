@@ -55,6 +55,23 @@ When the honest answer is "it depends" or experts disagree, `/debate` runs a str
 
 The report gives the ruling with its confidence and each position's tally and confidence path, then the points of consensus, the remaining dissent, the cruxes (with the evidence that would settle each), what would change each side's mind, and the full argument ledger. Advocates and fact-checkers are held to the [report contracts](AGENT-NETWORK.md#evidence-and-contracts). An advocate whose report cites an unfetched page or misquotes one is sent back once; if it fails again, its position forfeits.
 
+## Fact-check a text, file or page
+
+`/factcheck` checks what a piece of writing claims, claim by claim:
+
+```text
+/factcheck https://example.com/article --max 10
+/factcheck drafts/press-release.md
+/factcheck The Eiffel Tower is 330 metres tall and opened in 1887.
+```
+
+1. **Extract**: the checkable claims (figures, dates, events, attributions, causal and comparative claims, descriptions of studies or laws) are rewritten to stand alone, so "it rose 12% last year" becomes "the city budget rose 12% in 2025". They are ranked by how much the text depends on them and capped at `--max` (default 10, at most 20). Opinions, predictions and advice are listed as not checkable.
+2. **Check**: each claim goes to its own checker, which sees only that claim. The checker returns `true`, `mostly-true`, `misleading` (accurate but missing context that changes the conclusion), `false` or `unverifiable`, with quoted evidence and a correction for anything not true. The original source cannot vouch for itself: evidence from its site does not count. A verdict left with no independent evidence is reported as `unverifiable`.
+3. **Challenge**: every confident verdict goes to an adversarial reviewer, whose only job is to overturn it with better evidence: a primary source, a newer figure, missing context. A strong, evidenced objection marks the claim `disputed` and shows both sides. A weak one caps its confidence at 60%.
+4. **Verdicts**: a table of claims, verdicts, confidence and evidence links, the corrections, the disputes, notes per claim, and a weighted reliability score for what could be checked (true 1, mostly-true 0.8, misleading 0.3, false 0, weighted by how much the text depends on each claim).
+
+Checkers and reviewers are held to the same [report contracts](AGENT-NETWORK.md#evidence-and-contracts) as research agents. They cite only pages they fetched, check their quotes with `verify_quote`, and count copies of one story as one source.
+
 ## Analyse data and produce a chart
 
 ```sh
