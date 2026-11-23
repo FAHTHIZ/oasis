@@ -52,6 +52,7 @@ import { MUTATION_PROBE_TOOL_DEFINITION } from './mutation-probe.mjs';
 import { BISECT_TOOL_DEFINITION } from './bisect.mjs';
 import { FLAKY_CHECK_TOOL_DEFINITION } from './flaky-check.mjs';
 import { MINIMIZE_REPRO_TOOL_DEFINITION } from './minimize-repro.mjs';
+import { FAULT_LOCALIZE_TOOL_DEFINITION } from './fault-localize.mjs';
 import { MONITOR_TOOL_DEFINITION } from './monitor-definition.mjs';
 import { assertNotAgentIgnored, filterAgentIgnored } from './agent-ignore.mjs';
 import { startCommandMonitor, startWsMonitor, backgroundExitNotifier, backgroundStuckNotifier } from './monitors.mjs';
@@ -2284,6 +2285,18 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         sandbox: context.sandbox
       });
     }
+    case 'localize_fault': {
+      const { runLocalizeFault } = await import('./fault-localize.mjs');
+      return await runLocalizeFault(root, args, {
+        approval: context.approval,
+        autoApprove: Boolean(context.autoApprove),
+        ruleAllowed: Boolean(context.ruleAllowed),
+        env: context.env || process.env,
+        signal: context.signal,
+        sandbox: context.sandbox,
+        injectionHold: injectionHoldReason(context.session)
+      });
+    }
     case 'minimize_repro': {
       const { runMinimizeRepro } = await import('./minimize-repro.mjs');
       return await runMinimizeRepro(root, args, {
@@ -2374,6 +2387,7 @@ TOOL_DEFINITIONS.push(MUTATION_PROBE_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(BISECT_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(FLAKY_CHECK_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(MINIMIZE_REPRO_TOOL_DEFINITION);
+TOOL_DEFINITIONS.push(FAULT_LOCALIZE_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(LSP_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(MONITOR_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(...GIT_TOOL_DEFINITIONS);
