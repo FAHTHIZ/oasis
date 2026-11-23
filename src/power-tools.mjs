@@ -30,7 +30,7 @@ import { commentWarning } from './style-rules.mjs';
 import { snapshotScriptedEdit, noOpEditWarning } from './inplace-edit-check.mjs';
 import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment, nonInteractiveEnvironment } from './tools.mjs';
 import { agentIgnoreMatch } from './agent-ignore.mjs';
-import { assertSandboxAvailable, launchCommand, sandboxLocalhostNote } from './sandbox.mjs';
+import { assertSandboxAvailable, launchCommand, sandboxLocalhostNote, withQuarantineNote } from './sandbox.mjs';
 import { fileGlobMatcher } from './glob.mjs';
 import { editNotebook } from './notebook.mjs';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
@@ -700,7 +700,9 @@ async function runShell(root, args, context, flavor = 'sh') {
   }
   const timeoutSeconds = Math.max(5, Math.min(600, Number.parseInt(args.timeoutSeconds, 10) || 120));
   const condensers = condenseOutputEnabled(context.env || process.env) ? { stdout: createOutputCondenser(), stderr: createOutputCondenser() } : null;
-  return await new Promise((resolve) => {
+  return await new Promise((settle) => {
+    // Files the sandbox moved out of the workspace (see watchProtectedCreations) are reported with the result.
+    const resolve = (value) => settle(withQuarantineNote(value, launch));
     let stdout = '';
     let stderr = '';
     // run_shell keeps no raw log, so the note says how to see everything.

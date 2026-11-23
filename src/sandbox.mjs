@@ -21,10 +21,11 @@ import { normalizeSshSettings, detectSshRuntime, sshWrap, DEFAULT_SSH_EXCLUDES }
 import { normalizeDaytonaSettings, ensureDaytonaSync, daytonaSshSettings } from './daytona-backend.mjs';
 import { normalizeModalSettings, ensureModalSync, modalSshSettings } from './modal-backend.mjs';
 import { spawnSync } from 'node:child_process';
-import { realpathSync, statSync, lstatSync, rmdirSync, unlinkSync, readFileSync, existsSync, mkdtempSync } from 'node:fs';
+import { realpathSync, statSync, lstatSync, rmdirSync, unlinkSync, readFileSync, existsSync, mkdtempSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { getConfigDirectory } from './config.mjs';
 
 const SENSITIVE_HOME_PATHS = [
   '.ssh', '.aws', '.azure', '.kube', '.docker', '.gnupg',
@@ -123,10 +124,23 @@ export function sandboxReadBlock(root, env = process.env) {
   return { hidden, reopen };
 }
 
-const PROTECTED_FILES = ['.bashrc', '.bash_profile', '.zshrc', '.zprofile', '.profile', '.gitconfig', '.gitmodules', '.ripgreprc', '.mcp.json',
-  '.claude/settings.json', '.claude/settings.local.json', '.oasis/settings.json', '.oasis/settings.local.json', '.git/config'];
-const PROTECTED_DIRS = ['.vscode', '.idea', '.git/hooks', '.claude/commands', '.claude/agents', '.claude/skills', '.claude/hooks',
-  '.oasis/commands', '.oasis/agents', '.oasis/skills', '.oasis/hooks'];
+// Files a sandboxed command must not create or change, because something
+// outside the sandbox runs or obeys them later: shells, git, direnv, commit
+// hooks, package managers, dev containers, MCP and LSP servers, and the
+// settings of OASIS and other coding agents. Kept in step with the protected
+// configuration paths in protected-paths.mjs (test/sandbox-protected-paths
+// checks both lists), so the sandbox is not a way around that prompt.
+export const PROTECTED_FILES = ['.bashrc', '.bash_profile', '.zshrc', '.zprofile', '.profile', '.gitconfig', '.gitmodules', '.ripgreprc', '.mcp.json',
+  '.claude/settings.json', '.claude/settings.local.json', '.oasis/settings.json', '.oasis/settings.local.json', '.git/config',
+  '.oasis/mcp.json', '.claude/mcp.json', '.lsp.json', '.envrc', '.npmrc', '.yarnrc.yml', '.pnpmfile.js', '.pnpmfile.cjs',
+  '.pre-commit-config.yaml', '.pre-commit-config.yml', 'lefthook.yml', 'lefthook.yaml', 'lefthook-local.yml', 'lefthook-local.yaml',
+  '.devcontainer.json', 'opencode.json', 'opencode.jsonc', '.aider.conf.yml', '.aider.conf.yaml',
+  '.cursor/mcp.json', '.cursor/hooks.json', '.cursor/environment.json', '.gemini/settings.json', '.codex/config.toml',
+  '.continue/config.json', '.continue/config.yaml', '.continue/config.yml', '.continue/config.ts'];
+export const PROTECTED_DIRS = ['.vscode', '.idea', '.git/hooks', '.claude/commands', '.claude/agents', '.claude/skills', '.claude/hooks',
+  '.oasis/commands', '.oasis/agents', '.oasis/skills', '.oasis/hooks', '.oasis/plugins', '.claude/plugins',
+  '.husky', '.devcontainer', '.agents/agents', '.gemini/agents', '.gemini/commands', '.gemini/extensions',
+  '.opencode/command', '.opencode/commands', '.cursor/rules'];
 const PLACEHOLDER_FILES = new Set(['.mcp.json', '.claude/settings.json', '.claude/settings.local.json', '.oasis/settings.json', '.oasis/settings.local.json', '.git/config']);
 
 function lstatOrNull(target) { try { return lstatSync(target); } catch { return null; } }
@@ -147,13 +161,17 @@ export function protectedWritePaths(roots = []) {
       if (seen.has(full)) continue;
       const info = lstatOrNull(full);
       if (info) { seen.add(full); existing.push({ path: full, type: info.isDirectory() ? 'directory' : 'file' }); continue; }
-      if (item.type === 'file' && !PLACEHOLDER_FILES.has(item.rel)) continue;
       const parts = item.rel.split('/');
       let first = null;
       for (let i = 1; i <= parts.length; i++) {
         const candidate = path.join(base, ...parts.slice(0, i));
         if (!lstatOrNull(candidate)) { first = { path: candidate, type: i === parts.length ? item.type : 'directory' }; break; }
       }
+      // A missing folder gets an empty read-only placeholder, which git does
+      // not show. A missing file placeholder is an empty file that `git
+      // status` and `git add -A` inside the sandbox would pick up, so only the
+      // few listed here get one; watchProtectedCreations() catches the rest.
+      if (first && first.type === 'file' && !PLACEHOLDER_FILES.has(item.rel)) continue;
       if (!first || seen.has(first.path)) continue;
       seen.add(first.path);
       missing.push(first);
@@ -754,10 +772,99 @@ export function wrapCommand(command, args, sandbox, cwd, options = {}) {
 }
 
 export async function launchCommand(command, args, sandbox, cwd, options = {}) {
+  const local = sandbox && sandbox.enabled && sandbox.available && sandbox.kind !== 'ssh' && !REMOTE_BACKENDS.includes(sandbox.kind);
+  // Taken before any placeholder exists, so placeholders are not mistaken for
+  // files the command created.
+  const watch = local ? watchProtectedCreations(sandbox.protectedRoots || []) : null;
+  let launch;
   if (sandbox && sandbox.enabled && sandbox.available && sandbox.kind === 'srt') {
     const { srtLaunch } = await import('./sandbox-runtime.mjs');
     const prefix = unsetEnvPrefix(sandbox);
-    return prefix.length ? srtLaunch(prefix[0], [...prefix.slice(1), command, ...args], sandbox, cwd) : srtLaunch(command, args, sandbox, cwd);
+    launch = await (prefix.length ? srtLaunch(prefix[0], [...prefix.slice(1), command, ...args], sandbox, cwd) : srtLaunch(command, args, sandbox, cwd));
+  } else launch = wrapCommand(command, args, sandbox, cwd, options);
+  if (!watch || !watch.paths.length) return launch;
+  const inner = launch.release;
+  const quarantined = [];
+  let done = false;
+  return {
+    ...launch,
+    quarantined,
+    release: () => {
+      if (done) return;
+      done = true;
+      if (typeof inner === 'function') inner();
+      quarantined.push(...watch.check());
+    }
+  };
+}
+
+/**
+ * Protected files and folders that do not exist yet. Read-only mounts cover
+ * the ones that exist; a missing root-level file such as .envrc or .npmrc has
+ * no mount to stop its creation on Linux, and container backends mount only
+ * what exists. check() runs when the command ends: anything on the list that
+ * now exists was created by the sandboxed command, so it is moved out of the
+ * workspace into <config>/sandbox-quarantine and returned. Otherwise a
+ * sandboxed, auto-approved command could plant .husky/pre-commit or .envrc and
+ * have it run outside the sandbox on the next commit or cd.
+ */
+export function watchProtectedCreations(roots = [], { quarantineRoot = '' } = {}) {
+  const paths = [];
+  for (const root of roots) {
+    const base = path.resolve(root);
+    if (!lstatOrNull(base)) continue;
+    const dotGit = lstatOrNull(path.join(base, '.git'));
+    for (const rel of [...PROTECTED_FILES, ...PROTECTED_DIRS]) {
+      if (dotGit && dotGit.isFile() && rel.startsWith('.git/')) continue;
+      const full = path.join(base, ...rel.split('/'));
+      if (!lstatOrNull(full)) paths.push({ root: base, rel, path: full });
+    }
   }
-  return wrapCommand(command, args, sandbox, cwd, options);
+  return {
+    paths,
+    check() {
+      const moved = [];
+      let target = '';
+      for (const item of paths) {
+        const info = lstatOrNull(item.path);
+        if (!info) continue;
+        // An empty placeholder folder left by a failed cleanup is not the command's doing.
+        if (info.isDirectory() && PROTECTED_DIRS.includes(item.rel)) { try { if (!readdirSync(item.path).length) { rmdirSync(item.path); continue; } } catch {} }
+        try {
+          target ||= mkdtempSync(path.join(quarantineRoot || sandboxQuarantineDirectory(), new Date().toISOString().replace(/[:.]/g, '-') + '-'));
+          const destination = path.join(target, ...item.rel.split('/'));
+          mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
+          renameSync(item.path, destination);
+          moved.push({ path: item.rel, root: item.root, movedTo: destination });
+        } catch (error) {
+          // Moving failed (another device, permissions): remove it instead,
+          // since leaving it would let it run outside the sandbox.
+          try { rmSync(item.path, { recursive: true, force: true }); moved.push({ path: item.rel, root: item.root, removed: true, error: error.code || String(error.message || error) }); } catch {}
+        }
+      }
+      return moved;
+    }
+  };
+}
+
+function sandboxQuarantineDirectory(env = process.env) {
+  const dir = path.join(getConfigDirectory(env), 'sandbox-quarantine');
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return dir;
+}
+
+/** A command result with the quarantine note added, when there is one. */
+export function withQuarantineNote(result, launch) {
+  const moved = launch && Array.isArray(launch.quarantined) ? launch.quarantined : [];
+  if (!moved.length || !result || typeof result !== 'object') return result;
+  return { ...result, protectedFilesQuarantined: moved.map((item) => item.path), quarantine: quarantineNote(moved) };
+}
+
+/** Text for a command result when the sandbox moved files the command created. */
+export function quarantineNote(quarantined) {
+  if (!quarantined || !quarantined.length) return '';
+  return 'The sandboxed command created protected configuration ' + (quarantined.length === 1 ? 'file ' : 'files ') + quarantined.map((item) => item.path).join(', ') +
+    ' (hooks, settings or files that other tools run later, outside the sandbox). OASIS moved ' + (quarantined.length === 1 ? 'it' : 'them') + ' out of the workspace' +
+    (quarantined[0].movedTo ? ' to ' + quarantined[0].movedTo.slice(0, quarantined[0].movedTo.length - quarantined[0].path.length - 1) : '') +
+    '. To change these files, edit them with the file tools, which ask first.';
 }
