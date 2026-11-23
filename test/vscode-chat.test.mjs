@@ -15,7 +15,7 @@ const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src',
 
 async function tmp(t) {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-chat-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   return dir;
 }
 
@@ -68,8 +68,22 @@ test('control channel routes prompts, permission answers and interrupts', async 
 });
 
 test('chat process drives a real OASIS session with inline approvals', async (t) => {
-  const root = await tmp(t);
-  const home = await tmp(t);
+  // One teardown, in order: stop the CLI child and wait for it to exit, then
+  // remove its folders. Separate after hooks ran the removals first, while the
+  // child was still saving its session, so rm failed with ENOTEMPTY, the stop
+  // hook never ran and the live child kept the test file from exiting.
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-chat-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-chat-'));
+  let proc = null;
+  t.after(async () => {
+    const child = proc?.child;
+    if (child && child.exitCode === null && child.signalCode === null) {
+      const exited = new Promise((resolve) => { child.once('close', resolve); setTimeout(resolve, 5000).unref(); });
+      proc.stop();
+      await exited;
+    } else proc?.stop();
+    for (const dir of [root, home]) await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  });
   const nodeWrite = (file) => ({ command: process.execPath, args: ['-e', "require('fs').writeFileSync('" + file + "','hi from chat')"] });
   const { config } = await scriptedModel(t, [(payload) => {
     const last = payload.messages.at(-1);
@@ -79,8 +93,7 @@ test('chat process drives a real OASIS session with inline approvals', async (t)
     if (/nope/.test(text)) return toolCall('c2', 'run_command', nodeWrite('nope.txt'));
     return { content: 'Finished.' };
   }]);
-  const proc = new OasisChatProcess({ command: JSON.stringify(process.execPath) + ' ' + JSON.stringify(CLI), cwd: root, env: { OASIS_HOME: home, HOME: home, OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: config.baseURL, OASIS_MODEL: 'fixture', OASIS_NO_ANIMATION: '1', OASIS_IDE_PORT: '' } });
-  t.after(() => proc.stop());
+  proc = new OasisChatProcess({ command: JSON.stringify(process.execPath) + ' ' + JSON.stringify(CLI), cwd: root, env: { OASIS_HOME: home, HOME: home, OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: config.baseURL, OASIS_MODEL: 'fixture', OASIS_NO_ANIMATION: '1', OASIS_IDE_PORT: '' } });
   const { events, waitFor } = collect(proc);
   proc.send('create hello.txt');
   const permission = await waitFor((event) => event.kind === 'permission');
