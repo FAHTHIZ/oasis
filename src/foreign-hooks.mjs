@@ -20,7 +20,6 @@
 // OASIS_OTHER_AGENT_RULES=0, or "otherAgentHooks": false in settings, turns
 // this off.
 import { existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { readdir, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -75,7 +74,7 @@ export function codexMatcher(matcher) {
   return matcher.replace(/\bapply_patch\b/g, '(?:' + EDIT_TOOLS.join('|') + '|apply_patch)');
 }
 
-function codexHooks(doc, platform) {
+export function codexHooks(doc, platform = process.platform) {
   const { kept, dropped } = splitHookEvents(doc);
   if (!kept) return { hooks: {}, dropped };
   const hooks = {};
@@ -103,9 +102,6 @@ async function codexLayer(dir, scope, platform) {
   return out.filter((item) => Object.keys(item.hooks).length || item.dropped.length);
 }
 
-const HOST = fileURLToPath(new URL('./opencode-plugin-host.mjs', import.meta.url));
-const quoted = (value) => '"' + String(value).replace(/"/g, '\\"') + '"';
-
 // Plugin files in an OpenCode plugin folder: direct .js/.mjs/.ts files and
 // package folders (their package.json main, or index.*).
 async function openCodePluginFiles(dir) {
@@ -124,26 +120,48 @@ async function openCodePluginFiles(dir) {
   return files;
 }
 
-// Which OASIS events a plugin needs, read from its source so the host only runs
-// where the plugin has something to do.
-async function openCodePlugin(file, scope) {
-  let text = '';
-  try { text = await readFile(file, 'utf8'); } catch { return null; }
-  if (/\.ts$/.test(file) && !process.features.typescript) return { scope, file, protocol: 'opencode', hooks: {}, dropped: ['TypeScript plugins need Node.js 22.18 or later'] };
-  // OpenCode V2 plugins (Plugin.define) need OpenCode's own runtime.
-  if (/Plugin\.define\s*\(/.test(text)) return { scope, file, protocol: 'opencode', hooks: {}, dropped: ['OpenCode V2 plugin (Plugin.define)'] };
+/**
+ * The hook that runs one OpenCode plugin on one OASIS event, in argument form
+ * so no shell quoting is involved. `pluginPath` may use ${CLAUDE_PLUGIN_ROOT}.
+ */
+export function openCodeHook(pluginPath, event, label) {
+  return { type: 'command', command: '${OASIS_NODE}', args: ['${OASIS_OPENCODE_HOST}', pluginPath, event], timeout: 30, statusMessage: 'OpenCode plugin ' + label };
+}
+
+/** OASIS events an OpenCode plugin's source handles. */
+export function openCodeEvents(text) {
   const events = new Set();
   if (text.includes('tool.execute.before')) events.add('PreToolUse');
   if (text.includes('tool.execute.after') || text.includes('file.edited')) events.add('PostToolUse');
   if (text.includes('session.idle')) events.add('Stop');
   if (text.includes('session.created')) events.add('SessionStart');
   if (text.includes('session.deleted')) events.add('SessionEnd');
+  return events;
+}
+
+/** Hook groups that run an OpenCode plugin wherever its source has work. */
+export function openCodePluginHooks(text, pluginPath, label) {
   const hooks = {};
-  for (const event of events) {
-    const command = [quoted(process.execPath), quoted(HOST), quoted(file), event].join(' ');
-    (hooks[event] ||= []).push({ ...(event === 'PostToolUse' && !text.includes('tool.execute.after') ? { matcher: 'Edit|Write|MultiEdit' } : {}), hooks: [{ type: 'command', command, timeout: 30, statusMessage: 'OpenCode plugin ' + path.basename(file) }] });
-  }
-  return { scope, file, protocol: 'opencode', hooks, dropped: [] };
+  for (const event of openCodeEvents(text)) (hooks[event] ||= []).push({ ...(event === 'PostToolUse' && !text.includes('tool.execute.after') ? { matcher: 'Edit|Write|MultiEdit' } : {}), hooks: [openCodeHook(pluginPath, event, label)] });
+  return hooks;
+}
+
+/** Why an OpenCode plugin cannot run here, or ''. */
+export function openCodeUnsupported(file, text) {
+  if (/\.ts$/.test(file) && !process.features.typescript) return 'TypeScript plugins need Node.js 22.18 or later';
+  // OpenCode V2 plugins (Plugin.define) need OpenCode's own runtime.
+  if (/Plugin\.define\s*\(/.test(text)) return 'OpenCode V2 plugin (Plugin.define)';
+  return '';
+}
+
+// Which OASIS events a plugin needs, read from its source so the host only runs
+// where the plugin has something to do.
+async function openCodePlugin(file, scope) {
+  let text = '';
+  try { text = await readFile(file, 'utf8'); } catch { return null; }
+  const why = openCodeUnsupported(file, text);
+  if (why) return { scope, file, protocol: 'opencode', hooks: {}, dropped: [why] };
+  return { scope, file, protocol: 'opencode', hooks: openCodePluginHooks(text, file, path.basename(file)), dropped: [] };
 }
 
 /**

@@ -127,10 +127,15 @@ async function hookDoc(dir, info) {
 // each one is filed under the Claude Code event that fires at the same moment.
 // A relative script path is resolved against the plugin root, as both tools do.
 function bridgedHooks(dir, info, doc) {
+  if (info.format === 'gemini') return bridgeHookDoc('gemini', doc, rootedRewrite(dir, info));
   const { dropped: foreign } = splitHookEvents(doc);
   if (!foreign.length) return { hooks: {}, dropped: [] };
   const only = { hooks: Object.fromEntries(Object.entries(doc.hooks).filter(([event]) => foreign.includes(event))) };
-  const rewrite = (text, { path: isPath } = {}) => {
+  return bridgeHookDoc(info.format, only, rootedRewrite(dir, info));
+}
+
+function rootedRewrite(dir, info) {
+  return (text, { path: isPath } = {}) => {
     const value = portableVars(String(text));
     if (isPath) return '"' + (value.startsWith('${') || path.isAbsolute(value) || !existsSync(path.join(dir, value)) ? value : underRoot(value)) + '"';
     const match = /^(\S+)([\s\S]*)$/.exec(value.trim());
@@ -142,7 +147,6 @@ function bridgedHooks(dir, info, doc) {
     const relative = ships || (info.format === 'cursor' && /^\.\.?\//.test(head));
     return relative ? '"' + underRoot(head) + '"' + rest : value;
   };
-  return bridgeHookDoc(info.format, only, rewrite);
 }
 
 /** What a foreign plugin has that will not run under OASIS, in plain words. */
@@ -319,9 +323,16 @@ export async function convertToClaudePlugin(srcDir, destDir, info) {
     // the wrong names; the converted copies replace them.
     for (const rel of files.filter((f) => /^agents\/[^/]+\.(agent|chatmode)\.md$/i.test(f))) await rm(path.join(destDir, rel), { force: true });
     await convertConfigPack(destDir, info, manifest, writeSkill);
+    const { codexHooks, openCodePluginHooks, openCodeUnsupported } = await import('./foreign-hooks.mjs');
+    const add = (hooks) => { for (const [event, groups] of Object.entries(hooks)) (((manifest.hooks ||= {}))[event] ||= []).push(...groups); };
     for (const { protocol, doc } of info.found.hookDocs || []) {
-      const { hooks } = bridgedHooks(destDir, { format: protocol }, doc);
-      for (const [event, groups] of Object.entries(hooks)) (((manifest.hooks ||= {}))[event] ||= []).push(...groups);
+      // Codex hooks already speak Claude Code's protocol.
+      if (protocol === 'codex') add(codexHooks(doc, process.platform).hooks);
+      else add(bridgedHooks(destDir, { format: protocol }, doc).hooks);
+    }
+    for (const rel of info.found.openCodePlugins || []) {
+      const text = await readFile(path.join(destDir, rel), 'utf8').catch(() => '');
+      if (text && !openCodeUnsupported(rel, text)) add(openCodePluginHooks(text, underRoot(rel), path.posix.basename(rel)));
     }
   } else if (info.format === 'gemini') {
     const settings = geminiSettings(m);
