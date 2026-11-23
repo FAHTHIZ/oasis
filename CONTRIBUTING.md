@@ -34,6 +34,8 @@ The system prompt and the tool list sent to the model are snapshotted in `test/f
 
 Include focused tests for behaviour changes. For permission, sandbox, filesystem or network changes, add regression cases for both the intended behaviour and nearby safe behaviour that must continue to work.
 
+Commits are credited to the people who make them. Do not add trailers or footers that credit an AI tool (`Co-authored-by: <assistant>`, "Generated with ..."); the quality workflow rejects pushed commits that carry them (`.github/scripts/check-commit-attribution.mjs`).
+
 Review `git diff` before submitting. Explain the user-visible effect, relevant compatibility impact and exact checks you ran. Do not claim a test passed unless you ran it and observed a successful exit status.
 
 ## Pull requests
