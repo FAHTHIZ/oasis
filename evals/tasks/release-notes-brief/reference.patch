@@ -1,0 +1,20 @@
+diff --git a/RELEASE_NOTES.md b/RELEASE_NOTES.md
+new file mode 100644
+index 0000000..85eef73
+--- /dev/null
++++ b/RELEASE_NOTES.md
+@@ -0,0 +1,14 @@
++# Release notes: 2.3.0
++
++## Breaking
++
++- The `--legacy-auth` flag is gone. Use `--auth token` instead.
++
++## What's new
++
++- Export invoices as CSV.
++- Search is faster on accounts with more than 10,000 invoices.
++
++## Fixes
++
++- Customer names with an emoji no longer cause a crash.

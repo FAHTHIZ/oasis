@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+const ws = process.argv[2];
+const text = readFileSync(path.join(ws, 'answer.md'), 'utf8');
+const plain = text.replace(/,/g, '');
+const [main, contradiction = ''] = plain.split(/Contradiction:/);
+assert.ok(contradiction, 'has a Contradiction: paragraph');
+assert.match(main, /\b1200\b/, 'states 1200 as the current limit');
+assert.doesNotMatch(main, /\b600\b/, 'does not present 600 as current');
+assert.match(main, /sources\/official-api-docs\.md/, 'cites the official docs');
+assert.match(contradiction, /\b600\b/);
+assert.match(contradiction, /sources\/press-release-2025\.md/);
+assert.match(contradiction, /sources\/blog-repost\.md/);
+assert.match(contradiction, /(copy|copies|repost|repeat|same (press release|announcement|source)|not independent)/i, 'notes the repost is not independent');
+assert.match(contradiction, /(outdated|older|out of date|superseded|stale|2025)/i, 'says why it is not current');

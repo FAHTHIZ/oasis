@@ -1,0 +1,86 @@
+diff --git a/logs/app-2026-10-30.log b/logs/archive/2026-10/app-2026-10-30.log
+similarity index 100%
+rename from logs/app-2026-10-30.log
+rename to logs/archive/2026-10/app-2026-10-30.log
+diff --git a/logs/app-2026-11-01.log b/logs/archive/2026-11/app-2026-11-01.log
+similarity index 100%
+rename from logs/app-2026-11-01.log
+rename to logs/archive/2026-11/app-2026-11-01.log
+diff --git a/logs/app-2026-11-02.log b/logs/archive/2026-11/app-2026-11-02.log
+similarity index 100%
+rename from logs/app-2026-11-02.log
+rename to logs/archive/2026-11/app-2026-11-02.log
+diff --git a/logs/app-2026-11-03.log b/logs/archive/2026-11/app-2026-11-03.log
+similarity index 100%
+rename from logs/app-2026-11-03.log
+rename to logs/archive/2026-11/app-2026-11-03.log
+diff --git a/logs/app-2026-11-04.log b/logs/archive/2026-11/app-2026-11-04.log
+similarity index 100%
+rename from logs/app-2026-11-04.log
+rename to logs/archive/2026-11/app-2026-11-04.log
+diff --git a/logs/archive/manifest.json b/logs/archive/manifest.json
+new file mode 100644
+index 0000000..d4d7715
+--- /dev/null
++++ b/logs/archive/manifest.json
+@@ -0,0 +1,24 @@
++{
++  "moved": [
++    {
++      "file": "app-2026-10-30.log",
++      "to": "archive/2026-10/app-2026-10-30.log"
++    },
++    {
++      "file": "app-2026-11-01.log",
++      "to": "archive/2026-11/app-2026-11-01.log"
++    },
++    {
++      "file": "app-2026-11-02.log",
++      "to": "archive/2026-11/app-2026-11-02.log"
++    },
++    {
++      "file": "app-2026-11-03.log",
++      "to": "archive/2026-11/app-2026-11-03.log"
++    },
++    {
++      "file": "app-2026-11-04.log",
++      "to": "archive/2026-11/app-2026-11-04.log"
++    }
++  ]
++}
+diff --git a/scripts/archive-logs.mjs b/scripts/archive-logs.mjs
+new file mode 100644
+index 0000000..04fc106
+--- /dev/null
++++ b/scripts/archive-logs.mjs
+@@ -0,0 +1,30 @@
++#!/usr/bin/env node
++// Moves daily logs dated before --before YYYY-MM-DD into logs/archive/YYYY-MM/
++// and appends what moved to logs/archive/manifest.json.
++import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
++import path from 'node:path';
++
++const args = process.argv.slice(2);
++const at = args.indexOf('--before');
++const before = at >= 0 ? args[at + 1] : '';
++if (!/^\d{4}-\d{2}-\d{2}$/.test(before || '')) {
++  console.error('usage: archive-logs.mjs --before YYYY-MM-DD [--dir logs]');
++  process.exit(2);
++}
++const dirAt = args.indexOf('--dir');
++const dir = path.resolve(dirAt >= 0 ? args[dirAt + 1] : 'logs');
++const archive = path.join(dir, 'archive');
++const manifestPath = path.join(archive, 'manifest.json');
++const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : { moved: [] };
++for (const name of readdirSync(dir).sort()) {
++  const match = /^app-(\d{4})-(\d{2})-(\d{2})\.log$/.exec(name);
++  if (!match) continue;
++  const date = match[1] + '-' + match[2] + '-' + match[3];
++  if (date >= before) continue;
++  const target = path.join(archive, match[1] + '-' + match[2]);
++  mkdirSync(target, { recursive: true });
++  renameSync(path.join(dir, name), path.join(target, name));
++  manifest.moved.push({ file: name, to: path.relative(dir, path.join(target, name)).split(path.sep).join('/') });
++}
++mkdirSync(archive, { recursive: true });
++writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');

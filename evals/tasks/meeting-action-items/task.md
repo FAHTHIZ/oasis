@@ -1,0 +1,1 @@
+From notes/meeting.md, write notes/actions.json: a JSON array with one object {"owner", "action", "due"} for each explicit commitment someone made to do something themselves. "due" is the YYYY-MM-DD date they committed to, or null when they gave none. Do not include suggestions or ideas that nobody committed to.

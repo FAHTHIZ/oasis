@@ -1,0 +1,11 @@
+diff --git a/answer.md b/answer.md
+new file mode 100644
+index 0000000..127977a
+--- /dev/null
++++ b/answer.md
+@@ -0,0 +1,5 @@
++# Acme API rate limit
++
++The current limit is 1,200 requests per minute per API key, according to the official API reference updated 2026-10-20 (sources/official-api-docs.md). A forum report from 2026-11-01 agrees (sources/forum-thread.md).
++
++Contradiction: the 2025 launch press release (sources/press-release-2025.md) says 600 requests per minute, and sources/blog-repost.md repeats that same press release, so it is not an independent source. That figure is outdated; the newer official documentation supersedes it.

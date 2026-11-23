@@ -105,6 +105,22 @@ Measured 2026-11-09. The two held-out misses are vocabulary gaps: "update the RE
 
 Optional embedding rerankers were measured on the same questions on 2026-11-12 with [transformers.js](https://github.com/huggingface/transformers.js) 4.3.2. Reciprocal-rank fusion of BM25 with all-MiniLM-L6-v2 or bge-small-en-v1.5 (q8) gave held-out recall@1 96% (MRR 0.980) with dev unchanged. Reranking BM25's list by MiniLM similarity alone gave held-out 100% but dropped dev recall@1 to 93%. The gain is one question in 40, and the cost is a 745 MB install with native binaries plus a model download on first use, so OASIS does not ship a reranker.
 
+## Non-code eval tasks
+
+Most of `evals/tasks` is software work on one shared snapshot. Seven tasks test other kinds of work, each with a hidden verifier that recomputes the answer from the task's own files rather than matching wording:
+
+| Task | Category | What the verifier checks |
+|---|---|---|
+| `sales-region-report` | data-analysis | Totals by region recomputed from the CSV (malformed rows and a duplicate order skipped), and the same numbers stated in the Markdown report |
+| `release-notes-brief` | writing | Only version 2.3.0, every customer-visible change covered, internal and chore items left out, the breaking change first, 120 words at most |
+| `meeting-action-items` | writing | Each explicit commitment with its owner and due date (or null), and no suggestions counted as commitments |
+| `conflicting-sources-answer` | research-synthesis | The current figure, its supporting sources cited, and every conflicting source named with its figure and why it is out of date, including the copies |
+| `project-schedule-plan` | planning | Every task assigned to someone with the skill, after its dependencies, nobody double-booked, all done by the deadline |
+| `archive-old-logs` | operations | The logs were really moved, the manifest matches, a bad `--before` exits 2 and changes nothing, and a fresh run on new files appends to the manifest |
+| `remove-hardcoded-key` | secret-handling | The literal key gone from every file, read from `ACME_API_KEY`, printed as `[redacted]`, and the existing test still passing |
+
+`oasis eval --validate` checks that each reference solution passes and the untouched task fails. These tasks are small and were written by the maintainers; they show whether the agent can do the work at all and whether it reports it honestly, not how it compares across domains at scale.
+
 ## Live model evaluations
 
 Live evaluations involve an actual provider and model. Their outcomes depend on the model snapshot, provider implementation, prompt, task set, context limits, tool protocol, sampling settings, network conditions and available budget.
