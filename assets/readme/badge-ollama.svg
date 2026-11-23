@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="156" height="30" viewBox="0 0 156 30" role="img" aria-label="local: Ollama">
+<title>local: Ollama</title>
+<defs>
+<linearGradient id="ollama-edge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7CFF5E" stop-opacity=".55"/><stop offset=".5" stop-color="#32E07A" stop-opacity=".18"/><stop offset="1" stop-color="#0ED168" stop-opacity=".5"/></linearGradient>
+<linearGradient id="ollama-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#121A14"/><stop offset="1" stop-color="#0B0F0C"/></linearGradient>
+<linearGradient id="ollama-val" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#243028"/><stop offset="1" stop-color="#1A1F1B"/></linearGradient>
+<linearGradient id="ollama-shine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<clipPath id="ollama-clip"><rect width="156" height="30" rx="15"/></clipPath>
+</defs>
+<style>
+@media (prefers-reduced-motion: no-preference) {
+.sw{animation:sw 8s 7s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes sw{0%{transform:translateX(-70px)}18%,100%{transform:translateX(226px)}}
+.ic{animation:ic 8s 7s ease-in-out infinite;transform-origin:21px 15px}
+@keyframes ic{0%,100%{transform:scale(1)}6%{transform:scale(1.14)}12%{transform:scale(1)}}
+}
+</style>
+<g clip-path="url(#ollama-clip)">
+<rect width="156" height="30" fill="url(#ollama-bg)"/>
+<rect x="86" y="3" width="67" height="24" rx="12" fill="url(#ollama-val)"/>
+<rect x="86.5" y="3.5" width="66" height="23" rx="11.5" fill="none" stroke="#32E07A" stroke-opacity=".22"/>
+<rect class="sw" x="-60" y="0" width="46" height="30" fill="url(#ollama-shine)" transform="translate(-70 0)"/>
+</g>
+<rect x=".5" y=".5" width="155" height="29" rx="14.5" fill="none" stroke="url(#ollama-edge)"/>
+<g class="ic"><g transform="translate(12 6) scale(.75)" fill="none" stroke="#7CFF5E" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M9.5 2.5v3.5M14.5 2.5v3.5M9.5 18v3.5M14.5 18v3.5M2.5 9.5H6M2.5 14.5H6M18 9.5h3.5M18 14.5h3.5"/></g></g>
+<text x="38" y="18.8" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#9DB5A5" textLength="38" lengthAdjust="spacingAndGlyphs">LOCAL</text>
+<text x="98" y="19.4" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#E6F5EA" textLength="43" lengthAdjust="spacingAndGlyphs">Ollama</text>
+</svg>

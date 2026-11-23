@@ -11,6 +11,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tagline, stats, quickstart, capability, CARD_KINDS, providers, orbit, footer } from './readme-scenes.mjs';
+import { badgeFiles } from './readme-badges.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'assets', 'readme');
@@ -223,7 +224,7 @@ function divider(theme) {
 `;
 }
 
-const files = { 'hero.svg': hero(), 'architecture.svg': architecture(), 'footer.svg': footer() };
+const files = { 'hero.svg': hero(), 'architecture.svg': architecture(), 'footer.svg': footer(), ...badgeFiles() };
 for (const theme of ['dark', 'light']) {
   files[`tagline-${theme}.svg`] = tagline(theme);
   files[`stats-${theme}.svg`] = stats(theme);

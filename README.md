@@ -22,16 +22,34 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/quality.yml?branch=main&style=for-the-badge&label=quality&labelColor=0B0F0C&color=32E07A"></a>
-  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=for-the-badge&labelColor=0B0F0C&color=7CFF5E"></a>
-  <img alt="More than 3,700 tests" src="https://img.shields.io/badge/tests-3%2C700%2B-0ED168?style=for-the-badge&labelColor=0B0F0C">
-  <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=for-the-badge&labelColor=0B0F0C&color=1A1F1B"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Release: stable" src="assets/readme/badge-release.svg" height="28"></a>
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="assets/readme/badge-license.svg" height="28"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Tests: 3,700+" src="assets/readme/badge-tests.svg" height="28"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/actions"><img alt="Checks: every push" src="assets/readme/badge-ci.svg" height="28"></a>
   <br>
-  <img alt="Windows, macOS and Linux" src="https://img.shields.io/badge/windows%20%C2%B7%20macos%20%C2%B7%20linux-1A1F1B?style=flat-square&logo=nodedotjs&logoColor=7CFF5E&labelColor=0B0F0C">
-  <img alt="Node.js 22.19 or newer" src="https://img.shields.io/badge/node-%E2%89%A522.19-1A1F1B?style=flat-square&labelColor=0B0F0C">
-  <a href="https://github.com/FAHTHIZ/oasis/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/FAHTHIZ/oasis?style=flat-square&labelColor=0B0F0C&color=32E07A"></a>
-  <a href="https://github.com/FAHTHIZ/oasis/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/FAHTHIZ/oasis/main?style=flat-square&labelColor=0B0F0C&color=1A1F1B"></a>
-  <a href="CONTRIBUTING.md"><img alt="Pull requests welcome" src="https://img.shields.io/badge/PRs-welcome-7CFF5E?style=flat-square&labelColor=0B0F0C"></a>
+  <a href="docs/FIRST-RUN.md"><img alt="Node: ≥ 22.19" src="assets/readme/badge-node.svg" height="28"></a>
+  <a href="docs/RELEASES.md"><img alt="Runs on: Windows · macOS · Linux" src="assets/readme/badge-platforms.svg" height="28"></a>
+  <a href="docs/TERMINAL.md"><img alt="Interface: terminal" src="assets/readme/badge-terminal.svg" height="28"></a>
+  <a href="docs/INTERFACES.md"><img alt="Interface: web app" src="assets/readme/badge-web.svg" height="28"></a>
+  <br>
+  <a href="docs/DESKTOP.md"><img alt="Interface: desktop app" src="assets/readme/badge-desktop.svg" height="28"></a>
+  <a href="docs/REMOTE-ACCESS.md"><img alt="Self-hosted: your machine" src="assets/readme/badge-hosted.svg" height="28"></a>
+  <a href="docs/INFERENCE.md"><img alt="Local: Ollama" src="assets/readme/badge-ollama.svg" height="28"></a>
+  <a href="docs/INFERENCE.md"><img alt="Models: hosted or local" src="assets/readme/badge-models.svg" height="28"></a>
+  <br>
+  <a href="docs/EXTENDING.md"><img alt="Protocol: MCP" src="assets/readme/badge-mcp.svg" height="28"></a>
+  <a href="docs/A2A.md"><img alt="Protocol: A2A" src="assets/readme/badge-a2a.svg" height="28"></a>
+  <a href="docs/SUBAGENTS.md"><img alt="Agents: parallel teams" src="assets/readme/badge-agents.svg" height="28"></a>
+  <a href="docs/EXTENDING.md"><img alt="Plugins: Claude Code" src="assets/readme/badge-plugins.svg" height="28"></a>
+  <br>
+  <a href="docs/EXECUTION-BACKENDS.md"><img alt="Sandbox: Docker · bubblewrap" src="assets/readme/badge-sandbox.svg" height="28"></a>
+  <a href="SECURITY.md"><img alt="Security: policy" src="assets/readme/badge-security.svg" height="28"></a>
+  <a href="docs/USER-GUIDE.md"><img alt="Docs: user guide" src="assets/readme/badge-docs.svg" height="28"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/stargazers"><img alt="Star: on GitHub" src="assets/readme/badge-stars.svg" height="28"></a>
+  <br>
+  <a href="CONTRIBUTING.md"><img alt="Pull requests: welcome" src="assets/readme/badge-prs.svg" height="28"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/discussions"><img alt="Community: Discussions" src="assets/readme/badge-discussions.svg" height="28"></a>
+  <a href="CODE_OF_CONDUCT.md"><img alt="Conduct: be kind" src="assets/readme/badge-conduct.svg" height="28"></a>
 </p>
 
 <p align="center">
@@ -427,10 +445,10 @@ OASIS is a young project. Status labels for every part are in [Capabilities and 
 
 | Status | Areas |
 | --- | --- |
-| ![Stable](https://img.shields.io/badge/-stable-32E07A?style=flat-square) | Terminal and scripted runs, the self-hosted web app, sessions, checkpoints and undo, permission modes, bubblewrap and Docker sandboxes, MCP, Claude Code plugins, OpenAI-compatible, Anthropic, Gemini and local providers |
-| ![Released, lightly tested](https://img.shields.io/badge/-released%2C%20lightly%20tested-7CFF5E?style=flat-square) | Subagents in parallel and in teams, scripted workflows, domain packs, the desktop app (installers not yet code-signed), editor integrations, Codex App Server and Cursor API compatibility, the SDK, GitHub Action and cloud runs, Telegram, Slack and Discord gateways, the Chrome browser tool, app connectors, image and speech tools |
-| ![Unreleased](https://img.shields.io/badge/-unreleased%20(main)-FBBF24?style=flat-square) | On `main`, install from source: desktop computer use and virtual desktops (experimental), the control room, A2A, agent experience, the shared knowledge board, `mixture_of_agents`, Daytona, Modal, Apptainer and gVisor backends, more chat gateways, Honcho and Home Assistant |
-| ![Not claimed](https://img.shields.io/badge/-not%20claimed-1A1F1B?style=flat-square) | Production readiness for untrusted code without OS isolation, results with paid frontier models, a hosted service, a published Terminal-Bench or SWE-bench score |
+| <img alt="Stable" src="assets/readme/status-stable.svg" height="24"> | Terminal and scripted runs, the self-hosted web app, sessions, checkpoints and undo, permission modes, bubblewrap and Docker sandboxes, MCP, Claude Code plugins, OpenAI-compatible, Anthropic, Gemini and local providers |
+| <img alt="Released, lightly tested" src="assets/readme/status-lightly-tested.svg" height="24"> | Subagents in parallel and in teams, scripted workflows, domain packs, the desktop app (installers not yet code-signed), editor integrations, Codex App Server and Cursor API compatibility, the SDK, GitHub Action and cloud runs, Telegram, Slack and Discord gateways, the Chrome browser tool, app connectors, image and speech tools |
+| <img alt="Unreleased (main)" src="assets/readme/status-unreleased.svg" height="24"> | On `main`, install from source: desktop computer use and virtual desktops (experimental), the control room, A2A, agent experience, the shared knowledge board, `mixture_of_agents`, Daytona, Modal, Apptainer and gVisor backends, more chat gateways, Honcho and Home Assistant |
+| <img alt="Not claimed" src="assets/readme/status-not-claimed.svg" height="24"> | Production readiness for untrusted code without OS isolation, results with paid frontier models, a hosted service, a published Terminal-Bench or SWE-bench score |
 
 Engineering benchmarks of the harness itself (tool-call repair, edit application, risky-command blocking, secret detection) and every recorded live run are kept for development in [Benchmarks](docs/development/BENCHMARKS.md) and [Real-world runs](docs/development/REAL-WORLD-RUNS.md). They are one-trial samples, not a ranking.
 
@@ -466,7 +484,7 @@ CI also runs platform security tests, a live Docker sandbox test, native PTY tes
 
 <br>
 
-Every animation in this README is a plain SVG built by `scripts/readme-art.mjs` and `scripts/readme-scenes.mjs`: CSS keyframes and SMIL only, no scripts, no web fonts, no external images. Each one ships in a dark and a light version picked by `<picture>`, and each one shows a finished still frame when your system asks for reduced motion. `node scripts/readme-art.mjs --check` fails when a file in `assets/readme/` is out of date.
+Every animation in this README is a plain SVG built by `scripts/readme-art.mjs`, `scripts/readme-scenes.mjs` and `scripts/readme-badges.mjs` (the rounded badges): CSS keyframes and SMIL only, no scripts, no web fonts, no external images. Each one ships in a dark and a light version picked by `<picture>`, and each one shows a finished still frame when your system asks for reduced motion. `node scripts/readme-art.mjs --check` fails when a file in `assets/readme/` is out of date.
 
 </details>
 

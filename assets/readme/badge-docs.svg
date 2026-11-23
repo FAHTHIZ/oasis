@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="171" height="30" viewBox="0 0 171 30" role="img" aria-label="docs: user guide">
+<title>docs: user guide</title>
+<defs>
+<linearGradient id="docs-edge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7CFF5E" stop-opacity=".55"/><stop offset=".5" stop-color="#32E07A" stop-opacity=".18"/><stop offset="1" stop-color="#0ED168" stop-opacity=".5"/></linearGradient>
+<linearGradient id="docs-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#121A14"/><stop offset="1" stop-color="#0B0F0C"/></linearGradient>
+<linearGradient id="docs-val" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#243028"/><stop offset="1" stop-color="#1A1F1B"/></linearGradient>
+<linearGradient id="docs-shine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<clipPath id="docs-clip"><rect width="171" height="30" rx="15"/></clipPath>
+</defs>
+<style>
+@media (prefers-reduced-motion: no-preference) {
+.sw{animation:sw 8s 3.400000000000002s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes sw{0%{transform:translateX(-70px)}18%,100%{transform:translateX(241px)}}
+.ic{animation:ic 8s 3.400000000000002s ease-in-out infinite;transform-origin:21px 15px}
+@keyframes ic{0%,100%{transform:scale(1)}6%{transform:scale(1.14)}12%{transform:scale(1)}}
+}
+</style>
+<g clip-path="url(#docs-clip)">
+<rect width="171" height="30" fill="url(#docs-bg)"/>
+<rect x="79" y="3" width="89" height="24" rx="12" fill="url(#docs-val)"/>
+<rect x="79.5" y="3.5" width="88" height="23" rx="11.5" fill="none" stroke="#32E07A" stroke-opacity=".22"/>
+<rect class="sw" x="-60" y="0" width="46" height="30" fill="url(#docs-shine)" transform="translate(-70 0)"/>
+</g>
+<rect x=".5" y=".5" width="170" height="29" rx="14.5" fill="none" stroke="url(#docs-edge)"/>
+<g class="ic"><g transform="translate(12 6) scale(.75)" fill="none" stroke="#7CFF5E" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V5a2.5 2.5 0 0 1 2.5-2.5H20v17H6.5A2.5 2.5 0 0 0 4 22M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/></g></g>
+<text x="38" y="18.8" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#9DB5A5" textLength="31" lengthAdjust="spacingAndGlyphs">DOCS</text>
+<text x="91" y="19.4" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#E6F5EA" textLength="65" lengthAdjust="spacingAndGlyphs">user guide</text>
+</svg>

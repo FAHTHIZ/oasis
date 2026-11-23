@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="173" height="30" viewBox="0 0 173 30" role="img" aria-label="conduct: be kind">
+<title>conduct: be kind</title>
+<defs>
+<linearGradient id="conduct-edge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7CFF5E" stop-opacity=".55"/><stop offset=".5" stop-color="#32E07A" stop-opacity=".18"/><stop offset="1" stop-color="#0ED168" stop-opacity=".5"/></linearGradient>
+<linearGradient id="conduct-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#121A14"/><stop offset="1" stop-color="#0B0F0C"/></linearGradient>
+<linearGradient id="conduct-val" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#243028"/><stop offset="1" stop-color="#1A1F1B"/></linearGradient>
+<linearGradient id="conduct-shine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<clipPath id="conduct-clip"><rect width="173" height="30" rx="15"/></clipPath>
+</defs>
+<style>
+@media (prefers-reduced-motion: no-preference) {
+.sw{animation:sw 8s 1.6000000000000014s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes sw{0%{transform:translateX(-70px)}18%,100%{transform:translateX(243px)}}
+.ic{animation:ic 8s 1.6000000000000014s ease-in-out infinite;transform-origin:21px 15px}
+@keyframes ic{0%,100%{transform:scale(1)}6%{transform:scale(1.14)}12%{transform:scale(1)}}
+}
+</style>
+<g clip-path="url(#conduct-clip)">
+<rect width="173" height="30" fill="url(#conduct-bg)"/>
+<rect x="101" y="3" width="69" height="24" rx="12" fill="url(#conduct-val)"/>
+<rect x="101.5" y="3.5" width="68" height="23" rx="11.5" fill="none" stroke="#32E07A" stroke-opacity=".22"/>
+<rect class="sw" x="-60" y="0" width="46" height="30" fill="url(#conduct-shine)" transform="translate(-70 0)"/>
+</g>
+<rect x=".5" y=".5" width="172" height="29" rx="14.5" fill="none" stroke="url(#conduct-edge)"/>
+<g class="ic"><g transform="translate(12 6) scale(.75)" fill="none" stroke="#7CFF5E" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5C2 10.8 3.5 12.5 5 14l7 7Z"/></g></g>
+<text x="38" y="18.8" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10.5" font-weight="700" fill="#9DB5A5" textLength="53" lengthAdjust="spacingAndGlyphs">CONDUCT</text>
+<text x="113" y="19.4" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#E6F5EA" textLength="45" lengthAdjust="spacingAndGlyphs">be kind</text>
+</svg>
