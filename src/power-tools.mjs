@@ -694,8 +694,8 @@ async function runShell(root, args, context, flavor = 'sh') {
     if (!exe) throw new Error('PowerShell was not found. Install PowerShell 7 (pwsh) and put it on PATH.');
     shell = powerShellLaunch(exe, command, context.env || process.env);
   } else shell = process.platform === 'win32' ? { command: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', command] } : { command: '/bin/sh', args: ['-c', command] };
-  const launch = await launchCommand(shell.command, shell.args, sandbox, root);
   const env = nonInteractiveEnvironment(scrubEnvironment(context.env || process.env), context.env || process.env);
+  const launch = await launchCommand(shell.command, shell.args, sandbox, root, { env });
   if (args.run_in_background === true) {
     const registry = context.session && (context.session.background ||= new Map());
     if (!registry) throw new Error('Background commands are not available in this session.');

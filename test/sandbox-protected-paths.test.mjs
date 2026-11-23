@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync, realpathSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { wrapCommand, macProfile, containerArgs, protectedWritePaths, detectSandbox, watchProtectedCreations, launchCommand, withQuarantineNote, PROTECTED_FILES, PROTECTED_DIRS } from '../src/sandbox.mjs';
+import { wrapCommand, macProfile, containerArgs, protectedWritePaths, detectSandbox, watchProtectedCreations, launchCommand, withQuarantineNote, placeholderGitExcludes, PROTECTED_FILES, PROTECTED_DIRS } from '../src/sandbox.mjs';
 import { protectedConfigPath } from '../src/protected-paths.mjs';
 import { executePowerTool } from '../src/power-tools.mjs';
 
@@ -160,4 +160,43 @@ test('bubblewrap: a sandboxed script cannot plant hooks or rc files that run lat
   const left = readdirSync(root).sort();
   assert.ok(!left.some((name) => ['.envrc', '.npmrc', '.lsp.json', 'lefthook.yml', '.husky', '.devcontainer', '.codex', '.cursor'].includes(name)), left.join(','));
   assert.deepEqual([...launch.quarantined.map((item) => item.path)].sort(), ['.envrc', '.lsp.json', '.npmrc', 'lefthook.yml']);
+});
+
+test('placeholder excludes keep the user excludes and anchor each placeholder to the repository top', (t) => {
+  const root = project(t);
+  const sub = path.join(root, 'pkg');
+  mkdirSync(sub);
+  const userIgnore = path.join(root, 'user-ignore');
+  writeFileSync(userIgnore, '*.log');
+  const calls = [];
+  const run = (cmd, args) => {
+    calls.push(args.join(' '));
+    if (args[0] === 'rev-parse') return { status: 0, stdout: root + '\n' };
+    return { status: 0, stdout: userIgnore + '\n' };
+  };
+  const missing = [{ path: path.join(sub, '.mcp.json'), type: 'file' }, { path: path.join(sub, '.git', 'config'), type: 'file' }, { path: path.join(sub, '.vscode'), type: 'directory' }];
+  const excludes = placeholderGitExcludes(missing, [sub], { HOME: root, GIT_CONFIG_COUNT: '2' }, run);
+  t.after(() => excludes && excludes.cleanup());
+  assert.ok(excludes);
+  assert.equal(readFileSync(excludes.file, 'utf8'), '*.log\n# OASIS sandbox placeholders\n/pkg/.mcp.json\n');
+  assert.deepEqual(excludes.env, { GIT_CONFIG_COUNT: '3', GIT_CONFIG_KEY_2: 'core.excludesFile', GIT_CONFIG_VALUE_2: excludes.file });
+  excludes.cleanup();
+  assert.ok(!existsSync(excludes.dir));
+  assert.equal(placeholderGitExcludes([{ path: path.join(sub, '.vscode'), type: 'directory' }], [sub], {}, run), null, 'folders need no excludes');
+});
+
+const hasGit = spawnSync('git', ['--version']).status === 0;
+test('git add -A works inside the sandbox and does not stage placeholder files', { skip: (!bwrap && 'bubblewrap is not available') || (!hasGit && 'git is not available') }, (t) => {
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'oasis-protect-git-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: root, env }).status, 0);
+  writeFileSync(path.join(root, 'a.txt'), 'hi\n');
+  const sandbox = { enabled: true, available: true, kind: 'bubblewrap', writable: [root], protectedRoots: [root], maskedPaths: [], network: false };
+  const launch = wrapCommand('/bin/sh', ['-c', 'git add -A && git status --porcelain'], sandbox, root, { env });
+  const result = spawnSync(launch.command, launch.args, { cwd: root, env, encoding: 'utf8' });
+  launch.release();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, 'A  a.txt\n');
+  assert.ok(!existsSync(path.join(root, '.mcp.json')));
 });
