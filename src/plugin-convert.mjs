@@ -240,7 +240,8 @@ const portableVars = (value) => typeof value === 'string'
   ? value.replace(/\$\{PLUGIN_ROOT\}/g, ROOT).replace(/\$\{PLUGIN_DATA\}/g, '${CLAUDE_PLUGIN_DATA}')
   : value;
 const underRoot = (rel) => {
-  const clean = path.posix.normalize(String(rel).replace(/\\/g, '/')).replace(/^\.\/?/, '').replace(/\/$/, '');
+  // Only a leading "./" goes: ".cursor/hooks/x.sh" keeps its dot.
+  const clean = path.posix.normalize(String(rel).replace(/\\/g, '/')).replace(/^\.(?:\/|$)/, '').replace(/\/$/, '');
   return clean && clean !== '.' ? ROOT + '/' + clean : ROOT;
 };
 
@@ -333,6 +334,10 @@ export async function convertToClaudePlugin(srcDir, destDir, info) {
     // the wrong names; the converted copies replace them.
     for (const rel of files.filter((f) => /^agents\/[^/]+\.(agent|chatmode)\.md$/i.test(f))) await rm(path.join(destDir, rel), { force: true });
     await convertConfigPack(destDir, info, manifest, writeSkill);
+    for (const { protocol, doc } of info.found.hookDocs || []) {
+      const { hooks } = bridgedHooks(destDir, { format: protocol }, doc);
+      for (const [event, groups] of Object.entries(hooks)) (((manifest.hooks ||= {}))[event] ||= []).push(...groups);
+    }
   } else if (info.format === 'gemini') {
     const settings = geminiSettings(m);
     const servers = {};

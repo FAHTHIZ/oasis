@@ -225,7 +225,7 @@ async function readYamlFile(file) {
 
 // Everything a config pack holds, without writing anything.
 async function scanPack(dir) {
-  const found = { commands: [], agents: [], rules: [], skills: [], servers: {}, userConfig: {}, tools: new Set() };
+  const found = { commands: [], agents: [], rules: [], skills: [], servers: {}, userConfig: {}, hookDocs: [], tools: new Set() };
   // VS Code / GitHub Copilot, under .github/ and (awesome-copilot) at the top level.
   for (const base of [path.join(dir, '.github'), dir]) {
     for (const { file, base: name } of await listMd(path.join(base, 'prompts'), '.prompt.md')) { found.commands.push({ name: slug(name), body: vscodePromptToCommand(await readText(file)) }); found.tools.add('VS Code'); }
@@ -242,8 +242,18 @@ async function scanPack(dir) {
   for (const [sub, key] of [['agents', 'agents'], ['commands', 'commands']]) {
     for (const { file, base: name } of await listMd(path.join(dir, '.claude', sub), '.md')) found[key].push({ name: slug(name), body: await readText(file), native: true });
   }
-    const copilotInstructions = await readText(path.join(dir, '.github', 'copilot-instructions.md'));
+  const copilotInstructions = await readText(path.join(dir, '.github', 'copilot-instructions.md'));
   if (copilotInstructions.trim()) { found.rules.push({ name: 'copilot-instructions', text: copilotInstructions.trim(), always: true }); found.tools.add('VS Code'); }
+  // Repository hooks: Copilot's .github/hooks/*.json and Cursor's
+  // .cursor/hooks.json run through the hook protocol bridge.
+  let hookFiles = [];
+  try { hookFiles = (await readdir(path.join(dir, '.github', 'hooks'))).filter((name) => /\.json$/i.test(name)).sort(); } catch {}
+  for (const name of hookFiles) {
+    const doc = await readJson(path.join(dir, '.github', 'hooks', name));
+    if (doc && doc.hooks && typeof doc.hooks === 'object') { found.hookDocs.push({ protocol: 'copilot', doc, file: '.github/hooks/' + name }); found.tools.add('Copilot'); }
+  }
+  const cursorHooks = await readJson(path.join(dir, '.cursor', 'hooks.json'));
+  if (cursorHooks && cursorHooks.hooks && typeof cursorHooks.hooks === 'object') { found.hookDocs.push({ protocol: 'cursor', doc: cursorHooks, file: '.cursor/hooks.json' }); found.tools.add('Cursor'); }
   const vscodeMcp = await readJson(path.join(dir, '.vscode', 'mcp.json'));
   if (vscodeMcp) {
     const { servers, userConfig } = vscodeServers(vscodeMcp);
@@ -296,7 +306,7 @@ async function scanPack(dir) {
 }
 
 // Claude Code files alone are not a pack (OASIS reads them as they are).
-const packSize = (found) => found.tools.size ? found.commands.length + found.agents.length + found.rules.length + found.skills.length + Object.keys(found.servers).length : 0;
+const packSize = (found) => found.tools.size ? found.commands.length + found.agents.length + found.rules.length + found.skills.length + Object.keys(found.servers).length + found.hookDocs.length : 0;
 
 /** A folder of another agent's customizations, or null. */
 export async function detectConfigPack(dir) {
@@ -318,6 +328,8 @@ export function describeConfigPack(info) {
   if (f.skills.length) parts.push(count(f.skills.length, 'skill'));
   const servers = Object.keys(f.servers).length;
   if (servers) parts.push(count(servers, 'MCP server') + ' (they run when sessions start)');
+  const events = f.hookDocs.reduce((n, item) => n + Object.keys(item.doc.hooks).length, 0);
+  if (events) parts.push(count(events, 'hook event') + ' from ' + f.hookDocs.map((item) => item.file).join(', ') + ' (they run commands on your machine)');
   return parts;
 }
 
