@@ -54,7 +54,12 @@ if (!realHome && !process.env.PLAYWRIGHT_BROWSERS_PATH) {
 // The scratch ~/.gitconfig above already carries the fallback identity.
 const GIT_LEAKS = /^GIT_(?:AUTHOR_|COMMITTER_|CONFIG_(?:COUNT|KEY_\d+|VALUE_\d+|PARAMETERS|GLOBAL|SYSTEM|NOSYSTEM)$|DIR$|WORK_TREE$|INDEX_FILE$|OBJECT_DIRECTORY$|ALTERNATE_OBJECT_DIRECTORIES$|NAMESPACE$|CEILING_DIRECTORIES$|DISCOVERY_ACROSS_FILESYSTEM$|COMMON_DIR$)/;
 const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => realHome || !GIT_LEAKS.test(key)));
-const child = spawn(process.execPath, ['--test', ...args, ...files], {
+// A test that hangs (a server never closed, a promise never settled) used to
+// hold the run until the CI job's own timeout, with no hint which one it was.
+// Each test now fails after five minutes with its name; OASIS_TEST_TIMEOUT_MS
+// or an explicit --test-timeout changes it.
+const timeout = args.some((arg) => arg.startsWith('--test-timeout')) ? [] : ['--test-timeout=' + (Number(process.env.OASIS_TEST_TIMEOUT_MS) > 0 ? Number(process.env.OASIS_TEST_TIMEOUT_MS) : 300000)];
+const child = spawn(process.execPath, ['--test', ...timeout, ...args, ...files], {
   stdio: 'inherit',
   env: { ...baseEnv, ...isolated, TMPDIR: scratch, TMP: scratch, TEMP: scratch }
 });
