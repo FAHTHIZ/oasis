@@ -124,13 +124,15 @@ function clip(text, max = MAX_TEXT) {
 }
 
 // Only the fields a verifier needs; tool output itself stays out (its digest stands for it).
-const EVENT_FIELDS = ['seq', 'at', 'epoch', 'kind', 'tool', 'command', 'checkKind', 'exitCode', 'finished', 'passed', 'masked', 'noTests', 'filtered', 'mayEdit', 'url', 'finalUrl', 'query', 'path', 'digest'];
+const EVENT_FIELDS = ['seq', 'at', 'epoch', 'kind', 'tool', 'command', 'checkKind', 'exitCode', 'finished', 'passed', 'masked', 'noTests', 'filtered', 'mayEdit', 'url', 'finalUrl', 'query', 'path', 'changed', 'digest'];
 
 function receiptEvent(event) {
   const out = {};
   for (const key of EVENT_FIELDS) {
     if (event[key] === undefined || event[key] === null || event[key] === false && !['finished', 'passed'].includes(key)) continue;
-    out[key] = typeof event[key] === 'string' ? redactSecretText(event[key]).slice(0, 400) : event[key];
+    out[key] = typeof event[key] === 'string' ? redactSecretText(event[key]).slice(0, 400)
+      : Array.isArray(event[key]) ? event[key].filter((item) => typeof item === 'string').map((item) => redactSecretText(item).slice(0, 400))
+        : event[key];
   }
   return out;
 }
@@ -182,7 +184,7 @@ async function fileDigest(root, relative) {
 
 /** The checks to rerun: the latest run of each distinct command since the last edit, newest last. */
 export function replayPlan(events) {
-  const lastEdit = events.reduce((max, event) => (event.kind === 'edit' || event.mayEdit ? Math.max(max, event.seq) : max), 0);
+  const lastEdit = events.reduce((max, event) => (event.kind === 'edit' || event.mayEdit || (Array.isArray(event.changed) && event.changed.length) ? Math.max(max, event.seq) : max), 0);
   const byCommand = new Map();
   for (const event of events) {
     if (event.kind !== 'check' || !event.finished || event.masked || !event.command || event.seq < lastEdit) continue;
@@ -216,7 +218,12 @@ export async function buildReceipt(session, { request = null, reply = null, resu
     basis: (claim.basis || []).map((item) => item.seq).filter(Number.isInteger),
     ...(claim.reasons ? { reasons: claim.reasons } : {})
   }));
-  const edited = [...new Set(raw.filter((event) => event.kind === 'edit' && event.path).map((event) => event.path))].slice(0, MAX_FILES);
+  // Files edited by tools, and files commands were observed to change (formatters, code
+  // generators, sed -i, snapshot updates): the receipt attests both.
+  const edited = [...new Set(raw.flatMap((event) => [
+    ...(event.kind === 'edit' && event.path ? [event.path] : []),
+    ...(Array.isArray(event.changed) ? event.changed : [])
+  ]))].slice(0, MAX_FILES);
   const files = (await Promise.all(edited.map((file) => fileDigest(workspace, file)))).filter(Boolean);
   const task = session && session.task ? session.task : null;
   const outcome = task && task.outcome ? task.outcome : null;
