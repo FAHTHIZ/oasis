@@ -230,3 +230,18 @@ test('Continue prompt files (.prompt and .md) become slash commands with {{{ inp
   assert.equal(run.shell.length, 0);
   assert.equal((await resolveCustomCommand(root, '/review now', { commands })).prompt, 'Review (the current git diff) carefully.\n\nnow');
 });
+
+test('Factory Droid Markdown commands (.factory/commands, ~/.factory/commands) expand $ARGUMENTS; project beats user', async (t) => {
+  const { root, home, env } = await setup(t, {
+    '.factory/commands/code-review.md': '---\ndescription: Send a review checklist\nargument-hint: <branch>\n---\nReview `$ARGUMENTS` and respond with a checklist.',
+    '.factory/commands/ops/deploy.md': 'Deploy now.',
+    '~/.factory/commands/code-review.md': 'USER VERSION',
+    '~/.factory/commands/standup.md': 'Write my standup.'
+  });
+  const commands = await loadCustomCommands(root, { env, home });
+  assert.equal(commands.get('code-review').foreign, 'Factory Droid');
+  assert.match(commands.get('code-review').description, /Send a review checklist/);
+  assert.ok(commands.has('standup'));
+  const review = await resolveCustomCommand(root, '/code-review feature/login', { env, home });
+  assert.equal(review.prompt, 'Review `feature/login` and respond with a checklist.');
+});

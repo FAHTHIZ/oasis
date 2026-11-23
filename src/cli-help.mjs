@@ -133,7 +133,7 @@ export function helpText() {
     '  oasis auto-mode defaults|config|critique|reset   Inspect or reset the auto mode classifier rules',
     '  oasis purge [PATH] [--dry-run] [-y] [-i] [--all] [--memory]   Delete local Oasis state for a project',
     '  oasis profile list|create|use|show|delete  Separate agents with their own config, memory, sessions and skills (--profile NAME)',
-    '  oasis import [codex|gemini|cursor|claude|hermes|openclaw|opencode|antigravity|windsurf|cline] [--dry-run] [--yes]  Import MCP servers, instructions, commands, rules, skills and memories',
+    '  oasis import [codex|gemini|cursor|factory|claude|hermes|openclaw|opencode|antigravity|windsurf|cline] [--dry-run] [--yes]  Import MCP servers, instructions, commands, rules, skills and memories',
     '  oasis mcp remove NAME [--scope user|project]   Remove a configured server (user config first, then .mcp.json)',
     '  oasis mcp enable|disable NAME Turn a configured server on or off',
     '  oasis mcp share [--to claude,cursor,vscode,gemini,codex,opencode,zed,copilot] [--user] [--remove]  Register oasis mcp serve in other agents\' MCP settings',

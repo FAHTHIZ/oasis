@@ -301,11 +301,13 @@ OASIS reads these tools' project files where they are, so a repository set up fo
 | `AGENTS.md`, `AGENT.md`, `AGENTS.local.md`, per folder | Devin Desktop, Cursor, Codex | Read |
 | `.agent/rules`, `.agents/rules`, `~/.gemini/antigravity-cli/rules`, `~/.gemini/antigravity-cli/plugins/*/rules` | Antigravity | Read with the same triggers |
 | `.cursor/commands`, `~/.cursor/commands` | Cursor | Slash commands |
+| `.factory/commands`, `~/.factory/commands` | Factory Droid | Markdown slash commands with `description`, `argument-hint` and `$ARGUMENTS`; executable (shebang) commands are not run |
+| `.factory/mcp.json`, `~/.factory/mcp.json` | Factory Droid | MCP servers through `oasis import factory` |
 | `.devin/workflows`, `.windsurf/workflows` (up to the git root), `~/.codeium/windsurf/global_workflows` | Devin Desktop / Windsurf | Slash commands; workflows a workflow calls are appended. Sub-folder workflow folders are not scanned |
 | `.agents/workflows`, `.agent/workflows`, `~/.gemini/config/workflows` | Antigravity | Slash commands; `// turbo` auto-run markers are not honoured |
 | `.cursorignore`, `.devinignore`, `.codeiumignore`, `~/.codeium/.codeiumignore`, `.geminiignore`, `.aiexclude`, `.aiderignore` | Cursor, Devin Desktop / Windsurf, Gemini CLI / Code Assist, Aider | Agent file tools refuse covered paths; listings, search and `@` mentions skip them. Shell commands are not blocked (Cursor does not block them either). Cursor's built-in default ignore list is not copied |
 | `.openhands/microagents/*.md`, `.openhands/skills/*.md`, `~/.openhands/skills`, `~/.openhands/microagents` | OpenHands | No triggers: always-on; `paths:`: path-scoped; `triggers:`: keyword-injected once per conversation with OpenHands' whole-word matching. Task `inputs:` are not prompted for |
-| Skill folders: `.cursor/skills`, `.codex/skills`, `.devin/skills`, `.windsurf/skills`, `.agent/skills`, `.openhands/skills`, `~/.agents/skills`, `~/.cursor/skills`, `~/.config/devin/skills`, `~/.gemini/config/skills` (and Antigravity's legacy, CLI and plugin `skills/` folders), `~/.openhands/skills` | Cursor, Codex, Devin Desktop, Antigravity, OpenHands | Listed and loadable as skills, with their `references/` files. Antigravity's scan of parent folders up to the repository root is not done |
+| Skill folders: `.cursor/skills`, `.codex/skills`, `.factory/skills`, `~/.factory/skills`, `.devin/skills`, `.windsurf/skills`, `.agent/skills`, `.openhands/skills`, `~/.agents/skills`, `~/.cursor/skills`, `~/.config/devin/skills`, `~/.gemini/config/skills` (and Antigravity's legacy, CLI and plugin `skills/` folders), `~/.openhands/skills` | Cursor, Codex, Factory Droid, Devin Desktop, Antigravity, OpenHands | Listed and loadable as skills, with their `references/` files. Antigravity's scan of parent folders up to the repository root is not done |
 | `.cursor/worktrees.json`, `.windsurf/hooks.json` `post_setup_worktree`, `.openhands/setup.sh` | Cursor, Windsurf, OpenHands | Run in each new OASIS worktree, trusted workspaces only (the source tools run them without a trust step; OpenHands runs setup.sh at every session start in its sandbox, OASIS only for new worktrees). `.openhands/pre-commit.sh` is not installed as a git hook |
 
 ## Terminal agent files
@@ -333,7 +335,7 @@ Files from these tools that OASIS reads where they are (no `oasis import` step).
 
 ## Imports and data formats
 
-- `oasis import codex|gemini|cursor|claude|hermes|openclaw|opencode|antigravity|windsurf|cline`
+- `oasis import codex|gemini|cursor|factory|claude|hermes|openclaw|opencode|antigravity|windsurf|cline`
   copies another tool's MCP servers, instructions, commands, rules, skills and
   memories into OASIS files (`--dry-run` shows the plan first).
 - `oasis sessions export --compress` and `oasis batch --compress` write

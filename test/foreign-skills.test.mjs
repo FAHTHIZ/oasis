@@ -19,6 +19,8 @@ async function fixture(t) {
   await write(path.join(root, '.openhands/skills/oh-one/SKILL.md'), skill('oh-one', 'OPENHANDS-PROJECT'));
   await write(path.join(root, '.openhands/skills/oh-one/references/notes.md'), 'OH-REFERENCE');
   await write(path.join(root, '.codex/skills/codex-one/SKILL.md'), skill('codex-one', 'CODEX-PROJECT'));
+  await write(path.join(root, '.factory/skills/droid-one/SKILL.md'), skill('droid-one', 'FACTORY-PROJECT'));
+  await write(path.join(home, '.factory/skills/droid-global/SKILL.md'), skill('droid-global', 'FACTORY-GLOBAL'));
   await write(path.join(root, '.claude/skills/shared/SKILL.md'), skill('shared', 'CLAUDE-WINS'));
   await write(path.join(root, '.devin/skills/shared/SKILL.md'), skill('shared', 'DEVIN-LOSES'));
   await write(path.join(home, '.gemini/config/skills/ag-one/SKILL.md'), skill('ag-one', 'ANTIGRAVITY-GLOBAL'));
@@ -39,10 +41,12 @@ test('skills from Cursor, Devin Desktop, Windsurf, Antigravity, OpenHands and Co
   const { root, env } = await fixture(t);
   const skills = await listAvailableSkills(root, { env });
   const byName = Object.fromEntries(skills.map((item) => [item.name, item]));
-  for (const name of ['cursor-one', 'devin-one', 'wind-one', 'oh-one', 'codex-one', 'ag-one', 'devin-global', 'agents-global', 'oh-global', 'ag-plugin', 'agcli-plugin']) assert.ok(byName[name], name);
+  for (const name of ['cursor-one', 'devin-one', 'wind-one', 'oh-one', 'codex-one', 'droid-one', 'droid-global', 'ag-one', 'devin-global', 'agents-global', 'oh-global', 'ag-plugin', 'agcli-plugin']) assert.ok(byName[name], name);
   assert.ok(!byName.escaped, 'symlinked skill folders are skipped');
   assert.equal(byName['devin-one'].origin, '.devin/skills');
   assert.equal(byName['ag-one'].origin, '~/.gemini/config/skills');
+  assert.equal(byName['droid-global'].origin, '~/.factory/skills');
+  assert.match((await loadSkillText(root, 'droid-one', { env })).content, /FACTORY-PROJECT/);
   assert.equal(byName.shared.source, 'claude-project', 'native locations win a name clash');
 
   assert.match((await loadSkillText(root, 'devin-one', { env })).content, /DEVIN-PROJECT/);

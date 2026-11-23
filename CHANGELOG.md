@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Added
 
+- Factory Droid workspaces work as they are: `.factory/commands` Markdown commands (with `$ARGUMENTS`), `.factory/skills`, and `oasis import factory` for `.factory/mcp.json` servers. `.factory/` hooks, MCP, droids and commands are protected paths, and an imported `type: sse` server stays SSE.
 - Factory droids in `.factory/droids/` and `~/.factory/droids/` are subagents for the task tool, with Droid tool categories and IDs as tool limits.
 - Factory Droid hooks run live: `~/.factory/hooks.json`, `.factory/hooks.json` (trusted workspace), the legacy `.factory/hooks/hooks.json` and `settings.json` hooks, with Droid matchers (`Execute`, `Create`, `ApplyPatch`) read as OASIS tools and Droid tool names shown to the hook. Imported Factory plugin hooks get the same bridge.
 - Factory Droid plugins (`.factory-plugin/`) install with `oasis add`: droids become agents with their tool lists, `mcp.json` servers load, and hooks run with Droid tool names (`Execute`, `Create`) and `${DROID_PLUGIN_ROOT}` translated.

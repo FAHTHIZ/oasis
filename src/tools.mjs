@@ -1305,14 +1305,15 @@ const ABSOLUTE_SKILL_SOURCES = { 'global-portable': getUniversalGlobalSkillsDire
 
 // Skill folders of other agents, read in place (SKILL.md per folder). Project
 // folders are relative to the workspace; home folders are relative to $HOME.
-// Sources: Cursor, Devin Desktop (Windsurf), Antigravity, OpenHands and Codex docs.
-export const FOREIGN_PROJECT_SKILL_DIRS = ['.cursor/skills', '.codex/skills', '.windsurf/skills', '.devin/skills', '.agent/skills', '.openhands/skills'];
+// Sources: Cursor, Factory, Devin Desktop (Windsurf), Antigravity, OpenHands and Codex docs.
+export const FOREIGN_PROJECT_SKILL_DIRS = ['.cursor/skills', '.codex/skills', '.factory/skills', '.windsurf/skills', '.devin/skills', '.agent/skills', '.openhands/skills'];
 export function foreignUserSkillDirectories(env = process.env) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
   const codexHome = env.CODEX_HOME || path.join(home, '.codex');
   return [
     ['~/.agents/skills', path.join(home, '.agents', 'skills')],
     ['~/.cursor/skills', path.join(home, '.cursor', 'skills')],
+    ['~/.factory/skills', path.join(home, '.factory', 'skills')],
     ['$CODEX_HOME/skills', path.join(codexHome, 'skills')],
     ['~/.config/devin/skills', path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'devin', 'skills')],
     ['~/.gemini/antigravity/skills', path.join(home, '.gemini', 'antigravity', 'skills')],

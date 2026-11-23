@@ -21,6 +21,8 @@ test('settings, hooks, MCP and git paths are protected; ordinary files are not',
   }
   assert.match(protectedConfigPath(root, '.git/hooks/pre-commit').reason, /git runs these hooks/);
   assert.match(protectedConfigPath(root, '.oasis/settings.json').reason, /permission rules/);
+  for (const file of ['.factory/hooks.json', '.factory/settings.json', '.factory/mcp.json', '.factory/hooks/hooks.json', '.factory/droids/x.md', '.factory/commands/x.md']) assert.match(protectedConfigPath(root, file).reason, /Factory Droid/, file);
+  assert.equal(protectedConfigPath(root, '.factory/notes.md'), null);
 });
 
 test('only rules that name a protected path count as explicit permission', () => {

@@ -170,6 +170,7 @@ export async function foreignCommandDirectories(root, env = process.env, home = 
     { dir: path.join(home, '.gemini', 'config', 'workflows'), scope: 'user', foreign: 'Antigravity' },
     { dir: path.join(home, '.codeium', 'windsurf', 'global_workflows'), scope: 'user', foreign: 'Windsurf' },
     { dir: path.join(home, '.cursor', 'commands'), scope: 'user', foreign: 'Cursor' },
+    { dir: path.join(home, '.factory', 'commands'), scope: 'user', foreign: 'Factory Droid', droid: true },
     { dir: path.join(home, '.roo', 'commands'), scope: 'user', foreign: 'Roo Code' },
     ...vscodeUserPromptDirs(env, home).map((dir) => ({ dir, scope: 'user', foreign: 'VS Code', vscode: true })),
     { dir: path.join(home, '.continue', 'prompts'), scope: 'user', foreign: 'Continue', continueDev: true },
@@ -179,6 +180,7 @@ export async function foreignCommandDirectories(root, env = process.env, home = 
     { dir: path.join(workspace, '.agent', 'workflows'), scope: 'project', foreign: 'Antigravity' },
     { dir: path.join(workspace, '.agents', 'workflows'), scope: 'project', foreign: 'Antigravity' },
     { dir: path.join(workspace, '.cursor', 'commands'), scope: 'project', foreign: 'Cursor' },
+    { dir: path.join(workspace, '.factory', 'commands'), scope: 'project', foreign: 'Factory Droid', droid: true },
     { dir: path.join(workspace, '.roo', 'commands'), scope: 'project', foreign: 'Roo Code' },
     { dir: path.join(workspace, '.github', 'prompts'), scope: 'project', foreign: 'VS Code', vscode: true },
     { dir: path.join(workspace, '.continue', 'prompts'), scope: 'project', foreign: 'Continue', continueDev: true },
@@ -220,7 +222,7 @@ export async function loadCustomCommands(root, options = {}) {
   const workspaceReal = await realpath(path.resolve(root)).catch(() => path.resolve(root));
   let parseToml = null;
   const opencodeJsonRead = new Set();
-  for (const { dir, scope, foreign, outside, gemini, opencode, vscode, continueDev } of [...await foreignCommandDirectories(root, env, home), ...commandDirectories(root, env, home)]) {
+  for (const { dir, scope, foreign, outside, gemini, opencode, vscode, continueDev, droid } of [...await foreignCommandDirectories(root, env, home), ...commandDirectories(root, env, home)]) {
     // OpenCode commands defined under "commands" (or legacy "command") in opencode.json(c);
     // Markdown commands of the same scope override them.
     if (opencode && !opencodeJsonRead.has(scope)) {
@@ -314,12 +316,13 @@ export async function loadCustomCommands(root, options = {}) {
         commands.set(name, {
           name,
           description: (String((Array.isArray(meta.description) ? meta.description.join(', ') : meta.description) || firstLine.replace(/^#+\s*/, '')).slice(0, 180) + ' (' + foreign + ')').trim(),
-          argumentHint: '',
+          argumentHint: droid && typeof meta['argument-hint'] === 'string' ? meta['argument-hint'] : '',
           model: null, allowedTools: null, effort: null, context: null, agent: null,
           body: body.trim(),
           file,
           scope,
-          foreign
+          foreign,
+          ...(droid ? { droid: true } : {})
         });
         continue;
       }
@@ -635,6 +638,13 @@ export async function resolveCustomCommand(root, rawInput, options = {}) {
     // files to read (workspace only); there is no inline shell.
     const rendered = renderContinuePrompt(command.body, argumentText);
     const prompt = rendered.text + (argumentText.trim() && !rendered.usedArguments ? '\n\n' + argumentText.trim() : '');
+    const expanded = await expandFileMentions(root, prompt);
+    return { name: command.name, args: argumentText, command, prompt: expanded.text, mentions: expanded.files, shell: [], grantTools: null };
+  }
+  if (command.droid) {
+    // Factory Droid: $ARGUMENTS is everything after the name; a body without it
+    // is sent unchanged. No inline shell, no positional placeholders.
+    const prompt = command.body.includes('$ARGUMENTS') ? command.body.replaceAll('$ARGUMENTS', () => argumentText) : command.body;
     const expanded = await expandFileMentions(root, prompt);
     return { name: command.name, args: argumentText, command, prompt: expanded.text, mentions: expanded.files, shell: [], grantTools: null };
   }

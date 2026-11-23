@@ -151,3 +151,19 @@ test('imports OpenClaw MCP servers, persona, memories and skills but never secre
   assert.match(describePlan(plan), /API keys and channel tokens are not copied/);
   assert.deepEqual(parseImportArgs(['openclaw']).sources, ['openclaw']);
 });
+
+test('imports Factory Droid MCP servers from ~/.factory/mcp.json and .factory/mcp.json', async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-import-factory-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const root = path.join(base, 'project'), home = path.join(base, 'home');
+  await mkdir(root, { recursive: true });
+  await put(path.join(home, '.factory', 'mcp.json'), JSON.stringify({ mcpServers: { linear: { type: 'http', url: 'https://mcp.linear.app/mcp', headers: { K: 'V' } }, old: { type: 'sse', url: 'https://sse.example/mcp' }, off: { command: 'x', disabled: true } } }));
+  await put(path.join(root, '.factory', 'mcp.json'), JSON.stringify({ mcpServers: { playwright: { command: 'npx', args: ['-y', '@playwright/mcp@latest'], env: { KEY: '${KEY}' } } } }));
+  const plan = await planImport(root, { env: { HOME: home, OASIS_CONFIG_DIR: path.join(base, 'cfg') }, sources: ['factory'] });
+  const servers = Object.fromEntries(plan.items.filter((item) => item.kind === 'mcp' && item.action === 'add').map((item) => [item.scope + ':' + item.name, item.server]));
+  assert.deepEqual(servers['user:linear'], { type: 'http', url: 'https://mcp.linear.app/mcp', headers: { K: 'V' } });
+  assert.equal(servers['user:old'].type, 'sse');
+  assert.deepEqual(servers['project:playwright'], { command: 'npx', args: ['-y', '@playwright/mcp@latest'], env: { KEY: '${KEY}' } });
+  assert.ok(plan.items.some((item) => item.name === 'off' && item.action === 'skip'));
+  assert.deepEqual(parseImportArgs(['factory']).sources, ['factory']);
+});

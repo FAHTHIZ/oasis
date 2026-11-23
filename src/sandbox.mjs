@@ -137,11 +137,13 @@ export const PROTECTED_FILES = ['.bashrc', '.bash_profile', '.zshrc', '.zprofile
   '.pre-commit-config.yaml', '.pre-commit-config.yml', 'lefthook.yml', 'lefthook.yaml', 'lefthook-local.yml', 'lefthook-local.yaml',
   '.devcontainer.json', 'opencode.json', 'opencode.jsonc', '.aider.conf.yml', '.aider.conf.yaml',
   '.cursor/mcp.json', '.cursor/hooks.json', '.cursor/environment.json', '.gemini/settings.json', '.codex/config.toml', '.codex/hooks.json',
+  '.factory/hooks.json', '.factory/settings.json', '.factory/mcp.json',
   '.continue/config.json', '.continue/config.yaml', '.continue/config.yml', '.continue/config.ts'];
 export const PROTECTED_DIRS = ['.vscode', '.idea', '.git/hooks', '.claude/commands', '.claude/agents', '.claude/skills', '.claude/hooks',
   '.oasis/commands', '.oasis/agents', '.oasis/skills', '.oasis/hooks', '.oasis/plugins', '.claude/plugins',
   '.husky', '.devcontainer', '.agents/agents', '.gemini/agents', '.gemini/commands', '.gemini/extensions',
-  '.opencode/command', '.opencode/commands', '.opencode/plugin', '.opencode/plugins', '.cursor/rules', '.github/hooks'];
+  '.opencode/command', '.opencode/commands', '.opencode/plugin', '.opencode/plugins', '.cursor/rules', '.github/hooks',
+  '.factory/hooks', '.factory/droids', '.factory/commands'];
 const PLACEHOLDER_FILES = new Set(['.mcp.json', '.claude/settings.json', '.claude/settings.local.json', '.oasis/settings.json', '.oasis/settings.local.json', '.git/config']);
 
 function lstatOrNull(target) { try { return lstatSync(target); } catch { return null; } }

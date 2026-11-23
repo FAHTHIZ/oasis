@@ -44,6 +44,8 @@ const PROTECTED = [
   /^\.cursor\/(?:mcp\.json|hooks\.json|rules\/|environment\.json)/,
   /^\.gemini\/(?:settings\.json|extensions\/)/,
   /^\.codex\/(?:config\.toml|hooks\.json)$/,
+  // Factory Droid hooks, MCP servers, droids and commands; OASIS loads them too.
+  /^\.factory\/(?:hooks\.json|settings\.json|mcp\.json|hooks\/|droids\/|commands\/)/,
   // Copilot hook files; OASIS runs them too (src/foreign-hooks.mjs).
   /^\.github\/hooks\//,
   /^\.continue\/config\.(?:json|ya?ml|ts)$/,
@@ -68,6 +70,7 @@ const PROTECTED = [
 
 const REASONS = [
   [/^\.(?:oasis|claude|agents|gemini)\/agents\//, 'project agent files can declare hooks and MCP servers that run when the agent is launched in a trusted workspace'],
+  [/^\.factory\//, 'Factory Droid and OASIS load these hooks, MCP servers, droids and commands automatically'],
   [/^\.opencode\/plugins?\//, 'OpenCode and OASIS run these plugins on tool and session events'],
   [/commands?\/|opencode\.jsonc?$/, 'custom commands in a trusted project run their inline shell and grant their allowed-tools when you type the command'],
   [/^\.(?:cursor|gemini|codex|continue)\/|^\.aider\.conf/, 'another coding agent loads this configuration (MCP servers, hooks, rules) automatically'],
@@ -164,7 +167,7 @@ export function ruleNamesProtectedPath(rule) {
   const match = String(rule || '').match(/^[A-Za-z0-9_.-]+\((.+)\)$/s);
   if (!match) return false;
   const target = match[1].trim().replace(/^\.\//, '').replace(/\\/g, '/').toLowerCase();
-  if (/^\.(?:oasis|claude|git|vscode|cursor|gemini|codex|continue|husky|devcontainer)\b|^\.mcp\.json|^\.lsp\.json|^\.envrc|^\.pre-commit-config|^\.npmrc|^\.yarnrc|^\.pnpmfile|^lefthook/.test(target)) return true;
+  if (/^\.(?:oasis|claude|git|vscode|cursor|gemini|codex|factory|continue|husky|devcontainer)\b|^\.mcp\.json|^\.lsp\.json|^\.envrc|^\.pre-commit-config|^\.npmrc|^\.yarnrc|^\.pnpmfile|^lefthook/.test(target)) return true;
   // Any other protected path (opencode.json, .aider.conf.yml, .agents/agents/,
   // .opencode/commands/ ...): the literal part of the rule before its first
   // glob must itself be, or be a folder of, a protected path. A broad rule
@@ -186,13 +189,13 @@ export function protectedEditMessage(toolName, hit) {
 // Shell commands that write protected paths (`echo ... > .git/hooks/pre-commit`,
 // `cp x .oasis/settings.json`) or set git config keys that run commands.
 // Returns a reason string or null. Reading these files (cat, grep) is fine.
-const SHELL_PROTECTED_PATH = /(?:^|[\s'"=:/\\(<>|;&])\.?(?:\.git[\\/]+(?:hooks(?:[\\/]|\b)|config\b)|\.(?:oasis|claude)[\\/](?:settings(?:\.local)?\.json|hooks[\\/]|plugins[\\/])|\.mcp\.json|\.lsp\.json|\.vscode[\\/](?:settings|tasks|launch|mcp)\.json|\.envrc\b|\.husky[\\/]|\.devcontainer[\\/]|\.(?:cursor|gemini|codex)[\\/](?:mcp\.json|hooks\.json|settings\.json|config\.toml)|\.pre-commit-config\.ya?ml|\.pnpmfile\.c?js|\.yarnrc\.yml)/i;
+const SHELL_PROTECTED_PATH = /(?:^|[\s'"=:/\\(<>|;&])\.?(?:\.git[\\/]+(?:hooks(?:[\\/]|\b)|config\b)|\.(?:oasis|claude)[\\/](?:settings(?:\.local)?\.json|hooks[\\/]|plugins[\\/])|\.mcp\.json|\.lsp\.json|\.vscode[\\/](?:settings|tasks|launch|mcp)\.json|\.envrc\b|\.husky[\\/]|\.devcontainer[\\/]|\.(?:cursor|gemini|codex|factory)[\\/](?:mcp\.json|hooks\.json|settings\.json|config\.toml)|\.pre-commit-config\.ya?ml|\.pnpmfile\.c?js|\.yarnrc\.yml)/i;
 const SHELL_WRITE = /(?:>>?|\btee\b|\bcp\b|\bmv\b|\bln\b|\binstall\b|\bsed\s+(?:-[a-z]*i|--in-place)|\bperl\s+-[a-z]*i|\bchmod\b|\btruncate\b|\btouch\b|\bdd\b|\brsync\b|\bsponge\b|\bopen\s*\(|\.write_(?:text|bytes)\b|Set-Content|Add-Content|Out-File|Copy-Item|Move-Item|New-Item|WriteAllText|writeFile)/i;
 const GIT_CONFIG_EXEC = /\bgit\s+(?:-c\s+\S+\s+)*config\b(?![^;&|]*\s--(?:get|list|unset)\b)[^;&|]*\b(?:core\.(?:hookspath|fsmonitor|sshcommand|pager|editor|askpass)|alias\.|filter\.|diff\.\S+\.textconv|credential\.helper|include\.path|includeif\.)/i;
 
 // `cd .git/hooks && echo ... > pre-commit` names the file relative to a folder
 // it changed into first.
-const SHELL_CD_PROTECTED = /\b(?:cd|pushd)\s+(?:\.\/)?\.(?:git|oasis|claude|husky|devcontainer|vscode|cursor|gemini|codex)(?:[\\/]|\s|$|[;&|)])/i;
+const SHELL_CD_PROTECTED = /\b(?:cd|pushd)\s+(?:\.\/)?\.(?:git|oasis|claude|husky|devcontainer|vscode|cursor|gemini|codex|factory)(?:[\\/]|\s|$|[;&|)])/i;
 
 export function protectedShellWrite(command) {
   // Empty and split quotes (.gi""t, .g'i't) spell the same path to the shell.
