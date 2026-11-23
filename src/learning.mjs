@@ -39,6 +39,33 @@ export function assertLearningVerification(state, issues = []) {
   return true;
 }
 
+/**
+ * Refuses a proposal while the task's runtime checks say it did not succeed:
+ * a rejected verdict (an unmet criterion, a failed review, a contradicted
+ * claim), or a failed or incomplete run. Unchecked work may still be
+ * proposed; the proposal says it was unchecked.
+ */
+export function assertLearningOutcome(outcome) {
+  if (!outcome) return true;
+  if (['rejected', 'failed', 'incomplete', 'cancelled'].includes(outcome.verdict)) {
+    const why = outcome.review === 'fail' ? 'an independent review failed'
+      : outcome.unmet && outcome.unmet.length ? 'unmet: ' + outcome.unmet.join('; ')
+        : 'the task is ' + outcome.verdict;
+    throw new Error('Cannot save a procedural-learning proposal from a task that has not succeeded (' + oneLine(why, 400) + '). Finish the task and meet its checks first.');
+  }
+  return true;
+}
+
+/** How the task behind a proposal was checked, for the reviewer of the proposal. */
+export function describeTaskCheck(check) {
+  if (!check || !check.verdict) return '';
+  if (check.verdict === 'verified' || check.verdict === 'independently_verified') {
+    return check.verdict.replace('_', ' ') + (check.total ? ' (' + check.met + ' of ' + check.total + ' criteria met)' : '');
+  }
+  if (check.verdict === 'evidenced') return 'evidenced: backed by tool results, not fully checked';
+  return 'unchecked: OASIS could not check this task';
+}
+
 function projectKey(root) {
   // Store a stable opaque project identifier, not the absolute workspace path.
   return createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 20);
@@ -206,6 +233,11 @@ export async function createSkillProposal(root, input = {}, { env = process.env,
   if (proposals.length >= MAX_PROPOSALS_PER_SCOPE) {
     throw new Error('This scope already has ' + MAX_PROPOSALS_PER_SCOPE + ' proposals. Reject or promote old proposals before adding another.');
   }
+  // Set by the runtime just before this call (never by the model): how the
+  // task behind the proposal stood when it was made.
+  const pending = session && session.pendingLearningCheck;
+  if (session) delete session.pendingLearningCheck;
+  const taskCheck = pending && pending.verdict ? { verdict: String(pending.verdict).slice(0, 40), met: Number(pending.met) || 0, total: Number(pending.total) || 0 } : null;
   const createdAt = new Date().toISOString();
   const id = randomBytes(8).toString('hex');
   const directory = await ensureProposalDirectory(root, scope, env);
@@ -221,11 +253,12 @@ export async function createSkillProposal(root, input = {}, { env = process.env,
     updatedAt: createdAt,
     sourceSession: oneLine(session && session.sessionId, 120) || null,
     evidence,
+    ...(taskCheck ? { taskCheck } : {}),
     ...(update ? { update: true } : {}),
     body
   };
   await atomicWrite(file, JSON.stringify(proposal, null, 2) + '\n');
-  return { id, name, description, scope, status: 'pending', createdAt, evidence, ...(update ? { update: true } : {}) };
+  return { id, name, description, scope, status: 'pending', createdAt, evidence, ...(taskCheck ? { taskCheck } : {}), ...(update ? { update: true } : {}) };
 }
 
 function ensureInside(base, candidate) {
@@ -359,6 +392,7 @@ export function learningProposalText(proposal) {
     'Status: ' + proposal.status + ' · Scope: ' + proposal.scope + (proposal.update === true ? ' · Updates the existing skill (the old version is kept as SKILL.md.bak)' : ''),
     'Description: ' + proposal.description,
     'Evidence: ' + proposal.evidence,
+    ...(describeTaskCheck(proposal.taskCheck) ? ['Task check: ' + describeTaskCheck(proposal.taskCheck)] : []),
     ...(proposal.promotedPath ? ['Promoted to: ' + proposal.promotedPath] : []),
     ...(proposal.rejectionReason ? ['Rejection: ' + proposal.rejectionReason] : []),
     '',

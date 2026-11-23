@@ -53,7 +53,7 @@ import { closeTeammatePanes } from './teammate-panes.mjs';
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, refreshSessionMcpTools } from './mcp.mjs';
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS, listMemories, saveMemory } from './auto-memory.mjs';
-import { learningEnabled, LEARNING_TOOL_DEFINITIONS, assertLearningVerification } from './learning.mjs';
+import { learningEnabled, LEARNING_TOOL_DEFINITIONS, assertLearningVerification, assertLearningOutcome } from './learning.mjs';
 import { reflectOnCompaction } from './compaction-reflection.mjs';
 import { countJsonTokens, countTextTokens } from './tokens.mjs';
 import { estimateTokens, tokenUpperBound, microcompact, maskObservations, pruneOldToolOutput, toolOutputPruneSettings, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
@@ -99,7 +99,7 @@ import { ASK_USER_TOOL_DEFINITION, askUserQuestion, questionBudget } from './ask
 import { CONNECT_SERVICE_TOOL_DEFINITION } from './connectors.mjs';
 import { webAccessSites, outboundEmailHit, userEmailAddresses } from './web-access.mjs';
 import { exitPlanMode, permissionMode } from './plan-mode.mjs';
-import { newGateState, runCompletionGates } from './completion-gates.mjs';
+import { newGateState, provisionalTaskOutcome, runCompletionGates } from './completion-gates.mjs';
 import { deriveTaskSpec, restoreSpec, taskBrief, taskModelEnabled } from './task-model.mjs';
 import { applyClaimInvalidation, claimInvalidationNotice, restoreClaimLog } from './claim-ledger.mjs';
 import { adoptReportedContextWindow, useCompactToolProfile } from './context-window.mjs';
@@ -2711,6 +2711,12 @@ async function executeOneCallRaw(session, call, context, options) {
             const state = authorizedContext && authorizedContext.verification;
             const issues = state ? verificationIssues(state) : ['runtime verification state is unavailable'];
             assertLearningVerification(state, issues);
+            // The task's own acceptance checks (src/task-model.mjs) gate learning
+            // for every kind of work, not only code edits: a procedure from a
+            // task whose checks failed or whose review failed is not saved.
+            const outcome = provisionalTaskOutcome(session, { env: options.env || process.env });
+            assertLearningOutcome(outcome);
+            session.pendingLearningCheck = outcome;
           }
         }
       });

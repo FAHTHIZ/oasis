@@ -33,7 +33,7 @@ import { formatLspVerificationBlocker, verificationSummary } from './verificatio
 import { permissionMode } from './plan-mode.mjs';
 import { evidenceSince, sessionEvidence, recordEvidence } from './evidence-ledger.mjs';
 import { describeClaimCounts, logClaims } from './claim-ledger.mjs';
-import { admitsShortfall, assessOutcome, gateNotice, gateProblems, specSummary, taskGateNudge } from './task-model.mjs';
+import { admitsShortfall, assessOutcome, gateNotice, gateProblems, specSummary, taskGateNudge, taskModelEnabled } from './task-model.mjs';
 import {
   ACTION_NUDGE, CONTINUE_NUDGE, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, providerStopNotice, providerCutNotice,
   REFUSAL_NUDGE, SOURCE_EXTENSIONS, UNREADABLE_CALL_NUDGE, GATE_FOLLOWUP_NUDGE, NEW_TEST_FOLLOWUP_NUDGE, announcesNextStep, announcesTerseStep, appendLspUnavailableNotice, asksForAction,
@@ -482,6 +482,25 @@ export async function runCompletionGates(turn, host) {
     ...(taskOutcome && session.task ? { task: specSummary(session.task) } : {}),
     ...(followupsAdded.length ? { followupsAdded: followupsAdded.map((item) => ({ id: item.id, text: item.text })) } : {})
   } };
+}
+
+/**
+ * The task's outcome so far, judged on this turn's evidence before any reply:
+ * what a skill proposal made mid-turn is checked against. Null without a
+ * task, in a subagent, or when the task model is off.
+ */
+export function provisionalTaskOutcome(session, { env = process.env } = {}) {
+  if (!session || !session.task || !taskModelEnabled(session, env)) return null;
+  try {
+    const events = evidenceSince(sessionEvidence(session), session.taskEvidenceFrom || 0);
+    const outcome = assessOutcome(session.task, { events, reply: '', root: session.root, ...reviewContext(session) });
+    return {
+      verdict: outcome.verdict,
+      met: outcome.acceptance.met, total: outcome.acceptance.total,
+      unmet: outcome.acceptance.criteria.filter((item) => item.status === 'unmet').map((item) => item.description).slice(0, 5),
+      review: outcome.independent && outcome.independent.verdict || null
+    };
+  } catch { return null; }
 }
 
 function reviewContext(session) {
