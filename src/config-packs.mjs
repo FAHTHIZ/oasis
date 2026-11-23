@@ -171,9 +171,27 @@ function vscodePromptToCommand(text) {
   return (lines.length > 3 ? lines.join('\n') : '') + converted + (inputs.length ? '' : '\n\n$ARGUMENTS') + '\n';
 }
 
+// VS Code agent tools (and tool sets such as search/codebase) -> Claude Code tool names.
+const VSCODE_TOOL_NAMES = {
+  read: ['Read', 'Grep', 'Glob', 'LS'], codebase: ['Read', 'Grep', 'Glob', 'LS'], search: ['Read', 'Grep', 'Glob', 'LS'], readfile: ['Read'], usages: ['Grep'], changes: ['Bash'],
+  edit: ['Edit', 'MultiEdit', 'Write'], editfiles: ['Edit', 'MultiEdit', 'Write'], createfile: ['Write'], new: ['Write'],
+  execute: ['Bash'], runcommands: ['Bash'], runinterminal: ['Bash'], runtasks: ['Bash'], runtests: ['Bash'], terminallastcommand: ['BashOutput'],
+  fetch: ['WebFetch'], web: ['WebFetch', 'WebSearch'], websearch: ['WebSearch'], todos: ['TodoWrite'], agent: ['Task'], runsubagent: ['Task']
+};
+
+/** Claude Code tool names for a VS Code agent's tools list, or null when it has none. MCP server entries have no counterpart. */
+export function vscodeToolNames(tools) {
+  if (!Array.isArray(tools) || !tools.length) return null;
+  const key = (tool) => String(tool).toLowerCase().replace(/[^a-z]/g, '');
+  const names = [...new Set(tools.flatMap((tool) => VSCODE_TOOL_NAMES[key(tool)] || VSCODE_TOOL_NAMES[key(String(tool).split('/').pop())] || []))];
+  return names.length ? names : ['Read'];
+}
+
 function vscodeAgentToMarkdown(text, name, kind) {
   const { meta, body } = front(text);
   const lines = ['---', 'name: ' + name, 'description: ' + JSON.stringify(String(meta.description || 'Imported ' + kind + ' ' + name))];
+  const tools = vscodeToolNames(meta.tools);
+  if (tools) lines.push('tools: ' + tools.join(', '));
   if (typeof meta.model === 'string' && meta.model.trim()) lines.push('model: ' + JSON.stringify(meta.model.trim()));
   lines.push('---', '', body, '');
   return lines.join('\n');

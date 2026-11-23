@@ -76,6 +76,13 @@ test('a VS Code / Copilot customization repo becomes one plugin', async (t) => {
   const gh = (await servers(plugins, env, root)).gh;
   assert.ok(gh, 'mcp.json server carried');
   assert.equal(gh.command, 'gh-mcp');
+  const { readFile: read } = await import('node:fs/promises');
+  const agentFile = (await import('node:fs')).readdirSync(path.join(plugins[0].root, "agents")).find((name) => /planner/.test(name));
+  assert.match(await read(path.join(plugins[0].root, 'agents', agentFile), 'utf8'), /^tools: Read, Grep, Glob, LS$/m);
+  const { vscodeToolNames } = await import('../src/config-packs.mjs');
+  assert.deepEqual(vscodeToolNames(['search/codebase', 'editFiles', 'runCommands', 'github/*']), ['Read', 'Grep', 'Glob', 'LS', 'Edit', 'MultiEdit', 'Write', 'Bash']);
+  assert.deepEqual(vscodeToolNames(['github/*']), ['Read']);
+  assert.equal(vscodeToolNames(undefined), null);
 });
 
 test('a Cursor rules-only repo becomes a plugin whose rules are skills', async (t) => {
