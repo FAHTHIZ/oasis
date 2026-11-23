@@ -148,6 +148,14 @@ in a trusted workspace, like `.claude/settings.json` hooks; the user file always
 loads. A relative script path at the start of a command is made absolute (the
 project folder, or `~/.cursor` for the user file). Hook policy
 (`allowManagedHooksOnly`, `disableAllHooks`) applies to them as to any hook.
+Codex hooks (`.codex/hooks.json` and `[hooks]` tables in `.codex/config.toml`,
+and the same files in `~/.codex` or `CODEX_HOME`) already use Claude Code's
+events and replies, so they run as they are; a matcher naming Codex's
+`apply_patch` also matches `Edit`, `Write` and `MultiEdit`, `commandWindows` is
+used on Windows, and `[features] hooks = false` turns a layer off. Codex-only
+events (`PreModelRequest`, `PostModelRequest`, `Interrupt`) are skipped.
+Because these files now run commands under OASIS too, writing `.codex/hooks.json`
+or anything in `.github/hooks/` asks first, like other agents' settings files.
 `OASIS_OTHER_AGENT_RULES=0` or `"otherAgentHooks": false` in settings turns this
 off.
 

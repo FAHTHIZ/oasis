@@ -41,7 +41,9 @@ const PROTECTED = [
   // Configuration that other coding agents load automatically.
   /^\.cursor\/(?:mcp\.json|hooks\.json|rules\/|environment\.json)/,
   /^\.gemini\/(?:settings\.json|extensions\/)/,
-  /^\.codex\/config\.toml$/,
+  /^\.codex\/(?:config\.toml|hooks\.json)$/,
+  // Copilot hook files; OASIS runs them too (src/foreign-hooks.mjs).
+  /^\.github\/hooks\//,
   /^\.continue\/config\.(?:json|ya?ml|ts)$/,
   /^\.aider\.conf\.ya?ml$/,
   // Editor settings and tasks: VS Code runs folderOpen tasks automatically and
@@ -66,6 +68,7 @@ const REASONS = [
   [/^\.(?:oasis|claude|agents|gemini)\/agents\//, 'project agent files can declare hooks and MCP servers that run when the agent is launched in a trusted workspace'],
   [/commands?\/|opencode\.jsonc?$/, 'custom commands in a trusted project run their inline shell and grant their allowed-tools when you type the command'],
   [/^\.(?:cursor|gemini|codex|continue)\/|^\.aider\.conf/, 'another coding agent loads this configuration (MCP servers, hooks, rules) automatically'],
+  [/^\.github\/hooks\//, 'GitHub Copilot and OASIS run the hooks in these files automatically'],
   [/^\.vscode\/|\.code-workspace$/, 'the editor can run tasks on folder open and use settings that name executables or auto-approve agent tools'],
   [/^\.devcontainer/, 'dev containers run lifecycle commands (postCreateCommand) automatically'],
   [/^\.envrc$/, 'direnv executes this file when you enter the directory'],
