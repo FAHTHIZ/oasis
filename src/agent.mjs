@@ -25,7 +25,7 @@ import { priceFor, estimateCostUsd, recordBudgetSpend, formatUsd, cloudModelBehi
 import { hasImages, fitImages } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, captureFromPreimage, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
 import { beginEffectObservation, finishEffectObservation, preimagesFor, publicEffects } from './effect-contracts.mjs';
-import { applyReconciliation, journalDone, journalIntent, journalPathFor, readJournal, reconcileJournal, reconciliationNote } from './intent-journal.mjs';
+import { applyReconciliation, checkProbes, journalDone, journalIntent, journalPathFor, readJournal, reconcileJournal, reconciliationNote } from './intent-journal.mjs';
 import { keywordRulesFor, nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, modelAllowed, modelDenied, modelRestrictionMessage } from './model-aliases.mjs';
 import { selectTaskModel } from './model-routing.mjs';
@@ -60,6 +60,7 @@ import { reflectOnCompaction } from './compaction-reflection.mjs';
 import { countJsonTokens, countTextTokens } from './tokens.mjs';
 import { estimateTokens, tokenUpperBound, microcompact, maskObservations, pruneOldToolOutput, toolOutputPruneSettings, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { genAiProviderName, genAiSpanNames, getTelemetry, lineChanges } from './telemetry.mjs';
+import { withToolFaults } from './fault-injection.mjs';
 import { isAnthropicFamily } from './cloud-providers.mjs';
 import { loadSettings, normalizeLanguage } from './settings.mjs';
 import { withReplyLanguage } from './reply-language.mjs';
@@ -2192,6 +2193,36 @@ function taskNameToolHint(session, requested) {
   return ' "' + name + '" is a name from the task, not a tool.' + (editing.length ? ' To write or change code, use ' + editing.join(', ') + '.' : '');
 }
 
+// Live reconciliation. A call that failed (threw, timed out, lost its
+// connection) may still have done its work, and a model that simply retries
+// does it twice: the reliability lab's lost-reply scenario appended a log line
+// twice this way. Before the error reaches the model, check the world the way
+// a resumed session does after a crash (src/intent-journal.mjs probes) plus
+// what the effect contract saw change, and say so when it took effect.
+// Ordinary failures that changed nothing get no note.
+async function afterFailureCheck(session, intent, effects) {
+  if (/^(0|false|off|no)$/i.test(String((session.providerEnv || process.env).OASIS_AFTER_FAILURE_CHECK ?? '').trim())) return null;
+  let state = '';
+  let findings = [];
+  if (effects && effects.observedCount) {
+    const view = effects.publicView || publicEffects(effects);
+    const files = Array.isArray(view && view.files) ? view.files : [];
+    state = 'changed';
+    findings = files.length ? ['changed while it ran: ' + files.slice(0, 8).join(', ')] : ['files changed while it ran'];
+    if (view && view.concurrent) findings.push('another command ran at the same time, so some of this may be its work');
+  }
+  if (intent && Array.isArray(intent.probes) && intent.probes.length) {
+    const check = await checkProbes(session.root, intent.probes);
+    if (['applied', 'changed', 'partial'].includes(check.state)) {
+      if (!state || check.state === 'applied') state = check.state;
+      findings = [...new Set([...findings, ...check.findings])];
+    }
+  }
+  if (!state) return null;
+  const said = { applied: 'it took effect', partial: 'it partly took effect', changed: 'its targets changed, so it probably ran' }[state];
+  return { state, findings, note: 'This call reported an error, but OASIS checked its targets: ' + said + ' (' + findings.join('; ') + '). Check the result before repeating it; repeating may do it twice.' };
+}
+
 async function executeOneCallTraced(session, call, context, options) {
   const tel = getTelemetry(context && context.env || process.env);
   if (!tel) return executeOneCallRaw(session, call, context, options);
@@ -2333,7 +2364,7 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
         executionContext.approval = (...prompt) => runtime.waitForUser(() => ask(...prompt));
       }
       if (typeof options.prepare === 'function') await options.prepare({ input: validatedInput, context: executionContext });
-      return await executeTool(name, validatedInput, executionContext);
+      return await withToolFaults(name, runtime.env, () => executeTool(name, validatedInput, executionContext));
     }
   });
   return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize: authorization.authorize });
@@ -2414,7 +2445,7 @@ async function executeMappedMcpToolWithKernel(session, name, args, context, opti
       if (typeof session.onBackgroundEvent === 'function') mcpOptions.onBackgroundTask = (task) => trackBackgroundMcpTask(session, task);
       if (typeof options.prepare === 'function') await options.prepare({ input: validatedInput, context: mcpOptions });
       try {
-        return await callMappedMcpTool(session, name, validatedInput, mcpOptions);
+        return await withToolFaults(name, runtime.env || options.env || process.env, () => callMappedMcpTool(session, name, validatedInput, mcpOptions));
       } catch (error) {
         // Lazy sign-in: the server wants an account. Show the Connect card for
         // it and, once connected, run the same call again.
@@ -2770,6 +2801,10 @@ async function executeOneCallRaw(session, call, context, options) {
           if (result && typeof result === 'object' && !Array.isArray(result)) result = { ...result, effects: publicEffects(record) };
         }
       }
+      if (journalEntry && result && typeof result === 'object' && typeof result.error === 'string' && result.error) {
+        const afterFailure = await afterFailureCheck(session, journalEntry, result.effects && Number(result.effects.changed) > 0 ? { observedCount: Number(result.effects.changed), publicView: result.effects } : null).catch(() => null);
+        if (afterFailure) result = { ...result, afterFailure };
+      }
       if (journalEntry) { await journalDone(session, journalEntry, result).catch(() => null); journalEntry = null; }
       if (AUTO_LSP_EDIT_TOOLS.has(name) && successfulMutation(name, result)) fileMutationResult = result;
       if (name === 'load_skill' && !options.isSubagent && result && typeof result.content === 'string') {
@@ -2838,15 +2873,21 @@ async function executeOneCallRaw(session, call, context, options) {
     if (attemptedArgs && error.name !== 'AbortError') {
       result = applyFailureHookResult(result, await runToolFailureHooks(session, name, attemptedArgs, result.error, context).catch(() => ''));
     }
+    const failedIntent = journalEntry;
     if (journalEntry) { await journalDone(session, journalEntry, result).catch(() => null); journalEntry = null; }
     // A command that failed or timed out may still have changed files.
+    let failedEffects = null;
     if (effectHandle) {
       const record = await finishEffectObservation(session, effectHandle).catch(() => null);
       effectHandle = null;
       if (record) {
         for (const preimage of await preimagesFor(record).catch(() => [])) captureFromPreimage(session, preimage);
-        if (record.observedCount) result = { ...result, effects: publicEffects(record) };
+        if (record.observedCount) { result = { ...result, effects: publicEffects(record) }; failedEffects = record; }
       }
+    }
+    if (error.name !== 'AbortError') {
+      const afterFailure = await afterFailureCheck(session, failedIntent, failedEffects).catch(() => null);
+      if (afterFailure) result = { ...result, afterFailure };
     }
   }
   if (options.onToolResult) options.onToolResult({ name, result, call });

@@ -19,6 +19,7 @@ import { debugLog, debugEnabled } from './debug-log.mjs';
 import { TOOL_DEFINITIONS } from './tools.mjs';
 import { recordContextAnchor } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
+import { wrapModelFetch } from './fault-injection.mjs';
 import { GENAI_TOKEN_BUCKETS, currentTraceContext, genAiErrorType, genAiProviderName, genAiServer, genAiSpanNames, getTelemetry } from './telemetry.mjs';
 import { isAnthropicFamily, cloudEndpoint, cloudBody, cloudHeaders, cloudStreams } from './cloud-providers.mjs';
 import { assertZeroBudgetRoute, chargeRequestAttempt, recordTokenUsage } from './cost-policy.mjs';
@@ -190,7 +191,8 @@ async function requestCompletionWithStreamRestarts(session, options = {}) {
       // A stall already cost a full idle window (300 s or more), so it gets
       // at most two restarts; a dropped connection fails fast and gets them all.
       const allowed = streamRestartLimit(options.env || session.providerEnv || process.env);
-      const limit = (error && error.stalled ? Math.min(allowed, MAX_STALL_RESTARTS) : allowed) + (overloaded ? 1 : 0);
+      // So does a bad 200 body: it repeats when the endpoint is simply wrong.
+      const limit = (error && (error.stalled || error.badBody) ? Math.min(allowed, MAX_STALL_RESTARTS) : allowed) + (overloaded ? 1 : 0);
       // A malformed tool call tends to repeat on the identical request, so the
       // turn loop retries it with a corrective note instead (see below).
       if (!error || error.code !== 'OASIS_STREAM_INTERRUPTED' || error.malformedCall || restart >= limit || (options.signal && options.signal.aborted)) throw error;
@@ -585,7 +587,7 @@ async function requestCompletionRawInner(session, options = {}) {
     await waitForProviderRetry(milliseconds, controller.signal);
     timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
   };
-  const fetchImpl = typeof options.fetchImpl === 'function' ? options.fetchImpl : providerFetch(isLoopbackProvider(config));
+  const fetchImpl = wrapModelFetch(typeof options.fetchImpl === 'function' ? options.fetchImpl : providerFetch(isLoopbackProvider(config)), providerEnv);
   const abortFromCaller = () => controller.abort();
   if (options.signal) {
     if (options.signal.aborted) abortFromCaller();
@@ -750,7 +752,12 @@ async function requestCompletionRawInner(session, options = {}) {
     } else {
       const body = await response.text();
       try { data = JSON.parse(body); } catch {
-        throw new Error('The model provider returned invalid JSON. Confirm the configured endpoint and provider protocol.');
+        // A 200 whose body is cut off or replaced (a dropped connection, a
+        // proxy's error page) is usually transient: found by the reliability
+        // lab (src/reliability-lab.mjs), where one bad body ended the task.
+        // It gets a couple of restarts; a misconfigured endpoint still fails
+        // with this message once they are used up.
+        throw Object.assign(new Error('The model provider returned invalid JSON. Confirm the configured endpoint and provider protocol.'), { code: 'OASIS_STREAM_INTERRUPTED', badBody: true });
       }
       // Gateways answer some failures with HTTP 200 and an error body. Seen live
       // from OpenRouter when a :free model is withdrawn: {"error":{"code":404,
@@ -803,7 +810,7 @@ async function requestCompletionRawInner(session, options = {}) {
       return { role: 'assistant', content: text, tool_calls: toolCalls, responseItems: data.output, usage: normalizeUsage(data.usage), ...(responsesTruncated ? { truncated: true, outputLimit } : {}) };
     }
     const message = data.choices && data.choices[0] && data.choices[0].message;
-    if (!message) throw new Error('The model provider returned no assistant message.');
+    if (!message) throw Object.assign(new Error('The model provider returned no assistant message.'), { code: 'OASIS_STREAM_INTERRUPTED', badBody: true });
     // Gemini ends a reply with finish_reason "function_call_filter:
     // MALFORMED_FUNCTION_CALL" and nothing else when its own tool call failed
     // to parse. That is not a final answer (it used to end the task with no
