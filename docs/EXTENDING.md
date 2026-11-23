@@ -122,6 +122,7 @@ oasis plugin marketplace add anthropics/claude-plugins-official
 oasis plugin install NAME@MARKETPLACE
 oasis plugin list | show | enable | disable | update | uninstall NAME
 oasis plugin validate ./my-plugin
+oasis plugin export ./my-plugin --out ./dist   # also installable by Codex, Gemini CLI, Cursor and Copilot CLI
 oasis add OWNER/REPO                      # also Codex, Gemini CLI, Cursor, Copilot CLI and Agent Plugins plugins and Kiro powers
 ```
 
