@@ -74,9 +74,25 @@ The static prediction gives an exact file list for 4 of 16 commands and says "br
 
 The benchmark also found a gap in the static prediction: before this change it predicted that `find … -delete`, `… | xargs sed -i` and `npm run build` change nothing at all, so their real changes were flagged as unexpected. They are now bounded (`find -delete` to its start points) or marked broad (`find -exec`, `xargs` with a writing command, package scripts, `perl` without `-i`).
 
+## Servers it tried to reach
+
+The rehearsal has no network, but it still shows where a command would have gone. Inside the sandbox, the rehearsal starts a small HTTP proxy on its own loopback interface and points `HTTP_PROXY`, `HTTPS_PROXY` (both cases), `npm_config_proxy`, `npm_config_https_proxy`, `PIP_PROXY`, `NODE_USE_ENV_PROXY=1` and git's `http.proxy` (including URL-specific proxies passed in `GIT_CONFIG_*`) at it. Every request gets a 403 and nothing leaves the sandbox; the host and port each one asked for are recorded and the prompt adds a line such as:
+
+```
+  It tried to reach registry.npmjs.org (refused: nothing was sent).
+```
+
+`NO_PROXY` is set to `localhost,127.0.0.1,::1`, so a test that starts a local server and connects to it works as before. Up to 20 hosts are kept; the result for the model carries them as `contacted`. A rehearsal that tried to reach a server is not offered for "apply the rehearsal", because without the network it may have produced something different.
+
+Measured in this repository's sandbox: `curl`, `git ls-remote`, Node's `fetch`, `pip download`, `npm install` and Python's `urllib` each reported the right host (6 of 6); a command that only used a local server reported none; a listener on the host saw no request. The proxy adds about 6 ms to a rehearsal (median of 12 runs of `true`: 35 ms before, 41 ms after).
+
+Not recorded: clients that ignore proxy variables and open sockets directly (raw TCP, some Go and Rust binaries, DNS lookups), and SOCKS (`ALL_PROXY` is removed). The request body is never seen, because nothing is sent: the record is where a command wanted to go, not what it would have said.
+
+Git settings passed in the environment (`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`) that carry credentials (a proxy URL with a password, an `extraHeader`, a token in an `insteadOf` URL) are removed for the rehearsal, so unapproved code cannot copy them into a file name.
+
 ## Limits
 
-- Effects outside the file system are not rehearsed: the network is off, so a command that downloads fails in rehearsal (the prompt says so) and a command that talks to a server has not talked to it.
+- Effects outside the file system are not rehearsed: the network is off, so a command that downloads fails in rehearsal (the prompt says so and names the servers it tried, see above) and a command that talks to a server has not talked to it.
 - Writes outside the workspace are refused in rehearsal (read-only); the prompt says when the command tried. The real run may succeed there.
 - A command can still read files the user can read. Without network or sockets it cannot send them anywhere during the rehearsal, but rehearsal does run unapproved code, which is why it is off by default. With rehearsal on, treat the approval prompt as "run this, isolated, then decide", the same trust boundary as `sandbox.autoAllowCommands` with the OS sandbox.
 - Non-deterministic commands can differ between rehearsal and the real run; the divergence check catches the file-level difference, not differences in content.
