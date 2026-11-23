@@ -389,7 +389,7 @@ By default OASIS works in the folder you start it in, on your machine, with appr
 
 **Apps.** Say "connect GitHub" or type `/connect linear` and a Connect card appears in the conversation. Approve access on the service's own page and its tools are ready in the same turn. 48 apps are built in, and any other remote MCP server works by name from the official MCP Registry or by URL.
 
-**MCP.** Stdio, HTTP and SSE servers, with OAuth, elicitation and MCP Tasks. `oasis mcp serve` exposes OASIS's own tools to other MCP clients.
+**MCP.** Stdio, HTTP and SSE servers, with OAuth, elicitation and MCP Tasks. `oasis mcp serve` exposes OASIS's own tools, skills and every slash command it can read, in any agent's format, to other MCP clients.
 
 **Skills and plugins.** Skills, slash commands, hooks, subagents and MCP servers can be packaged as plugins. Existing Claude Code setups (`CLAUDE.md`, `.claude/agents`, skills, hooks, settings, `.mcp.json` and plugins) load without conversion, and Codex plugins and Gemini CLI extensions are converted on install. What loads and what does not is in [Compatibility](docs/COMPATIBILITY.md).
 

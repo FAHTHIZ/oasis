@@ -5,6 +5,13 @@
 // --allow-commands. Secret files and paths outside the workspace stay blocked.
 // The protocol (version negotiation, framing, ping, errors) is the official
 // MCP TypeScript SDK server; OASIS only supplies tools/list and tools/call.
+//
+// It is also the universal plugin bridge: every slash command OASIS can read
+// (its own, Claude Code plugins, Gemini CLI TOML, Cursor, VS Code prompt
+// files, Continue, OpenCode, Windsurf workflows...) is served as an MCP
+// prompt, and every skill through list_skills / load_skill, so any MCP
+// client can use them without converting anything. --no-prompts turns the
+// prompts off. Inline shell in a command runs only with --allow-commands.
 import { Server, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { oasisVersion } from './version.mjs';
@@ -15,7 +22,7 @@ import { webSearchEnabled } from './web-search.mjs';
 import { protectedConfigTarget, protectedEditsAllowed } from './protected-paths.mjs';
 import { getTelemetry, shutdownTelemetry } from './telemetry.mjs';
 
-const SERVE_READ_ONLY = ['read_file', 'list_files', 'glob_files', 'repo_map', 'grep', 'ast_grep', 'search_files', 'git_status', 'git_diff', 'git_log', 'lsp', 'diagnostics', 'fetch_url', 'web_search'];
+const SERVE_READ_ONLY = ['list_skills', 'load_skill', 'read_skill_resource', 'read_file', 'list_files', 'glob_files', 'repo_map', 'grep', 'ast_grep', 'search_files', 'git_status', 'git_diff', 'git_log', 'lsp', 'diagnostics', 'fetch_url', 'web_search'];
 const SERVE_EDITS = ['edit_file', 'multi_edit', 'write_file', 'notebook_edit'];
 const SERVE_COMMANDS = ['run_command', 'command_output', 'kill_command', 'list_background'];
 
@@ -30,13 +37,42 @@ export function servedTools({ allowEdits = false, allowCommands = false, env = p
   }));
 }
 
-function createMcpServer({ root, allowEdits = false, allowCommands = false, env = process.env, version = oasisVersion() } = {}) {
+// MCP prompt names allow letters, digits, -, _ and . ; OASIS namespaces use ':'.
+const promptName = (name) => String(name).replace(/:/g, '.');
+
+/** Every slash command OASIS can read, as MCP prompts. */
+export async function servedPrompts(root, { env = process.env } = {}) {
+  const { loadCustomCommands } = await import('./commands.mjs');
+  const commands = await loadCustomCommands(root, { env }).catch(() => new Map());
+  return [...commands.values()].map((command) => ({
+    name: promptName(command.name),
+    description: String(command.description || 'Custom command').slice(0, 300),
+    arguments: [{ name: 'arguments', description: command.argumentHint ? 'Arguments: ' + command.argumentHint : 'What to run the command on', required: false }]
+  }));
+}
+
+function createMcpServer({ root, allowEdits = false, allowCommands = false, prompts = true, env = process.env, version = oasisVersion() } = {}) {
   const tools = servedTools({ allowEdits, allowCommands, env });
   const allowed = new Set(tools.map((tool) => tool.name));
   const session = { root, background: new Map(), settings: {} };
-  const server = new Server({ name: 'oasis', version }, { capabilities: { tools: { listChanged: false } }, instructions: 'Oasis workspace tools for ' + root + '. Paths are relative to that folder.' });
+  const server = new Server({ name: 'oasis', version }, { capabilities: { tools: { listChanged: false }, ...(prompts ? { prompts: { listChanged: false } } : {}) }, instructions: 'Oasis workspace tools for ' + root + '. Paths are relative to that folder.' + (prompts ? ' Slash commands from every agent format in this workspace are available as prompts; skills through list_skills and load_skill.' : ' Skills are available through list_skills and load_skill.') });
   const text = (value, isError) => ({ content: [{ type: 'text', text: value }], isError });
   server.setRequestHandler('tools/list', async () => ({ tools }));
+  if (prompts) {
+    server.setRequestHandler('prompts/list', async () => ({ prompts: await servedPrompts(root, { env }) }));
+    server.setRequestHandler('prompts/get', async (request) => {
+      const { loadCustomCommands, resolveCustomCommand } = await import('./commands.mjs');
+      const wanted = String(request.params && request.params.name || '');
+      const commands = await loadCustomCommands(root, { env }).catch(() => new Map());
+      const command = [...commands.values()].find((item) => promptName(item.name) === wanted);
+      if (!command) throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Unknown prompt: ' + wanted);
+      const args = request.params && request.params.arguments || {};
+      const argumentText = String(args.arguments ?? Object.values(args).join(' ') ?? '');
+      const resolved = await resolveCustomCommand(root, '/' + command.name + (argumentText ? ' ' + argumentText : ''), { commands, env, disableShell: !allowCommands });
+      if (!resolved) throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Unknown prompt: ' + wanted);
+      return { description: command.description, messages: [{ role: 'user', content: { type: 'text', text: String(resolved.prompt).slice(0, 200000) } }] };
+    });
+  }
   server.setRequestHandler('tools/call', async (request) => {
     const name = request.params && request.params.name;
     const args = request.params && request.params.arguments || {};
@@ -70,8 +106,9 @@ function createMcpServer({ root, allowEdits = false, allowCommands = false, env 
 export async function serveMcp({ root, args = [], env = process.env, input = process.stdin, output = process.stdout, log = process.stderr } = {}) {
   const allowEdits = args.includes('--allow-edits') || args.includes('--allow-all');
   const allowCommands = args.includes('--allow-commands') || args.includes('--allow-all');
-  const { server, close } = createMcpServer({ root: path.resolve(root), allowEdits, allowCommands, env });
-  log.write('Oasis MCP server on stdio for ' + path.resolve(root) + ' (' + ['read-only tools', allowEdits && 'edits', allowCommands && 'commands'].filter(Boolean).join(', ') + ')\n');
+  const prompts = !args.includes('--no-prompts');
+  const { server, close } = createMcpServer({ root: path.resolve(root), allowEdits, allowCommands, prompts, env });
+  log.write('Oasis MCP server on stdio for ' + path.resolve(root) + ' (' + ['read-only tools', 'skills', prompts && 'commands as prompts', allowEdits && 'edits', allowCommands && 'commands'].filter(Boolean).join(', ') + ')\n');
   const transport = new StdioServerTransport(input, output);
   const closed = new Promise((resolve) => { transport.onclose = resolve; input.once('end', resolve); input.once('close', resolve); });
   // Clients usually stop a stdio server with SIGTERM and SIGKILL it 1-2 s
