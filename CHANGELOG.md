@@ -4,6 +4,10 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ## Unreleased
 
+### Added
+
+- Hook protocol bridge. Cursor and Copilot CLI hooks in a plugin now run under OASIS instead of being left out. Each one is filed under the Claude Code event that fires at the same moment (Cursor `beforeShellExecution` on shell `PreToolUse`, Copilot `agentStop` on `Stop`, and so on); its stdin gets the fields that tool sends (`conversation_id`, `workspace_roots`, `command`; `toolName`, `toolArgs` as a JSON string) and its reply is read the way that tool reads it, so a deny, a rewritten call, extra context or a stop follow-up all work. Cursor's fail-closed rules (invalid JSON on a permission hook, `failClosed`) are kept. Only Cursor Tab hooks, `afterAgentThought`, `workspaceOpen` and Copilot's `userPromptTransformed` and `preMcpToolCall`, which have no OASIS moment, are still listed as not carried over. See [Compatibility](docs/COMPATIBILITY.md#hook-protocol-bridge).
+
 ## [0.10.0] - 2026-11-23
 
 First release under the 0.x numbers. Versions 1.0.0 through 1.8.0 are renumbered 0.1.0 through 0.9.0 (minor plus one), and an install that still reports a 1.x version updates normally; see [Version numbers](docs/RELEASES.md#version-numbers).

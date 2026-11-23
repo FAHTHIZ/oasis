@@ -46,19 +46,20 @@ test('an OASIS plugin (.oasis-plugin/plugin.json) installs natively and expands 
   assert.match(report.report[0], /Plugin "native-one"/);
 });
 
-test('a Cursor plugin installs: rules become skills, mcp.json servers start, Cursor hooks are reported as not carried over', async (t) => {
+test('a Cursor plugin installs: rules become skills, mcp.json servers start, Cursor hooks run through the bridge', async (t) => {
   const { src, root, env } = await fixture(t, {
     '.cursor-plugin/plugin.json': { name: 'cursor-kit', version: '1.0.0', description: 'Kit' },
     'rules/style.mdc': '---\ndescription: House style for TypeScript\nglobs: "**/*.ts"\nalwaysApply: false\n---\nUse named exports.\n',
     'skills/review/SKILL.md': '---\nname: review\ndescription: Review\n---\nReview.\n',
     'mcp.json': { mcpServers: { kit: { command: './bin/kit' } } },
-    'hooks/hooks.json': { version: 1, hooks: { beforeShellExecution: [{ command: './hooks/guard.sh' }], PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '${PLUGIN_ROOT}/ok.sh' }] }] } }
+    'hooks/hooks.json': { version: 1, hooks: { beforeShellExecution: [{ command: './hooks/guard.sh' }], beforeTabFileRead: [{ command: './tab.sh' }], PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '${PLUGIN_ROOT}/ok.sh' }] }] } }
   });
   const asked = [];
   await addAnything(src, { root, env, approve: async (s) => { asked.push(s); return true; } });
   assert.match(asked[0], /Cursor plugin "cursor-kit"/);
   assert.match(asked[0], /1 rule \(as skills\)/);
-  assert.match(asked[0], /Not carried over: Cursor hooks \(beforeShellExecution\)/);
+  assert.match(asked[0], /Cursor hooks run through the OASIS protocol bridge/);
+  assert.match(asked[0], /Not carried over: Cursor hooks \(beforeTabFileRead\) have no matching OASIS event/);
   const plugins = await loadEnabledPlugins(root, { env });
   const skills = await pluginSkills(plugins);
   assert.deepEqual(skills.map((s) => s.name).sort(), ['cursor-kit-rule-style', 'review']);
@@ -67,6 +68,9 @@ test('a Cursor plugin installs: rules become skills, mcp.json servers start, Cur
   assert.equal((await servers(plugins, env, root)).kit.command, plugins[0].root + '/bin/kit');
   const hooks = Object.assign({}, ...(await pluginHooks(plugins, { env, root })).map((h) => h.hooks));
   assert.deepEqual(Object.keys(hooks), ['PreToolUse']);
+  const bridged = hooks.PreToolUse.find((group) => group.hooks[0].protocol);
+  assert.equal(bridged.matcher, 'Bash|PowerShell');
+  assert.deepEqual(bridged.hooks[0], { type: 'command', command: '"${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh"', protocol: 'cursor', foreignEvent: 'beforeShellExecution' });
 });
 
 test('a Copilot CLI plugin (.github/plugin) installs with its root SKILL.md and .github/mcp.json', async (t) => {
@@ -74,16 +78,18 @@ test('a Copilot CLI plugin (.github/plugin) installs with its root SKILL.md and 
     '.github/plugin/plugin.json': { name: 'copilot-kit', version: '2.0.0', description: 'Copilot' },
     'SKILL.md': '---\nname: deploy-check\ndescription: Check a deploy\n---\nCheck.\n',
     '.github/mcp.json': { mcpServers: { gh: { type: 'http', url: 'https://example.com/mcp' } } },
-    'hooks.json': { version: 1, hooks: { preToolUse: [{ type: 'command', bash: './x.sh' }] } }
+    'hooks.json': { version: 1, hooks: { preToolUse: [{ type: 'command', bash: './x.sh' }] } },
+    'x.sh': '#!/bin/sh\n'
   });
   const asked = [];
   await addAnything(src, { root, env, approve: async (s) => { asked.push(s); return true; } });
   assert.match(asked[0], /Copilot CLI plugin "copilot-kit"/);
-  assert.match(asked[0], /Not carried over: Copilot CLI hooks \(preToolUse\)/);
+  assert.doesNotMatch(asked[0], /Not carried over/);
   const plugins = await loadEnabledPlugins(root, { env });
   assert.deepEqual((await pluginSkills(plugins)).map((s) => s.name), ['copilot-kit'], 'a root SKILL.md is the plugin\'s own skill');
   assert.deepEqual((await servers(plugins, env, root)).gh, { type: 'http', url: 'https://example.com/mcp' });
-  assert.deepEqual((await pluginHooks(plugins, { env, root })).flatMap((h) => Object.keys(h.hooks)), []);
+  const [hookSet] = await pluginHooks(plugins, { env, root });
+  assert.deepEqual(hookSet.hooks.PreToolUse, [{ hooks: [{ type: 'command', command: '"${CLAUDE_PLUGIN_ROOT}/x.sh"', protocol: 'copilot', foreignEvent: 'preToolUse', timeout: 30 }] }]);
 });
 
 test('a Kiro power installs: POWER.md and steering files become one skill, mcp.json servers start', async (t) => {

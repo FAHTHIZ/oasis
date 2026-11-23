@@ -23,6 +23,7 @@ import { getConfigDirectory } from './config.mjs';
 import { useProviderSettings } from './provider-registry.mjs';
 import { normalizePermissionMode } from './permission-modes.mjs';
 import { replaceFileDurably } from './atomic-write.mjs';
+import { BRIDGE_PROTOCOLS } from './hook-bridges.mjs';
 export { PERMISSION_MODES, normalizePermissionMode } from './permission-modes.mjs';
 
 // OCI runtime names (runsc, kata-runtime, io.containerd.runsc.v1) or an absolute path for Podman.
@@ -177,7 +178,14 @@ function normalizeHook(hook) {
       ...(Array.isArray(hook.args) ? { args: hook.args.map(String) } : {}),
       ...(hook.async === true ? { async: true } : {}),
       ...(hook.asyncRewake === true ? { asyncRewake: true } : {}),
-      ...(hook.shell === 'powershell' || hook.shell === 'bash' ? { shell: hook.shell } : {})
+      ...(hook.shell === 'powershell' || hook.shell === 'bash' ? { shell: hook.shell } : {}),
+      // A hook written for another agent (Cursor, Copilot CLI): hook-bridges.mjs
+      // translates its stdin and reply. Kept only for a known protocol.
+      ...(BRIDGE_PROTOCOLS.includes(hook.protocol) && typeof hook.foreignEvent === 'string' ? {
+        protocol: hook.protocol, foreignEvent: hook.foreignEvent,
+        ...(typeof hook.foreignMatcher === 'string' && hook.foreignMatcher ? { foreignMatcher: hook.foreignMatcher } : {}),
+        ...(hook.env && typeof hook.env === 'object' && !Array.isArray(hook.env) ? { env: Object.fromEntries(Object.entries(hook.env).filter(([key, value]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && typeof value === 'string')) } : {})
+      } : {})
     };
   }
   if (type === 'http' && typeof hook.url === 'string' && /^https?:\/\//i.test(hook.url)) {
