@@ -9,6 +9,7 @@
 import path from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { CHAT_COMMAND_HELP, chatUsageRecorder } from './gateway-commands.mjs';
+import { chatApprovalText } from './approval-language.mjs';
 
 const APPROVAL_TIMEOUT_MS = 10 * 60000;
 const MODES = ['default', 'acceptEdits', 'plan', 'auto'];
@@ -228,7 +229,7 @@ export function createChatCore(options = {}) {
           const canAlways = Boolean(meta && meta.suggestion);
           const timer = setTimeout(() => { approvals.delete(id); resolve(false); send(chatKey, 'Approval ' + id + ' timed out and was rejected.').catch(() => {}); }, timeoutMs);
           approvals.set(id, { chatKey, canAlways, resolve: (value) => { clearTimeout(timer); approvals.delete(id); resolve(value); } });
-          send(chatKey, 'Approval needed:\n' + String(message).slice(0, 1800) + (options.textApprovals ? '\n\n' + approvalReplyHint(id, canAlways) : ''), { approval: { id, canAlways } }).catch((error) => { log(error.message); const waiter = approvals.get(id); if (waiter) waiter.resolve(false); });
+          send(chatKey, 'Approval needed:\n' + chatApprovalText(message, meta) + (options.textApprovals ? '\n\n' + approvalReplyHint(id, canAlways) : ''), { approval: { id, canAlways } }).catch((error) => { log(error.message); const waiter = approvals.get(id); if (waiter) waiter.resolve(false); });
         })
       });
       try { const { saveSession } = deps.sessions || await import('./sessions.mjs'); await saveSession(state.session, { env }); } catch {}
