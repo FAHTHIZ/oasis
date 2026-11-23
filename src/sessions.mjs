@@ -304,6 +304,27 @@ async function savedHead(file) {
   } catch { return { updatedAt: '', archived: false }; } finally { if (handle) await handle.close().catch(() => {}); }
 }
 
+// The evidence ledger (src/evidence-ledger.mjs) is kept with the session, so a
+// resumed session's receipts and checks still see what earlier turns ran.
+const MAX_SAVED_EVIDENCE = 500;
+const EVIDENCE_STRING_FIELDS = ['kind', 'tool', 'command', 'checkKind', 'url', 'finalUrl', 'query', 'path', 'digest'];
+export function sanitizeEvidenceLedger(ledger) {
+  if (!ledger || typeof ledger !== 'object' || !Array.isArray(ledger.events)) return null;
+  const events = [];
+  for (const event of ledger.events.slice(-MAX_SAVED_EVIDENCE)) {
+    if (!event || typeof event !== 'object' || !Number.isInteger(event.seq) || typeof event.kind !== 'string') continue;
+    const out = { seq: event.seq, at: Number(event.at) || 0, epoch: Number.isInteger(event.epoch) ? event.epoch : 0 };
+    for (const key of EVIDENCE_STRING_FIELDS) if (typeof event[key] === 'string') out[key] = event[key].slice(0, 400);
+    for (const key of ['finished', 'passed', 'masked', 'noTests', 'filtered', 'mayEdit']) if (typeof event[key] === 'boolean') out[key] = event[key];
+    if (Number.isInteger(event.exitCode)) out.exitCode = event.exitCode;
+    if (Array.isArray(event.numbers)) out.numbers = event.numbers.filter((value) => typeof value === 'string').slice(0, 100);
+    if (Array.isArray(event.urls)) out.urls = event.urls.filter((value) => typeof value === 'string').slice(0, 50);
+    events.push(out);
+  }
+  const last = events.length ? events[events.length - 1] : null;
+  return { events, seq: Math.max(Number.isInteger(ledger.seq) ? ledger.seq : 0, last ? last.seq : 0), epoch: Math.max(Number.isInteger(ledger.epoch) ? ledger.epoch : 0, last ? last.epoch : 0) };
+}
+
 export async function saveSession(session, options = {}) {
   if (!session || !Array.isArray(session.messages)) throw new Error('There is no active session to save.');
   const env = options.env || process.env;
@@ -352,6 +373,7 @@ export async function saveSession(session, options = {}) {
     ...(sanitizeGoal(session.goal) ? { goal: sanitizeGoal(session.goal) } : {}),
     ...(restoreSpec(session.task) ? { task: restoreSpec(session.task) } : {}),
     ...(claimLogSnapshot(session).length ? { claimLog: claimLogSnapshot(session) } : {}),
+    ...(session.evidenceLedger && Array.isArray(session.evidenceLedger.events) && session.evidenceLedger.events.length ? { evidenceLedger: sanitizeEvidenceLedger(session.evidenceLedger) } : {}),
     agents: sanitizeAgentHistory(session.agentTasks),
     // A mid-turn snapshot marks the turn as unfinished; the end-of-turn save
     // drops the mark. A session restored with it tells the model its last
@@ -430,6 +452,7 @@ export async function loadSession(root, id, options = {}) {
     goal: sanitizeGoal(payload.goal),
     task: restoreSpec(payload.task),
     claimLog: Array.isArray(payload.claimLog) ? payload.claimLog.slice(-200) : [],
+    evidenceLedger: payload.evidenceLedger ? sanitizeEvidenceLedger(payload.evidenceLedger) : null,
     agents: sanitizeAgentHistory(payload.agents),
     turnInProgress: payload.turnInProgress && typeof payload.turnInProgress === 'object'
       ? { request: safePersistedText(String(payload.turnInProgress.request || '').slice(0, 2000), 2000), savedAt: String(payload.turnInProgress.savedAt || '').slice(0, 40) }

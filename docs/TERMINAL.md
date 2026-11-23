@@ -92,6 +92,7 @@ prompt and exits. Useful flags:
 | `--goal-verify` | With `--goal`: confirm a met goal with the `verify` agent, which runs the result |
 | `--review [N]` | After work that changed files, the `verify` agent checks it against the request; failures go back to the agent for up to N fix rounds (default 1, max 3). A final failure exits 1 with `error_review_failed` |
 | `--require-verified` | Exit 1 if OASIS could not verify its changes |
+| `--receipt FILE` | Write a signed receipt of the run's evidence to FILE; check it with `oasis receipt verify FILE`. See [Receipts](RECEIPTS.md) |
 | `--json-schema SCHEMA` | Return JSON matching a schema |
 | `--max-turns N`, `--max-budget-usd N`, `--max-requests N` | Hard limits |
 | `--zero-budget` | Only send requests to models proven free |
@@ -100,6 +101,9 @@ prompt and exits. Useful flags:
 The `json` result reports `usage` (tokens), `total_cost_usd`, the configured
 `model`, and `modelUsage`: requests, tokens and cost for each model that
 answered, including a fallback model, subagents and the advisor.
+
+`oasis receipt verify FILE [--replay] [--trust KEY_ID] [--json]` checks a receipt
+and exits 1 unless it holds; `/receipt [FILE]` writes one from an interactive session.
 
 Piped input is added to the prompt: `cat build.log | oasis -p "explain this error"`.
 

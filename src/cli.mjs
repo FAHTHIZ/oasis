@@ -1980,7 +1980,8 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
     includeHookEvents: Boolean(headless.includeHookEvents),
     forwardSubagentText: Boolean(headless.forwardSubagentText),
     promptSuggestions: Boolean(headless.promptSuggestions),
-    requireVerified: Boolean(headless.requireVerified)
+    requireVerified: Boolean(headless.requireVerified),
+    ...(headless.receipt ? { receipt: headless.receipt } : {})
   }));
   // Codex's -o/--output-last-message: also write the final reply to a file.
   if (headless.outputLastMessage && summary) {
@@ -3023,7 +3024,7 @@ const COMMON_FLAGS = ['--print', '--continue', '--resume', '--model', '--max-tur
   '--permission-mode', '--dangerously-skip-permissions', '--help', '--version', '--verbose', '--debug', '--name', '--bg', '--allowedTools',
   '--disallowedTools', '--add-dir', '--system-prompt', '--append-system-prompt', '--restricted', '--interactive', '--goal', '--effort',
   '--agent', '--sandbox', '--mcp-config', '--plugin-dir', '--settings', '--fork-session', '--session-id', '--json-schema', '--input-format',
-  '--prompt-interactive', '--tmux', '--exec', '--init'];
+  '--prompt-interactive', '--tmux', '--exec', '--init', '--receipt'];
 
 /**
  * A leftover argument that looks like a flag (all known flags are consumed
@@ -3254,6 +3255,13 @@ async function parseMainFlags(rawArgs, flags) {
       flags.headless.jsonSchemaSource = arg === '--output-schema' && !/^\s*[{@]/.test(value) ? '@' + value : value;
       continue;
     }
+    if (arg === '--receipt') {
+      const value = takeValue();
+      if (!value || value.startsWith('-')) throw new Error('--receipt needs a file path for the receipt.');
+      flags.headless.receipt = value;
+      continue;
+    }
+    if (arg.startsWith('--receipt=')) { flags.headless.receipt = arg.slice(10); continue; }
     if (arg === '-o' || arg === '--output-last-message') {
       const value = takeValue();
       if (!value || value.startsWith('-')) throw new Error(arg + ' needs a file path for the final message.');
@@ -3899,6 +3907,7 @@ async function main() {
     stdout.write(insightsSummaryText(stats) + (file ? '\nReport: ' + file : '') + '\n');
     return;
   }
+  if (command === 'receipt' || command === 'receipts') { const { receiptCommand } = await import('./receipt-cli.mjs'); const code = await receiptCommand(rest, workspace); if (code) process.exitCode = code; return; }
   if (command === 'backups') return await showBackups(workspace);
   if (command === 'restore') return await restoreOne(workspace, rest[0]);
   if (command === 'install') {

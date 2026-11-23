@@ -140,6 +140,7 @@ export const BUILTIN_COMMANDS = {
   doctor: 'Check this workspace: tools, language servers, sandbox, settings, provider',
   'release-notes': 'Show recent changes to Oasis',
   export: 'Save this conversation as Markdown or a standalone HTML page (/export FILE.md | FILE.html)',
+  receipt: 'Write a signed, verifiable receipt of this session\'s work (/receipt [FILE.json]); check it with oasis receipt verify',
   resume: 'List saved sessions or resume one (/resume [ID])',
   goal: 'Keep working across turns until a condition is met (/goal CONDITION | pause | resume | edit CONDITION | clear)',
   color: 'Set this session\'s prompt color (/color red|blue|green|yellow|purple|orange|pink|cyan|random|default)',
@@ -319,7 +320,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const groups = [
         { title: 'Core workflows', commands: ['init', 'plan', 'fix', 'diagnose', 'review', 'rollback'] },
         { title: 'Getting started', commands: ['help', 'setup', 'status', 'doctor', 'context', 'cost', 'undo'] },
-        { title: 'Working', commands: ['clear', 'compact', 'test', 'diagnostics', 'hunt', 'bisect', 'flaky', 'localize', 'minimize', 'mutate', 'audit', 'tasks', 'workflows', 'learning', 'commit', 'pr', 'goal', 'recipe', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export', 'presets'] },
+        { title: 'Working', commands: ['clear', 'compact', 'test', 'diagnostics', 'hunt', 'bisect', 'flaky', 'localize', 'minimize', 'mutate', 'audit', 'tasks', 'workflows', 'learning', 'commit', 'pr', 'goal', 'recipe', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export', 'receipt', 'presets'] },
         { title: 'Safety', commands: ['permissions', 'mode', 'sandbox', 'security-review', 'undo', 'rewind', 'purge', 'logout', 'doctor'] },
         { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'avoid', 'comments', 'output-style', 'personality', 'honcho', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome', 'computer'] }
       ];
@@ -1889,6 +1890,22 @@ export async function runBuiltinCommand(name, argument, state) {
       applyOutputStyle(session, style);
       sessionOptions.outputStyle = style.name;
       return { output: 'Output style set to ' + style.name + '.' };
+    }
+    case 'receipt': {
+      if (!session || !Array.isArray(session.messages)) return { output: 'There is no active conversation to write a receipt for.' };
+      const requested = String(argument || '').trim() || 'oasis-receipt-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+      try {
+        const target = await resolveWorkspacePath(root, requested, { rejectSymlinks: true, workspaceOnly: true, allowIgnored: true });
+        const { createReceipt, writeReceipt } = await import('./receipts.mjs');
+        const receipt = await createReceipt(session, { env });
+        await writeReceipt(target.absolute, receipt);
+        const counts = receipt.claims.counts || {};
+        const claimText = Object.entries(counts).filter(([, n]) => n).map(([k, n]) => n + ' ' + k).join(', ') || 'no checkable claims';
+        return { output: 'Receipt written to ' + target.relative + ': ' + receipt.evidence.count + ' evidence events, ' + receipt.files.length + ' files, ' + claimText + '. Signed by ' + receipt.signature.keyId + '.\nAnyone can check it with: oasis receipt verify ' + target.relative + ' (add --replay to rerun its checks)' };
+      } catch (error) {
+        if (/outside the workspace/i.test(error.message || '')) return { output: 'Receipt paths must be inside the workspace.' };
+        return { output: 'Could not write the receipt: ' + (error.message || error) };
+      }
     }
     case 'export': {
       if (!session || !Array.isArray(session.messages)) return { output: 'There is no active conversation to export.' };

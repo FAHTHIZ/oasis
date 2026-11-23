@@ -172,6 +172,8 @@ export async function runHeadless(options) {
     // not verify (no passing check, unreviewed diff, failing test) exits 1 with
     // subtype error_not_verified, so CI and scripts don't treat "Not verified" as success.
     requireVerified = false,
+    // --receipt FILE: write a signed, verifiable receipt of the run (src/receipts.mjs).
+    receipt = '',
     // Text mode: one short line per step on stderr, so `oasis -p` is not
     // silent for minutes. On by default only when stderr is a terminal;
     // OASIS_PROGRESS=1 forces it on, OASIS_PROGRESS=0 turns it off.
@@ -567,6 +569,14 @@ export async function runHeadless(options) {
   if (session && promptSuggestions && !error && result && (outputFormat === 'stream-json' || onEvent)) suggestion = await suggestNextPrompt(session, { signal });
   // The budget ledger also holds subagent, review and side-request spend.
   if (session && session.budgetLedger && Number(session.budgetLedger.spentUsd) > costUsd) costUsd = Number(session.budgetLedger.spentUsd);
+  let receiptPath = '';
+  let receiptError = '';
+  if (session && receipt && (result || progressed)) {
+    try {
+      const { createReceipt, writeReceipt } = await import('./receipts.mjs');
+      receiptPath = await writeReceipt(path.resolve(root, receipt), await createReceipt(session, { result, request: rawPrompt, env }));
+    } catch (caught) { receiptError = String(caught && caught.message || caught); }
+  }
   if (session) closeSession(session);
   const mustVerify = requireVerified || env.OASIS_REQUIRE_VERIFIED === '1';
   const notVerified = mustVerify && !error && Boolean(result && result.verificationIncomplete);
@@ -603,6 +613,8 @@ export async function runHeadless(options) {
     ...(reviewState ? { review: reviewState } : {}),
     ...(schemaErrors ? { structured_output_errors: schemaErrors.slice(0, 20) } : {}),
     ...(result && result.verification ? { verification: result.verification } : {}),
+    ...(receiptPath ? { receipt: receiptPath } : {}),
+    ...(receiptError ? { receipt_error: receiptError } : {}),
     ...(result && result.verificationIncomplete ? { verification_issues: result.verificationIssues } : {}),
     ...(session && Array.isArray(session.reportedFindings) ? { findings: session.reportedFindings, ...(session.findingsSummary ? { findings_summary: session.findingsSummary } : {}) } : {})
   };
