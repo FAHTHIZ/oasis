@@ -483,7 +483,7 @@ export function runKnowledgeTool(session, name, args = {}) {
   if (name === 'hypotheses') {
     const ledger = sessionEvidence(session);
     const events = ledger ? ledger.events : [];
-    const result = runHypothesisTool(session, board, args, { actor: actorOf(session), ground: (text, sources) => groundFinding(text, sources, events), untrusted: Boolean(injectionTaint(session, 'agent ' + actorOf(session))) });
+    const result = runHypothesisTool(session, board, args, { actor: actorOf(session), ground: (text, sources) => groundFinding(text, sources, events), untrusted: Boolean(injectionTaint(session, 'agent ' + actorOf(session))), model: modelOf(session), type: clean(session && session.agentType, 80), ledger: boardLedgers.get(board) });
     return result;
   }
   throw new Error('Unknown knowledge tool ' + name);

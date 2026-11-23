@@ -83,7 +83,9 @@ export function sanitizeMatrix(value) {
       sites: (Array.isArray(e.sites) ? e.sites : []).map((site) => clean(site, 200)).filter(Boolean).slice(0, 10),
       ratings: Object.fromEntries(Object.entries(e.ratings && typeof e.ratings === 'object' ? e.ratings : {}).filter(([id, rating]) => ids.has(id) && rating in RATINGS)),
       weight: Number.isFinite(e.weight) ? Math.min(1, Math.max(0, e.weight)) : 1,
-      ...(e.untrusted ? { untrusted: true } : {})
+      ...(e.untrusted ? { untrusted: true } : {}),
+      ...(clean(e.model, 120) ? { model: clean(e.model, 120) } : {}),
+      ...(clean(e.type, 80) ? { type: clean(e.type, 80) } : {})
     }));
     out.questions.push({ id: raw.id, text: clean(raw.text, 300), by: clean(raw.by, 100) || 'main', hypotheses, evidence, ...(raw.resolved && typeof raw.resolved === 'object' ? { resolved: { hypothesis: clean(raw.resolved.hypothesis, 20), by: clean(raw.resolved.by, 100), reason: clean(raw.resolved.reason, 400) } } : {}) });
   }
@@ -185,7 +187,7 @@ function questionView(question) {
  * Run the hypotheses tool. ground(text, sources) -> { issues, grounds } is the
  * knowledge board's grounding against the acting agent's own tool results.
  */
-export function runHypothesisTool(session, board, args = {}, { actor = 'main', ground = () => ({ issues: [], grounds: [] }), untrusted = false } = {}) {
+export function runHypothesisTool(session, board, args = {}, { actor = 'main', ground = () => ({ issues: [], grounds: [] }), untrusted = false, model = '', type = '', ledger = null } = {}) {
   const matrix = matrixOf(board);
   const action = String(args.action || 'status');
   if (action === 'open') {
@@ -235,7 +237,7 @@ export function runHypothesisTool(session, board, args = {}, { actor = 'main', g
     if (!grounds.length) { weight *= 0.5; why.push('not backed by your own tool results'); }
     if (repeats) { weight *= 0.5; why.push('repeats a source already used on this question (' + sites.join(', ') + ')'); }
     if (untrusted) { weight *= 0.5; why.push('you read content that looked like a prompt injection'); }
-    const item = { id: 'e_' + matrix.nextE++, text, by: actor, grounded: grounds.length > 0, sites, ratings, weight, ...(untrusted ? { untrusted: true } : {}) };
+    const item = { id: 'e_' + matrix.nextE++, text, by: actor, grounded: grounds.length > 0, sites, ratings, weight, ...(untrusted ? { untrusted: true } : {}), ...(clean(model, 120) ? { model: clean(model, 120) } : {}), ...(clean(type, 80) ? { type: clean(type, 80) } : {}) };
     question.evidence.push(item);
     if (question.evidence.length > MAX_EVIDENCE) question.evidence.shift();
     const unrated = question.hypotheses.filter((h) => !(h.id in ratings)).map((h) => h.id);
@@ -253,7 +255,9 @@ export function runHypothesisTool(session, board, args = {}, { actor = 'main', g
     const view = questionView(question);
     const top = view.hypotheses[0];
     question.resolved = { hypothesis: choice, by: actor, reason: clean(args.reason, 400) };
-    return { ...questionView(question), ...(top && choice !== top.id ? { warning: 'Resolved against the evidence: ' + top.id + ' had the highest posterior (' + top.posterior + '). Say why in your report.' } : {}) };
+    // Only the coordinator's resolution scores the raters, so no agent grades its own evidence.
+    const scored = actor === 'main' ? scoreRaters(question, choice, ledger, board.uid || 'board') : 0;
+    return { ...questionView(question), ...(scored ? { calibration: scored + ' evidence rating' + (scored === 1 ? '' : 's') + ' scored against the answer (oasis agents calibration)' } : {}), ...(top && choice !== top.id ? { warning: 'Resolved against the evidence: ' + top.id + ' had the highest posterior (' + top.posterior + '). Say why in your report.' } : {}) };
   }
   if (action === 'status') {
     if (args.question) return questionView(findQuestion(matrix, args.question));
@@ -261,6 +265,35 @@ export function runHypothesisTool(session, board, args = {}, { actor = 'main', g
     return { questions, open: questions.filter((q) => q.state === 'open').length, note: questions.length ? 'Posteriors are recomputed from the evidence each time; inconsistency counts how much evidence contradicts each hypothesis (lower is better, as in ACH).' : 'No questions yet. Open one with action open when several explanations are possible.' };
   }
   throw new Error('Unknown hypotheses action ' + action + '.');
+}
+
+/**
+ * Each piece of evidence is an implicit forecast: its ratings, as normalised
+ * likelihoods, put the most probability on one hypothesis. When the question
+ * is resolved, that forecast held if it pointed at the answer. Recorded per
+ * model in the calibration ledger (kind "hypothesis"), so an agent whose
+ * evidence keeps pointing the wrong way shows up in its calibration record.
+ */
+export function raterForecasts(question, answer) {
+  const out = [];
+  for (const item of question.evidence) {
+    const values = question.hypotheses.map((h) => RATINGS[item.ratings[h.id] || '0']);
+    const top = Math.max(...values);
+    if (top === Math.min(...values) || values.filter((value) => value === top).length > 1) continue;
+    const favoured = question.hypotheses[values.indexOf(top)].id;
+    const p = Math.round(top / values.reduce((sum, value) => sum + value, 0) * 1000) / 1000;
+    out.push({ evidence: item.id, by: item.by, model: item.model || 'unknown', type: item.type || '', favoured, p, o: favoured === answer ? 1 : 0 });
+  }
+  return out;
+}
+
+function scoreRaters(question, answer, ledger, uid) {
+  if (!ledger || typeof ledger.record !== 'function') return 0;
+  let count = 0;
+  for (const forecast of raterForecasts(question, answer)) {
+    try { if (ledger.record({ id: uid + ':' + question.id + ':' + forecast.evidence, model: forecast.model, type: forecast.type, p: forecast.p, o: forecast.o, kind: 'hypothesis' })) count++; } catch {}
+  }
+  return count;
 }
 
 /** One line per open question for a starting subagent, '' when none. */
