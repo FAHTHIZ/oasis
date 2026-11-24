@@ -168,7 +168,16 @@ jobs:
         # setsid: the suite gets its own session and process group, so a test that
         # signals a process group by mistake fails the suite instead of stopping
         # the runner ("The runner has received a shutdown signal").
-        run: mkdir -p /tmp/h1 && setsid --wait env -i PATH="/tmp/ast-grep/node_modules/.bin:/tmp/gitleaks:/tmp/pyscan-bin:$PATH" HOME=/tmp/h1 NODE_OPTIONS="--import=$GITHUB_WORKSPACE/.github/scripts/test-resource-watch.mjs" node --test --test-timeout=300000 test/*.test.mjs
+        # Browser E2E suites use Chrome and the runner's session services. They run in each
+        # full Node integrity job; keep this env -i pass focused on non-browser tests.
+        run: |
+          mkdir -p /tmp/h1
+          mapfile -t tests < <(find test -maxdepth 1 -type f -name '*.test.mjs' \
+            ! -name 'app-e2e.test.mjs' \
+            ! -name 'app-live-run-e2e.test.mjs' \
+            ! -name 'app-markdown-browser.test.mjs' \
+            -print | sort)
+          setsid --wait env -i PATH="/tmp/ast-grep/node_modules/.bin:/tmp/gitleaks:/tmp/pyscan-bin:$PATH" HOME=/tmp/h1 NODE_OPTIONS="--import=$GITHUB_WORKSPACE/.github/scripts/test-resource-watch.mjs" node --test --test-timeout=300000 "${tests[@]}"
 
   pty-runtime:
     name: Native PTY integration (Linux / Node 22)
