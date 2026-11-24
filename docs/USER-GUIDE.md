@@ -37,7 +37,7 @@ OASIS is a runtime, not an inference service. Bring a key or a local model serve
 |---|---|---|
 | OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) | One key for hundreds of models. Free models are limited to 20 requests a minute and 50 a day (1,000 a day after buying $10 of credits), per [OpenRouter's limits](https://openrouter.ai/docs/api_reference/limits). |
 | NVIDIA NIM | [build.nvidia.com](https://build.nvidia.com/) | Keys start with `nvapi-`. OpenAI-compatible endpoint `https://integrate.api.nvidia.com/v1`, with a free prototyping tier. |
-| OASIS Route | [First-party self-hosted gateway](https://github.com/FAHTHIZ/OASIS-ROUTE) | Native setup choice is on OASIS `main` (next release); runs on `http://localhost:8081/v1` with `OASIS_ROUTE_API_KEY`. Released builds can use a custom OpenAI-compatible endpoint. |
+| OASIS Route | [First-party self-hosted gateway](https://github.com/FAHTHIZ/OASIS-ROUTE) | Terminal setup choice is on OASIS `main` (next release); runs on `http://localhost:8081/v1` with `OASIS_ROUTE_API_KEY`. Released builds can use a custom OpenAI-compatible endpoint; direct browser-app connection is not yet supported. |
 | OmniRoute | [Self-hosted gateway](https://github.com/cheaper-inference/omniroute) | Runs on `http://localhost:20128/v1` and routes one endpoint to many providers. Paste the address. |
 | FreeLLMAPI | [Self-hosted gateway](https://github.com/Azhan787/FreeLLMAPI) | Runs on `http://localhost:3001/v1` and pools provider keys behind one endpoint. |
 | Anthropic, OpenAI, Gemini, Groq, DeepSeek, xAI, Mistral, Hugging Face | The provider's console | Paste the key; the provider is detected from its prefix. |
