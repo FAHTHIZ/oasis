@@ -8,6 +8,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { isTestPath } from './test-tamper.mjs';
 import { runLsp, serverForFile } from './lsp.mjs';
 import { isLocalModelEndpoint } from './local-context.mjs';
+import { forbidsFileChanges } from './git-intent.mjs';
 export { MAX_EMPTY_REPLY_NUDGES, EMPTY_REPLY_NUDGE, EMPTY_REPLY_NOTICE, providerStopNotice, providerCutNotice } from './empty-reply.mjs';
 export const MAX_SESSION_TOOL_CALLS = 10000;
 
@@ -157,9 +158,22 @@ export function asksForNewTests(request) {
 }
 
 export function asksForAction(request) {
+  // "Run the tests and tell me which fail. Do not change any files." is not a
+  // request to change something; nudging it to edit (seen live) made the
+  // model drop its correct report and try to fix the code instead.
+  if (forbidsFileChanges(request)) return false;
   const text = String(request || '').trim().replace(/^(?:please|pls|can you|could you|would you|go ahead and|now)[\s,]+/i, '');
   if (/^(?:how|what|why|which|when|where|who|explain|describe|summari[sz]e|review|compare|list|show me how|tell me)\b/i.test(text)) return false;
   return /^(?:create|add|implement|fix|write|make|update|change|modify|refactor|remove|delete|rename|move|build|set up|setup|install|run|edit|replace|convert|migrate|bump|upgrade|generate|scaffold|wire|hook up|port|patch|repair|resolve|finish|complete)\b/i.test(text);
+}
+
+// "Run the tests and tell me which pass": the answer is a report, and one
+// that quotes the output in a code block is not a tutorial in place of work.
+export function asksForReport(request) {
+  const text = String(request || '').trim().replace(/^(?:please|pls|can you|could you|would you|go ahead and|now)[\s,]+/i, '');
+  return /^(?:run|test|check|execute)\b/i.test(text) &&
+    /\b(?:tell|report|show|list|summari[sz]e|which|whether|what|how many)\b/i.test(text) &&
+    !/\b(?:fix|change|update|edit|add|create|write|implement|make\s+(?:it|them|the)|remove|refactor|repair|resolve|correct)\b/i.test(text);
 }
 
 // Numbered steps, "you can"/"we can" instructions, or a code block handed to the user.

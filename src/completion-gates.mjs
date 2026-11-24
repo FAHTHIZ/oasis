@@ -36,7 +36,7 @@ import { describeClaimCounts, logClaims } from './claim-ledger.mjs';
 import { admitsShortfall, assessOutcome, gateNotice, gateProblems, specSummary, taskGateNudge, taskModelEnabled } from './task-model.mjs';
 import {
   ACTION_NUDGE, CONTINUE_NUDGE, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, providerStopNotice, providerCutNotice,
-  REFUSAL_NUDGE, SOURCE_EXTENSIONS, UNREADABLE_CALL_NUDGE, GATE_FOLLOWUP_NUDGE, NEW_TEST_FOLLOWUP_NUDGE, announcesNextStep, announcesTerseStep, appendLspUnavailableNotice, asksForAction,
+  REFUSAL_NUDGE, SOURCE_EXTENSIONS, UNREADABLE_CALL_NUDGE, GATE_FOLLOWUP_NUDGE, NEW_TEST_FOLLOWUP_NUDGE, announcesNextStep, announcesTerseStep, appendLspUnavailableNotice, asksForAction, asksForReport,
   assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, fencedFileFromReply, givesUpEarly, normalizeReviewPath,
   readsLikeInstructions, refusesSpuriously, relatedTestsHint, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge
 } from './turn-guards.mjs';
@@ -254,7 +254,8 @@ export async function runCompletionGates(turn, host) {
   // Smaller models often answer "create X" with a tutorial instead of doing it.
   // They also announce the next step ("I need to create the file") and stop.
   if (g.actionNudges < 2 && !verification.changedPaths.size && !options.planOnly && permissionMode(session, options) !== 'plan' && asksForAction(request)) {
-    const kind = !String(text || '').trim() ? 'empty' : claimsUnmadeChange(text) ? 'false-claim' : readsLikeInstructions(text) ? 'described' : announcesNextStep(text) ? 'announced' : givesUpEarly(text) ? 'gave-up' : '';
+    const reported = asksForReport(request) && verification.lastVerificationExitCode != null;
+    const kind = !String(text || '').trim() ? 'empty' : claimsUnmadeChange(text) ? 'false-claim' : !reported && readsLikeInstructions(text) ? 'described' : announcesNextStep(text) ? 'announced' : givesUpEarly(text) ? 'gave-up' : '';
     if (kind) {
       g.actionNudges++;
       // A false "I created it" in context gets repeated by small models; drop it.
