@@ -7,6 +7,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 ### Added
 
 - OASIS Route is now a first-party built-in gateway provider on `main`: `oasis setup` offers it by name, the registry uses `OASIS_ROUTE_API_KEY` at `http://127.0.0.1:8081/v1`, and the service remains independently deployed. Released builds can use its generic OpenAI-compatible endpoint until this change ships in a release.
+- The secret shield recognizes OASIS Route's `oasis_live_` and `oasis_test_` keys, so the router's bearer credentials are masked in tool output and transcripts.
 
 ### Changed
 

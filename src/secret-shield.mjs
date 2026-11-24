@@ -37,10 +37,11 @@ const TOKEN_PATTERNS = [
   /\bsk-ant-admin[0-9]{2}-[A-Za-z0-9_-]{20,}/g,
   /\bgsk_[A-Za-z0-9]{40,}\b/g,
   // Keys of providers in the setup menu that Gitleaks has no rule for:
-  // NVIDIA NIM, Cerebras, Fireworks, and the unified key FreeLLMAPI issues.
+  // OASIS Route, NVIDIA NIM, Cerebras, Fireworks, and the unified key FreeLLMAPI issues.
   /\bnvapi-[A-Za-z0-9_-]{40,}/g,
   /\bcsk-[A-Za-z0-9]{40,}\b/g,
   /\bfw_[A-Za-z0-9]{20,}\b/g,
+  /\boasis_(?:live|test)_[a-z2-7]{12}_[A-Za-z0-9_-]{40,}/g,
   /\bfreellmapi-[A-Za-z0-9_-]{24,}/g,
   /\bxai-[A-Za-z0-9]{40,}\b/g,
   /\bpplx-[A-Za-z0-9]{40,}\b/g,

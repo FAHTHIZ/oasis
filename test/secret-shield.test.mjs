@@ -111,6 +111,8 @@ test('newer provider keys, OAuth tokens and webhook URLs are masked', () => {
     'csk-' + r(48),
     'fw_' + r(24),
     'freellmapi-' + 'a1b2c3d4'.repeat(6),
+    'oasis_live_' + 'abcdefghijkl' + '_' + 'a'.repeat(43),
+    'oasis_test_' + 'bcdefghijklm' + '_' + 'b'.repeat(43),
     'xai-' + r(80),
     'pplx-' + r(48),
     'r8_' + r(37),
