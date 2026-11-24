@@ -215,6 +215,40 @@ jobs:
           OASIS_REQUIRE_DOCKER: '1'
         run: node --test test/sandbox-docker-live.test.mjs
 
+  browser-engines:
+    name: Browser tool on Obscura and Chrome
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Install dependencies from the lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Install the pinned Obscura release (SHA-256 checked)
+        env:
+          OASIS_OBSCURA_CACHE: ${{ runner.temp }}/obscura
+        run: |
+          node src/oasis.mjs browser install
+          node src/oasis.mjs browser status
+      - name: Browser tests with the automatic engine
+        env:
+          OASIS_OBSCURA_CACHE: ${{ runner.temp }}/obscura
+        run: node --test --test-timeout=300000 test/browser-*.test.mjs
+      - name: Browser tests forced onto Obscura
+        env:
+          OASIS_OBSCURA_CACHE: ${{ runner.temp }}/obscura
+          OASIS_BROWSER_ENGINE: obscura
+        run: node --test --test-timeout=300000 test/browser-*.test.mjs
+      - name: Browser engine benchmark
+        env:
+          OASIS_OBSCURA_CACHE: ${{ runner.temp }}/obscura
+        run: node scripts/bench-browser.mjs --runs 3
   browser-e2e:
     name: Browser end-to-end smoke test
     runs-on: ubuntu-latest

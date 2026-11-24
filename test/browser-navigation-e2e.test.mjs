@@ -7,17 +7,21 @@ import path from 'node:path';
 import { mkdtemp } from 'node:fs/promises';
 import '../src/tools.mjs';
 import { findChrome } from '../src/cdp.mjs';
+import { findObscura } from '../src/browser-engine.mjs';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
 const chrome = findChrome(process.env);
+// Runs on whichever engine the automatic choice picks (Obscura when installed).
+const obscura = findObscura(process.env);
+const engines = { ...(chrome ? { OASIS_CHROME_PATH: chrome } : {}), ...(obscura ? { OASIS_OBSCURA_PATH: obscura } : {}) };
 
 function listen(handler) {
   const server = http.createServer(handler);
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)));
 }
 
-test('browser guards: same-origin passes, cross-origin link/form/redirect ask, denial blocks, opaque targets never load', { skip: chrome ? false : 'no Chrome/Chromium installed', timeout: 120000 }, async (t) => {
+test('browser guards: same-origin passes, cross-origin link/form/redirect ask, denial blocks, opaque targets never load', { skip: chrome || obscura ? false : 'no browser engine installed', timeout: 120000 }, async (t) => {
   const other = await listen((req, res) => { res.setHeader('content-type', 'text/html'); res.end('<title>Other</title><h1>other origin</h1>'); });
   const otherUrl = 'http://127.0.0.1:' + other.address().port;
   const home = await listen((req, res) => {
@@ -32,7 +36,7 @@ test('browser guards: same-origin passes, cross-origin link/form/redirect ask, d
   t.after(() => { home.close(); other.close(); });
   const homeUrl = 'http://127.0.0.1:' + home.address().port + '/';
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-nav-e2e-'));
-  const env = { ...process.env, HOME: root, OASIS_CHROME_HEADLESS: '1', OASIS_CHROME_PATH: chrome || '' };
+  const env = { ...process.env, HOME: root, OASIS_CHROME_HEADLESS: '1', ...engines };
   const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
   const { config } = await scriptedModel(t, [
     toolCall('n1', 'browser', { action: 'navigate', url: homeUrl }),

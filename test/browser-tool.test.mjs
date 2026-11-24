@@ -6,12 +6,16 @@ import path from 'node:path';
 import { mkdtemp } from 'node:fs/promises';
 import '../src/tools.mjs';
 import { findChrome } from '../src/cdp.mjs';
+import { findObscura } from '../src/browser-engine.mjs';
 import { browserNavigationNeedsApproval, browserNavigationPolicy, isPrivateBrowserRequest } from '../src/browser-tool.mjs';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
 const chrome = findChrome(process.env);
+// Runs on whichever engine the automatic choice picks (Obscura when installed).
+const obscura = findObscura(process.env);
+const engines = { ...(chrome ? { OASIS_CHROME_PATH: chrome } : {}), ...(obscura ? { OASIS_OBSCURA_PATH: obscura } : {}) };
 
 test('browser navigation approvals scope web URLs by origin and opaque URLs by exact target', async () => {
   const approved = new Set();
@@ -73,13 +77,13 @@ test('browser navigation approvals scope web URLs by origin and opaque URLs by e
 });
 const PAGE = '<html><head><title>Fixture</title></head><body><h1>Hello browser</h1><input placeholder="Search"><button onclick="document.getElementById(\'out\').textContent=\'clicked:\'+document.querySelector(\'input\').value;console.log(\'btn\')">Go</button><div id="out"></div><script>console.error(\'boom-fixture\');fetch(\'/missing\')</script></body></html>';
 
-test('the browser tool drives Chrome inside an agent turn', { skip: chrome ? false : 'no Chrome/Chromium installed' }, async (t) => {
+test('the browser tool drives a browser inside an agent turn', { skip: chrome || obscura ? false : 'no browser engine installed' }, async (t) => {
   const server = http.createServer((req, res) => { if (req.url === '/') { res.setHeader('content-type', 'text/html'); res.end(PAGE); } else { res.statusCode = 404; res.end('no'); } });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const url = 'http://localhost:' + server.address().port + '/';
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-browser-'));
-  const env = { ...process.env, HOME: root, OASIS_CHROME_HEADLESS: '1', OASIS_CHROME_PATH: chrome };
+  const env = { ...process.env, HOME: root, OASIS_CHROME_HEADLESS: '1', ...engines };
   const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
   const { config, requests } = await scriptedModel(t, [
     toolCall('n', 'browser', { action: 'navigate', url }),

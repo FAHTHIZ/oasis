@@ -6,11 +6,15 @@ import path from 'node:path';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import '../src/tools.mjs';
 import { findChrome } from '../src/cdp.mjs';
+import { findObscura } from '../src/browser-engine.mjs';
 import { addFrame, newRecording, recordingHtml, stepCaption, MAX_FRAMES } from '../src/browser-recording.mjs';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
 const chrome = findChrome(process.env);
+// Runs on whichever engine the automatic choice picks (Obscura when installed).
+const obscura = findObscura(process.env);
+const engines = { ...(chrome ? { OASIS_CHROME_PATH: chrome } : {}), ...(obscura ? { OASIS_OBSCURA_PATH: obscura } : {}) };
 
 test('captions never include typed text', () => {
   assert.equal(stepCaption('type', { text: 'hunter2', submit: true }), 'Typed 7 characters and submitted');
@@ -35,7 +39,7 @@ test('the player is self-contained and escapes captions', () => {
   assert.match(html, /default-src 'none'/);
 });
 
-test('the browser tool records steps and saves a replay', { skip: chrome ? false : 'no Chrome/Chromium installed' }, async (t) => {
+test('the browser tool records steps and saves a replay', { skip: chrome || obscura ? false : 'no browser engine installed' }, async (t) => {
   const page = '<html><head><title>Rec</title></head><body><input placeholder="Name"><button onclick="document.title=\'done\'">Go</button></body></html>';
   const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html'); res.end(page); });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -43,7 +47,7 @@ test('the browser tool records steps and saves a replay', { skip: chrome ? false
   const url = 'http://localhost:' + server.address().port + '/';
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-rec-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const env = { ...process.env, HOME: root, OASIS_CHROME_HEADLESS: '1', OASIS_CHROME_PATH: chrome };
+  const env = { ...process.env, HOME: root, OASIS_CHROME_HEADLESS: '1', ...engines };
   const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
   const { config } = await scriptedModel(t, [
     toolCall('n', 'browser', { action: 'navigate', url }),
