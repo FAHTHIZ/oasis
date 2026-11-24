@@ -443,7 +443,7 @@ export function providers(theme) {
 <g mask="url(#m)"><g transform="translate(${lx} ${y + 4})"><g class="row${r}">${pills}</g></g></g>`;
   });
   return svgDoc(W, H, 'Models, local servers and integrations OASIS works with',
-    'Three scrolling rows. Hosted: ' + rows[0].items.join(', ') + '. Local: ' + rows[1].items.join(', ') + '. Plugs into: ' + rows[2].items.join(', ') + '.', css.join('\n'), body, defs.join(''));
+    'Three scrolling rows. Hosted: ' + rows[0].items.join(', ') + '. Local: Ollama, LM Studio, llama.cpp, vLLM. Gateways: OASIS Route, OmniRoute, FreeLLMAPI. Zero-budget mode, failover backups, prompt caching, spend limits. Plugs into: ' + rows[2].items.join(', ') + '.', css.join('\n'), body, defs.join(''));
 }
 
 // --- Interfaces orbit: one runtime, many front doors ---------------------------
