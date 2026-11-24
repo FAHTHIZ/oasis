@@ -162,7 +162,9 @@ test('deniedHint does not suggest auto mode to a run already in auto mode', asyn
   const denied = [{ tool_name: 'run_command', tool_input: { command: 'python3', args: ['-m', 'unittest', 'discover'] }, detail: 'Run this command?' }];
   const hint = deniedHint(denied, { env: { OASIS_SANDBOX: '1' }, mode: 'auto' });
   assert.doesNotMatch(hint, /--permission-mode auto/);
-  assert.match(hint, /Auto mode's check was not sure about this/);
+  assert.doesNotMatch(hint, /not sure/, 'no classifier reason, no claim about it');
+  const unsure = deniedHint([{ ...denied[0], auto_mode_reason: 'The test file starts a subprocess.' }], { env: {}, mode: 'auto' });
+  assert.match(unsure, /Auto mode's check was not sure \(The test file starts a subprocess\), so it was not run\./);
   assert.match(hint, /To allow next time: --allowedTools "run_command\(python3 -m:\*\)"\./);
   assert.match(deniedHint(denied, { env: {} }), /or --permission-mode auto/);
   const tool = deniedHint([{ tool_name: 'web_fetch', tool_input: {}, detail: 'Fetch?' }], { env: {}, mode: 'auto' });
