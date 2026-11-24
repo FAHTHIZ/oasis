@@ -27,6 +27,10 @@ Most remaining memory comes from Oasis's own source modules, which load at impor
 
 About 45 MB of the session's RSS appears on the first token count, which loads the tokenizer's BPE table. Measured 14 November 2026 in a fresh Node 22 process (RSS after loading and encoding one string): `gpt-tokenizer` o200k (what OASIS uses) +68 MB / 284 ms, `gpt-tokenizer` cl100k +46 MB, `js-tiktoken` o200k +153 MB, `tiktoken` (WASM) o200k +65 MB. `gpt-tokenizer` is within 3 MB of the WASM build and needs no binary, and `js-tiktoken` uses more than twice as much, so no change was made. The table loads on the first token count, not at startup (`--version` and `--help` stay at 46 MB).
 
+### Browser engines
+
+`npm run bench:browser` compares Obscura and Chrome on launch, navigation, snapshots, screenshots, memory, tabs and separate sessions. Results and their limits are in [Browser](../BROWSER.md#benchmarks) ([raw JSON](../../bench/results/browser-2026-11-24.json)).
+
 ### CLI launch against other agent CLIs
 
 `npm run bench:perf -- --compare` (Linux only) runs `--version` and `--help` for each agent CLI on PATH. Every CLI is measured the same way: the same machine, a scratch HOME, no provider keys, and no model calls. It samples peak RSS (`VmHWM`) for every process in the CLI's process tree every 2 ms. Recorded 14 November 2026, 5 runs each ([raw JSON](../../bench/results/perf-compare-2026-11-14.json)):

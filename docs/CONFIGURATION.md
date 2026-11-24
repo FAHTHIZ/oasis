@@ -526,6 +526,13 @@ Sources: `src/tools.mjs`, `src/power-tools.mjs`, `src/git-visible-files.mjs`.
   `[match at column N of a long line]`. With ripgrep this uses a second,
   match-only pass (`-o -b --column`) over the affected files (up to 50).
 
+## Browser
+
+The browser tool's engine and its settings (`OASIS_BROWSER_ENGINE`,
+`OASIS_BROWSER_FALLBACK`, `OASIS_OBSCURA_PATH`, `OASIS_BROWSER_PROFILE`,
+`OASIS_CHROME_PATH`, `OASIS_CHROME_PORT` and the rest) are listed in
+[Browser](BROWSER.md#settings).
+
 ## Command output
 
 Sources: `src/output-condense.mjs`, `runWorkspaceCommand` in `src/tools.mjs`,

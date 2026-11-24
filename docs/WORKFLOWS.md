@@ -14,8 +14,8 @@ Run any of these interactively (`oasis`, then type the request), in the web app
 oasis -p "Compare the three most-used open-source vector databases: licence, hosting options, last release date. Cite every source."
 ```
 
-The agent uses `web_search` and `fetch_url` (or the Chrome browser tool with
-`--chrome` for pages that need JavaScript). The runtime keeps an evidence
+The agent uses `web_search` and `fetch_url` (or the browser tool with
+`--browser` for pages that need JavaScript). The runtime keeps an evidence
 ledger of every page actually fetched: a claim that cites a URL the agent never
 opened is flagged before the answer reaches you.
 
@@ -136,12 +136,13 @@ the chat. Setup per platform: [Gateways](GATEWAYS.md).
 ## Operate a browser or a desktop
 
 ```sh
-oasis --chrome "Open the staging site, walk through sign-up, and report every console error with a screenshot."
+oasis --browser "Open the staging site, walk through sign-up, and report every console error with a screenshot."
 oasis --computer-use "Open the spreadsheet on the desktop and copy the totals row into totals.txt."
 ```
 
-`--chrome` gives the agent a Chrome tool over the DevTools protocol and saves
-each browser session as an HTML recording under `.oasis/recordings/`.
+`--browser` gives the agent a browser over the DevTools protocol (Obscura when
+installed, Chrome otherwise; see [Browser](BROWSER.md)) and saves each browser
+session as an HTML recording under `.oasis/recordings/`.
 `--computer-use` lets it take screenshots and use the mouse and keyboard after
 one approval per session; `--computer-use=virtual` uses a private virtual
 screen on Linux instead of yours. Computer use is experimental:

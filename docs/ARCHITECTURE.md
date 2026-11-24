@@ -27,7 +27,7 @@ The model proposes responses and tool calls. OASIS owns the runtime decisions ar
 
 | Area | Main source locations | Responsibility |
 |---|---|---|
-| Agent orchestration | `src/agent.mjs` | Creates sessions, coordinates streamed turns, dispatches tool calls, handles retries and context recovery. |
+| Agent orchestration | `src/agent.mjs`, `src/agent-compaction.mjs` | Creates sessions, coordinates streamed turns, dispatches tool calls, handles retries and context recovery. |
 | Model requests | `src/agent-request.mjs` | Builds and sends each model request: timeouts, stream restarts, model fallback, tracing, usage accounting. |
 | Subagents and dispatch | `src/agent-subagents.mjs` | Subagents, specialist reviews, workflows, background runs and shared-task dispatch: everything that starts a child turn. |
 | Turn support | `src/system-prompt.mjs`, `src/project-profile.mjs`, `src/steering.mjs`, `src/turn-guards.mjs`, `src/verification-summary.mjs`, `src/tool-results.mjs`, `src/compaction-history.mjs`, `src/context-window.mjs`, `src/plan-mode.mjs`, `src/ask-user.mjs`, `src/web-access.mjs` | The pieces of a turn that do not need the loop itself: the system prompt and project profile, mid-turn steering, verification and nudges, what the model sees from each tool, compaction helpers, context-window discovery from provider overflow errors, plan-mode hand-off, user questions and per-site web approval. |
@@ -50,6 +50,7 @@ The model proposes responses and tool calls. OASIS owns the runtime decisions ar
 | Extensions | `src/mcp.mjs`, `src/plugins.mjs`, `src/hooks.mjs`, `src/skill-install.mjs`, `skills/` | MCP connections, plugins, lifecycle hooks and Agent Skills. |
 | Persistence and recovery | `src/sessions.mjs`, `src/checkpoints.mjs`, `src/memory.mjs`, `src/backups.mjs` | Session history, memory, checkpoints and recovery data. |
 | Effects and durable execution | `src/effect-contracts.mjs`, `src/intent-journal.mjs` | Predicted versus observed changes of shell commands (private-store snapshots feeding checkpoints), and the write-ahead intent journal reconciled when a crashed session resumes. See [EFFECTS.md](EFFECTS.md) and [DURABLE-EXECUTION.md](DURABLE-EXECUTION.md). |
+| Browser | `src/browser-tool.mjs`, `src/browser-engine.mjs`, `src/cdp.mjs`, `src/browser-recording.mjs` | The `browser` tool: engine choice between Obscura and Chrome, Obscura install, one multiplexed CDP connection per browser, navigation approval, downloads, fallback and recordings. See [Browser](BROWSER.md). |
 | Verification | `src/claim-check.mjs`, `src/diagnostics.mjs`, `src/test-tamper.mjs`, `src/change-guard.mjs`, `src/mutation-probe.mjs`, `src/bisect.mjs`, `src/flaky-check.mjs`, `src/minimize-repro.mjs`, `src/fault-localize.mjs` | Records check evidence, diagnoses problems, guards against unsafe or misleading edits, and tests the tests: planted bugs, history search for the breaking commit, flake detection, input minimization and fault localization. |
 
 ## A typical agent turn

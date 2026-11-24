@@ -199,7 +199,7 @@ OASIS is not tied to one kind of task or one model vendor. The same runtime plan
     </td>
     <td width="50%" valign="top">
       <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/card-research-dark.svg"><img src="assets/readme/card-research-light.svg" width="100%" alt="Research card: three sources change from fetching to opened, and a citation of a page that was never fetched is flagged."></picture>
-      <br><b>Research.</b> Federated web search, page fetching and a real Chrome it can drive (<code>--chrome</code>). An evidence ledger flags any claim that cites a page the agent never opened. <code>/deep-research</code> fans a question out to parallel research agents and cross-checks their claims.
+      <br><b>Research.</b> Federated web search, page fetching and a browser it can drive (<code>--browser</code>). An evidence ledger flags any claim that cites a page the agent never opened. <code>/deep-research</code> fans a question out to parallel research agents and cross-checks their claims.
     </td>
   </tr>
   <tr>
@@ -219,7 +219,7 @@ OASIS is not tied to one kind of task or one model vendor. The same runtime plan
     </td>
     <td width="50%" valign="top">
       <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/card-computer-dark.svg"><img src="assets/readme/card-computer-light.svg" width="100%" alt="Browser and computer use card: a cursor clicks a form field, types a title, clicks Save, and the result is checked with a screenshot."></picture>
-      <br><b>Browser and computer use.</b> Drives Chrome over CDP, and (experimental) sees the screen and uses the mouse and keyboard on Linux, macOS and Windows with <code>--computer-use</code>, optionally inside a virtual desktop. See <a href="docs/COMPUTER_USE.md">Computer use</a>.
+      <br><b>Browser and computer use.</b> Drives a browser over CDP: <a href="docs/BROWSER.md">Obscura</a>, a headless engine that starts in about 35 ms with a fifth of Chrome's memory or less, with Chrome for windows and for sites that need it. It also (experimental) sees the screen and uses the mouse and keyboard on Linux, macOS and Windows with <code>--computer-use</code>, optionally inside a virtual desktop. See <a href="docs/COMPUTER_USE.md">Computer use</a>.
     </td>
   </tr>
   <tr>
@@ -447,7 +447,7 @@ OASIS is a young project. Status labels for every part are in [Capabilities and 
 | Status | Areas |
 | --- | --- |
 | <img alt="Stable" src="assets/readme/status-stable.svg" height="24"> | Terminal and scripted runs, the self-hosted web app, sessions, checkpoints and undo, permission modes, bubblewrap and Docker sandboxes, MCP, Claude Code plugins, OpenAI-compatible, Anthropic, Gemini and local providers |
-| <img alt="Released, lightly tested" src="assets/readme/status-lightly-tested.svg" height="24"> | Subagents in parallel and in teams, scripted workflows, domain packs, the desktop app (installers not yet code-signed), editor integrations, Codex App Server and Cursor API compatibility, the SDK, GitHub Action and cloud runs, Telegram, Slack and Discord gateways, the Chrome browser tool, app connectors, image and speech tools, the control room, A2A, agent experience, the shared knowledge board, `mixture_of_agents`, Daytona, Modal, Apptainer and gVisor backends, more chat gateways, Honcho and Home Assistant |
+| <img alt="Released, lightly tested" src="assets/readme/status-lightly-tested.svg" height="24"> | Subagents in parallel and in teams, scripted workflows, domain packs, the desktop app (installers not yet code-signed), editor integrations, Codex App Server and Cursor API compatibility, the SDK, GitHub Action and cloud runs, Telegram, Slack and Discord gateways, the browser tool, app connectors, image and speech tools, the control room, A2A, agent experience, the shared knowledge board, `mixture_of_agents`, Daytona, Modal, Apptainer and gVisor backends, more chat gateways, Honcho and Home Assistant |
 | <img alt="Experimental" src="assets/readme/status-experimental.svg" height="24"> | Desktop computer use, virtual desktops and subagents with their own desktop |
 | <img alt="Not claimed" src="assets/readme/status-not-claimed.svg" height="24"> | Production readiness for untrusted code without OS isolation, results with paid frontier models, a hosted service, a published Terminal-Bench or SWE-bench score |
 

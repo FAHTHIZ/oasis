@@ -114,7 +114,8 @@ performance claim.
 | macOS Seatbelt profile | Released; unit-tested only | [Execution backends](EXECUTION-BACKENDS.md) |
 | Podman, SSH remote machines | Released, lightly tested | [Execution backends](EXECUTION-BACKENDS.md) |
 | Daytona and Modal cloud sandboxes, Apptainer/Singularity, gVisor (`runsc`) runtime | Released, lightly tested | [Execution backends](EXECUTION-BACKENDS.md) |
-| Built-in Chrome browser tool over CDP (`--chrome`), with session recordings | Released, lightly tested | [User guide](USER-GUIDE.md) |
+| Built-in browser tool over CDP (`--browser`), with session recordings | Released, lightly tested | [Browser](BROWSER.md) |
+| Obscura as the default browser engine, with automatic fallback to Chrome | On `main`, pending release | [Browser](BROWSER.md) |
 | Desktop computer use (`--computer-use`) on Linux, macOS and Windows | Experimental | [Computer use](COMPUTER_USE.md) |
 
 ## Models and integrations
@@ -156,11 +157,12 @@ performance claim.
 | Limitation | Why | Workaround |
 | --- | --- | --- |
 | No tuning for one model family | OASIS works across many providers, so prompts and tool schemas cannot be tuned for a single vendor's models the way a vendor's own agent can. | `oasis connect` tests candidate models with a real tool call and keeps the first that works. |
-| Few real-world hours | The automated suite is large (more than 3,700 tests), but the user base is small, so edge cases surface more slowly. | Report problems in [Issues](https://github.com/FAHTHIZ/oasis/issues). |
+| Few real-world hours | The automated suite is large (more than 4,300 tests), but the user base is small, so edge cases surface more slowly. | Report problems in [Issues](https://github.com/FAHTHIZ/oasis/issues). |
 | Edits are applied without asking in `default` mode | A deliberate choice for speed; edits are checkpointed and can be rewound, and protected config paths still prompt. | Use `plan` mode, or `ask` rules for `edit_file`. |
 | Plugin cost | Each enabled plugin adds tools and prompt text. | Large MCP servers move behind `tool_search`; skills are listed by name and loaded on demand. |
 | Small local models | Small models follow long tool lists less reliably, and some local servers default to a 4,096-token window. | `oasis connect http://localhost:11434` creates a 32K-window `-oasis` copy of an Ollama model. |
-| Core size | `src/agent.mjs` (about 4,200 lines) and `src/cli.mjs` (about 3,900 lines) are still large. | Splitting continues; provider retry, request shaping, budgets, turn guards, compaction and tool results are already separate modules. |
+| Core size | `src/agent.mjs` (about 4,250 lines) and `src/cli.mjs` (about 3,700 lines) are still large. | Splitting continues; provider retry, request shaping, budgets, turn guards, history compaction (`src/agent-compaction.mjs`), command-line flags (`src/cli-flags.mjs`) and tool results are already separate modules. |
+| Browser engine trade-offs | Obscura, the default engine, is much lighter than Chrome but slower on image-heavy pages, and some sites refuse it. | Bot checks and pages it cannot load fall back to Chrome by themselves; `OASIS_BROWSER_ENGINE=chrome` always uses Chrome. See [Browser](BROWSER.md#obscura-limitations-and-what-oasis-does-about-them). |
 
 Development evidence (benchmarks, real-model runs and their limits) lives in
 [docs/development](development/BENCHMARKS.md), not in this status page.

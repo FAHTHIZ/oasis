@@ -8,14 +8,28 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 - OASIS Route is now a first-party built-in gateway provider on `main`: `oasis setup` offers it by name, the registry uses `OASIS_ROUTE_API_KEY` at `http://127.0.0.1:8081/v1`, and the service remains independently deployed. Released builds can use its generic OpenAI-compatible endpoint until this change ships in a release.
 - The secret shield recognizes OASIS Route's `oasis_live_` and `oasis_test_` keys, so the router's bearer credentials are masked in tool output and transcripts.
+- The browser tool runs on [Obscura](https://github.com/h4ckf0r0day/obscura), a headless engine in Rust, when it is installed, and on Chrome otherwise. Obscura starts in about 34 ms instead of 284 ms, idles at about 12 MB instead of 212 MB, and four sessions browsing at once finish in 548 ms instead of 2 s. Chrome still runs for visible windows, and a page that shows Obscura a bot check, stays empty or never loads is opened again in Chrome with the tabs and cookies carried over. See [Browser](docs/BROWSER.md).
+- `oasis browser status` and `oasis browser install` (pinned release, SHA-256 checked, atomic); `/browser` in a session; `--browser` as the new name of `--chrome`; a browser line in `oasis doctor`.
+- The browser saves downloads: clicking a download link, or the `download` action, writes the file to `.oasis/downloads/` with a safe, unique name and leaves the tab on its page.
+- New browser actions: `read` (the page as Markdown), `select`, `hover`, `back`, `forward`, `reload`, `download` and `engine` (report or switch the engine). `OASIS_BROWSER_PROFILE` keeps sign-ins between sessions.
+- `npm run bench:browser` compares the engines on launch, navigation, snapshots, screenshots, memory and parallel tabs.
 
 ### Changed
 
+- The browser speaks CDP over one WebSocket per browser with flattened sessions for its tabs, instead of one connection per tab.
+- Element refs from `snapshot` live in a page-side registry rather than DOM attributes, so pages cannot read or forge them, and the names of `select` and `textarea` elements no longer include their contents.
 - Dependencies: `@agentclientprotocol/sdk` 2.8.0, `defuddle` 0.19.7, `rrule-temporal` 2.3.0; the app's icon sprite comes from `lucide-static` 1.76.0.
 - The desktop build tools pin `minimatch` 11.0.9 past GHSA-g3hv-75wg-m249; `npm audit` in `desktop/` reports nothing.
 
 ### Fixed
 
+- Browser calls made at the same time (two tool calls in one turn) are queued instead of interleaving on one tab.
+- A browser that failed to start was left running; it is now killed and its profile removed.
+- Clearing a field before typing now tells React, Vue and similar frameworks about the change, so the old value does not come back on submit.
+- Typing with `submit: true` no longer submits a form twice when Enter already started a navigation.
+- A refused cross-origin redirect returns to the previous page instead of leaving the tab on `about:blank`.
+- A browser tab that closes rejects its pending commands at once instead of at their timeout.
+- Host checks for private addresses resolve every DNS record once per 30 seconds and share in-flight lookups, instead of resolving again on every request.
 - The browser end-to-end test no longer times out waiting for an approval when the full suite loads the CPU.
 
 ## [0.11.0] - 2026-11-24

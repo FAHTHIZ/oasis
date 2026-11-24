@@ -26,6 +26,7 @@ every guide.
 - [Terminal guide](TERMINAL.md): input prefixes, keys, permission modes, commands, scripts and CI.
 - [Interfaces](INTERFACES.md): web app, ACP editors, VS Code family, Codex App Server, Cursor Cloud Agents API, SDK, CI, chat gateways.
 - [Execution backends](EXECUTION-BACKENDS.md): where commands run: the OS sandbox, Docker or Podman, any machine over SSH, or a Daytona cloud sandbox.
+- [Browser](BROWSER.md): the agent's browser, its two engines (Obscura and Chrome), fallback, sessions, security and benchmarks.
 - [Computer use](COMPUTER_USE.md): let the agent see the screen and use the mouse and keyboard, with setup for Linux, macOS and Windows.
 - [Messaging gateways](GATEWAYS.md): Telegram, WhatsApp, Discord, Slack, Mattermost, Matrix, Signal and email setup, chat commands, typed approvals and routine delivery.
 - [Desktop app](DESKTOP.md): installers, unsigned first launch, key storage, updates, uninstall.
