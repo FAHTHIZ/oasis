@@ -146,6 +146,16 @@ test('deniedHint names the command that was not approved and the flag that allow
   assert.equal(deniedHint([]), '');
 });
 
+test('deniedHint shows a multi-line command as its first line', async () => {
+  // Seen in a -p run: a refused heredoc was printed whole inside inline backticks.
+  const { deniedHint } = await import('../src/headless.mjs');
+  const hint = deniedHint([{ tool_name: 'run_shell', tool_input: { command: "python3 - <<'PY'\nimport os\nPY" }, detail: 'Run this shell command?' }], { env: {} });
+  assert.match(hint, /`python3 - <<'PY'` \(shortened\)/);
+  assert.doesNotMatch(hint, /import os/);
+  const long = deniedHint([{ tool_name: 'run_command', tool_input: { command: 'echo', args: ['x'.repeat(300)] }, detail: 'Run?' }], { env: {} });
+  assert.match(long, /x{10}\.\.\.` \(shortened\)/);
+});
+
 test('deniedHint does not suggest auto mode to a run already in auto mode', async () => {
   // Seen in an auto-mode -p run: `python3 -m unittest discover` was refused and the hint said to use --permission-mode auto.
   const { deniedHint } = await import('../src/headless.mjs');

@@ -655,6 +655,14 @@ export function headlessSetupErrorOutput(error, outputFormat) {
 }
 
 /** One stderr paragraph for `oasis -p` naming what was not approved and the flag that allows it. */
+// A denied command as one readable line: a heredoc or long script is cut at
+// its first line, so the inline backticks around it stay intact.
+function shownCommand(line) {
+  const first = line.split(/\r?\n/)[0];
+  const cut = first.length > 120 ? first.slice(0, 117) + '...' : first;
+  return '`' + cut.replace(/`/g, "'") + '`' + (cut !== line ? ' (shortened)' : '');
+}
+
 export function deniedHint(denied, { env = process.env, mode = '' } = {}) {
   const commands = [];
   const tools = [];
@@ -692,7 +700,7 @@ export function deniedHint(denied, { env = process.env, mode = '' } = {}) {
   }
   if (!commands.length && !tools.length && !protectedRules.length) return '';
   const shownRules = rules.slice(0, 3);
-  const head = '\nNot approved in this run (nobody can approve in -p mode): ' + [...commands.map((line) => '`' + line + '`'), ...tools, ...protectedRules.map((rule) => rule.replace(/\((.*)\)$/, ' `$1`'))].slice(0, 6).join(', ') + '.\n';
+  const head = '\nNot approved in this run (nobody can approve in -p mode): ' + [...commands.map(shownCommand), ...tools, ...protectedRules.map((rule) => rule.replace(/\((.*)\)$/, ' `$1`'))].slice(0, 6).join(', ') + '.\n';
   const protectedNote = protectedRules.length ? (protectedRules.length > 1 ? 'Those are protected configuration files, which ask' : 'That is a protected configuration file, which asks') +
     ' even with --yes, --full-auto or --permission-mode auto. To allow next time: --allowedTools "' + protectedRules.slice(0, 3).join(',') + '" (a rule naming the path) or OASIS_ALLOW_CONFIG_EDITS=1.\n' : '';
   if (!commands.length && !tools.length) return head + protectedNote;
@@ -702,7 +710,7 @@ export function deniedHint(denied, { env = process.env, mode = '' } = {}) {
 function deniedAdvice({ tools, shownRules, unrulable, highRisk, env, mode = '' }) {
   // Auto mode was already on: its classifier was unsure, so only a rule helps.
   const auto = mode === 'auto';
-  const noRule = unrulable.length ? 'A permission rule cannot pre-approve ' + unrulable.slice(0, 3).map((line) => '`' + line + '`').join(', ') +
+  const noRule = unrulable.length ? 'A permission rule cannot pre-approve ' + unrulable.slice(0, 3).map(shownCommand).join(', ') +
     ' (shell redirects, substitutions or a high-risk shell line always need a person); run ' + (unrulable.length > 1 ? 'them' : 'it') + ' yourself, or ask for plain commands without shell syntax.\n' : '';
   if (!shownRules.length) return noRule + (unrulable.length && !tools.length ? '' : 'To allow next time: --allowedTools' + (auto ? ' or --yes' : ', --yes or --permission-mode auto') + '.\n');
   // Inline code, wrappers and the like ask even with --full-auto or --yes; only an allow rule lets them run.
