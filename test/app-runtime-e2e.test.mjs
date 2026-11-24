@@ -179,7 +179,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   // command, which the app's own approval sheet asks about.
   await waitFor(page, type('Build a counter web app in index.html'));
   await waitFor(page, submit, { label: 'submit the message box', timeout: 20000 });
-  await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval sheet for the command', timeout: 30000 });
+  await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval sheet for the command' });
   assert.match(await evaluate(page, `document.querySelector('#approvalSummary .approval-command').textContent`), /^node -e/);
   assert.equal(await evaluate(page, `document.querySelector('#approvalSummary .risk-badge') ? 'risky' : 'plain'`), 'risky');
   assert.equal(await evaluate(page, `!document.getElementById('approvalInstead').hidden && document.getElementById('denyButton').textContent`), 'Deny', 'a running task can be told what to do instead');
@@ -191,7 +191,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   const frozen = await evaluate(page, clockText);
   await waitFor(page, `${clockText} !== ${JSON.stringify(frozen)}`, { label: 'the clock keeps counting while waiting', timeout: 4000 });
   await click(page, 'allowButton');
-  await waitFor(page, `!${busy} && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'runtime task finished', timeout: 40000 });
+  await waitFor(page, `!${busy} && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'runtime task finished' });
   assert.match(await readFile(path.join(root, 'index.html'), 'utf8'), /Counter/, 'the file was written on disk');
   assert.equal(await evaluate(page, `document.querySelectorAll('.tool').length`), 4, 'one card per tool call');
   assert.equal(await evaluate(page, `[...document.querySelectorAll('.tool')].at(-1).className`), 'tool ok', 'the approved command ran');
@@ -218,7 +218,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   // 6. Typing while OASIS works adds a note to the running task.
   await waitFor(page, type('Run a slow check'));
   await waitFor(page, submit, { label: 'submit the message box', timeout: 20000 });
-  await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval for the slow check', timeout: 30000 });
+  await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval for the slow check' });
   await waitFor(page, type('use tabs please'));
   assert.equal(await evaluate(page, `document.body.classList.contains('steering') && document.getElementById('sendButton').getAttribute('aria-label')`), 'Send to the running task');
   await waitFor(page, submit, { label: 'submit the message box', timeout: 20000 });
@@ -236,7 +236,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
     await evaluate(page, `document.querySelector('.tool.waiting .step-ask .step-allow').click(); true`);
   }
   await waitFor(page, `document.getElementById('approvalSheet').hidden && !document.querySelector('.step-ask')`, { label: 'Allow answered the approval' });
-  await waitFor(page, `!${busy} && /noted: use tabs/.test(document.getElementById('transcript').textContent)`, { label: 'the running task read the note', timeout: 30000 });
+  await waitFor(page, `!${busy} && /noted: use tabs/.test(document.getElementById('transcript').textContent)`, { label: 'the running task read the note' });
   assert.equal(await evaluate(page, `[...document.querySelectorAll('.msg.user.steer')].some((m) => /use tabs please/.test(m.textContent)) && document.getElementById('pendingInputs').hidden`), true, 'once read, the note joins the chat where the agent read it');
 
   // 7. A pasted screenshot goes to the model as an image.
@@ -245,7 +245,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await waitFor(page, type('What is in this screenshot?'));
   await shot('7-image');
   await waitFor(page, submit, { label: 'submit the message box', timeout: 20000 });
-  await waitFor(page, `!${busy} && /I can see your image \\(data:image\\/png;base64/.test(document.getElementById('transcript').textContent)`, { label: 'the model received the image', timeout: 30000 });
+  await waitFor(page, `!${busy} && /I can see your image \\(data:image\\/png;base64/.test(document.getElementById('transcript').textContent)`, { label: 'the model received the image' });
   assert.equal(await evaluate(page, `document.querySelectorAll('#attachments .attachment').length + ':' + document.querySelectorAll('.msg.user .thumbs img').length`), '0:1', 'the image moved into the sent message');
   await shot('7-image-sent');
 
@@ -283,14 +283,14 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await waitFor(page, `Boolean(document.getElementById('input')) && !${busy}`, { label: 'app ready after reload' });
   await waitFor(page, type('!node -e "console.log(6 * 7)" | cat'));
   await waitFor(page, submit, { label: 'submit the message box', timeout: 20000 });
-  await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval for the ! command', timeout: 30000 });
+  await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval for the ! command' });
   assert.match(await evaluate(page, `document.querySelector('#approvalSummary').textContent`), /node/);
   await click(page, 'allowButton');
-  await waitFor(page, `!${busy} && [...document.querySelectorAll('.tool')].at(-1).className === 'tool ok' && /42/.test([...document.querySelectorAll('.tool')].at(-1).textContent)`, { label: 'the ! command ran and its output is shown', timeout: 30000 });
+  await waitFor(page, `!${busy} && [...document.querySelectorAll('.tool')].at(-1).className === 'tool ok' && /42/.test([...document.querySelectorAll('.tool')].at(-1).textContent)`, { label: 'the ! command ran and its output is shown' });
   await shot('8-shell');
   await waitFor(page, type('What did that print?'));
   await waitFor(page, submit, { label: 'submit the message box', timeout: 20000 });
-  await waitFor(page, `!${busy} && /Your command printed 42\\./.test(document.getElementById('transcript').textContent)`, { label: 'the next message carried the command output', timeout: 30000 });
+  await waitFor(page, `!${busy} && /Your command printed 42\\./.test(document.getElementById('transcript').textContent)`, { label: 'the next message carried the command output' });
 
   // 11. Opening the terminal panel asks first. No task is waiting on that
   // approval, so there is no "tell OASIS instead" box for terminal keystrokes
@@ -300,12 +300,12 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, `document.querySelector('[data-panel-tab="terminal"], #terminalTab, [aria-controls="terminalView"]')?.click(); true`);
   await waitFor(page, `Boolean(document.getElementById('terminalStart')) && !document.getElementById('terminalView').hidden`, { label: 'terminal panel open', timeout: 15000 });
   await click(page, 'terminalStart');
-  await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval to open the terminal', timeout: 30000 });
+  await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval to open the terminal' });
   assert.match(await evaluate(page, `document.getElementById('approvalSummary').textContent`), /interactive terminal/);
   assert.deepEqual(await evaluate(page, `[document.getElementById('approvalInstead').hidden, document.getElementById('approvalInstead').value, document.getElementById('denyButton').textContent, document.activeElement && document.activeElement.id]`).then((v) => v.slice(0, 3)), [true, '', 'Deny']);
   assert.notEqual(await evaluate(page, `document.activeElement && document.activeElement.id`), 'approvalInstead');
   await click(page, 'allowButton');
-  await waitFor(page, `/running/.test(document.getElementById('terminalStatus').textContent)`, { label: 'terminal running after Allow', timeout: 30000 });
+  await waitFor(page, `/running/.test(document.getElementById('terminalStatus').textContent)`, { label: 'terminal running after Allow' });
   await click(page, 'terminalStop');
 
   assert.deepEqual(errors, [], 'no uncaught errors in the app');
