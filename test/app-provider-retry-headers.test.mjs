@@ -59,3 +59,24 @@ test('OpenRouter attribution headers are restricted to actual OpenRouter hosts',
   assert.equal(sent['HTTP-Referer'], 'https://fahthiz.github.io/oasis/');
   assert.equal(sent['X-Title'], 'OASIS');
 });
+
+
+test('stream usage options are based on the URL host, not a substring', async () => {
+  for (const baseURL of ['http://localhost:11434/v1', 'http://127.0.0.1:8080/v1', 'http://[::1]:8080/v1']) {
+    let body;
+    await chat({ ...config, baseURL }, {
+      messages: [{ role: 'user', content: 'x' }],
+      fetchImpl: async (_url, options) => { body = JSON.parse(options.body); return ok(); }
+    });
+    assert.equal(body.stream_options, undefined, baseURL);
+  }
+
+  for (const baseURL of ['https://localhost.attacker.test/v1', 'https://api.example.test/localhost/v1']) {
+    let body;
+    await chat({ ...config, baseURL }, {
+      messages: [{ role: 'user', content: 'x' }],
+      fetchImpl: async (_url, options) => { body = JSON.parse(options.body); return ok(); }
+    });
+    assert.deepEqual(body.stream_options, { include_usage: true }, baseURL);
+  }
+});
