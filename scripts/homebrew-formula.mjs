@@ -4,7 +4,7 @@
 // after `brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis`.
 // The release workflow runs this after publishing and commits the result to
 // main; it can also be run by hand:
-//   node scripts/homebrew-formula.mjs --version 1.1.0 --source-sha <sha256 of the tag tarball>
+//   node scripts/homebrew-formula.mjs --version 0.11.0 --source-sha <sha256 of the tag tarball>
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
