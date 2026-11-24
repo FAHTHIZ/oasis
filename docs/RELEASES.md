@@ -10,11 +10,12 @@ Releases are published on [GitHub Releases](https://github.com/FAHTHIZ/oasis/rel
 | --- | --- |
 | macOS, Linux | `curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh \| sh` |
 | Windows (PowerShell) | `irm https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.ps1 \| iex` |
+| Android (Termux, experimental) | [Termux quick start](ANDROID-TERMUX.md) · `curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh \| sh` |
 | Homebrew | `brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis && brew install fahthiz/oasis/oasis-cli` |
 | Release tarball | `npm install --global ./oasis-oss-<version>.tgz` |
 | From source | `git clone https://github.com/FAHTHIZ/oasis.git && cd oasis && npm install && npm install --global .` |
 
-All methods need Node.js 22.19 or newer and Git.
+The release installers and Homebrew require Node.js 22.19 or newer. Git is required for the from-source checkout, but not for the release installers or Homebrew; the POSIX installer may use Git as a fallback when GitHub's release APIs are unavailable. Termux on Android is experimental; see [Android / Termux](ANDROID-TERMUX.md).
 
 ## Verify a download
 

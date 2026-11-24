@@ -20,6 +20,7 @@ performance claim.
 | --- | --- |
 | Linux | Verified by automated tests and live runs |
 | Windows and macOS | Tested in CI (security and runtime regression tests, installer scripts), not by hand |
+| Android (Termux) | Experimental: the installer has a Termux-aware Node.js bootstrap and a manual smoke test; Android is not in the CI matrix |
 | Desktop installers for all three | Built in CI; not yet code-signed |
 
 ## Core runtime

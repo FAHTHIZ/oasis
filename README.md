@@ -154,11 +154,12 @@ curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.
 | Method | Command |
 | --- | --- |
 | Windows (PowerShell) | `irm https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.ps1 \| iex` |
+| Android (Termux, experimental) | [Termux quick start](docs/ANDROID-TERMUX.md) · `curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh \| sh` |
 | Homebrew | `brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis && brew install fahthiz/oasis/oasis-cli` |
 | From source | `git clone https://github.com/FAHTHIZ/oasis.git && cd oasis && npm install && npm install --global .` |
 | Desktop app | Installers for Windows, macOS and Linux on [GitHub Releases](https://github.com/FAHTHIZ/oasis/releases) (not yet code-signed, see [Desktop](docs/DESKTOP.md)) |
 
-One package gives you the terminal, the web app and every other interface below. It needs Node.js 22.19+ and Git. The install scripts take the latest stable release, ask before changing anything, and finish with `oasis doctor`. Every release ships the npm tarball, the desktop installers and a `SHA256SUMS` file. See [Downloads and releases](docs/RELEASES.md).
+One package gives you the terminal, the web app and every other interface below. The release installers need Node.js 22.19+; Git is optional for those installs and is needed for the from-source checkout (the POSIX installer can also use Git as a release-resolution fallback). Android installation through Termux is experimental; the installer can offer `pkg install nodejs` when Node.js is missing. The install scripts take the latest stable release, ask before changing anything, and finish with `oasis doctor`. Every release ships the npm tarball, the desktop installers and a `SHA256SUMS` file. See [Downloads and releases](docs/RELEASES.md).
 
 </details>
 

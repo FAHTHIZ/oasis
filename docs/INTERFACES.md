@@ -84,7 +84,7 @@ Use `oasis -p` or `oasis exec` for non-interactive runs and `oasis doctor` to ch
 
 `oasis exec --json` prints the Codex exec JSONL event stream (`thread.started`, `item.*`, `turn.completed`), so the OpenAI Codex TypeScript SDK can drive OASIS with `codexPathOverride` pointing at the `oasis` binary. Thread ids are OASIS session ids; `resume THREAD_ID` continues one. See CHANGELOG for the item and `--config` mapping.
 
-Android users who want the CLI on the device itself can run it in Termux with Node.js 22.19 or newer and Git.
+Android users can run the CLI on-device in Termux, but this path is experimental and is not a native Android app. Use the [Termux quick start](ANDROID-TERMUX.md); the POSIX installer offers `pkg install nodejs` when Node.js 22.19 or newer is missing. Git is optional for that release-install path and is needed only for a source checkout or Git-backed project features.
 
 ## Downloads
 
