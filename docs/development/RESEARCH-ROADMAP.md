@@ -8,7 +8,7 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### Effect contracts and the intent journal
 
-- Commit: `f00fbd77`. Docs: [Effects](../EFFECTS.md), [Durable execution](../DURABLE-EXECUTION.md).
+- Commit: `7a7272d8`. Docs: [Effects](../EFFECTS.md), [Durable execution](../DURABLE-EXECUTION.md).
 - Problem: shell commands were a blind spot. `/rewind` undid tool edits but not what `sed -i`, a formatter or a generator changed, and after a crash nobody knew whether the action that was running had happened.
 - Prior art: Claude Code and Codex checkpoints restore tool edits and the conversation, not shell effects ([Claude Code checkpointing](https://code.claude.com/docs/en/checkpointing), [Codex discussion](https://github.com/openai/codex/discussions/9618)). Workflow engines record activity results and require idempotent activities ([Temporal](https://docs.temporal.io/activities), [Restate](https://docs.restate.dev/concepts/durable_execution)); write-ahead logging comes from databases ([ARIES](https://dl.acm.org/doi/10.1145/128765.128770)).
 - New: every non-read-only command is bracketed by Git tree snapshots written through a private index and object store, so the observed effects are exact and rewindable without touching the user's repository; a write-ahead intent journal records probes per action, and after a crash each in-doubt action is resolved by observing its targets ("observe and decide") instead of retry-and-hope.
@@ -16,7 +16,7 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### Supply chain: SBOM, provenance attestations and reproducible packs
 
-- Commit: `1b4a5e30`. Docs: [Downloads and releases](../RELEASES.md).
+- Commit: `0afe47b0`. Docs: [Downloads and releases](../RELEASES.md).
 - Problem: release artifacts had checksums but no statement of what they contain or how they were built.
 - Prior art: [SLSA provenance](https://slsa.dev/spec/v1.0/provenance), [in-toto attestations](https://github.com/in-toto/attestation), [GitHub artifact attestations](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations).
 - New for OASIS: a deterministic CycloneDX 1.6 SBOM generated from the lockfile, signed build provenance for the tarball and SBOM via [actions/attest](https://github.com/actions/attest) pinned by commit, and a check that two packs of the same commit are byte-identical.
@@ -24,14 +24,14 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### Verified updates
 
-- Commit: `0a8b77f2`. Docs: [What `oasis update` checks](../RELEASES.md#what-oasis-update-checks).
+- Commit: `5c3b0155`. Docs: [What `oasis update` checks](../RELEASES.md#what-oasis-update-checks).
 - Problem: `oasis update` installed whatever the network returned.
 - New: the update downloads the release's own npm tarball, checks its SHA-256 against `SHA256SUMS`, reads `package.json` from inside the tarball to refuse downgrades or substitutions, and verifies the SLSA provenance with `gh attestation verify` pinned to the release workflow, tag and commit. A failed check installs nothing.
 - Acceptance: `test/update-verify.test.mjs` (8 tests, including the real v1.8.0 tarball, since renumbered 0.9.0). Live check against v1.8.0: checksum matched; provenance reported `unavailable` in a sandbox where `gh` could not reach Sigstore, which is the documented outcome.
 
 ### Verifier diversity
 
-- Commit: `d20c38d2`. Docs: [Task model, verifier diversity](../TASK-MODEL.md).
+- Commit: `5aed2b19`. Docs: [Task model, verifier diversity](../TASK-MODEL.md).
 - Problem: a "second look" by the same model family counted as independent review.
 - Prior art: correlated errors among LLM judges and self-preference bias ([ACM 2025](https://dl.acm.org/doi/10.5555/3780338.3781516), [arXiv 2605.29800](https://arxiv.org/html/2605.29800), [arXiv 2604.07650](https://arxiv.org/html/2604.07650)).
 - New: reviewers are scored on independence from the author (provider, family, prompt, evidence channel); a same-family review is labelled as such and does not satisfy an "independent review" gate.
@@ -39,7 +39,7 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### One trace across processes
 
-- Commit: `cbdda045`. Docs: [Trace context across processes](../CONFIGURATION.md#trace-context-across-processes).
+- Commit: `a221e141`. Docs: [Trace context across processes](../CONFIGURATION.md#trace-context-across-processes).
 - Problem: a task's spans stopped at process boundaries: a command, an MCP server and the model request each started a new trace.
 - Prior art: [W3C Trace Context](https://www.w3.org/TR/trace-context/), [OpenTelemetry environment carriers](https://opentelemetry.io/docs/specs/otel/context/env-carriers/), [MCP SEP-414 request `_meta`](https://modelcontextprotocol.io/seps/414-request-meta), [GenAI span conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/gen-ai-spans.md).
 - New: `TRACEPARENT` is passed to every spawned command, `_meta.traceparent` to MCP `tools/call`, the `traceparent` header to model requests, and `oasis mcp serve` continues the caller's trace. `OASIS_OTEL_ENV_CONTEXT=parent|link|off` chooses parent or link semantics ([discussion](https://github.com/open-telemetry/opentelemetry-specification/issues/5398)).
@@ -47,7 +47,7 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### Fault injection and the reliability laboratory
 
-- Commit: `ed8c1f7d`. Docs: [Reliability laboratory](../RELIABILITY-LAB.md).
+- Commit: `b2cc54e5`. Docs: [Reliability laboratory](../RELIABILITY-LAB.md).
 - Problem: recovery code was tested one path at a time; nobody measured whether a task survives realistic failures without duplicating side effects.
 - Prior art: [Principles of chaos engineering](https://principlesofchaos.org/), [Netflix chaos engineering](https://netflixtechblog.com/tagged/chaos-engineering).
 - New: `OASIS_FAULTS` injects model and tool faults into the real agent on seeded schedules; the lab runs 15 scenarios against a reactive stand-in model in throwaway work trees and scores completion, duplicated effects and wasted requests.
@@ -56,7 +56,7 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### Command rehearsal
 
-- Commit: `937d9d97`. Docs: [Command rehearsal](../REHEARSAL.md).
+- Commit: `21141ce8`. Docs: [Command rehearsal](../REHEARSAL.md).
 - Problem: an approval prompt showed the command line only; for programs, builds and package scripts the static effect prediction can only say "broad".
 - Prior art: [binpash/try](https://github.com/binpash/try) runs a shell command over overlayfs and commits the upper layer, without network isolation and without a conflict check; tool-specific dry runs (`make -n`, `terraform plan`) cover only their tool.
 - New: before approval, the command runs once in a bubblewrap overlay with no network, no host sockets and a read-only system; the prompt lists the exact files it would create, modify and delete; after approval the real run is compared with the rehearsal and any file it changed beyond what was shown is named. `oasis rehearse --apply` lands exactly the rehearsed changes after re-checking every touched path.
@@ -64,7 +64,7 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### World drift on resume
 
-- Commit: `c2c376d9`. Docs: [World drift on resume](../CONTINUITY.md).
+- Commit: `6b8362f0`. Docs: [World drift on resume](../CONTINUITY.md).
 - Problem: a resumed session assumes the workspace is as it left it; commits, branch switches and external edits made in between are invisible to the model.
 - Prior art: Claude Code and Codex resume restore the conversation only; OASIS's `file-state.mjs` reminder is in-memory and lost when the process exits.
 - New: each save records HEAD, branch and content hashes of the files the conversation touched; resume reports new commits, branch change, rewritten history and changed known files to the user and, once, to the model.
@@ -78,7 +78,7 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 ### Rehearsal by default under the bubblewrap sandbox
 
 - Commit: see `git log -- src/rehearsal.mjs` ("Rehearse by default under the bubblewrap sandbox").
-- The roadmap item said "with `sandbox.autoAllowCommands`"; under that setting ordinary commands never prompt, so the useful default is the sandbox itself: the commands that still prompt there are the high-risk ones. Building it exposed that the shipped rehearsal read credential paths and the unscrubbed environment before approval (fixed concurrently in `aeb229fd`; this change adds the sandbox's own `denyRead` masks) and that `"rehearse"` in settings was dropped by the loader (fixed here). `test/settings-keys.test.mjs` shows a repository cannot turn it on.
+- The roadmap item said "with `sandbox.autoAllowCommands`"; under that setting ordinary commands never prompt, so the useful default is the sandbox itself: the commands that still prompt there are the high-risk ones. Building it exposed that the shipped rehearsal read credential paths and the unscrubbed environment before approval (fixed concurrently in `a8b939e2`; this change adds the sandbox's own `denyRead` masks) and that `"rehearse"` in settings was dropped by the loader (fixed here). `test/settings-keys.test.mjs` shows a repository cannot turn it on.
 
 ### Apply the rehearsal
 
@@ -124,7 +124,7 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 
 ### Canary credential
 
-- Commits: `64a5502e` (environment decoy and tripwire) and the decoy-files commit after it. Docs: [Security model](../SECURITY.md#controls-oasis-enforces).
+- Commits: `0bd2a6c9` (environment decoy and tripwire) and the decoy-files commit after it. Docs: [Security model](../SECURITY.md#controls-oasis-enforces).
 - Problem: OASIS removes real credentials from command environments and hides any it sees in output, so an injected page has nothing real to steal, but OASIS also had no way to notice that something tried. The injection guard flags text that reads like instructions; an attack phrased as ordinary data passed it silently.
 - Prior art: canary tokens plant decoy AWS keys and URLs that alert when used ([Thinkst Canarytokens](https://github.com/thinkst/canarytokens/)); Rebuff adds a canary word to prompts to detect prompt leakage ([Rebuff](https://github.com/protectai/rebuff)); red-team tools mint inert canaries and match them in an agent's tool calls in base64, hex or URL encoding during an assessment ([Dreadnode](https://docs.dreadnode.io/ai-red-teaming/how-to/honeytoken-probing/)); research on agent credential exfiltration explicitly leaves credentials in structured tool-call arguments out of scope ([arXiv 2606.04141](https://arxiv.org/html/2606.04141)).
 - New: the decoy is built into the runtime and checked inline at the tool-call boundary, before execution, on every call, rather than alerting after use or during a test. Because the real credentials are already scrubbed, the decoy is the only credential a command can see, so any dump of the environment includes it. A trip refuses the call and puts the rest of the turn under the existing injection hold, so it also stops attacks that read as data.
