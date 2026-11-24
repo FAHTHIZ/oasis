@@ -174,7 +174,7 @@ export const BADGE_ROWS = [
 export const STATUS_PILLS = [
   { id: 'stable', text: 'stable', color: GREEN, glow: true },
   { id: 'lightly-tested', text: 'released, lightly tested', color: LIME },
-  { id: 'unreleased', text: 'unreleased (main)', color: '#FBBF24' },
+  { id: 'experimental', text: 'experimental', color: '#FBBF24' },
   { id: 'not-claimed', text: 'not claimed', color: '#6B7D71' },
 ];
 
