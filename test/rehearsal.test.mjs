@@ -284,7 +284,9 @@ test('apply is not offered for a failing rehearsal, a no-op or a high-risk comma
   await runWorkspaceCommand(root, await script(root, 'fail.sh', 'echo x > out.txt; exit 3'), [], options);
   await runWorkspaceCommand(root, await script(root, 'noop.sh', 'true'), [], options);
   await runWorkspaceCommand(root, 'python3', ['-c', 'open("p.txt","w").write("x")'], options);
-  assert.deepEqual(offers, [null, null, null]);
+  assert.deepEqual(offers.map((extra) => Boolean(extra && extra.rehearsal)), [false, false, false]);
+  // A high-risk command is not witnessed either (test/witnessed-run.test.mjs).
+  assert.equal(offers[2], null);
 });
 
 test('the agent turns an "apply the rehearsal" answer into a single landed change', { skip }, async (t) => {

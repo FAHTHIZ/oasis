@@ -37,6 +37,14 @@ It is offered only when the rehearsal exited 0, changed at least one file, wrote
 
 The app's approval card has the same answer as an **Apply rehearsal** button, shown only when the agent offered it. The web server sends `rehearsal: true` with `approval_required`, and the card answers with `{ "approved": true, "rehearsal": true }` on `POST /api/jobs/<id>/approval`; a rehearsal answer to an approval that did not offer one counts as a plain yes. The rehearsal's result (exit code and the files it would create, modify or delete) and the reason a command is high risk are part of the approval text in both the terminal and the app.
 
+## Witnessed runs in auto mode
+
+In `auto` mode, a command the classifier is unsure about (or cannot judge because it timed out or failed) used to wait for a person, and in `oasis -p` there is none, so it was simply not run. Now OASIS watches instead of guessing: the command runs once as a rehearsal. If everything it did stayed in the workspace, that rehearsal is the run. Its output and exit code go back to the model, exactly the file changes it was seen to make are applied (with the same conflict check as "Apply the rehearsal"), and the command never runs outside the rehearsal. A failing test run counts: its failure is the result.
+
+The rehearsal stands in for the run only when it finished in time (the command's own `timeoutSeconds`), tried to reach no server, wrote nothing outside the workspace, left `.git` alone, changed at most 200 paths and none of them is a protected configuration file (settings, hooks, MCP and plugin files, instruction files). Otherwise a person decides as before, and the approval (or the `oasis -p` summary) says what the rehearsal saw, for example "Auto mode's check was not sure (unclear what count.js does; its rehearsal tried to reach example.com), so it was not run." Files the command left in `/tmp` are named and reported as discarded, since the rehearsal's `/tmp` is private.
+
+It applies to `run_command` and to `run_shell` under the bubblewrap sandbox (without a sandbox, shell lines always reach a person), never to high-risk commands, commands held for suspected prompt injection, background or interactive commands, commands headed to SSH, a container or the editor's terminal, or after auto mode paused itself for repeated blocks. The auto-mode log records it as rule "Witnessed run". Turn it off with `"autoMode": { "witness": false }` in user settings; a project's settings may turn it off but not on. `OASIS_REHEARSE=0` turns off every rehearsal, witnessed runs included. Source: `witnessRun` in `src/rehearsal.mjs`; tests in `test/witnessed-run.test.mjs`.
+
 ## By hand: `oasis rehearse`
 
 ```sh
@@ -106,7 +114,7 @@ Git settings passed in the environment (`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`)
 
 - Effects outside the file system are not rehearsed: the network is off, so a command that downloads fails in rehearsal (the prompt says so and names the servers it tried, see above) and a command that talks to a server has not talked to it.
 - Writes outside the workspace are refused in rehearsal (read-only); the prompt says when the command tried. The real run may succeed there.
-- A command can still read files the user can read. Without network or sockets it cannot send them anywhere during the rehearsal, but rehearsal does run unapproved code, which is why it is off by default. With rehearsal on, treat the approval prompt as "run this, isolated, then decide", the same trust boundary as `sandbox.autoAllowCommands` with the OS sandbox.
+- A command can still read files the user can read (credential files and secret variables are hidden). A witnessed run returns its output to the model, so in auto mode an unsure command can show the model a file outside the workspace; it cannot send it anywhere else. Without network or sockets it cannot send them anywhere during the rehearsal, but rehearsal does run unapproved code, which is why it is off by default. With rehearsal on, treat the approval prompt as "run this, isolated, then decide", the same trust boundary as `sandbox.autoAllowCommands` with the OS sandbox.
 - Non-deterministic commands can differ between rehearsal and the real run; the divergence check catches the file-level difference, not differences in content.
 - Large copy-ups cost what they cost: modifying a 1 GB file copies it into the upper layer.
 

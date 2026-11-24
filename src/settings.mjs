@@ -722,7 +722,7 @@ export async function loadSettings(root, options = {}) {
     // Claude Code's autoCompactEnabled: false turns automatic compaction off.
     if (typeof settings.autoCompactEnabled === 'boolean') result.autoCompactEnabled = settings.autoCompactEnabled;
     // Auto mode classifier. Claude Code's schema { environment, allow, soft_deny, hard_deny } (each
-    // replaces the defaults unless it lists "$defaults"), plus Oasis's { model, rules, classifyAllShell }.
+    // replaces the defaults unless it lists "$defaults"), plus Oasis's { model, rules, classifyAllShell, witness }.
     // Like Claude Code, shared project settings cannot loosen the classifier: from project/local scopes
     // only extra soft_deny/hard_deny entries and rules are used.
     if (settings.autoMode && typeof settings.autoMode === 'object') {
@@ -733,6 +733,8 @@ export async function loadSettings(root, options = {}) {
       // A longer wait only changes how long a check may take, not what it allows.
       if (personal && Number.isFinite(Number(settings.autoMode.timeoutSeconds)) && Number(settings.autoMode.timeoutSeconds) > 0) result.autoMode.timeoutSeconds = Math.min(600, Number(settings.autoMode.timeoutSeconds));
       if (typeof settings.autoMode.classifyAllShell === 'boolean' && (personal || settings.autoMode.classifyAllShell)) result.autoMode.classifyAllShell = settings.autoMode.classifyAllShell;
+      // Witnessed runs (an unsure verdict rehearses the command): a project may only turn them off.
+      if (typeof settings.autoMode.witness === 'boolean' && (personal || !settings.autoMode.witness)) result.autoMode.witness = settings.autoMode.witness;
       for (const section of ['environment', 'allow', 'soft_deny', 'hard_deny']) {
         const list = settings.autoMode[section];
         if (!Array.isArray(list)) continue;

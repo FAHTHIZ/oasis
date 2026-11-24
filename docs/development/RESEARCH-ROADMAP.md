@@ -166,6 +166,15 @@ The rule for an entry: it must close a gap OASIS had, not rename something it al
 - Acceptance: an `.oasis-plugin` plugin and marketplace install, validate and expand all variable names; a Cursor plugin's rule becomes a skill with its globs, its `mcp.json` server starts from the plugin folder, its Claude-named hook loads and its Cursor hook is reported; a Copilot plugin's `.github/mcp.json` and root skill load and its hook is reported; a Kiro power's guide and steering files become one skill; Cursor and Copilot marketplaces list and install a picked plugin and skip entries outside the repository. `test/universal-plugins.test.mjs`.
 - Limit: Cursor and Copilot hooks do not run. Remote (non-local) entries in Cursor and Copilot marketplaces are skipped.
 
+### Witnessed runs
+
+- Commit: see `git log -- test/witnessed-run.test.mjs` ("Auto mode settles an unsure verdict by watching the command"). Docs: [Command rehearsal](../REHEARSAL.md#witnessed-runs-in-auto-mode).
+- Problem: found by using OASIS as a user. In an `oasis -p --permission-mode auto` run, the agent wrote a unit test that started its own script with `subprocess`; the classifier was unsure, nobody could approve, and the tests never ran, so the answer shipped with a failing test it had not seen. A classifier judges a command from its text; when the text is not enough it can only guess or ask.
+- Prior art: permission classifiers decide from the action's description (Claude Code's auto mode, OASIS's `src/auto-mode.mjs`); dynamic analysis sandboxes such as Cuckoo run a sample and report its behaviour, for a human analyst, after the fact; [try](https://github.com/binpash/try) runs a command over an overlay and lets a person commit it.
+- New: the uncertainty itself triggers execution in isolation, and the observed behaviour, not a prediction, settles it: a rehearsal that stayed in the workspace becomes the run, its output returned and its exact changes applied with a conflict check, so the command is never executed twice and never outside the overlay. Only the unsure middle is affected; allow and block verdicts and high-risk commands are unchanged.
+- Acceptance: a script that appends a line runs once in total and nobody is asked; a script that writes outside the workspace reaches a person with the rehearsal's finding in the reason and nothing kept; `/tmp` leftovers are reported as discarded; network attempts, `.git` changes, protected configuration files, timeouts and more than 200 paths are refused; it can be turned off, a project can only turn it off, and high-risk commands never use it; `run_shell` under the bubblewrap sandbox gets it too. Live (free hosted endpoint, `openai` model): rerunning that project's tests in auto mode, the classifier timed out, the rehearsal settled it, and the agent received the real failing test instead of a refusal. `test/witnessed-run.test.mjs`.
+- Limit: Linux with bubblewrap overlay support only (macOS rehearsal is still on the roadmap); a command that needs the network fails its rehearsal and goes to a person; reads outside the workspace are not observed.
+
 ## Examined and not built
 
 | Direction | Finding | Decision |
