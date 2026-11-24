@@ -121,7 +121,8 @@ performance claim.
 
 | Capability | Status | Where to read more |
 | --- | --- | --- |
-| OpenAI-compatible endpoints, Anthropic, Gemini, OpenRouter and local servers (Ollama, LM Studio, llama.cpp, vLLM, Jan) | Stable | [Configuration](CONFIGURATION.md#model-providers) |\n| First-party OASIS Route provider and setup preset, plus OmniRoute and FreeLLMAPI entries | On `main`, pending release; generic endpoint works in released builds | [Configuration](CONFIGURATION.md#oasis-route-gateway) |
+| OpenAI-compatible endpoints, Anthropic, Gemini, OpenRouter and local servers (Ollama, LM Studio, llama.cpp, vLLM, Jan) | Stable | [Configuration](CONFIGURATION.md#model-providers) |
+| First-party OASIS Route provider and setup preset, plus OmniRoute and FreeLLMAPI entries | On `main`, pending release; generic endpoint works in released builds | [Configuration](CONFIGURATION.md#oasis-route-gateway) |
 | Bedrock, Vertex AI, Azure AI Foundry | Released, lightly tested | [Configuration](CONFIGURATION.md#model-providers) |
 | Fallback models, task-aware routing, zero-budget mode and spend limits | Released, lightly tested | [Inference](INFERENCE.md) |
 | MCP client (stdio, HTTP, SSE, OAuth, elicitation, MCP Tasks) and the MCP Registry | Stable | [Extending OASIS](EXTENDING.md) |
