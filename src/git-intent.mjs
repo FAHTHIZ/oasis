@@ -4,6 +4,8 @@
 // Opt out with settings.allowUnrequestedGitWrites or
 // OASIS_ALLOW_UNREQUESTED_GIT_WRITES=1.
 
+import { multilingualForbidsChanges } from './multilingual-signals.mjs';
+
 const ACTIONS = [
   { action: 'commit', pattern: /\bgit\s+(?:-c\s+\S+\s+)*commit\b/, intent: /\b(?:commit|commits|committing|committed|amend|ship|check\s*in)\b/i },
   { action: 'push', pattern: /\bgit\s+(?:-c\s+\S+\s+)*push\b/, intent: /\b(?:push|pushing|publish|ship|release|deploy|upload|upstream|pull\s+request|merge\s+request|pr)\b/i },
@@ -62,9 +64,14 @@ const READ_ONLY_REQUEST = /\b(?:read[- ]only\s+(?:task|request|please|review|che
 // for the whole request.
 const CONDITIONAL = /\b(?:if|when|whenever|unless|once|otherwise|before|after|in\s+case|should)\b/i;
 
+const ENGLISH_WORDS = /\b(?:the|and|is|are|to|of|it|you|me|my|please|any|which|what|this|that|with|run|tell)\b/i;
+
 export function forbidsFileChanges(request) {
   const text = String(request || '');
   if (READ_ONLY_REQUEST.test(text)) return true;
+  // Other languages (src/multilingual-signals.mjs), unless the request reads
+  // as English, where the scoped reading above is the one to trust.
+  if (!ENGLISH_WORDS.test(text) && multilingualForbidsChanges(text)) return true;
   const pattern = new RegExp(NO_FILE_CHANGES.source, 'gi');
   for (const match of text.matchAll(pattern)) {
     const before = text.slice(0, match.index);

@@ -438,3 +438,45 @@ const ADMIT_FAIL_WORDS = compile([
 export function multilingualAdmitsFailure(text) {
   return test(ADMIT_FAIL_WORDS, String(text || '').replace(ZERO_FAILURES, ' '));
 }
+
+// "Do not change any files" in other languages (src/git-intent.mjs reads the
+// English). A change verb that is negated, in a sentence that names files or
+// "anything" and no particular path. Deliberately narrow: a false hit stops
+// the agent from editing for the whole request.
+const NO_CHANGE_VERBS = compile([
+  ...INTENT_TERMS.change,
+  sub('এডিট কর|ছোঁবে|ছুঁবে|স্পর্শ কর|লিখবে'),
+  sub('छेड़|छुओ|एडिट कर|संपादित कर'),
+  word('cambies|modifiques|toques|edites|alteres|mudes|mexa|mexas|toque|modifie|touche|touchez|édite|bearbeite|berühre|tocchi|toccare|modificare'),
+  stem('меняй|изменяй|трогай|редактируй|правь'),
+  word('ubah|sentuh|edit'),
+  sub('改动|动任何|编辑|触碰|変更し|編集し|触ら|건드리|편집하')
+]);
+const NO_CHANGE_OBJECT = compile([
+  sub('ফাইল|কিছু'), sub('फ़ाइल|फाइल|कुछ भी|कुछ'), sub('فائل|کچھ'), sub('ملف|ملفات|أي شيء|شيئا'),
+  word('archivos?|ficheros?|nada'), word('arquivos?|nada'), word('fichiers?|rien'),
+  word('dateien?|nichts|keine dateien'), word('file|nulla|niente'), stem('файл|ничего'),
+  word('dosya\\p{L}*|hiçbir şey\\p{L}*'), word('file|berkas|apa pun|apapun'),
+  sub('文件|任何东西|任何文件|ファイル|何も|파일|아무것도'), word('tệp|file|gì cả|bất cứ thứ gì')
+]);
+// Turkish negates with a verb suffix: "değiştirme", "dokunma".
+const SELF_NEGATED = /(?<![\p{L}])(?:değiştirme|dokunma|düzenleme|değiştirmeyin|dokunmayın|düzenlemeyin)(?![\p{L}])/iu;
+// German puts the negation on the object: "Ändere keine Dateien", "ändere nichts".
+// Only right after the verb and closing the clause: "ändere nichts an der
+// API" and "corrige le bug sans rien casser" do not count.
+const OBJECT_NEGATION = /^\s+(?:keine\s+dateien?|nichts|nada|rien|niente|nulla|ничего)\s*(?:$|[.,;:!?。！？])/iu;
+
+export function multilingualForbidsChanges(text) {
+  const value = String(text || '');
+  for (const sentence of value.split(/(?<=[.!?。！？।])\s*|\n/u)) {
+    if (!sentence.trim() || /[\w-]+\.[a-z0-9]{1,5}\b|[\w-]+\/[\w./-]*/i.test(sentence)) continue;
+    if (!test(NO_CHANGE_OBJECT, sentence)) continue;
+    if (SELF_NEGATED.test(sentence)) return true;
+    const pattern = NO_CHANGE_VERBS();
+    pattern.lastIndex = 0;
+    for (const match of sentence.matchAll(pattern)) {
+      if (negated(sentence, match.index, match[0].length) || OBJECT_NEGATION.test(sentence.slice(match.index + match[0].length))) return true;
+    }
+  }
+  return false;
+}
