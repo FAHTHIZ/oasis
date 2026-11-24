@@ -153,7 +153,7 @@ not collide with llama.cpp's common `8080` port.
    another provider. If you run Route on another port, set
    `OASIS_PROVIDER_OASIS_ROUTE_BASE_URL` to its `/v1` URL.
 
-Route's `free_only` policy is enforced by Route itself. OASIS `--zero-budget`
+The native `oasis-route` provider and setup choice are on OASIS `main` and will ship in its next release. Released OASIS builds can still connect through the generic custom OpenAI-compatible endpoint.\n\nRoute's `free_only` policy is enforced by Route itself. OASIS `--zero-budget`
 still treats an arbitrary gateway as unknown unless its no-billing behaviour is
 independently established; one router's policy is not proof to the other. Keep
 the development service on loopback. For production, use PostgreSQL, HTTPS and
