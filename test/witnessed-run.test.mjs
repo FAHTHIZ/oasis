@@ -84,8 +84,13 @@ test('an unsure verdict is settled by watching: the rehearsal is the run, and no
 
 test('a rehearsal that leaves the workspace goes to a person, who is told what it tried', { skip: !rehearsable && 'needs bubblewrap overlay support' }, async (t) => {
   const root = await tmp(t);
-  // The home folder is read-only in a rehearsal (/tmp is a private tmpfs, covered below).
-  const outside = path.join(os.homedir(), '.oasis-witness-test-' + process.pid);
+  // The home folder is read-only in a rehearsal (/tmp is a private tmpfs,
+  // covered below). The clean-environment CI job sets HOME=/tmp/h1, where a
+  // write lands in that tmpfs instead; use the checkout then.
+  const underTmp = (dir) => !path.relative(os.tmpdir(), dir).startsWith('..');
+  const base = [os.homedir(), process.cwd()].find((dir) => !underTmp(dir));
+  if (!base) return t.skip('the home folder and the checkout are both under ' + os.tmpdir());
+  const outside = path.join(base, '.oasis-witness-test-' + process.pid);
   t.after(() => rm(outside, { force: true }));
   await writeFile(path.join(root, 'leak.js'), 'require("fs").writeFileSync("in.txt", "1"); require("fs").writeFileSync(' + JSON.stringify(outside) + ', "1");\n');
   const { config } = await scriptedModel(t, [
