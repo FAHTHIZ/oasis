@@ -7,7 +7,7 @@ performance claim.
 
 | Label | Meaning |
 | --- | --- |
-| **Stable** | In the latest release ([v0.10.0](https://github.com/FAHTHIZ/oasis/releases/latest)), covered by automated tests and exercised in live runs on Linux. |
+| **Stable** | In the latest release ([v0.11.0](https://github.com/FAHTHIZ/oasis/releases/latest)), covered by automated tests and exercised in live runs on Linux. |
 | **Released, lightly tested** | In the latest release and covered by unit or integration tests, but with few real-world hours. Expect rough edges. |
 | **Unreleased** | Merged on `main` and tested, but not in a tagged release yet. Install from source to use it. See [Unreleased in the changelog](../CHANGELOG.md#unreleased). |
 | **Experimental** | Works, but the interface or behaviour may change, or it depends on platform pieces OASIS cannot test in CI. |
@@ -28,10 +28,10 @@ performance claim.
 | --- | --- | --- |
 | Agent turn loop, tool calls, streaming, compaction, checkpoints and `/rewind` | Stable | [Architecture](ARCHITECTURE.md) |
 | Permission modes (`plan` … `dont-ask`), shell-command risk analysis, protected paths, secret scanning | Stable | [Security model](SECURITY.md) |
-| Instruction pins: risky lines newly added to AGENTS.md, CLAUDE.md or project rules are withheld until you accept them | Unreleased | [Security model](SECURITY.md#controls-oasis-enforces) |
-| Check memory: check results kept per exact working-tree content across sessions; a different outcome on the same files is flagged as flaky or environmental | Unreleased | [Continuity](CONTINUITY.md#check-memory) |
-| Egress provenance: composed data sent to a host that only outside content named waits for a person; following links passes | Unreleased | [Security model](SECURITY.md#controls-oasis-enforces) |
-| Canary credential: a decoy token in every command environment; a tool call that carries it (also encoded) is refused and holds the turn's outbound actions | Unreleased | [Security model](SECURITY.md#controls-oasis-enforces) |
+| Instruction pins: risky lines newly added to AGENTS.md, CLAUDE.md or project rules are withheld until you accept them | Released, lightly tested | [Security model](SECURITY.md#controls-oasis-enforces) |
+| Check memory: check results kept per exact working-tree content across sessions; a different outcome on the same files is flagged as flaky or environmental | Released, lightly tested | [Continuity](CONTINUITY.md#check-memory) |
+| Egress provenance: composed data sent to a host that only outside content named waits for a person; following links passes | Released, lightly tested | [Security model](SECURITY.md#controls-oasis-enforces) |
+| Canary credential: a decoy token in every command environment; a tool call that carries it (also encoded) is refused and holds the turn's outbound actions | Released, lightly tested | [Security model](SECURITY.md#controls-oasis-enforces) |
 | Verification gate: a reply that claims success without a reviewed diff or a passing check is sent back | Stable | [Architecture](ARCHITECTURE.md) |
 | `mutation_probe`: revert check and planted bugs on the changed lines show whether the tests catch a regression in the change | Released, lightly tested | [User guide](USER-GUIDE.md#do-the-tests-catch-a-bug-in-the-change) |
 | `bisect_regression`: `git bisect` in an isolated worktree finds the first commit that broke a check, with endpoint checks and skip support | Released, lightly tested | [User guide](USER-GUIDE.md#which-commit-broke-it) |
@@ -126,7 +126,7 @@ performance claim.
 | MCP client (stdio, HTTP, SSE, OAuth, elicitation, MCP Tasks) and the MCP Registry | Stable | [Extending OASIS](EXTENDING.md) |
 | 48 built-in app connectors with an in-chat Connect card | Released, lightly tested | [Extending OASIS](EXTENDING.md) |
 | Claude Code plugins, skills, hooks and settings; Codex plugins and Gemini CLI extensions converted on install | Stable for Claude Code plugins; others released, lightly tested | [Compatibility](COMPATIBILITY.md) |
-| OASIS's own plugin manifest (`.oasis-plugin/`); Cursor and Copilot CLI plugins and marketplaces and Kiro powers installed, with unsupported parts named | Unreleased | [Compatibility](COMPATIBILITY.md#plugins-from-other-agents) |
+| OASIS's own plugin manifest (`.oasis-plugin/`); Cursor and Copilot CLI plugins and marketplaces and Kiro powers installed, with unsupported parts named | Released, lightly tested | [Compatibility](COMPATIBILITY.md#plugins-from-other-agents) |
 | `generate_image`, `text_to_speech` through OpenAI-compatible APIs | Released, lightly tested | [Configuration](CONFIGURATION.md) |
 | Honcho user modeling, Home Assistant tools, `/personality` | Released, lightly tested | [Configuration](CONFIGURATION.md) |
 | Trajectory export for training (`--compress`, `--format hermes`) | Released, lightly tested | [Compatibility](COMPATIBILITY.md#imports-and-data-formats) |
