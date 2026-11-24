@@ -38,3 +38,24 @@ test('a 409 marked x-should-retry: true is retried after the advised wait', asyn
   assert.ok(Date.now() - started < 1500);
   assert.match(JSON.stringify(reply), /done/);
 });
+
+
+test('OpenRouter attribution headers are restricted to actual OpenRouter hosts', async () => {
+  for (const baseURL of ['https://api.example.test/openrouter.ai/v1', 'https://openrouter.ai.attacker.test/v1']) {
+    let sent;
+    await chat({ ...config, baseURL }, {
+      messages: [{ role: 'user', content: 'x' }],
+      fetchImpl: async (_url, options) => { sent = options.headers; return ok(); }
+    });
+    assert.equal(sent['HTTP-Referer'], undefined, baseURL);
+    assert.equal(sent['X-Title'], undefined, baseURL);
+  }
+
+  let sent;
+  await chat({ ...config, baseURL: 'https://openrouter.ai/api/v1' }, {
+    messages: [{ role: 'user', content: 'x' }],
+    fetchImpl: async (_url, options) => { sent = options.headers; return ok(); }
+  });
+  assert.equal(sent['HTTP-Referer'], 'https://fahthiz.github.io/oasis/');
+  assert.equal(sent['X-Title'], 'OASIS');
+});
