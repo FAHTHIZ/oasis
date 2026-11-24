@@ -7,7 +7,7 @@ performance claim.
 
 | Label | Meaning |
 | --- | --- |
-| **Stable** | In the latest release ([v0.11.0](https://github.com/FAHTHIZ/oasis/releases/latest)), covered by automated tests and exercised in live runs on Linux. |
+| **Stable** | In the latest release ([v0.12.0](https://github.com/FAHTHIZ/oasis/releases/latest)), covered by automated tests and exercised in live runs on Linux. |
 | **Released, lightly tested** | In the latest release and covered by unit or integration tests, but with few real-world hours. Expect rough edges. |
 | **Unreleased** | Merged on `main` and tested, but not in a tagged release yet. Install from source to use it. See [Unreleased in the changelog](../CHANGELOG.md#unreleased). |
 | **Experimental** | Works, but the interface or behaviour may change, or it depends on platform pieces OASIS cannot test in CI. |
@@ -115,7 +115,7 @@ performance claim.
 | Podman, SSH remote machines | Released, lightly tested | [Execution backends](EXECUTION-BACKENDS.md) |
 | Daytona and Modal cloud sandboxes, Apptainer/Singularity, gVisor (`runsc`) runtime | Released, lightly tested | [Execution backends](EXECUTION-BACKENDS.md) |
 | Built-in browser tool over CDP (`--browser`), with session recordings | Released, lightly tested | [Browser](BROWSER.md) |
-| Obscura as the default browser engine, with automatic fallback to Chrome | On `main`, pending release | [Browser](BROWSER.md) |
+| Obscura as the default browser engine, with automatic fallback to Chrome | Released, lightly tested | [Browser](BROWSER.md) |
 | Desktop computer use (`--computer-use`) on Linux, macOS and Windows | Experimental | [Computer use](COMPUTER_USE.md) |
 
 ## Models and integrations
@@ -123,7 +123,7 @@ performance claim.
 | Capability | Status | Where to read more |
 | --- | --- | --- |
 | OpenAI-compatible endpoints, Anthropic, Gemini, OpenRouter and local servers (Ollama, LM Studio, llama.cpp, vLLM, Jan) | Stable | [Configuration](CONFIGURATION.md#model-providers) |
-| First-party terminal OASIS Route provider and setup preset, plus OmniRoute and FreeLLMAPI entries | On `main`, pending release; generic endpoint works in released builds | [Configuration](CONFIGURATION.md#oasis-route-gateway) |
+| First-party terminal OASIS Route provider and setup preset, plus OmniRoute and FreeLLMAPI entries | Released, lightly tested | [Configuration](CONFIGURATION.md#oasis-route-gateway) |
 | Bedrock, Vertex AI, Azure AI Foundry | Released, lightly tested | [Configuration](CONFIGURATION.md#model-providers) |
 | Fallback models, task-aware routing, zero-budget mode and spend limits | Released, lightly tested | [Inference](INFERENCE.md) |
 | MCP client (stdio, HTTP, SSE, OAuth, elicitation, MCP Tasks) and the MCP Registry | Stable | [Extending OASIS](EXTENDING.md) |
