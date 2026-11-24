@@ -49,7 +49,7 @@ performance claim.
 | Sessions, resume, fork, export (`/export`, HTML and Markdown) | Stable | [Terminal guide](TERMINAL.md) |
 | Memory across sessions, `session_search`, `/learning` skill proposals | Released, lightly tested | [Extending OASIS](EXTENDING.md) |
 | `/goal` (keep working until a condition holds), routines and schedules (`oasis schedule`) | Released, lightly tested | [User guide](USER-GUIDE.md) |
-| General-purpose system prompt with rules for research, data and writing deliverables | Released, lightly tested | [Changelog](../CHANGELOG.md#unreleased) |
+| General-purpose system prompt with rules for research, data and writing deliverables | Released, lightly tested | [Workflows](WORKFLOWS.md#split-work-across-agents) |
 
 ## Tasks, outcomes and learning
 
@@ -75,7 +75,7 @@ performance claim.
 | Scripted workflows (`workflow` tool, built-in `/audit` and `/deep-research`) | Released, lightly tested | [Subagents](SUBAGENTS.md) |
 | Research and analysis domain packs (`plugins/oasis-research`, `plugins/oasis-analysis`) | Released, lightly tested | [Extending OASIS](EXTENDING.md#domain-packs) |
 | Best-of-N attempts in parallel worktrees (`oasis attempts`) | Released, lightly tested | [User guide](USER-GUIDE.md#best-of-n-attempts) |
-| `mixture_of_agents`: ask several models the same question and merge the answers | Released, lightly tested | [Changelog](../CHANGELOG.md#unreleased) |
+| `mixture_of_agents`: ask several models the same question and merge the answers | Released, lightly tested | [Workflows](WORKFLOWS.md#split-work-across-agents) |
 | Subagents with their own virtual desktop (`environment: "desktop"`) | Experimental | [Computer use](COMPUTER_USE.md) |
 | Control room: every agent on this computer, its screen, history and spend | Released, lightly tested | [Control room](CONTROL_ROOM.md) |
 | Agent experience: evidence-decided outcomes per run, recall of earlier runs, `oasis agents experience`, optional experience-based model routing | Released, lightly tested | [Subagents](SUBAGENTS.md#experience) |

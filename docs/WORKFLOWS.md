@@ -144,7 +144,7 @@ oasis --computer-use "Open the spreadsheet on the desktop and copy the totals ro
 each browser session as an HTML recording under `.oasis/recordings/`.
 `--computer-use` lets it take screenshots and use the mouse and keyboard after
 one approval per session; `--computer-use=virtual` uses a private virtual
-screen on Linux instead of yours. Computer use is unreleased and experimental:
+screen on Linux instead of yours. Computer use is experimental:
 see [Computer use](COMPUTER_USE.md).
 
 ## Split work across agents
@@ -161,7 +161,7 @@ checked against what each subagent's own tools showed. See
 [Subagents](SUBAGENTS.md) and [Agent network](AGENT-NETWORK.md).
 
 To ask several models the same hard question and merge their answers, ask the
-agent to use `mixture_of_agents` (unreleased). To run one task several times
+agent to use `mixture_of_agents`. To run one task several times
 and keep only a verified result:
 
 ```sh
