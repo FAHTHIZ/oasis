@@ -13,5 +13,13 @@
   "devDependencies": {
     "electron": "45.2.3",
     "electron-builder": "26.18.0"
+  },
+  "overrides": {
+    "@electron/universal": {
+      "minimatch": "11.0.9"
+    },
+    "app-builder-lib": {
+      "minimatch": "11.0.9"
+    }
   }
 }
