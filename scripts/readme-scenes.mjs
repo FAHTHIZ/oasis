@@ -420,7 +420,7 @@ export function providers(theme) {
   const W = 1280, H = 236;
   const rows = [
     { label: 'HOSTED', speed: 42, dir: -1, items: ['OpenAI', 'Anthropic', 'Google Gemini', 'Amazon Bedrock', 'Vertex AI', 'Azure AI Foundry', 'OpenRouter', 'Groq', 'DeepSeek', 'Mistral', 'xAI', 'any OpenAI-compatible API'] },
-    { label: 'LOCAL', speed: 34, dir: 1, items: ['Ollama', 'LM Studio', 'llama.cpp', 'vLLM', 'OmniRoute', 'FreeLLMAPI', 'zero-budget mode', 'failover backups', 'prompt caching', 'spend limits'] },
+    { label: 'LOCAL / ROUTING', speed: 34, dir: 1, items: ['Ollama', 'LM Studio', 'llama.cpp', 'vLLM', 'OASIS Route', 'OmniRoute', 'FreeLLMAPI', 'zero-budget mode', 'failover backups', 'prompt caching', 'spend limits'] },
     { label: 'PLUGS INTO', speed: 38, dir: -1, items: ['MCP servers', 'MCP Registry', '48 app connectors', 'Claude Code plugins', 'Codex plugins', 'Gemini CLI extensions', 'skills', 'hooks', 'GitHub Action', 'A2A agents'] }
   ];
   const lx = 168, rowH = 56, top = 24;
@@ -443,7 +443,7 @@ export function providers(theme) {
 <g mask="url(#m)"><g transform="translate(${lx} ${y + 4})"><g class="row${r}">${pills}</g></g></g>`;
   });
   return svgDoc(W, H, 'Models, local servers and integrations OASIS works with',
-    'Three scrolling rows. Hosted: ' + rows[0].items.join(', ') + '. Local: Ollama, LM Studio, llama.cpp, vLLM. Gateways: OASIS Route, OmniRoute, FreeLLMAPI. Zero-budget mode, failover backups, prompt caching, spend limits. Plugs into: ' + rows[2].items.join(', ') + '.', css.join('\n'), body, defs.join(''));
+    'Three scrolling rows. Hosted: ' + rows[0].items.join(', ') + '. Local model servers: Ollama, LM Studio, llama.cpp, vLLM. Self-hosted gateways: OASIS Route, OmniRoute, FreeLLMAPI. Runtime features: zero-budget mode, failover backups, prompt caching, spend limits. Plugs into: ' + rows[2].items.join(', ') + '.', css.join('\n'), body, defs.join(''));
 }
 
 // --- Interfaces orbit: one runtime, many front doors ---------------------------
