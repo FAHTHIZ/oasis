@@ -99,6 +99,13 @@ function trimSlash(url) {
   return String(url || '').replace(/\/+$/, '');
 }
 
+function isLoopbackEndpoint(baseURL) {
+  try {
+    const host = new URL(String(baseURL || '')).hostname.toLowerCase().replace(/\.$/, '');
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+  } catch { return false; }
+}
+
 function isOpenRouterEndpoint(baseURL) {
   try {
     const host = new URL(String(baseURL || '')).hostname.toLowerCase();
@@ -253,7 +260,7 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
     : (Number(config.maxTokens) || (openRouter ? 4096 : 0));
   if (requestedLimit > 0) body.max_tokens = requestedLimit;
   if (config.temperature !== undefined && config.temperature !== '') body.temperature = Number(config.temperature);
-  if (!/localhost|127\.0\.0\.1/.test(config.baseURL)) body.stream_options = { include_usage: true };
+  if (!isLoopbackEndpoint(config.baseURL)) body.stream_options = { include_usage: true };
   const url = trimSlash(config.baseURL) + '/chat/completions';
   const headers = openAIHeaders(config);
   let response = await fetchImpl(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
