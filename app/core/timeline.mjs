@@ -383,7 +383,7 @@ export function thoughtLabel(elapsedMs) {
   return Number.isFinite(value) && value >= 1000 ? 'Thought for ' + formatDuration(value) : 'Thought';
 }
 
-// The headline of a settled thought, as Claude and Perplexity show it: the
+// The headline of a settled thought: the
 // summary's own bold title when it has one ("**Finding the bug**"), else its
 // first sentence, plain text, at most about one line. '' when there is none.
 export function thoughtHeadline(text, max = 96) {
