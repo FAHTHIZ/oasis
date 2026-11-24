@@ -146,6 +146,19 @@ test('deniedHint names the command that was not approved and the flag that allow
   assert.equal(deniedHint([]), '');
 });
 
+test('deniedHint does not suggest auto mode to a run already in auto mode', async () => {
+  // Seen in an auto-mode -p run: `python3 -m unittest discover` was refused and the hint said to use --permission-mode auto.
+  const { deniedHint } = await import('../src/headless.mjs');
+  const denied = [{ tool_name: 'run_command', tool_input: { command: 'python3', args: ['-m', 'unittest', 'discover'] }, detail: 'Run this command?' }];
+  const hint = deniedHint(denied, { env: { OASIS_SANDBOX: '1' }, mode: 'auto' });
+  assert.doesNotMatch(hint, /--permission-mode auto/);
+  assert.match(hint, /Auto mode's check was not sure about this/);
+  assert.match(hint, /To allow next time: --allowedTools "run_command\(python3 -m:\*\)"\./);
+  assert.match(deniedHint(denied, { env: {} }), /or --permission-mode auto/);
+  const tool = deniedHint([{ tool_name: 'web_fetch', tool_input: {}, detail: 'Fetch?' }], { env: {}, mode: 'auto' });
+  assert.doesNotMatch(tool, /--permission-mode auto/);
+});
+
 test('deniedHint does not suggest --full-auto to a --full-auto run, nor for high-risk commands it cannot allow', async () => {
   // Seen in a --full-auto run: `node -e ...` was refused, and the hint said to use --full-auto.
   const { deniedHint } = await import('../src/headless.mjs');

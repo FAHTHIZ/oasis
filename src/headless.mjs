@@ -630,7 +630,7 @@ export async function runHeadless(options) {
   else if (outputFormat !== 'none') write(JSON.stringify(summary) + '\n');
   // Nobody can approve anything in -p, so say what was skipped and how to allow it next time.
   if (outputFormat === 'text' && denied.length && env.OASIS_PROGRESS !== '0') {
-    try { process.stderr.write(deniedHint(denied, { env })); } catch {}
+    try { process.stderr.write(deniedHint(denied, { env, mode: session && session.permissions && session.permissions.mode })); } catch {}
   }
   if (outputFormat === 'text' && notVerified && env.OASIS_PROGRESS !== '0') {
     try { process.stderr.write('\n[oasis] Exiting 1: --require-verified is on and OASIS could not verify these changes.\n'); } catch {}
@@ -655,7 +655,7 @@ export function headlessSetupErrorOutput(error, outputFormat) {
 }
 
 /** One stderr paragraph for `oasis -p` naming what was not approved and the flag that allows it. */
-export function deniedHint(denied, { env = process.env } = {}) {
+export function deniedHint(denied, { env = process.env, mode = '' } = {}) {
   const commands = [];
   const tools = [];
   const rules = [];
@@ -696,16 +696,19 @@ export function deniedHint(denied, { env = process.env } = {}) {
   const protectedNote = protectedRules.length ? (protectedRules.length > 1 ? 'Those are protected configuration files, which ask' : 'That is a protected configuration file, which asks') +
     ' even with --yes, --full-auto or --permission-mode auto. To allow next time: --allowedTools "' + protectedRules.slice(0, 3).join(',') + '" (a rule naming the path) or OASIS_ALLOW_CONFIG_EDITS=1.\n' : '';
   if (!commands.length && !tools.length) return head + protectedNote;
-  return head + protectedNote + deniedAdvice({ tools, shownRules, unrulable, highRisk, env });
+  return head + protectedNote + deniedAdvice({ tools, shownRules, unrulable, highRisk, env, mode });
 }
 
-function deniedAdvice({ tools, shownRules, unrulable, highRisk, env }) {
+function deniedAdvice({ tools, shownRules, unrulable, highRisk, env, mode = '' }) {
+  // Auto mode was already on: its classifier was unsure, so only a rule helps.
+  const auto = mode === 'auto';
   const noRule = unrulable.length ? 'A permission rule cannot pre-approve ' + unrulable.slice(0, 3).map((line) => '`' + line + '`').join(', ') +
     ' (shell redirects, substitutions or a high-risk shell line always need a person); run ' + (unrulable.length > 1 ? 'them' : 'it') + ' yourself, or ask for plain commands without shell syntax.\n' : '';
-  if (!shownRules.length) return noRule + (unrulable.length && !tools.length ? '' : 'To allow next time: --allowedTools, --yes or --permission-mode auto.\n');
+  if (!shownRules.length) return noRule + (unrulable.length && !tools.length ? '' : 'To allow next time: --allowedTools' + (auto ? ' or --yes' : ', --yes or --permission-mode auto') + '.\n');
   // Inline code, wrappers and the like ask even with --full-auto or --yes; only an allow rule lets them run.
   if (highRisk) return noRule + 'High-risk commands (inline code, wrappers and the like) always ask, even with --full-auto. To allow next time: --allowedTools "' + shownRules.join(',') + '".\n';
   // --full-auto sets OASIS_SANDBOX=1; suggesting it again would not help.
   const sandboxed = String(env.OASIS_SANDBOX || '') === '1';
-  return noRule + 'To allow next time: ' + (sandboxed ? '' : '--full-auto (edits plus commands inside the OS sandbox), ') + '--allowedTools "' + shownRules.join(',') + '", or --permission-mode auto.\n';
+  const options = [...(sandboxed ? [] : ['--full-auto (edits plus commands inside the OS sandbox)']), '--allowedTools "' + shownRules.join(',') + '"', ...(auto ? [] : ['--permission-mode auto'])];
+  return noRule + (auto ? 'Auto mode\'s check was not sure about ' + (shownRules.length > 1 ? 'these' : 'this') + ', so it was not run. ' : '') + 'To allow next time: ' + (options.length > 1 ? options.slice(0, -1).join(', ') + ', or ' + options.at(-1) : options[0]) + '.\n';
 }
