@@ -2497,7 +2497,7 @@ async function showResumeRecap(root, persistence) {
 // Commands that set up the conversation: typed before the first message they
 // start the session (as the first prompt would) instead of answering "start a
 // conversation first". Claude Code accepts /model, /add-dir and /rename then too.
-export const SESSION_START_COMMANDS = new Set(['context', 'model', 'add-dir', 'rename', 'autocompact', 'sandbox', 'advisor', 'mixture', 'routing', 'chrome', 'computer']);
+export const SESSION_START_COMMANDS = new Set(['context', 'model', 'add-dir', 'rename', 'autocompact', 'sandbox', 'advisor', 'mixture', 'routing', 'browser', 'chrome', 'computer']);
 export const RESUMED_SESSION_COMMANDS = new Set(['rewind', 'rollback', 'context', 'compact', 'export', 'cost', 'recap', 'rename', 'fork', 'branch', 'todos', 'undo', 'copy', 'usage', 'tasks', 'agents', 'goal']);
 
 // Set while the interactive prompt runs, so messages name /setup rather than
@@ -3035,7 +3035,7 @@ async function startWebWorkspace(root, args) {
 
 
 // Top-level commands, for the typo hint (`oasis doctr` -> doctor).
-const TYPO_COMMANDS = ['a2a', 'control-room', 'acp', 'agents', 'app', 'auth', 'backups', 'batch', 'config', 'connect', 'diagnostics', 'doctor', 'eval', 'extensions', 'gateway', 'help', 'ide', 'import', 'init', 'insights', 'install', 'mcp', 'memory', 'models', 'permissions', 'plugins', 'purge', 'quota', 'restore', 'sessions', 'setup', 'skills', 'trust', 'ultrareview', 'uninstall', 'update', 'watch', 'web', 'completion', 'cloud', 'computer-use', 'daytona', 'modal', 'honcho', 'schedule', 'routines', 'exec', 'diff', 'deploy', 'profile', 'attempts', 'rehearse', 'instructions'];
+const TYPO_COMMANDS = ['a2a', 'browser', 'control-room', 'acp', 'agents', 'app', 'auth', 'backups', 'batch', 'config', 'connect', 'diagnostics', 'doctor', 'eval', 'extensions', 'gateway', 'help', 'ide', 'import', 'init', 'insights', 'install', 'mcp', 'memory', 'models', 'permissions', 'plugins', 'purge', 'quota', 'restore', 'sessions', 'setup', 'skills', 'trust', 'ultrareview', 'uninstall', 'update', 'watch', 'web', 'completion', 'cloud', 'computer-use', 'daytona', 'modal', 'honcho', 'schedule', 'routines', 'exec', 'diff', 'deploy', 'profile', 'attempts', 'rehearse', 'instructions'];
 // One-word tasks that sit close to a command name but are real requests.
 const ONE_WORD_TASKS = new Set(['lint', 'test', 'tests', 'build', 'run', 'fix', 'format', 'review', 'explain', 'commit', 'refactor', 'deploy', 'debug', 'docs', 'start', 'stop', 'clean', 'check', 'plan', 'status', 'resume']);
 // Chat controls that only make sense inside a session (`oasis undo` used to
@@ -3196,11 +3196,11 @@ async function parseMainFlags(rawArgs, flags) {
     if (arg === '--append-system-prompt-file') { SESSION_OPTIONS.pendingFiles.push({ kind: 'append', file: needValue(arg) }); continue; }
     if (arg === '--fallback-model') { SESSION_OPTIONS.fallbackModel = needValue(arg); continue; }
     if (arg === '--advisor') { SESSION_OPTIONS.advisor = needValue(arg); continue; }
-    if (arg === '--chrome') { SESSION_OPTIONS.chrome = true; continue; }
+    if (arg === '--chrome' || arg === '--browser') { SESSION_OPTIONS.chrome = true; continue; }
     if (arg === '--computer-use') { SESSION_OPTIONS.computerUse = true; continue; }
     if (arg === '--computer-use=virtual') { SESSION_OPTIONS.computerUse = 'virtual'; continue; }
     if (arg === '--no-computer-use') { SESSION_OPTIONS.computerUse = false; continue; }
-    if (arg === '--no-chrome') { SESSION_OPTIONS.chrome = false; continue; }
+    if (arg === '--no-chrome' || arg === '--no-browser') { SESSION_OPTIONS.chrome = false; continue; }
     if (arg === '--bg' || arg === '--background') { SESSION_OPTIONS.background = true; continue; }
     if (arg === '--exec') { const value = rawArgs[i + 1]; if (value === undefined) throw new Error('--exec requires a shell command.'); i += 1; SESSION_OPTIONS.exec = value; continue; }
     if (arg === '--max-budget-usd') {
@@ -3686,6 +3686,22 @@ async function main() {
     return;
   }
   if (command === 'doctor') return await doctor(rest, workspace, { fallbackModel: SESSION_OPTIONS.fallbackModel });
+  if (command === 'browser') {
+    const sub = rest[0] || 'status';
+    const { engineStatus, formatEngineStatus, installObscura } = await import('./browser-engine.mjs');
+    if (sub === 'install') {
+      try {
+        const result = await installObscura({ env: process.env, onProgress: (line) => stderr.write(line + '\n') });
+        stdout.write((result.installed ? 'Installed Obscura ' + result.version : 'Obscura ' + result.version + ' is already installed') + ': ' + result.path + '\n');
+      } catch (error) { stderr.write('Could not install Obscura: ' + error.message + '\n'); process.exitCode = 1; }
+      return;
+    }
+    if (sub !== 'status') { stderr.write('Usage: oasis browser [status|install] [--json]\n'); process.exitCode = 2; return; }
+    const status = await engineStatus(process.env);
+    stdout.write((rest.includes('--json') ? JSON.stringify(status, null, 2) : formatEngineStatus(status)) + '\n');
+    process.exitCode = status.obscura || status.chrome ? 0 : 1;
+    return;
+  }
   if (command === 'computer-use') {
     const sub = rest[0] || 'doctor';
     if (sub !== 'doctor' && sub !== 'status') { stderr.write('Usage: oasis computer-use doctor [--json]\n'); process.exitCode = 2; return; }

@@ -89,6 +89,11 @@ export async function doctor(args = [], root = process.cwd(), { fallbackModel = 
   try { config = await loadConfig(); } catch {}
   for (const item of probes) detail('  ' + doctorToolLine(item, commandAvailable(item), config) + '\n');
   try {
+    const { engineStatus } = await import('./browser-engine.mjs');
+    const engines = await engineStatus(process.env);
+    detail('  Browser: ' + [engines.obscura ? (engines.obscura.version || 'Obscura') : 'Obscura not installed (oasis browser install)', engines.chrome ? 'Chrome found' : 'Chrome not found'].map((s) => s.trim()).join(', ') + '; engine ' + engines.preference + '\n');
+  } catch {}
+  try {
     config = await loadConfig();
     modelConfigured = Boolean(config.configured);
     const summary = getProviderSummary(config);

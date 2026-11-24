@@ -116,10 +116,10 @@ export function configItems() {
       apply: async (value, state) => { await saveSetting('autoMemory', value === 'true', state.env); return 'Auto memory ' + (value === 'true' ? 'on' : 'off') + ' (applies to new sessions).'; }
     },
     {
-      key: 'chrome', label: 'Chrome browser tool', description: 'Give the agent a browser (also /chrome)',
+      key: 'chrome', label: 'Browser tool', description: 'Give the agent a browser: Obscura or Chrome (also /browser)',
       choices: async () => BOOL,
       current: async (state, saved) => String(Boolean(state.session ? state.session.chromeEnabled : saved.chrome)),
-      apply: async (value, state, run) => { await saveSetting('chrome', value === 'true', state.env); if (state.session) await run('chrome', value === 'true' ? 'on' : 'off'); return 'Chrome browser tool ' + (value === 'true' ? 'on' : 'off') + '.'; }
+      apply: async (value, state, run) => { await saveSetting('chrome', value === 'true', state.env); if (state.session) await run('chrome', value === 'true' ? 'on' : 'off'); return 'Browser tool ' + (value === 'true' ? 'on' : 'off') + '.'; }
     },
     {
       key: 'defaultShell', label: 'Shell for ! commands', description: 'bash or powershell',

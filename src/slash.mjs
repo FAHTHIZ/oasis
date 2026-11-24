@@ -150,7 +150,8 @@ export const BUILTIN_COMMANDS = {
   debug: 'Turn on debug logging and troubleshoot an issue from the session debug log (/debug [description] | /debug off)',
   'team-onboarding': 'Write a team onboarding guide for this project from your last 30 days of Oasis usage (/team-onboarding [DAYS])',
   heapdump: 'Write a JavaScript heap snapshot and memory breakdown for diagnosing high memory use',
-  chrome: 'Turn the Chrome browser tool on or off for this session (/chrome [on|off|status])',
+  chrome: 'Turn the browser tool on or off for this session (/chrome [on|off|status]; same as /browser)',
+  browser: 'Turn the browser tool on or off, or see which engine runs it (/browser [on|off|status|install])',
   computer: 'Let the agent see the screen and use the mouse and keyboard (/computer [on|off|virtual|status|doctor])',
   bug: 'Report a bug: drafts a GitHub issue with your report and environment details (nothing is sent until you open the link) (/bug [report] [--with-transcript])',
   'setup-bedrock': 'Configure Amazon Bedrock: detects AWS credentials, region and model pins, then saves them to user settings (/setup-bedrock [region=R] [profile=P] [model=ID] [sonnet=ID] [haiku=ID] [opus=ID] [save])',
@@ -323,7 +324,7 @@ export async function runBuiltinCommand(name, argument, state) {
         { title: 'Getting started', commands: ['help', 'setup', 'status', 'doctor', 'context', 'cost', 'undo'] },
         { title: 'Working', commands: ['clear', 'compact', 'test', 'diagnostics', 'hunt', 'bisect', 'flaky', 'localize', 'minimize', 'mutate', 'audit', 'tasks', 'workflows', 'learning', 'commit', 'pr', 'goal', 'recipe', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export', 'receipt', 'presets'] },
         { title: 'Safety', commands: ['permissions', 'mode', 'sandbox', 'security-review', 'undo', 'rewind', 'purge', 'logout', 'doctor'] },
-        { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'avoid', 'comments', 'output-style', 'personality', 'honcho', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome', 'computer'] }
+        { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'avoid', 'comments', 'output-style', 'personality', 'honcho', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'browser', 'chrome', 'computer'] }
       ];
       const used = new Set();
       const lines = [];
@@ -1276,18 +1277,24 @@ export async function runBuiltinCommand(name, argument, state) {
       const sessionInfo = session ? ['Session: ' + session.messages.length + ' messages, ~' + Math.round(JSON.stringify(session.messages).length / 1024) + ' KB of conversation' + (session.background ? ', ' + session.background.size + ' background commands' : '') + (session.mcpClients ? ', ' + session.mcpClients.size + ' MCP servers' : '')] : [];
       return { output: ['Heap snapshot: ' + file + ' (open it in Chrome DevTools > Memory).', 'RSS ' + mb(mem.rss) + ', heap ' + mb(mem.heapUsed) + ' of ' + mb(mem.heapTotal) + ', external ' + mb(mem.external) + ', array buffers ' + mb(mem.arrayBuffers) + '.', 'Largest heap spaces:', ...heap, ...sessionInfo].join('\n') };
     }
+    case 'browser':
     case 'chrome': {
-      if (!session) return { output: 'Start a conversation first, or launch with oasis --chrome.' };
-      const { setChrome } = await import('./agent.mjs');
-      const { findChrome } = await import('./cdp.mjs');
       const wanted = String(argument || '').trim().toLowerCase();
-      const exe = env.OASIS_CHROME_PORT ? 'attached to port ' + env.OASIS_CHROME_PORT : findChrome(env);
-      if (!wanted || wanted === 'status') return { output: 'Chrome tool: ' + (session.chromeEnabled ? 'on' : 'off') + (session.browserState ? ' (browser open)' : '') + '. Browser: ' + (exe || 'not found; set OASIS_CHROME_PATH') + '.' };
-      if (wanted === 'off') { setChrome(session, false); return { output: 'Chrome tool off; the browser was closed.' }; }
-      if (wanted !== 'on') return { output: 'Usage: /chrome [on|off|status]' };
-      if (!exe) return { output: 'No Chrome, Chromium or Edge found. Install one or set OASIS_CHROME_PATH.' };
+      const { engineStatus, formatEngineStatus, installObscura } = await import('./browser-engine.mjs');
+      if (wanted === 'install') {
+        try { const result = await installObscura({ env }); return { output: (result.installed ? 'Installed Obscura ' : 'Obscura ' + result.version + ' is already installed at ') + (result.installed ? result.version + ' at ' : '') + result.path + '.' }; }
+        catch (error) { return { output: 'Could not install Obscura: ' + error.message }; }
+      }
+      const status = await engineStatus(env);
+      if (!wanted || wanted === 'status') return { output: formatEngineStatus(status, session ? { enabled: Boolean(session.chromeEnabled), open: Boolean(session.browserState) } : {}) + (env.OASIS_CHROME_PORT ? '\nAttached to Chrome on port ' + env.OASIS_CHROME_PORT + '.' : '') };
+      if (!session) return { output: 'Start a conversation first, or launch with oasis --browser.' };
+      const { setChrome } = await import('./agent.mjs');
+      if (wanted === 'off') { setChrome(session, false); return { output: 'Browser tool off; the browser was closed.' }; }
+      if (wanted !== 'on') return { output: 'Usage: /' + name + ' [on|off|status|install]' };
+      if (!status.obscura && !status.chrome && !env.OASIS_CHROME_PORT) return { output: 'No browser found. Run /browser install for Obscura, or install Chrome, Chromium or Edge (or set OASIS_CHROME_PATH).' };
       setChrome(session, true);
-      return { output: 'Chrome tool on (' + exe + '). The agent can now open pages, click, type, take screenshots and read the console.' };
+      const engine = status.preference === 'chrome' || !status.obscura ? 'Chrome' : status.preference === 'obscura' || !status.chrome ? 'Obscura' : 'Obscura, with Chrome as the fallback';
+      return { output: 'Browser tool on (' + engine + '). The agent can now open pages, click, type, read, download and take screenshots.' };
     }
     case 'computer': {
       const { setComputerUse, computerUseDoctor, formatComputerUseDoctor } = await import('./computer-use.mjs');
