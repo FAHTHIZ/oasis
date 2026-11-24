@@ -420,7 +420,7 @@ export function providers(theme) {
   const W = 1280, H = 236;
   const rows = [
     { label: 'HOSTED', speed: 42, dir: -1, items: ['OpenAI', 'Anthropic', 'Google Gemini', 'Amazon Bedrock', 'Vertex AI', 'Azure AI Foundry', 'OpenRouter', 'Groq', 'DeepSeek', 'Mistral', 'xAI', 'any OpenAI-compatible API'] },
-    { label: 'LOCAL / ROUTING', speed: 34, dir: 1, items: ['Ollama', 'LM Studio', 'llama.cpp', 'vLLM', 'OASIS Route', 'OmniRoute', 'FreeLLMAPI', 'zero-budget mode', 'failover backups', 'prompt caching', 'spend limits'] },
+    { label: 'LOCAL ROUTING', speed: 34, dir: 1, items: ['Ollama', 'LM Studio', 'llama.cpp', 'vLLM', 'OASIS Route', 'OmniRoute', 'FreeLLMAPI', 'zero-budget mode', 'failover backups', 'prompt caching', 'spend limits'] },
     { label: 'PLUGS INTO', speed: 38, dir: -1, items: ['MCP servers', 'MCP Registry', '48 app connectors', 'Claude Code plugins', 'Codex plugins', 'Gemini CLI extensions', 'skills', 'hooks', 'GitHub Action', 'A2A agents'] }
   ];
   const lx = 168, rowH = 56, top = 24;
