@@ -1,7 +1,7 @@
 # Live run: non-code eval tasks on a free hosted endpoint (23 November 2026)
 
 - Command: `OASIS_CONFIG_DIR=… node src/cli.mjs eval --task archive-old-logs,conflicting-sources-answer,meeting-action-items,project-schedule-plan,release-notes-brief,remove-hardcoded-key,sales-region-report --trials 1 --timeout-seconds 1200 --yes`
-- OASIS 0.9.0 (published as 1.8.0) at `b7c3daab`, Node 22.21.1, Linux x64.
+- OASIS 0.9.0 (published as 1.8.0) at `108a5d26`, Node 22.21.1, Linux x64.
 - Endpoint: `https://text.pollinations.ai/openai` (OpenAI-compatible, anonymous tier, no key; OASIS needs a non-empty `apiKey`, so it was set to `anonymous`). Model alias `openai`, which the service serves with gpt-oss-20b at the time of the run. `maxSteps` 40, `maxCommandSeconds` 120, permission mode auto. No charge, so cost is reported as unknown.
 - One trial per task: a smoke test, not a score. The service is shared and its model behind an alias can change, so a rerun may differ. Raw file: [results.json](results.json).
 
@@ -21,9 +21,9 @@ Pass rate 6/7, median 360 s. Self-assessment: OASIS reached a verdict on all 7 t
 
 Single trials of `sales-region-report` on the same endpoint, before this run, failed for reasons that were OASIS's, not the model's:
 
-- `python -c` was refused because nobody was there to approve it, and the refusal did not say so; the model kept retrying. The message now says the command needs approval nobody can give in an unattended run and suggests writing a script file (`b9b4d1e9`).
-- The model wrote a scratch file, then could not delete it: auto-approval refused deleting any file. A file the session created itself, unchanged since, can now be deleted (`b7c3daab`).
-- Heredocs and pipes passed to `run_command` were run as literal arguments with no hint why they failed. Results now carry a note that `run_command` takes no shell syntax (`4cf88526`).
+- `python -c` was refused because nobody was there to approve it, and the refusal did not say so; the model kept retrying. The message now says the command needs approval nobody can give in an unattended run and suggests writing a script file (`2f675de7`).
+- The model wrote a scratch file, then could not delete it: auto-approval refused deleting any file. A file the session created itself, unchanged since, can now be deleted (`108a5d26`).
+- Heredocs and pipes passed to `run_command` were run as literal arguments with no hint why they failed. Results now carry a note that `run_command` takes no shell syntax (`07903c64`).
 
 With those fixes, 4 of the first 5 tasks passed in this run, and 6 of 7 overall.
 
@@ -38,13 +38,13 @@ The one failure showed a gap in the task contract, not only in the model: OASIS 
 
 An unmet criterion goes back to the model once before it may finish (`test/local-sources-criteria.test.mjs`).
 
-## Rerun of the failed task at `684ca16f`
+## Rerun of the failed task at `d18b198c`
 
 `conflicting-sources-answer`, two trials, same endpoint ([results-conflicting-rerun.json](results-conflicting-rerun.json)): 1/2 passed. Both trials read all four sources this time (one only after the new `sources_read` criterion sent it back for `sources/forum-thread.md`). The failing trial again wrote `## Contradiction` as a heading; the `opening` criterion caught it (OASIS's verdict was `rejected`, matching the verifier), but the model was never told. The eval trace does not keep reply text, so the reason is inferred, not observed: the gate allowed one round per turn, and the likeliest use of it is an earlier reply given before `answer.md` existed, which a missing file sends back. Each problem now gets its own round, two at most per turn (`test/task-contract-gate.test.mjs`). The passing trial was `evidenced`, not `verified`: its quoted line from the docs is a single-source claim.
 
-## Rerun after the system audit at `67d85470`
+## Rerun after the system audit at `33da7fb4`
 
-Five tasks, one trial each, same endpoint and settings ([results-audit-rerun.json](results-audit-rerun.json)). The run ended at `a1d3ba3a`, a CI-only change, so the code under test did not change during it.
+Five tasks, one trial each, same endpoint and settings ([results-audit-rerun.json](results-audit-rerun.json)). The run ended at `4444e4f8`, a CI-only change, so the code under test did not change during it.
 
 | Task | Result | Time | Tokens | Tool calls | OASIS's own verdict |
 | --- | --- | ---: | ---: | ---: | --- |
