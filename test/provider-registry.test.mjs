@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { BUILTIN_PROVIDERS, providerRegistry, getProvider, providerApiKey, providerForEndpoint, useProviderSettings } from '../src/provider-registry.mjs';
 import { parseFallbackChain, resolveFallbackConfig } from '../src/fallback-chain.mjs';
-import { DEFAULT_BASE_URL, DEFAULT_MODEL, inferSetupProviderPreset } from '../src/config.mjs';
+import { DEFAULT_BASE_URL, DEFAULT_MODEL, inferSetupProviderPreset, resolveSetupProviderPreset, loadConfig } from '../src/config.mjs';
 import { LOCAL_SERVERS } from '../src/hardware.mjs';
 import { loadSettings } from '../src/settings.mjs';
 
@@ -19,6 +19,7 @@ test('config defaults and local-server discovery come from the registry', () => 
   assert.equal(BUILTIN_PROVIDERS['oasis-route'].gateway, true);
   assert.equal(providerApiKey('oasis-route', { OASIS_ROUTE_API_KEY: 'oasis_live_test' }), 'oasis_live_test');
   assert.equal(providerForEndpoint('http://localhost:8081/v1'), 'oasis-route');
+  assert.equal(resolveSetupProviderPreset('oasis-route'), 'oasis-route');
 });
 
 test('settings providers add and override entries; invalid ones are ignored', () => {
@@ -61,6 +62,22 @@ test('endpoint inference matches host and port, treating loopback names alike', 
   assert.equal(providerForEndpoint('https://api.openai.com/v1', 'anthropic'), '');
   assert.equal(inferSetupProviderPreset({ configured: true, protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:1234/v1' }), 'custom');
   assert.equal(inferSetupProviderPreset({ configured: true, protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:8081/v1' }), 'oasis-route');
+});
+
+test('OASIS Route reads its dedicated key only at its registered endpoint', async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-route-config-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const env = {
+    OASIS_CONFIG_DIR: dir, HOME: dir,
+    OASIS_BASE_URL: 'http://127.0.0.1:8081/v1', OASIS_MODEL: 'auto',
+    OASIS_ROUTE_API_KEY: 'oasis_live_route_test', OPENAI_API_KEY: 'must-not-leak'
+  };
+  const route = await loadConfig({ env });
+  assert.equal(route.baseURL, env.OASIS_BASE_URL);
+  assert.equal(route.model, 'auto');
+  assert.equal(route.apiKey, env.OASIS_ROUTE_API_KEY);
+  const other = await loadConfig({ env: { ...env, OASIS_BASE_URL: 'http://127.0.0.1:8082/v1' } });
+  assert.equal(other.apiKey, '');
 });
 
 test('a repository cannot define providers; user settings can', async () => {

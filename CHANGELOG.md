@@ -4,6 +4,10 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ## Unreleased
 
+### Added
+
+- OASIS Route is now a first-party built-in gateway provider on `main`: `oasis setup` offers it by name, the registry uses `OASIS_ROUTE_API_KEY` at `http://127.0.0.1:8081/v1`, and the service remains independently deployed. Released builds can use its generic OpenAI-compatible endpoint until this change ships in a release.
+
 ### Changed
 
 - Dependencies: `@agentclientprotocol/sdk` 2.8.0, `defuddle` 0.19.7, `rrule-temporal` 2.3.0; the app's icon sprite comes from `lucide-static` 1.76.0.
