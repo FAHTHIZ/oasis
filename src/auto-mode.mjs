@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 // Auto permission mode: a classifier model reviews each action that would otherwise
 // need your approval. Clearly safe actions run, risky ones are blocked (the agent is
@@ -231,18 +231,40 @@ function makeRecipe(root, target) {
 // Test files named on the command line, read so a test file the agent wrote
 // is judged by what it does, not by its name. The whole file is checked;
 // the classifier sees the first 3000 characters of each.
+// unittest's default pattern is test*.py; pytest's adds *_test.py.
+const PYTHON_TEST_FILE = /^(?:test.*|.*_test)\.py$/;
+function discoveredPythonTests(root) {
+  const out = [];
+  for (const dir of ['', 'tests', 'test']) {
+    let names = [];
+    try { names = readdirSync(path.join(root, dir)); } catch { continue; }
+    for (const name of names.sort()) if (PYTHON_TEST_FILE.test(name)) out.push(dir ? dir + '/' + name : name);
+  }
+  return out;
+}
+
 function withTestSources(request) {
   const { args, root } = request;
   const list = Array.isArray(args.args) ? args.args.map(String) : [];
   const files = args.command === 'node' ? list.filter((arg) => !arg.startsWith('-'))
     : args.command === 'pytest' ? list.filter((arg) => !arg.startsWith('-'))
-    : /^python3?$/.test(args.command) && list[0] === '-m' && list[1] === 'pytest' ? list.slice(2).filter((arg) => !arg.startsWith('-')) : [];
+    : /^python3?$/.test(args.command) && list[0] === '-m' && list[1] === 'pytest' ? list.slice(2).filter((arg) => !arg.startsWith('-'))
+    // unittest names modules (test_app, tests.test_app) or files.
+    : /^python3?$/.test(args.command) && list[0] === '-m' && list[1] === 'unittest' ? list.slice(2).filter((arg) => !arg.startsWith('-') && arg !== 'discover').map((arg) => /\.py$/.test(arg) ? arg : arg.split('.').join('/') + '.py') : [];
+  // A Python runner given no files discovers them: read the test files it
+  // would find at the top level and in tests/ (a file not read here is
+  // still judged; one that does what tests have no need to do is not fast).
+  const discovers = /^python3?$/.test(args.command) ? list[0] === '-m' && /^(?:pytest|unittest)$/.test(list[1] || '') : args.command === 'pytest';
+  if (discovers && !files.length) files.push(...discoveredPythonTests(root));
   const sources = {};
-  let risky = false;
-  for (const file of files.slice(0, 6)) {
+  // More than can be read: the classifier decides, not the fast path.
+  let risky = files.length > 40;
+  // Every named or discovered file (up to 40) is checked; the classifier sees six.
+  for (const file of files.slice(0, 40)) {
     let text;
     try { text = readFileSync(path.resolve(root, file), 'utf8'); } catch { continue; }
     if (RISKY_SOURCE.test(text)) risky = true;
+    if (Object.keys(sources).length >= 6) continue;
     const flagged = text.length > 3000 ? text.slice(3000).split(/\r?\n/).filter((line) => RISKY_SOURCE.test(line)).slice(0, 20).map((line) => line.slice(0, 300)) : [];
     sources[file] = text.slice(0, 3000) + (text.length > 3000 ? '\n[... ' + (text.length - 3000) + ' more characters' + (flagged.length ? '; the lines among them that reach the network, run programs or read the environment:\n' + flagged.join('\n') : '') + ' ...]' : '');
   }
@@ -282,6 +304,9 @@ export function obviousProjectCheck({ toolName, args, messages } = {}) {
   else if (cmd === 'node' && sub === '--test' && argv.slice(2).every(inWorkspace)) label = 'node --test';
   else if (cmd === 'node' && argv.length === 2 && inWorkspace(sub) && /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(sub)) label = 'node ' + sub;
   else if ((cmd === 'pytest' || /^python3?$/.test(cmd) && sub === '-m' && third === 'pytest') && argv.slice(cmd === 'pytest' ? 1 : 3).every((arg) => inWorkspace(arg) || /^-[qvxs]+$/.test(arg))) label = 'pytest';
+  // The standard library's runner, which the new-project rule recommends:
+  // modules, test files or discover, with output flags only (no -s/-p/-t).
+  else if (/^python3?$/.test(cmd) && sub === '-m' && third === 'unittest' && argv.slice(3).every((arg) => arg === 'discover' || /^-[vqbfc]+$/.test(arg) || (inWorkspace(arg) && /^[\w./-]+$/.test(arg)))) label = 'python -m unittest';
   else if (cmd === 'cargo' && /^(?:test|build|check|clippy|fmt)$/.test(sub || '')) label = 'cargo ' + sub;
   else if (cmd === 'go' && /^(?:test|build|vet)$/.test(sub || '')) label = 'go ' + sub;
   else if (cmd === 'make' && /^(?:test|check|lint|build)$/.test(sub || '') && argv.length === 2) label = 'make ' + sub;
