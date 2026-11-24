@@ -50,7 +50,7 @@ export const SETUP_INPUT_ENDED = 'Setup stopped: input ended before a choice was
 
 export async function configureProvider(root = process.cwd(), options = {}) {
   stdout.write('\nOasis setup — choose and verify your model provider\n');
-  stdout.write('A successful model response is required before settings are saved or coding tools are used. Presets include OpenAI, Anthropic, OpenRouter, Gemini, local Ollama, AWS Bedrock, Google Vertex AI, and Microsoft Foundry.\n');
+  stdout.write('A successful model response is required before settings are saved or coding tools are used. Presets include OpenAI, Anthropic, OpenRouter, Gemini, OASIS Route, local Ollama, AWS Bedrock, Google Vertex AI, and Microsoft Foundry.\n');
   const rl = createInterface({ input: stdin, output: stdout });
   // Input that ends mid-setup (`oasis setup < /dev/null`, a short pipe) left the
   // question pending: OASIS exited 0 with nothing saved and no explanation.
@@ -75,7 +75,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
   };
   let protocol, baseURL, model, presetName;
   const presets = {
-    ...Object.fromEntries(['openai', 'anthropic', 'openrouter', 'gemini', 'ollama'].map((id) => {
+    ...Object.fromEntries(['openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'oasis-route'].map((id) => {
       const entry = getProvider(id);
       return [id, { protocol: entry.protocol, baseURL: entry.baseURL, model: entry.model }];
     })),
@@ -85,12 +85,12 @@ export async function configureProvider(root = process.cwd(), options = {}) {
   };
   const chooseApiPreset = async (preferredPreset) => {
     stdout.write('\nChoose your API-key provider:\n');
-    stdout.write('  1. OpenAI\n  2. Anthropic\n  3. OpenRouter\n  4. Gemini\n  5. Other / compatible endpoint\n');
-    const preferred = ({ openai: '1', anthropic: '2', openrouter: '3', gemini: '4', custom: '5' })[preferredPreset] || '1';
-    const answer = (await ask('Choose [1/2/3/4/5] (default ' + preferred + '): ')).trim().toLowerCase() || preferred;
-    const providers = { '1': 'openai', '2': 'anthropic', '3': 'openrouter', '4': 'gemini', '5': 'custom' };
-    const selected = providers[answer] || (['openai', 'anthropic', 'openrouter', 'gemini', 'custom'].includes(answer) ? answer : '');
-    if (!selected) throw new Error('Choose a number from 1 to 5 for the API-key provider.');
+    stdout.write('  1. OpenAI\n  2. Anthropic\n  3. OpenRouter\n  4. Gemini\n  5. OASIS Route (self-hosted)\n  6. Other / compatible endpoint\n');
+    const preferred = ({ openai: '1', anthropic: '2', openrouter: '3', gemini: '4', 'oasis-route': '5', custom: '6' })[preferredPreset] || '1';
+    const answer = (await ask('Choose [1/2/3/4/5/6] (default ' + preferred + '): ')).trim().toLowerCase() || preferred;
+    const providers = { '1': 'openai', '2': 'anthropic', '3': 'openrouter', '4': 'gemini', '5': 'oasis-route', '6': 'custom' };
+    const selected = providers[answer] || (['openai', 'anthropic', 'openrouter', 'gemini', 'oasis-route', 'custom'].includes(answer) ? answer : '');
+    if (!selected) throw new Error('Choose a number from 1 to 6 for the API-key provider.');
     return selected;
   };
   try {
@@ -110,7 +110,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
       const defaultChoice = defaultPreset === 'ollama' ? '2'
         : ['bedrock', 'vertex', 'foundry', 'custom'].includes(defaultPreset) ? '3' : '1';
       const answer = (await ask('Choose [1/2/3] (default ' + defaultChoice + '): ')).trim().toLowerCase() || defaultChoice;
-      const directPresets = ['openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'bedrock', 'vertex', 'foundry', 'custom'];
+      const directPresets = ['openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'oasis-route', 'bedrock', 'vertex', 'foundry', 'custom'];
       if (directPresets.includes(answer)) {
         // Keep accepting named presets for existing scripts and experienced users.
         presetName = answer;
@@ -139,7 +139,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
       model = (await ask(modelPrompt)).trim() || defaultModel;
     } else {
       const selected = presets[presetName];
-      if (!selected) throw new Error('Unknown provider preset. Choose openai, anthropic, openrouter, gemini, ollama, bedrock, vertex, foundry, or custom.');
+      if (!selected) throw new Error('Unknown provider preset. Choose openai, anthropic, openrouter, gemini, oasis-route, ollama, bedrock, vertex, foundry, or custom.');
       protocol = selected.protocol;
       baseURL = selected.baseURL;
       model = selected.model;

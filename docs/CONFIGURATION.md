@@ -99,6 +99,7 @@ Built-in providers:
 | `llamacpp` (local) | openai-compatible | `http://127.0.0.1:8080/v1` | none |
 | `jan` (local) | openai-compatible | `http://127.0.0.1:1337/v1` | none |
 | `vllm` (local) | openai-compatible | `http://127.0.0.1:8000/v1` | `VLLM_API_KEY` (optional) |
+| `oasis-route` (first-party gateway) | openai-compatible | `http://127.0.0.1:8081/v1` | `OASIS_ROUTE_API_KEY` |
 | `omniroute` (gateway) | openai-compatible | `http://127.0.0.1:20128/v1` | `OMNIROUTE_API_KEY` |
 | `freellmapi` (gateway) | openai-compatible | `http://127.0.0.1:3001/v1` | `FREELLMAPI_API_KEY` |
 
@@ -113,15 +114,50 @@ host on `OPENAI_BASE_URL` uses Chat Completions (`openai-compatible`).
 
 Keys for local servers: OASIS never sends an ambient `OPENAI_API_KEY` or
 `ANTHROPIC_API_KEY` to a `localhost` address. A local gateway that needs a key
-(LiteLLM, OmniRoute with authentication) gets `OASIS_LOCAL_API_KEY`, or
+(LiteLLM, OmniRoute or OASIS Route with authentication) gets `OASIS_LOCAL_API_KEY`, or
 `OASIS_API_KEY` when `OASIS_BASE_URL` points at that server in the same
 environment. A built-in provider on its default address also reads its own
-variable (`FREELLMAPI_API_KEY` for `:3001`, `OMNIROUTE_API_KEY` for `:20128`,
-`VLLM_API_KEY` for `:8000`), which is never sent to any other address:
+variable (`OASIS_ROUTE_API_KEY` for `:8081`, `FREELLMAPI_API_KEY` for `:3001`,
+`OMNIROUTE_API_KEY` for `:20128`, `VLLM_API_KEY` for `:8000`), which is never
+sent to any other address:
 
 ```bash
 OASIS_BASE_URL=http://127.0.0.1:4000/v1 OASIS_API_KEY=sk-litellm-key oasis
 ```
+
+### OASIS Route gateway
+
+[OASIS Route](https://github.com/FAHTHIZ/OASIS-ROUTE) is the first-party,
+self-hosted inference gateway for OASIS. It keeps provider credentials in its
+own encrypted vault and exposes one OpenAI-compatible endpoint with model
+selection, quota-aware eligibility, spend policy and failover. It is a separate
+service; OASIS remains the agent runtime. Use port `8081` locally so it does
+not collide with llama.cpp's common `8080` port.
+
+1. Start Route from its repository with `uv sync`, then
+   `uv run oasis-route dev --port 8081` (or publish container port 8080 as host
+   port 8081). The dev server creates a local key in
+   `.oasis-dev/admin.key`; the second line is the bearer token.
+2. Connect at least one upstream provider in the Route console. Its built-in
+   mock providers make a fresh installation testable, but do not supply real
+   inference capacity.
+3. Export the Route key and point OASIS at its OpenAI-compatible endpoint:
+
+   ```bash
+   export OASIS_ROUTE_API_KEY="$(sed -n 2p .oasis-dev/admin.key)"
+   OASIS_BASE_URL=http://127.0.0.1:8081/v1 OASIS_MODEL=auto oasis
+   ```
+
+   Or use the setup menu and choose **OASIS Route**. The built-in provider
+   recognises `OASIS_ROUTE_API_KEY` only for this endpoint; it is not sent to
+   another provider. If you run Route on another port, set
+   `OASIS_PROVIDER_OASIS_ROUTE_BASE_URL` to its `/v1` URL.
+
+Route's `free_only` policy is enforced by Route itself. OASIS `--zero-budget`
+still treats an arbitrary gateway as unknown unless its no-billing behaviour is
+independently established; one router's policy is not proof to the other. Keep
+the development service on loopback. For production, use PostgreSQL, HTTPS and
+the Route deployment guide.
 
 ### OmniRoute gateway
 

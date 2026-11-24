@@ -121,7 +121,7 @@ performance claim.
 
 | Capability | Status | Where to read more |
 | --- | --- | --- |
-| OpenAI-compatible endpoints, Anthropic, Gemini, OpenRouter and local servers (Ollama, LM Studio, llama.cpp, vLLM, Jan) | Stable | [Configuration](CONFIGURATION.md#model-providers) |
+| OpenAI-compatible endpoints, Anthropic, Gemini, OpenRouter and local servers (Ollama, LM Studio, llama.cpp, vLLM, Jan) | Stable | [Configuration](CONFIGURATION.md#model-providers) |\n| First-party OASIS Route gateway plus built-in OmniRoute and FreeLLMAPI gateway providers | Released, lightly tested | [Configuration](CONFIGURATION.md#oasis-route-gateway) |
 | Bedrock, Vertex AI, Azure AI Foundry | Released, lightly tested | [Configuration](CONFIGURATION.md#model-providers) |
 | Fallback models, task-aware routing, zero-budget mode and spend limits | Released, lightly tested | [Inference](INFERENCE.md) |
 | MCP client (stdio, HTTP, SSE, OAuth, elicitation, MCP Tasks) and the MCP Registry | Stable | [Extending OASIS](EXTENDING.md) |
@@ -155,7 +155,7 @@ performance claim.
 | Limitation | Why | Workaround |
 | --- | --- | --- |
 | No tuning for one model family | OASIS works across many providers, so prompts and tool schemas cannot be tuned for a single vendor's models the way a vendor's own agent can. | `oasis connect` tests candidate models with a real tool call and keeps the first that works. |
-| Few real-world hours | The automated suite is large (more than 4,000 tests), but the user base is small, so edge cases surface more slowly. | Report problems in [Issues](https://github.com/FAHTHIZ/oasis/issues). |
+| Few real-world hours | The automated suite is large (more than 3,700 tests), but the user base is small, so edge cases surface more slowly. | Report problems in [Issues](https://github.com/FAHTHIZ/oasis/issues). |
 | Edits are applied without asking in `default` mode | A deliberate choice for speed; edits are checkpointed and can be rewound, and protected config paths still prompt. | Use `plan` mode, or `ask` rules for `edit_file`. |
 | Plugin cost | Each enabled plugin adds tools and prompt text. | Large MCP servers move behind `tool_search`; skills are listed by name and loaded on demand. |
 | Small local models | Small models follow long tool lists less reliably, and some local servers default to a 4,096-token window. | `oasis connect http://localhost:11434` creates a 32K-window `-oasis` copy of an Ollama model. |

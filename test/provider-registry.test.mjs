@@ -14,6 +14,11 @@ test('config defaults and local-server discovery come from the registry', () => 
   assert.equal(DEFAULT_MODEL, BUILTIN_PROVIDERS.openai.model);
   assert.deepEqual(LOCAL_SERVERS.map((s) => s.id), ['ollama', 'lmstudio', 'llamacpp', 'jan', 'vllm']);
   assert.ok(Object.isFrozen(BUILTIN_PROVIDERS.groq) && Object.isFrozen(BUILTIN_PROVIDERS.groq.keyEnv));
+  assert.equal(BUILTIN_PROVIDERS['oasis-route'].baseURL, 'http://127.0.0.1:8081/v1');
+  assert.equal(BUILTIN_PROVIDERS['oasis-route'].model, 'auto');
+  assert.equal(BUILTIN_PROVIDERS['oasis-route'].gateway, true);
+  assert.equal(providerApiKey('oasis-route', { OASIS_ROUTE_API_KEY: 'oasis_live_test' }), 'oasis_live_test');
+  assert.equal(providerForEndpoint('http://localhost:8081/v1'), 'oasis-route');
 });
 
 test('settings providers add and override entries; invalid ones are ignored', () => {
@@ -55,6 +60,7 @@ test('endpoint inference matches host and port, treating loopback names alike', 
   assert.equal(providerForEndpoint('https://generativelanguage.googleapis.com/v1beta/openai/'), 'gemini');
   assert.equal(providerForEndpoint('https://api.openai.com/v1', 'anthropic'), '');
   assert.equal(inferSetupProviderPreset({ configured: true, protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:1234/v1' }), 'custom');
+  assert.equal(inferSetupProviderPreset({ configured: true, protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:8081/v1' }), 'oasis-route');
 });
 
 test('a repository cannot define providers; user settings can', async () => {

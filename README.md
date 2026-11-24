@@ -379,7 +379,7 @@ By default OASIS works in the folder you start it in, on your machine, with appr
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/readme/providers-dark.svg">
-    <img src="assets/readme/providers-light.svg" alt="Three scrolling rows. Hosted: OpenAI, Anthropic, Google Gemini, Amazon Bedrock, Vertex AI, Azure AI Foundry, OpenRouter, Groq, DeepSeek, Mistral, xAI and any OpenAI-compatible API. Local: Ollama, LM Studio, llama.cpp, vLLM, OmniRoute, FreeLLMAPI, zero-budget mode, failover backups, prompt caching and spend limits. Plugs into: MCP servers, the MCP Registry, 48 app connectors, Claude Code plugins, Codex plugins, Gemini CLI extensions, skills, hooks, the GitHub Action and A2A agents." width="100%">
+    <img src="assets/readme/providers-light.svg" alt="Three scrolling rows. Hosted: OpenAI, Anthropic, Google Gemini, Amazon Bedrock, Vertex AI, Azure AI Foundry, OpenRouter, Groq, DeepSeek, Mistral, xAI and any OpenAI-compatible API. Local: Ollama, LM Studio, llama.cpp, vLLM. Gateways: first-party OASIS Route, OmniRoute and FreeLLMAPI. Also: zero-budget mode, failover backups, prompt caching and spend limits. Plugs into: MCP servers, the MCP Registry, 48 app connectors, Claude Code plugins, Codex plugins, Gemini CLI extensions, skills, hooks, the GitHub Action and A2A agents." width="100%">
   </picture>
 </p>
 
@@ -394,7 +394,7 @@ By default OASIS works in the folder you start it in, on your machine, with appr
 
 **Skills and plugins.** Skills, slash commands, hooks, subagents and MCP servers can be packaged as plugins. Existing Claude Code setups (`CLAUDE.md`, `.claude/agents`, skills, hooks, settings, `.mcp.json` and plugins) load without conversion, and Codex plugins and Gemini CLI extensions are converted on install. What loads and what does not is in [Compatibility](docs/COMPATIBILITY.md).
 
-**Free-tier routers.** [OmniRoute](https://github.com/cheaper-inference/OmniRoute) and [FreeLLMAPI](https://github.com/Azhan787/FreeLLMAPI) are built-in gateway providers. Run either on your machine with your own provider accounts and point `oasis connect` at it; zero-budget mode refuses any route it cannot prove is free. Each free tier has its own limits and terms. Setup: [OmniRoute](docs/CONFIGURATION.md#omniroute-gateway), [FreeLLMAPI](docs/CONFIGURATION.md#freellmapi-gateway).
+**Inference gateways.** [OASIS Route](https://github.com/FAHTHIZ/OASIS-ROUTE) is the first-party self-hosted router, with encrypted provider connections, quota-aware selection, spend policy and failover. OASIS also has built-in provider entries for third-party [OmniRoute](https://github.com/cheaper-inference/OmniRoute) and [FreeLLMAPI](https://github.com/Azhan787/FreeLLMAPI). These are separate services; OASIS remains the agent runtime. Gateways can expose free and paid upstreams, so `--zero-budget` does not assume a router is free. Setup: [OASIS Route](docs/CONFIGURATION.md#oasis-route-gateway), [OmniRoute](docs/CONFIGURATION.md#omniroute-gateway), [FreeLLMAPI](docs/CONFIGURATION.md#freellmapi-gateway).
 
 <details>
 <summary><b>Model, MCP and plugin commands</b></summary>

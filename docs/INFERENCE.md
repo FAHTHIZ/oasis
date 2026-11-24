@@ -28,7 +28,7 @@ chain moves to its next entry.
 | A model you priced at $0 (`OASIS_PRICE_INPUT=0 OASIS_PRICE_OUTPUT=0` or settings `pricing`) | free |
 | A model with a catalog price above $0 | paid, refused |
 | A model listed at $0 in the catalog, or with no known price | unknown, refused |
-| A loopback service on any other port (it may be LiteLLM, OmniRoute or FreeLLMAPI forwarding to a paid model) | unknown, refused |
+| A loopback service on any other port (it may be LiteLLM, OASIS Route, OmniRoute or FreeLLMAPI forwarding to a paid model) | unknown, refused |
 
 Unknown is refused on purpose: a free tier can bill once it is used up, and an
 advertised free allowance is not a guarantee. If you know a route cannot bill
@@ -231,8 +231,10 @@ meeting its expectation.
 
 ## Limitations
 
-- Zero-budget mode trusts its evidence: a loopback port, OpenRouter's `:free`
-  naming, and your declarations. It cannot see a provider's billing settings.
+- Zero-budget mode trusts its evidence: known local model-server ports,
+  OpenRouter's `:free` naming, and your declarations. It treats OASIS Route,
+  OmniRoute, FreeLLMAPI and other cloud-forwarding gateways as unknown; it cannot
+  inspect their upstream billing settings.
 - MCP servers and hooks that call paid APIs themselves are outside Oasis's view and are not gated.
 - Remaining quota is known only for providers that send rate-limit headers,
   and only as of the last response.

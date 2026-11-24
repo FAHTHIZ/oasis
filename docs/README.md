@@ -32,7 +32,7 @@ every guide.
 - [Remote access](REMOTE-ACCESS.md): run the web app on a server and use connected browser sessions from another device, securely.
 - [Downloads and releases](RELEASES.md): npm tarball, install scripts, Homebrew, checksums.
 - [Android / Termux](ANDROID-TERMUX.md): experimental on-device CLI installation and smoke check.
-- [Configuration](CONFIGURATION.md): providers, gateways, fallback models, routing, output, search, MCP options, telemetry.
+- [Configuration](CONFIGURATION.md): direct providers, the first-party OASIS Route gateway, third-party gateways, fallback models, routing, output, search, MCP options, telemetry.
 - [Inference](INFERENCE.md): zero-budget mode, request and token budgets, the quota ledger.
 - [Extending OASIS](EXTENDING.md): project instructions, skills, MCP, connected apps, plugins, commands, hooks, settings files.
 - [Control room](CONTROL_ROOM.md): every agent on this computer, with its screen and browser, history, spend and the machine's load, in the web app or `oasis control-room`.
