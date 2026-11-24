@@ -32,6 +32,7 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, re
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { protectedConfigPath } from './protected-paths.mjs';
 import { collectSensitivePaths, tmpToolchainMounts, unixSocketFilterPath } from './sandbox.mjs';
 
 export const REHEARSAL_TIMEOUT_MS = 30_000;
@@ -205,10 +206,12 @@ export async function rehearseCommand({ root, command, args = [], env = process.
   let commandExit = exitCode;
   let reported = false;
   let contacts = [];
+  let tmpLeft = [];
   try {
     const parsed = JSON.parse(await readFile(path.join(report, 'merged.json'), 'utf8'));
     merged = parsed.dirs || {};
     if (Array.isArray(parsed.contacts)) contacts = parsed.contacts.filter((item) => item && typeof item.host === 'string' && /^[a-z0-9.:_-]{1,253}$/.test(item.host)).slice(0, 20).map((item) => ({ host: item.host, port: Number(item.port) || 0 }));
+    if (Array.isArray(parsed.tmpLeft)) tmpLeft = parsed.tmpLeft.filter((name) => typeof name === 'string' && name.length <= 255 && !/[\/\0]/.test(name)).slice(0, 20);
     if (Number.isInteger(parsed.exitCode)) commandExit = parsed.exitCode;
     reported = true;
   } catch {}
@@ -223,6 +226,7 @@ export async function rehearseCommand({ root, command, args = [], env = process.
     readOnlyWrites: /read-only file system/i.test(stderr),
     network: Boolean(network),
     contacts,
+    ...(tmpLeft.length ? { tmpLeft } : {}),
     ms: Date.now() - started,
     keep: { state, upper, lower, entries: changes.entries, digests: changes.digests }
   };
@@ -433,6 +437,7 @@ export function formatRehearsal(result) {
     + (none ? '\n  It changed no files in the workspace.' : listed('would create', created) + listed('would modify', modified) + listed('would delete', deleted))
     + (result.git ? '\n  It also changed ' + result.git + ' path(s) inside .git.' : '')
     + (result.readOnlyWrites ? '\n  It tried to write outside the workspace (refused in the rehearsal; the real run may succeed there).' : '')
+    + (result.tmpLeft && result.tmpLeft.length ? '\n  It left ' + result.tmpLeft.length + ' item(s) in /tmp (' + result.tmpLeft.slice(0, 4).join(', ') + (result.tmpLeft.length > 4 ? ', ...' : '') + '); the rehearsal\'s /tmp is discarded.' : '')
     + (result.contacts && result.contacts.length ? '\n  It tried to reach ' + result.contacts.slice(0, 8).map(contactLabel).join(', ') + (result.contacts.length > 8 ? ', ...' : '') + ' (refused: nothing was sent).' : '')
     + (result.status === 'failed' ? failedNote(result) : '');
 }
@@ -448,7 +453,7 @@ function failedNote(result) {
 export function publicRehearsal(result) {
   if (!result || result.status === 'unavailable') return null;
   const cap = (items) => items.slice(0, MAX_LISTED);
-  return { status: result.status, exitCode: result.exitCode, ms: result.ms, created: cap(result.changes.created), modified: cap(result.changes.modified), deleted: cap(result.changes.deleted), ...(result.git ? { gitPaths: result.git } : {}), ...(result.readOnlyWrites ? { wroteOutsideWorkspace: true } : {}), ...(result.contacts && result.contacts.length ? { contacted: result.contacts.slice(0, MAX_LISTED).map(contactLabel) } : {}) };
+  return { status: result.status, exitCode: result.exitCode, ms: result.ms, created: cap(result.changes.created), modified: cap(result.changes.modified), deleted: cap(result.changes.deleted), ...(result.git ? { gitPaths: result.git } : {}), ...(result.readOnlyWrites ? { wroteOutsideWorkspace: true } : {}), ...(result.contacts && result.contacts.length ? { contacted: result.contacts.slice(0, MAX_LISTED).map(contactLabel) } : {}), ...(result.tmpLeft && result.tmpLeft.length ? { leftInTmp: result.tmpLeft } : {}) };
 }
 
 /**
@@ -512,3 +517,51 @@ export function summaryDivergence(summary, observedPaths) {
   if (!summary || !Array.isArray(observedPaths)) return null;
   return rehearsalDivergence({ status: summary.status, changes: { created: summary.created || [], modified: summary.modified || [], deleted: summary.deleted || [] } }, { modified: observedPaths });
 }
+
+// Witnessed runs (docs/REHEARSAL.md#witnessed-runs). When auto mode's classifier is
+// unsure about a command, OASIS watches it instead of guessing: the command runs once
+// as a rehearsal, and when everything it did stayed in the workspace, that rehearsal
+// is the run. Its output is returned and exactly the file changes it was seen to make
+// are applied; the command is never run outside the rehearsal.
+const WITNESS_MAX_CHANGES = 200;
+
+/** Whether a finished rehearsal can stand in for the run, and if not, why (one clause). */
+export function witnessVerdict(result, root) {
+  if (!result || result.status === 'unavailable') return { clean: false, reason: 'could not rehearse it here' };
+  if (result.status === 'timeout') return { clean: false, reason: 'did not finish in time' };
+  if (result.status === 'error' || !result.keep || (result.changes && result.changes.error)) return { clean: false, reason: 'could not finish' };
+  if (result.contacts && result.contacts.length) return { clean: false, reason: 'tried to reach ' + result.contacts.slice(0, 3).map(contactLabel).join(', ') };
+  if (result.readOnlyWrites) return { clean: false, reason: 'tried to write outside the workspace' };
+  if (result.git) return { clean: false, reason: 'changed ' + result.git + ' path(s) inside .git' };
+  const { created, modified, deleted } = result.changes;
+  const paths = [...created, ...modified, ...deleted];
+  if (paths.length > WITNESS_MAX_CHANGES) return { clean: false, reason: 'changed ' + paths.length + ' paths, more than a witnessed run applies' };
+  // Settings, hooks, instruction files: a change there always needs a person.
+  const hit = paths.map((rel) => protectedConfigPath(root, rel)).find(Boolean);
+  if (hit) return { clean: false, reason: 'would change ' + hit.path + ', a protected configuration file' };
+  return { clean: true, reason: '' };
+}
+
+/**
+ * Rehearse `command args` for a witnessed run. Returns null when witnessing is off or
+ * cannot run here; otherwise { clean, reason, summary, text, kept } where kept (only when
+ * clean) is the rehearsal to apply with applyRehearsal and dispose afterwards.
+ */
+export async function witnessRun({ root, command, args = [], env = process.env, settings = {}, sandbox = null, timeoutMs = REHEARSAL_TIMEOUT_MS } = {}) {
+  if (['0', 'false', 'off', 'no'].includes(String(env.OASIS_REHEARSE ?? '').trim().toLowerCase())) return null;
+  if (settings && settings.rehearse === false) return null;
+  // SSH and container sandboxes run the command elsewhere; a rehearsal here would not be it.
+  if (sandbox && sandbox.available && sandbox.kind !== 'bubblewrap') return null;
+  if (!rehearsalSupport().available) return null;
+  let result;
+  try {
+    const masked = sandbox && Array.isArray(sandbox.maskedPaths) ? sandbox.maskedPaths : [];
+    result = await rehearseCommand({ root, command, args, env, masked, timeoutMs });
+  } catch { return null; }
+  if (result.status === 'unavailable') return null;
+  const verdict = witnessVerdict(result, root);
+  const seen = { ...verdict, summary: publicRehearsal(result), text: formatRehearsal(result) };
+  if (!verdict.clean) { await disposeRehearsal(result); return seen; }
+  return { ...seen, kept: result };
+}
+

@@ -91,7 +91,8 @@ test('auto mode hands unclear actions to the user', async (t) => {
     { content: '{"decision": "ask", "reason": "Unsure."}' },
     { content: 'done' }
   ]);
-  const session = await createSession({ root, config, settings, permissionMode: 'auto' });
+  // Witnessed runs off, so the unsure verdict reaches the person (test/witnessed-run.test.mjs covers them on).
+  const session = await createSession({ root, config, settings: { ...settings, autoMode: { witness: false } }, permissionMode: 'auto' });
   const prompts = [];
   const metas = [];
   await runAgentTurn(session, 'do it', { approval: async (message, force, meta) => { prompts.push(message); metas.push(meta); return false; } });

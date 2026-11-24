@@ -45,6 +45,12 @@ main model's typical reply time (up to 180 seconds) when it runs on the same
 model. Set `autoMode.timeoutSeconds` in user settings to choose the limit, or
 set `autoMode.model` to a faster model. Source: `src/auto-mode.mjs`.
 
+When the classifier is unsure about a command, auto mode runs it once as a
+rehearsal (network off, writes outside the workspace refused) and, if all it did
+stayed in the workspace, uses that rehearsal as the run instead of waiting for a
+person. `"autoMode": { "witness": false }` turns this off; see
+[Witnessed runs](REHEARSAL.md#witnessed-runs-in-auto-mode).
+
 MCP tools also skip the classifier in `auto` mode when the server comes from
 your user MCP config (never a project `.mcp.json`) and the tool declares
 `readOnlyHint: true`, `openWorldHint: false` and no `destructiveHint`. Tools

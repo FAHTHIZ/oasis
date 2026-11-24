@@ -681,18 +681,36 @@ async function runShell(root, args, context, flavor = 'sh') {
   }
   if (!autoAllowed) {
     const choice = { value: null };
+    // Witnessed run when auto mode's classifier is unsure (see runWorkspaceCommand).
+    let witnessed = null;
+    const witness = flavor === 'sh' && process.platform === 'linux' && !hardRisk && !appRisk && !install.forceAsk && args.run_in_background !== true ? async () => {
+      const { witnessRun } = await import('./rehearsal.mjs');
+      witnessed = await witnessRun({ root, command: '/bin/sh', args: ['-c', command], env: env0, settings: (context.session && context.session.settings) || {}, sandbox, timeoutMs: Math.max(5, Math.min(600, Number.parseInt(args.timeoutSeconds, 10) || 120)) * 1000 });
+      return witnessed && { clean: witnessed.clean, reason: witnessed.reason, summary: witnessed.summary };
+    } : null;
+    const extra = rehearsal.kept || witness ? { ...(rehearsal.kept ? { rehearsal: { offer: true } } : {}), ...(witness ? { witness } : {}), choice } : null;
     let ok;
     try {
-    ok = context.approval && await context.approval((install.approvalNote ? install.approvalNote + '\n' : '') + (hardRisk ? 'HIGH RISK: this command ' + hardRisk + '. Auto-approval does not apply.\n' : '') + (appRisk ? 'Warning: ' + appRisk + (/^it appears to write|^it sets a git config/.test(appRisk) ? '.\n' : '. Unsaved work in those apps could be lost.\n') : '') + 'Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + (sandbox.ssh.display || sandbox.ssh.host) + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.') + rehearsal.text, !sandbox || Boolean(appRisk) || Boolean(hardRisk), rehearsal.kept ? { rehearsal: { offer: true }, choice } : null);
+    ok = context.approval && await context.approval((install.approvalNote ? install.approvalNote + '\n' : '') + (hardRisk ? 'HIGH RISK: this command ' + hardRisk + '. Auto-approval does not apply.\n' : '') + (appRisk ? 'Warning: ' + appRisk + (/^it appears to write|^it sets a git config/.test(appRisk) ? '.\n' : '. Unsaved work in those apps could be lost.\n') : '') + 'Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + (sandbox.ssh.display || sandbox.ssh.host) + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.') + rehearsal.text, !sandbox || Boolean(appRisk) || Boolean(hardRisk), extra);
     if (ok && typeof context.onApproved === 'function') await context.onApproved();
     if (ok && choice.value === 'rehearsal' && rehearsal.kept) {
       const { applyRehearsedRun } = await import('./tools.mjs');
       const { args: _ignored, ...applied } = await applyRehearsedRun(rehearsal.kept, command, []);
       return applied;
     }
-    } finally {
-      if (rehearsal.kept) { const { disposeRehearsal } = await import('./rehearsal.mjs'); await disposeRehearsal(rehearsal.kept); }
+    if (ok && choice.value === 'witnessed' && witnessed && witnessed.kept) {
+      const { applyRehearsedRun } = await import('./tools.mjs');
+      const { args: _ignored, ...applied } = await applyRehearsedRun(witnessed.kept, command, [], { witnessed: true });
+      return applied;
     }
+    } finally {
+      if (rehearsal.kept || (witnessed && witnessed.kept)) {
+        const { disposeRehearsal } = await import('./rehearsal.mjs');
+        if (rehearsal.kept) await disposeRehearsal(rehearsal.kept);
+        if (witnessed && witnessed.kept) await disposeRehearsal(witnessed.kept);
+      }
+    }
+    if (!ok && witnessed && witnessed.summary && !rehearsal.summary) rehearsal = { ...rehearsal, summary: witnessed.summary };
     if (!ok && (!context.approval || context.noApprover)) {
       const { unattendedCommandMessage } = await import('./tools.mjs');
       return { approved: false, command, unattended: true, message: unattendedCommandMessage(hardRisk || appRisk, 'shell') };

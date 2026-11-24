@@ -1890,8 +1890,24 @@ async function authorizeCall(session, name, args, context, options) {
         }
         return false;
       }
+      // Unsure: watch instead of guessing. The command runs once as a rehearsal; if all it
+      // did stayed in the workspace, that rehearsal is the run (src/rehearsal.mjs witnessRun).
+      // Not after repeated blocks (the classifier paused auto mode) or when turned off.
+      let doubt = verdict.reason || '';
+      if (extra && typeof extra.witness === 'function' && extra.choice && !verdict.paused && autoSettings.witness !== false) {
+        const seen = await extra.witness().catch(() => null);
+        if (seen && seen.clean) {
+          extra.choice.value = 'witnessed';
+          const reason = 'Witnessed: its rehearsal stayed in the workspace (' + (verdict.reason ? 'the classifier was unsure: ' + String(verdict.reason).replace(/[.\s]+$/, '') : 'the classifier was unsure') + ').';
+          session.autoMode.log.push({ tool: name, decision: 'allow', reason, rule: 'Witnessed run', at: Date.now() });
+          if (session.autoMode.log.length > 100) session.autoMode.log.shift();
+          if (options.onAutoMode) options.onAutoMode({ tool: name, decision: 'allow', reason, rule: 'Witnessed run', witnessed: true });
+          return true;
+        }
+        if (seen && seen.reason) doubt = (doubt ? String(doubt).replace(/[.\s]+$/, '') + '; ' : '') + 'its rehearsal ' + seen.reason;
+      }
       // Unsure: a person decides, and is told what the classifier doubted.
-      if (verdict.reason) { overlay.autoModeUnsure = String(verdict.reason).slice(0, 300); extra = { ...(extra || {}), autoModeReason: overlay.autoModeUnsure }; }
+      if (doubt) { overlay.autoModeUnsure = String(doubt).slice(0, 300); extra = { ...(extra || {}), autoModeReason: overlay.autoModeUnsure }; }
     }
     // dontAsk mode / permissions.denyInsteadOfPrompting: a prompt becomes a
     // denial the model can read, so unattended runs never hang on approval.

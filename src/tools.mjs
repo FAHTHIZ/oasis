@@ -641,7 +641,7 @@ export async function searchWorkspaceFiles(root, query, limit = 25, scope) {
 }
 
 // "Apply the rehearsal": land the rehearsed changes (conflict-checked) without running again.
-export async function applyRehearsedRun(kept, command, args) {
+export async function applyRehearsedRun(kept, command, args, { witnessed = false } = {}) {
   const { applyRehearsal, publicRehearsal } = await import('./rehearsal.mjs');
   const summary = publicRehearsal(kept);
   const applied = await applyRehearsal(kept);
@@ -650,8 +650,10 @@ export async function applyRehearsedRun(kept, command, args) {
   }
   return {
     command, args, approved: true, exitCode: kept.exitCode, stdout: kept.stdout || '', stderr: kept.stderr || '',
-    rehearsal: summary, appliedRehearsal: true,
-    message: 'The person chose to apply the rehearsal: its ' + (summary.created.length + summary.modified.length + summary.deleted.length) + ' file change(s) were copied into the workspace and the command was not run a second time. Output above is from the rehearsal (network was off).'
+    rehearsal: summary, appliedRehearsal: true, ...(witnessed ? { witnessed: true } : {}),
+    message: witnessed
+      ? 'Auto mode was not sure about this command, so it ran once as a rehearsal (network off, writes outside the workspace refused, credentials hidden). Everything it did stayed in the workspace, so that rehearsal was the run: ' + (summary.created.length + summary.modified.length + summary.deleted.length) + ' file change(s) were applied and it was not run again. Output above is from the rehearsal' + (summary.leftInTmp ? '; what it wrote in /tmp (' + summary.leftInTmp.slice(0, 4).join(', ') + ') was discarded with it' : '') + '. If it failed for lack of network, say so and give the user the command.'
+      : 'The person chose to apply the rehearsal: its ' + (summary.created.length + summary.modified.length + summary.deleted.length) + ' file change(s) were copied into the workspace and the command was not run a second time. Output above is from the rehearsal (network was off).'
   };
 }
 
@@ -801,7 +803,16 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     // A person can accept exactly what the rehearsal showed instead of a second run.
     // Not offered for high-risk commands: those are approved by reading the command.
     const choice = { value: null };
-    const extra = rehearsal.kept ? { rehearsal: { offer: true }, choice } : null;
+    // Witnessed run: when auto mode's classifier is unsure, the approver may rehearse the
+    // command and, if it stayed in the workspace, use that rehearsal as the run.
+    // Never for high-risk commands, which a person approves by reading them.
+    let witnessed = null;
+    const witness = !highRisk && !options.clientTerminal && !options.interactive && !options.background ? async () => {
+      const { witnessRun } = await import('./rehearsal.mjs');
+      witnessed = await witnessRun({ root, command, args, env: options.env || process.env, settings: options.settings || {}, sandbox, timeoutMs: timeoutSeconds * 1000 });
+      return witnessed && { clean: witnessed.clean, reason: witnessed.reason, summary: witnessed.summary };
+    } : null;
+    const extra = rehearsal.kept || witness ? { ...(rehearsal.kept ? { rehearsal: { offer: true } } : {}), ...(witness ? { witness } : {}), choice } : null;
     let ok;
     try {
     ok = approval && await approval('Run this command in the workspace?\n  ' + command + ' ' + args.map((arg) => JSON.stringify(arg)).join(' ') + rehearsal.text +
@@ -810,9 +821,15 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
       (sandbox && sandbox.available ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + (sandbox.ssh.display || sandbox.ssh.host) + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : ''), Boolean(highRisk), extra);
     if (ok && typeof options.onApproved === 'function') await options.onApproved();
     if (ok && choice.value === 'rehearsal' && rehearsal.kept) return await applyRehearsedRun(rehearsal.kept, command, args);
+    if (ok && choice.value === 'witnessed' && witnessed && witnessed.kept) return await applyRehearsedRun(witnessed.kept, command, args, { witnessed: true });
     } finally {
-      if (rehearsal.kept) { const { disposeRehearsal } = await import('./rehearsal.mjs'); await disposeRehearsal(rehearsal.kept); }
+      if (rehearsal.kept || (witnessed && witnessed.kept)) {
+        const { disposeRehearsal } = await import('./rehearsal.mjs');
+        if (rehearsal.kept) await disposeRehearsal(rehearsal.kept);
+        if (witnessed && witnessed.kept) await disposeRehearsal(witnessed.kept);
+      }
     }
+    if (!ok && witnessed && witnessed.summary && !rehearsal.summary) rehearsal = { ...rehearsal, summary: witnessed.summary };
     if (!ok && (!approval || options.noApprover)) return { approved: false, command, args, unattended: true, message: unattendedCommandMessage(highRisk) };
     if (!ok) return { approved: false, command, args, ...(rehearsal.summary ? { rehearsal: rehearsal.summary } : {}), message: 'Command was not approved. ' + (rehearsal.summary ? 'It only ran as a rehearsal in a throwaway copy of the workspace, and nothing it did was kept.' : 'No process was started.') + ' Do not retry it or ask for approval again this turn; finish what you can without it and tell the user the exact command to run.' };
   }

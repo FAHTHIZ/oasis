@@ -9,6 +9,7 @@
 // HTTP proxy and points the usual proxy variables at it. Every request is refused with
 // 403 and nothing leaves the sandbox; the host and port each one asked for are
 // recorded, so the person sees which servers the command would contact.
+// The report also names files the command left in /tmp, which the rehearsal discards.
 import { spawn } from 'node:child_process';
 import { readdirSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
@@ -71,6 +72,10 @@ if (port) {
   childEnv['GIT_CONFIG_VALUE_' + count] = proxy;
   childEnv.GIT_CONFIG_COUNT = String(count + 1);
 }
+// /tmp is a fresh tmpfs that disappears with the rehearsal: note what was there before
+// the command, so files it leaves behind there can be reported as discarded.
+const listTmp = () => { try { return readdirSync('/tmp'); } catch { return []; } };
+const tmpBefore = new Set(listTmp());
 const child = spawn(command, args, { stdio: 'inherit', env: childEnv });
 const forward = (signal) => { try { child.kill(signal); } catch {} };
 process.on('SIGTERM', () => forward('SIGTERM'));
@@ -93,6 +98,7 @@ function finish(exitCode) {
     }
   };
   walk('');
-  try { writeFileSync(report, JSON.stringify({ exitCode, dirs, ...(port ? { contacts: [...contacts.values()] } : {}) })); } catch {}
+  const tmpLeft = listTmp().filter((name) => !tmpBefore.has(name)).sort().slice(0, 20);
+  try { writeFileSync(report, JSON.stringify({ exitCode, dirs, ...(port ? { contacts: [...contacts.values()] } : {}), ...(tmpLeft.length ? { tmpLeft } : {}) })); } catch {}
   process.exit(exitCode);
 }
