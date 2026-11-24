@@ -82,7 +82,7 @@
     "open-source"
   ],
   "dependencies": {
-    "@agentclientprotocol/sdk": "^2.7.0",
+    "@agentclientprotocol/sdk": "^2.8.0",
     "@anthropic-ai/sandbox-runtime": "^0.0.83",
     "@cfworker/json-schema": "4.1.6",
     "@earendil-works/pi-tui": "1.5.2",
@@ -110,7 +110,7 @@
     "binary-extensions": "3.2.0",
     "cockatiel": "4.0.0",
     "croner": "^11.0.1",
-    "defuddle": "^0.19.6",
+    "defuddle": "^0.19.7",
     "diff": "^9.0.0",
     "dompurify": "3.4.18",
     "entities": "9.0.0",
@@ -140,7 +140,7 @@
     "picomatch": "^4.0.7",
     "quickjs-emscripten": "0.32.0",
     "remend": "1.5.0",
-    "rrule-temporal": "2.2.9",
+    "rrule-temporal": "2.3.0",
     "semver": "^7.8.6",
     "smol-toml": "1.9.1",
     "string-width": "^8.3.0",
@@ -162,8 +162,8 @@
   "devDependencies": {
     "esbuild": "0.28.2",
     "fake-indexeddb": "6.2.8",
-    "lucide-static": "1.72.0",
-    "oxlint": "^1.93.0",
+    "lucide-static": "1.75.0",
+    "oxlint": "^1.94.0",
     "sucrase": "3.35.1"
   },
   "author": {
