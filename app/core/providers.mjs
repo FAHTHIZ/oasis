@@ -200,7 +200,7 @@ async function* sseEvents(response, signal) {
 function openAIHeaders(config) {
   const headers = { 'content-type': 'application/json' };
   if (config.apiKey) headers.authorization = 'Bearer ' + config.apiKey;
-  if (/openrouter\.ai/.test(config.baseURL)) {
+  if (isOpenRouterEndpoint(config.baseURL)) {
     headers['HTTP-Referer'] = config.referer || 'https://fahthiz.github.io/oasis/';
     headers['X-Title'] = 'OASIS';
   }
