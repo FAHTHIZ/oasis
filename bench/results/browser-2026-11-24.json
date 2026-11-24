@@ -1,0 +1,54 @@
+{
+  "runs": 5,
+  "parallel": 4,
+  "results": [
+    {
+      "engine": "obscura",
+      "launchMs": 33.91584,
+      "coldNavigateMs": 37.75444700000003,
+      "warmNavigateMs": 27.637233999999978,
+      "snapshotMs": 48.22215099999994,
+      "screenshotMs": 100.83917299999985,
+      "elements": 123,
+      "idleRssMb": 11.9443359375,
+      "loadedRssMb": 44.3564453125,
+      "parallel": {
+        "tabs": 4,
+        "wallMs": 767.815188,
+        "rss": 96117760,
+        "rssMb": 91.6650390625
+      },
+      "sessions": {
+        "browsers": 4,
+        "wallMs": 547.7720909999998,
+        "rss": 145954816,
+        "rssMb": 139.193359375
+      },
+      "live": null
+    },
+    {
+      "engine": "chrome",
+      "launchMs": 284.10276199999953,
+      "coldNavigateMs": 61.760121000000254,
+      "warmNavigateMs": 34.96437900000001,
+      "snapshotMs": 9.566177000000607,
+      "screenshotMs": 84.32985499999995,
+      "elements": 123,
+      "idleRssMb": 212.037109375,
+      "loadedRssMb": 257.810546875,
+      "parallel": {
+        "tabs": 4,
+        "wallMs": 330.3202939999992,
+        "rss": 336350208,
+        "rssMb": 320.7685546875
+      },
+      "sessions": {
+        "browsers": 4,
+        "wallMs": 2029.058889,
+        "rss": 856100864,
+        "rssMb": 816.44140625
+      },
+      "live": null
+    }
+  ]
+}
