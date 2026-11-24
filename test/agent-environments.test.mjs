@@ -109,10 +109,10 @@ test('two desktop subagents run in parallel, each on its own screen, and their s
 });
 
 test('closing a browser tab settles its waits at once, so nothing holds the process open', async () => {
-  const { CdpPage } = await import('../src/cdp.mjs');
+  const { CdpConnection, CdpPage } = await import('../src/cdp.mjs');
   const sent = [];
-  const ws = { send: (text) => sent.push(text), close() {}, onmessage: null, onclose: null };
-  const page = new CdpPage(ws, { id: 't' });
+  const ws = { send: (text) => sent.push(JSON.parse(text)), close() {}, onmessage: null, onclose: null };
+  const page = new CdpPage(new CdpConnection(ws), 's1', { targetId: 't' });
   const started = Date.now();
   const event = page.once('Page.loadEventFired', 60_000);
   const command = page.send('Page.navigate', { url: 'about:blank' }, 60_000);
@@ -121,7 +121,7 @@ test('closing a browser tab settles its waits at once, so nothing holds the proc
   await assert.rejects(command, /tab closed/);
   assert.ok(Date.now() - started < 1000);
   assert.equal(await page.once('Page.loadEventFired', 60_000), null, 'a closed tab waits for nothing');
-  assert.equal(sent.length, 1);
+  assert.deepEqual(sent.map((m) => m.method), ['Page.navigate', 'Target.detachFromTarget'], 'the tab is detached, nothing else is sent');
 });
 
 test('--restricted holds for nested agents: a grandchild cannot get a desktop environment', async (t) => {

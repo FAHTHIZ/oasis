@@ -1,9 +1,13 @@
-// Minimal Chrome DevTools Protocol client: finds and launches Chrome/Chromium/
-// Edge with --remote-debugging-port, and speaks CDP over the WHATWG WebSocket
-// built into Node 22+ (undici).
+// Chrome DevTools Protocol client for the built-in browser tool.
+//
+// One WebSocket per browser, at the browser-level endpoint, with one flattened
+// session per tab (Target.attachToTarget { flatten: true }), the same model
+// Puppeteer and Playwright use. It works unchanged against Chrome, Chromium,
+// Edge and Obscura; the older per-page sockets (/json/new, /devtools/page/<id>)
+// do not exist in every engine and raced with tab creation.
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -42,7 +46,7 @@ function getJson(port, pathname, method = 'GET') {
     const req = http.request({ host: '127.0.0.1', port, path: pathname, method }, (res) => {
       let body = '';
       res.setEncoding('utf8');
-      res.on('data', (chunk) => { body += chunk; });
+      res.on('data', (chunk) => { body += chunk; if (body.length > 1024 * 1024) req.destroy(new Error('DevTools HTTP reply too large')); });
       res.on('end', () => { try { resolve(JSON.parse(body)); } catch (error) { reject(error); } });
     });
     req.on('error', reject);
@@ -58,13 +62,40 @@ async function readDevToolsPort(profile) {
   } catch { return 0; }
 }
 
-// --- WebSocket: the WHATWG client built into Node 22+ (undici) ---
-// A small adapter keeps CdpPage's onmessage(text)/onclose() shape.
-function connectWebSocket(url, WebSocketImpl = globalThis.WebSocket) {
-  if (typeof WebSocketImpl !== 'function') return Promise.reject(new Error('This Node.js has no WebSocket; use Node 22 or later.'));
+async function readObscuraReady(file) {
+  try {
+    const ready = JSON.parse(await readFile(file, 'utf8'));
+    const port = Number(ready && ready.port);
+    return Number.isInteger(port) && port > 0 && port < 65536 ? port : 0;
+  } catch { return 0; }
+}
+
+// The browser endpoint is always dialled on 127.0.0.1 with the port we started or
+// were told about. The host in /json/version is not trusted: an attached browser
+// (or anything answering on that port) could point it somewhere else.
+export function browserWebSocketUrl(port, version) {
+  let pathname = '/devtools/browser';
+  try {
+    const reported = new URL(String(version && version.webSocketDebuggerUrl || ''));
+    if (/^\/devtools\/browser(\/[\w-]+)?$/.test(reported.pathname)) pathname = reported.pathname;
+  } catch {}
+  return 'ws://127.0.0.1:' + port + pathname;
+}
+
+let wsModule = null;
+async function webSocketImpl() {
+  if (typeof globalThis.WebSocket === 'function') return globalThis.WebSocket;
+  if (!wsModule) wsModule = (await import('ws')).default;
+  return wsModule;
+}
+
+// A small adapter over the WHATWG WebSocket in Node 22+ (or the `ws` package, which
+// has the same event API) so the connection below sees onmessage(text)/onclose().
+export async function connectWebSocket(url, WebSocketImpl = null) {
+  const Impl = WebSocketImpl || await webSocketImpl();
   return new Promise((resolve, reject) => {
     let opened = false;
-    const socket = new WebSocketImpl(url);
+    const socket = new Impl(url, ...(Impl === wsModule ? [{ maxPayload: 256 * 1024 * 1024 }] : []));
     socket.binaryType = 'arraybuffer';
     const client = {
       onmessage: null,
@@ -82,146 +113,268 @@ function connectWebSocket(url, WebSocketImpl = globalThis.WebSocket) {
   });
 }
 
-/** One CDP connection to a page target. */
-export class CdpPage {
-  constructor(ws, target) {
+/** The browser-level protocol connection: requests by id, events routed by sessionId. */
+export class CdpConnection {
+  constructor(ws) {
     this.ws = ws;
-    this.target = target;
     this.nextId = 1;
     this.pending = new Map();
+    this.sessions = new Map();
     this.listeners = new Map();
     this.closed = false;
-    ws.onmessage = (text) => {
-      let msg;
-      try { msg = JSON.parse(text); } catch { return; }
-      if (msg.id && this.pending.has(msg.id)) {
-        const { resolve, reject } = this.pending.get(msg.id);
-        this.pending.delete(msg.id);
-        if (msg.error) reject(new Error(msg.error.message || 'CDP error')); else resolve(msg.result || {});
-      } else if (msg.method) {
-        for (const fn of this.listeners.get(msg.method) || []) { try { fn(msg.params || {}); } catch {} }
-      }
-    };
-    this.waiters = new Set();
-    ws.onclose = () => {
-      this.closed = true;
-      for (const { reject } of this.pending.values()) reject(new Error('Browser tab closed'));
-      this.pending.clear();
-      for (const settle of this.waiters) settle(null);
-      this.waiters.clear();
-    };
+    ws.onmessage = (text) => this.receive(text);
+    ws.onclose = () => this.shutdown();
   }
-  send(method, params = {}, timeoutMs = 30000) {
-    if (this.closed) return Promise.reject(new Error('Browser tab closed'));
+  receive(text) {
+    let msg;
+    try { msg = JSON.parse(text); } catch { return; }
+    if (msg.id && this.pending.has(msg.id)) {
+      const { resolve, reject, method } = this.pending.get(msg.id);
+      this.pending.delete(msg.id);
+      if (msg.error) reject(new Error((msg.error.message || 'CDP error') + (method ? ' (' + method + ')' : ''))); else resolve(msg.result || {});
+      return;
+    }
+    if (!msg.method) return;
+    if (msg.method === 'Target.detachedFromTarget' && msg.params && msg.params.sessionId) {
+      const session = this.sessions.get(msg.params.sessionId);
+      if (session) session.markClosed();
+    }
+    if (msg.sessionId) {
+      const session = this.sessions.get(msg.sessionId) || this.rescueSession(msg);
+      if (session) session.emit(msg.method, msg.params || {}, text);
+      return;
+    }
+    for (const fn of this.listeners.get(msg.method) || []) { try { fn(msg.params || {}); } catch {} }
+  }
+  send(method, params = {}, sessionId = null, timeoutMs = 30000) {
+    if (this.closed) return Promise.reject(new Error('Browser connection closed'));
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(method + ' timed out')); }, timeoutMs);
       timer.unref?.();
-      this.pending.set(id, { resolve: (v) => { clearTimeout(timer); resolve(v); }, reject: (e) => { clearTimeout(timer); reject(e); } });
-      this.ws.send(JSON.stringify({ id, method, params }));
+      this.pending.set(id, { method, resolve: (v) => { clearTimeout(timer); resolve(v); }, reject: (e) => { clearTimeout(timer); reject(e); } });
+      try { this.ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) })); }
+      catch (error) { this.pending.delete(id); clearTimeout(timer); reject(error); }
     });
   }
+  // Obscura tags some events (paused requests, navigation and lifecycle events)
+  // with the target's default session instead of the session we attached, e.g.
+  // "page-1-session" for "page-1-session-1". A paused request left unanswered
+  // stalls the page, and a missed frameNavigated leaves the tab URL stale, so hand
+  // those events to the attached session for the same target. Events that arrive
+  // on both sessions are delivered once (CdpPage drops exact repeats).
+  rescueSession(msg) {
+    const id = String(msg.sessionId);
+    for (const session of this.sessions.values()) {
+      const target = String(session.target.id || '');
+      if (session.sessionId.startsWith(id + '-') || (target && id.startsWith(target + '-'))) return session;
+    }
+    return null;
+  }
   on(method, fn) { if (!this.listeners.has(method)) this.listeners.set(method, []); this.listeners.get(method).push(fn); }
-  once(method, timeoutMs = 15000) {
+  shutdown() {
+    if (this.closed) return;
+    this.closed = true;
+    for (const { reject } of this.pending.values()) reject(new Error('Browser connection closed'));
+    this.pending.clear();
+    for (const session of this.sessions.values()) session.markClosed();
+    this.sessions.clear();
+  }
+  close() { this.shutdown(); try { this.ws.close(); } catch {} }
+}
+
+function digest(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+  return (h >>> 0).toString(36) + ':' + text.length;
+}
+
+/** One tab: a flattened protocol session on the browser connection. */
+export class CdpPage {
+  constructor(connection, sessionId, target) {
+    this.connection = connection;
+    this.sessionId = sessionId;
+    this.target = { ...target, id: target.targetId || target.id };
+    this.listeners = new Map();
+    this.waiters = new Set();
+    this.seen = new Set();
+    this.closed = false;
+    connection.sessions.set(sessionId, this);
+  }
+  send(method, params = {}, timeoutMs = 30000) {
+    if (this.closed) return Promise.reject(new Error('Browser tab closed'));
+    // A command in flight when the tab closes rejects at once, not at its timeout.
+    return new Promise((resolve, reject) => {
+      const abort = () => reject(new Error('Browser tab closed'));
+      this.waiters.add(abort);
+      this.connection.send(method, params, this.sessionId, timeoutMs).then(resolve, (error) => reject(this.closed ? new Error('Browser tab closed') : error))
+        .finally(() => this.waiters.delete(abort));
+    });
+  }
+  emit(method, params, raw = '') {
+    if (raw) {
+      // The same event on two sessions differs only in its sessionId field.
+      const key = method + ' ' + digest(JSON.stringify(params));
+      if (this.seen.has(key)) return;
+      this.seen.add(key);
+      if (this.seen.size > 256) this.seen.delete(this.seen.values().next().value);
+    }
+    for (const fn of [...(this.listeners.get(method) || [])]) { try { fn(params); } catch {} }
+  }
+  on(method, fn) { if (!this.listeners.has(method)) this.listeners.set(method, []); this.listeners.get(method).push(fn); }
+  off(method, fn) { const list = this.listeners.get(method); if (!list) return; const i = list.indexOf(fn); if (i >= 0) list.splice(i, 1); }
+  once(method, timeoutMs = 15000, predicate = null) {
     if (this.closed) return Promise.resolve(null);
     return new Promise((resolve) => {
-      const list = this.listeners.get(method) || [];
       const settle = (params) => {
         clearTimeout(timer);
         this.waiters.delete(settle);
-        const i = list.indexOf(fn);
-        if (i >= 0) list.splice(i, 1);
+        this.off(method, fn);
         resolve(params);
       };
-      const fn = (params) => settle(params);
+      const fn = (params) => { if (!predicate || predicate(params)) settle(params); };
       const timer = setTimeout(() => settle(null), timeoutMs);
       timer.unref?.();
       this.waiters.add(settle);
-      list.push(fn);
-      this.listeners.set(method, list);
+      this.on(method, fn);
     });
   }
-  // Closing settles every wait at once: a pending command or event wait must not keep
-  // the process alive (or a caller waiting) for its full timeout after the tab is gone.
-  close() {
-    if (!this.closed) this.closed = true;
-    for (const { reject } of this.pending.values()) reject(new Error('Browser tab closed'));
-    this.pending.clear();
-    for (const settle of this.waiters) settle(null);
+  // Every pending wait settles at once when the tab goes away: a command or event
+  // wait must not keep the process (or a caller) waiting for its full timeout.
+  markClosed() {
+    if (this.closed) return;
+    this.closed = true;
+    this.connection.sessions.delete(this.sessionId);
+    for (const settle of [...this.waiters]) settle(null);
     this.waiters.clear();
-    try { this.ws.close(); } catch {}
   }
+  close() {
+    if (this.closed) return;
+    const { connection, sessionId } = this;
+    this.markClosed();
+    if (!connection.closed) connection.send('Target.detachFromTarget', { sessionId }, null, 5000).catch(() => {});
+  }
+}
+
+// Variables that would silently widen what a launched engine may reach.
+const ENGINE_ENV_DENY = /^(?:OBSCURA_ALLOW_PRIVATE_NETWORK|OBSCURA_ALLOW_FILE_ACCESS)$/;
+
+function engineEnv(env, headless) {
+  const base = Object.fromEntries(Object.entries(process.env).filter(([key]) => !ENGINE_ENV_DENY.test(key)));
+  // A visible browser opens on the display it was given (an agent's own virtual screen).
+  if (!headless && env !== process.env && env.DISPLAY) base.DISPLAY = env.DISPLAY;
+  return base;
 }
 
 /** A launched (or attached) browser. */
 export class Browser {
-  constructor({ port, child = null, profile = null }) { this.port = port; this.child = child; this.profile = profile; }
-  static async launch({ env = process.env, headless = true, executable = null, timeoutMs = 45000 } = {}) {
-    const exe = executable || findChrome(env);
-    if (!exe) throw new Error('No Chrome, Chromium or Edge found. Install one, or set OASIS_CHROME_PATH to its executable.');
-    // Port 0 lets Chrome bind its own DevTools port and report it in
-    // <profile>/DevToolsActivePort. Picking a "free" port first and handing it
-    // over is racy: under parallel load another process (or another Chrome)
-    // can take it, and we would end up driving someone else's browser.
-    const profile = await mkdtemp(path.join(os.tmpdir(), 'oasis-chrome-'));
-    const args = ['--remote-debugging-port=0', '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-sync', '--window-size=1280,900'];
-    // GitHub-hosted Linux runners and small-memory containers can have a tiny
-    // /dev/shm. Chrome otherwise may start slowly or fail before opening CDP.
-    if (process.platform === 'linux') args.push('--disable-dev-shm-usage');
-    if (headless) args.push('--disable-gpu', '--disable-extensions', '--disable-default-apps');
-    if (headless) args.push('--headless=new');
-    if (process.platform === 'linux' && (env.OASIS_CHROME_NO_SANDBOX === '1' || (typeof process.getuid === 'function' && process.getuid() === 0))) args.push('--no-sandbox');
-    args.push('about:blank');
-    // A visible browser opens on the display it was given (an agent's own virtual screen).
-    const spawnEnv = !headless && env !== process.env && env.DISPLAY && env.DISPLAY !== process.env.DISPLAY ? { ...process.env, DISPLAY: env.DISPLAY } : undefined;
-    const child = spawn(exe, args, { stdio: ['ignore', 'ignore', 'pipe'], ...(spawnEnv ? { env: spawnEnv } : {}), ...processTreeSpawnOptions() });
+  constructor({ port, child = null, profile = null, keepProfile = false, engine = 'chrome', connection = null, capabilities = {} }) {
+    this.port = port;
+    this.child = child;
+    this.profile = profile;
+    this.keepProfile = keepProfile;
+    this.engine = engine;
+    this.connection = connection;
+    this.capabilities = capabilities;
+  }
+
+  /**
+   * Start a browser. `engine` is 'chrome' or 'obscura'. `profileDir` keeps cookies and
+   * storage across launches; without it a private temporary profile is used and removed.
+   * For Obscura, `allowPrivateNetwork` and `allowFileAccess` lift the engine's own
+   * network boundary; OASIS only sets them after the user approved such a target.
+   */
+  static async launch({ env = process.env, engine = 'chrome', headless = true, executable = null, timeoutMs = 45000, profileDir = null, allowPrivateNetwork = false, allowFileAccess = false, stealth = false } = {}) {
+    const exe = executable || (engine === 'chrome' ? findChrome(env) : null);
+    if (!exe) throw new Error(engine === 'chrome' ? 'No Chrome, Chromium or Edge found. Install one, or set OASIS_CHROME_PATH to its executable.' : 'Obscura is not installed. Run `oasis browser install`, or set OASIS_OBSCURA_PATH.');
+    let profile = profileDir;
+    if (profile) { await mkdir(profile, { recursive: true, mode: 0o700 }); await chmod(profile, 0o700).catch(() => {}); }
+    else profile = await mkdtemp(path.join(os.tmpdir(), engine === 'chrome' ? 'oasis-chrome-' : 'oasis-obscura-'));
+    let args;
+    let readyFile = null;
+    if (engine === 'obscura') {
+      readyFile = path.join(profile, 'ready-' + process.pid + '-' + Date.now() + '.json');
+      args = ['serve', '--host', '127.0.0.1', '--port', '0', '--ready-file', readyFile, '--storage-dir', path.join(profile, 'storage'), '--quiet'];
+      if (allowPrivateNetwork) args.push('--allow-private-network');
+      if (allowFileAccess) args.push('--allow-file-access');
+      if (stealth) args.push('--stealth');
+    } else {
+      // Port 0 lets Chrome bind its own DevTools port and report it in
+      // <profile>/DevToolsActivePort. Picking a "free" port first and handing it
+      // over is racy: under parallel load another process (or another Chrome)
+      // can take it, and we would end up driving someone else's browser.
+      args = ['--remote-debugging-port=0', '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-sync', '--disable-component-update', '--metrics-recording-only', '--password-store=basic', '--window-size=1280,900'];
+      // GitHub-hosted Linux runners and small-memory containers can have a tiny
+      // /dev/shm. Chrome otherwise may start slowly or fail before opening CDP.
+      if (process.platform === 'linux') args.push('--disable-dev-shm-usage');
+      if (headless) args.push('--disable-gpu', '--disable-extensions', '--disable-default-apps', '--headless=new');
+      if (process.platform === 'linux' && (env.OASIS_CHROME_NO_SANDBOX === '1' || (typeof process.getuid === 'function' && process.getuid() === 0))) args.push('--no-sandbox');
+      args.push('about:blank');
+    }
+    const child = spawn(exe, args, { stdio: ['ignore', 'ignore', 'pipe'], env: engineEnv(env, headless), ...processTreeSpawnOptions() });
     let spawnError = null;
     let stderr = '';
     child.stderr?.on('data', (chunk) => { stderr = (stderr + chunk.toString('utf8')).slice(-4000); });
     child.on('error', (error) => { spawnError = error; });
-    const browser = new Browser({ port: 0, child, profile });
+    const browser = new Browser({ port: 0, child, profile, keepProfile: Boolean(profileDir), engine, capabilities: { privateNetwork: engine === 'chrome' || allowPrivateNetwork, fileAccess: engine === 'chrome' || allowFileAccess } });
+    const name = engine === 'chrome' ? 'Chrome' : 'Obscura';
     const started = Date.now();
-    for (;;) {
-      if (!browser.port) browser.port = await readDevToolsPort(profile);
-      if (browser.port) { try { await getJson(browser.port, '/json/version'); break; } catch {} }
-      if (spawnError) {
-        await browser.close();
-        throw new Error('Could not start Chrome: ' + spawnError.message + (stderr ? '\n' + stderr : ''));
+    const limit = Math.max(1000, Math.min(Number(timeoutMs) || 45000, 90000));
+    try {
+      let version = null;
+      for (;;) {
+        if (!browser.port) browser.port = engine === 'obscura' ? await readObscuraReady(readyFile) : await readDevToolsPort(profile);
+        if (browser.port) { try { version = await getJson(browser.port, '/json/version'); break; } catch {} }
+        if (spawnError) throw new Error('Could not start ' + name + ': ' + spawnError.message + (stderr ? '\n' + stderr : ''));
+        if (child.exitCode !== null || child.signalCode !== null) {
+          const status = child.signalCode ? 'signal ' + child.signalCode : 'code ' + child.exitCode;
+          throw new Error(name + ' exited during startup (' + status + ').' + (stderr ? '\n' + stderr : ''));
+        }
+        if (Date.now() - started > limit) throw new Error(name + ' did not open its DevTools port in time.' + (stderr ? '\n' + stderr : ''));
+        await new Promise((r) => setTimeout(r, engine === 'obscura' ? 25 : 100));
       }
-      if (child.exitCode !== null || child.signalCode !== null) {
-        const status = child.signalCode ? 'signal ' + child.signalCode : 'code ' + child.exitCode;
-        await browser.close();
-        throw new Error('Chrome exited during startup (' + status + ').' + (stderr ? '\n' + stderr : ''));
-      }
-      if (Date.now() - started > Math.max(1000, Math.min(Number(timeoutMs) || 45000, 90000))) {
-        await browser.close();
-        throw new Error('Chrome did not open its DevTools port in time.' + (stderr ? '\n' + stderr : ''));
-      }
-      await new Promise((r) => setTimeout(r, 100));
+      browser.connection = new CdpConnection(await connectWebSocket(browserWebSocketUrl(browser.port, version)));
+      browser.startupMs = Date.now() - started;
+      return browser;
+    } catch (error) {
+      // A failed start must not leave a browser process (or its profile) behind.
+      await browser.close();
+      throw error;
     }
-    return browser;
   }
-  /** Attach to a Chrome you started with --remote-debugging-port. */
-  static async attach(port) { await getJson(port, '/json/version'); return new Browser({ port }); }
-  // While Chrome is still starting, /json/list can answer with an error object instead of
-  // the target list; retry briefly rather than failing the whole browser tool call.
+
+  /** Attach to a browser you started with --remote-debugging-port. */
+  static async attach(port) {
+    const version = await getJson(port, '/json/version');
+    const connection = new CdpConnection(await connectWebSocket(browserWebSocketUrl(port, version)));
+    return new Browser({ port, connection, engine: /obscura/i.test(String(version && (version.Browser || version['User-Agent']) || '')) ? 'obscura' : 'chrome', capabilities: { privateNetwork: true, fileAccess: true } });
+  }
+
+  get closed() { return !this.connection || this.connection.closed; }
+
   async pages() {
-    for (let attempt = 0; ; attempt++) {
-      const list = await getJson(this.port, '/json/list');
-      if (Array.isArray(list)) return list.filter((t) => t && t.type === 'page');
-      if (attempt >= 20) throw new Error('Chrome DevTools did not return a target list.');
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    }
+    const { targetInfos = [] } = await this.connection.send('Target.getTargets');
+    return targetInfos.filter((t) => t && t.type === 'page').map((t) => ({ ...t, id: t.targetId }));
   }
+
   async newPage(url = 'about:blank') {
-    let target;
-    try { target = await getJson(this.port, '/json/new?' + encodeURIComponent(url), 'PUT'); }
-    catch { target = await getJson(this.port, '/json/new?' + encodeURIComponent(url)); }
-    return this.connect(target);
+    const { targetId } = await this.connection.send('Target.createTarget', { url });
+    return this.connect({ targetId, url });
   }
-  async connect(target) { return new CdpPage(await connectWebSocket(target.webSocketDebuggerUrl), target); }
-  async closePage(id) { try { await getJson(this.port, '/json/close/' + id); } catch {} }
+
+  async connect(target) {
+    const targetId = target.targetId || target.id;
+    const { sessionId } = await this.connection.send('Target.attachToTarget', { targetId, flatten: true });
+    return new CdpPage(this.connection, sessionId, { ...target, targetId });
+  }
+
+  async closePage(id) {
+    if (this.closed) return;
+    await this.connection.send('Target.closeTarget', { targetId: id }, null, 5000).catch(() => {});
+  }
+
   async close() {
+    if (this.connection) this.connection.close();
     const child = this.child;
     if (child && Number.isInteger(child.pid) && child.exitCode === null && child.signalCode === null) {
       const exited = new Promise((resolve) => {
@@ -242,11 +395,11 @@ export class Browser {
       });
       signalProcessTree(child, process.platform === 'win32' ? 'SIGKILL' : 'SIGTERM');
       if (process.platform !== 'win32') {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        signalProcessTree(child, 'SIGKILL');
+        const quick = await Promise.race([exited, new Promise((resolve) => setTimeout(() => resolve(false), this.engine === 'obscura' ? 300 : 1000))]);
+        if (!quick) signalProcessTree(child, 'SIGKILL');
       }
       await exited;
     }
-    if (this.profile) await rm(this.profile, { recursive: true, force: true, maxRetries: 3 }).catch(() => {});
+    if (this.profile && !this.keepProfile) await rm(this.profile, { recursive: true, force: true, maxRetries: 3 }).catch(() => {});
   }
 }

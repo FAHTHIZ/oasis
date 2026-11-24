@@ -12,7 +12,7 @@ function fakePage(text, buttons) {
   }));
   const document = {
     title: 'T', body: { innerText: text }, documentElement: { scrollHeight: 100 },
-    querySelectorAll: (sel) => (sel === '[data-oasis-ref]' ? [] : elements)
+    querySelectorAll: () => elements
   };
   return { document, getComputedStyle: () => ({ visibility: 'visible', display: 'block' }), location: { href: 'http://x/' }, scrollY: 0, innerHeight: 100 };
 }
@@ -31,4 +31,16 @@ test('a short page has no notes', () => {
   assert.equal(snap.textNote, undefined);
   assert.equal(snap.elementsNote, undefined);
   assert.equal(snap.elements.length, 3);
+});
+
+test('snapshot refs live in a page-side registry, not in DOM attributes', () => {
+  const page = fakePage('hello', 2);
+  let wrote = false;
+  for (const el of page.document.querySelectorAll()) el.setAttribute = () => { wrote = true; };
+  const ctx = vm.createContext(page);
+  vm.runInContext(SNAPSHOT_JS, ctx);
+  assert.equal(wrote, false);
+  const registry = Object.getOwnPropertyNames(ctx).map((k) => ctx[k]).find((v) => v && typeof v === 'object' && typeof v.get === 'function' && typeof v.set === 'function');
+  assert.ok(registry, 'registry stored on the page global');
+  assert.equal(registry.get(1).deref().innerText, 'b0');
 });
