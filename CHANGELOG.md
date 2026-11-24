@@ -4,6 +4,10 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ## Unreleased
 
+## [0.11.0] - 2026-11-24
+
+Plugins and hooks from other agents run in OASIS as they are, and OASIS plugins export to them.
+
 ### Added
 
 - Factory Droid workspaces work as they are: `.factory/commands` Markdown commands (with `$ARGUMENTS`), `.factory/skills`, and `oasis import factory` for `.factory/mcp.json` servers. `.factory/` hooks, MCP, droids and commands are protected paths, and an imported `type: sse` server stays SSE.
@@ -33,6 +37,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- The README status table and the capability page no longer call features that shipped in 0.10.0 unreleased; desktop computer use and virtual desktops are listed as experimental.
 - Install summaries say "1 command", "1 skill" and "1 agent" instead of "1 commands".
 - A converted plugin's hook script under a dot folder (`.cursor/hooks/fmt.sh`) pointed at `cursor/hooks/fmt.sh` in the plugin; only a leading `./` is dropped now.
 
