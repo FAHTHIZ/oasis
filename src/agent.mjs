@@ -85,7 +85,7 @@ import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, agentRegistry, restoreAgentHi
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames, normalizeAgentDefinition } from './subagents.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES } from './shared-tasks.mjs';
 import { createKnowledgeBoard, KNOWLEDGE_TOOL_NAMES } from './knowledge-board.mjs';
-import { unrequestedGitWrite } from './git-intent.mjs';
+import { forbiddenFileChange, unrequestedGitWrite } from './git-intent.mjs';
 import { recordTokenUsage } from './cost-policy.mjs';
 import { spend as spendBudget } from './budget-algebra.mjs';
 import { evidenceFromToolResult, outputText as evidenceOutputText, recordEvidence, sessionEvidence } from './evidence-ledger.mjs';
@@ -2758,6 +2758,8 @@ async function executeOneCallRaw(session, call, context, options) {
     }
     const gitWrite = unrequestedGitWrite(session.currentRequest, name, args, { settings: session.settings || {}, env: (context && context.env) || options.env || process.env });
     if (gitWrite) throw new Error(gitWrite);
+    const noEdits = forbiddenFileChange(session.currentRequest, name, FILE_EDITING_TOOL_NAMES);
+    if (noEdits) throw new Error(noEdits);
     if (SESSION_TOOL_NAMES.has(name)) {
       result = await executeSessionToolWithKernel(session, name, args, context, {
         ...options,
