@@ -69,6 +69,35 @@ export function claimIssue(state, text, { edited = false, deniedCheck = '' } = {
     'Rerun the relevant check now (without piping away its exit status) and report the actual outcome; if it still fails, say so plainly and explain what remains.';
 }
 
+// Test names in the reply that no tool result, file read or user message
+// holds. Seen live: `python3 -m unittest discover` prints one dot per passing
+// test, and the model filled a pass/fail table with five invented names
+// (test_freq_from_stdin, ...) next to the one real failure. Python/Rust style
+// test_x and Go/Java style TestX names are checked; once per turn.
+const TEST_NAME = /\b(?:test_[A-Za-z0-9_]+|Test[A-Z][A-Za-z0-9_]*)\b/g;
+
+export function unseenTestNames(text, messages = []) {
+  const names = [...new Set(String(text || '').match(TEST_NAME) || [])];
+  if (!names.length) return [];
+  // Evidence is what tools returned and what the agent wrote through tools
+  // (a test it just added is named in its edit), never its own prose.
+  const seen = messages.map((message) => {
+    if (!message || message.role === 'system') return '';
+    if (message.role === 'assistant') return Array.isArray(message.tool_calls) ? message.tool_calls.map((call) => String(call && call.function && call.function.arguments || '')).join('\n') : '';
+    return typeof message.content === 'string' ? message.content : JSON.stringify(message.content || '');
+  }).join('\n');
+  return names.filter((name) => !seen.includes(name));
+}
+
+export function unseenTestIssue(state, text, messages) {
+  if (!state || state.namesNudged || !state.ran) return '';
+  const unseen = unseenTestNames(text, messages);
+  if (!unseen.length) return '';
+  state.namesNudged = true;
+  return 'Your reply names tests that appear in no tool result, file you read or user message: ' + unseen.slice(0, 8).join(', ') + (unseen.length > 8 ? ' and ' + (unseen.length - 8) + ' more' : '') +
+    '. Do not name a test you did not see. Read the test file or rerun the tests with verbose output (for example `python3 -m unittest -v` or `pytest -v`), then report only the names and results the output shows.';
+}
+
 const NO_CHECK = /no relevant test, check, lint, build, or type-check command has passed/;
 
 /**

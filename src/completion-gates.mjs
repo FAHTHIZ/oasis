@@ -24,7 +24,7 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { runHooks, hasHooks, capHookText } from './hooks.mjs';
-import { claimIssue, recordCheck as recordClaimCheck, appendUnverifiedNotice, failedEditIssue, appendFailedEditNotice } from './claim-check.mjs';
+import { claimIssue, unseenTestIssue, recordCheck as recordClaimCheck, appendUnverifiedNotice, failedEditIssue, appendFailedEditNotice } from './claim-check.mjs';
 import { correctionViolations, correctionNudge } from './standing-corrections.mjs';
 import { dissentGateEnabled, unacknowledgedDissent, dissentNudge } from './dissent-gate.mjs';
 import { extractFollowups, recordFollowups, followupsEnabled } from './followups.mjs';
@@ -382,7 +382,7 @@ export async function runCompletionGates(turn, host) {
     });
     return CONTINUE;
   }
-  const claimNudge = claimIssue(claimState, text, { edited: verification.changedPaths.size > 0, deniedCheck: verification.deniedCheck || '' }) || failedEditIssue(claimState, text);
+  const claimNudge = claimIssue(claimState, text, { edited: verification.changedPaths.size > 0, deniedCheck: verification.deniedCheck || '' }) || failedEditIssue(claimState, text) || unseenTestIssue(claimState, text, session.messages);
   if (claimNudge) {
     if (text && options.onText) await emitDisplayText(session, options, text);
     session.messages.push({ role: 'user', content: claimNudge });

@@ -99,7 +99,7 @@ for (const ask of ['Run the tests with python3 -m unittest discover and tell me 
       const n = requests.length;
       const message = n === 1
         ? { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'run_command', arguments: JSON.stringify({ command: 'python3', args: ['-m', 'unittest', 'discover'] }) } }] }
-        : { role: 'assistant', content: 'The run printed:\n\n```\n.\nRan 1 test\nOK\n```\n\ntest_ok passes; nothing fails.' };
+        : { role: 'assistant', content: 'The run printed:\n\n```\n.\nRan 1 test\nOK\n```\n\nThe one test passes; nothing fails.' };
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify({ choices: [{ message, finish_reason: n === 1 ? 'tool_calls' : 'stop' }], usage: { prompt_tokens: 5, completion_tokens: 5 } }));
     });
@@ -109,6 +109,28 @@ for (const ask of ['Run the tests with python3 -m unittest discover and tell me 
     t.after(() => closeSession(session));
     const result = await runAgentTurn(session, ask, { autoApprove: true, env, approval: async () => true });
     assert.equal(requests.length, 2, 'no nudge after the report');
-    assert.match(result.text, /test_ok passes/);
+    assert.match(result.text, /one test passes/);
   });
 }
+
+test('test names that nothing showed are flagged once, names from output, files or edits are not', async () => {
+  const { unseenTestNames, unseenTestIssue, newClaimState } = await import('../src/claim-check.mjs');
+  const messages = [
+    { role: 'user', content: 'Run the tests and tell me which fail.' },
+    { role: 'assistant', content: null, tool_calls: [{ function: { name: 'edit_file', arguments: '{"new_string":"def test_added(self):"}' } }] },
+    { role: 'tool', content: '{"stderr":".F...\\nFAIL: test_cli_output (test_wordfreq.TestWordFreq.test_cli_output)"}' }
+  ];
+  const reply = '| `test_cli_output` | FAIL |\n| `test_freq_from_stdin` | PASS |\n| `test_added` | PASS |\nTestWordFreq has one failure.';
+  assert.deepEqual(unseenTestNames(reply, messages), ['test_freq_from_stdin']);
+  const state = newClaimState();
+  assert.equal(unseenTestIssue(state, reply, messages), '', 'no check ran yet');
+  state.ran = 1;
+  assert.match(unseenTestIssue(state, reply, messages), /test_freq_from_stdin[\s\S]*-v/);
+  assert.equal(unseenTestIssue(state, reply, messages), '', 'once per turn');
+  assert.deepEqual(unseenTestNames('Only test_cli_output fails.', messages), []);
+});
+
+test('the same ban is read in other languages, scoped or unrelated requests are not', () => {
+  for (const text of ['টেস্ট চালাও এবং বলো কোনগুলো ফেল করছে। কোনো ফাইল পরিবর্তন করবেন না।', 'टेस्ट चलाओ, कोई फ़ाइल मत बदलो।', 'Ejecuta las pruebas. No cambies ningún archivo.', 'Lance les tests. Ne modifie aucun fichier.', 'Führe die Tests aus. Ändere keine Dateien.', 'Запусти тесты. Не меняй файлы.', '运行测试，不要修改任何文件。', 'テストを実行して。ファイルを変更しないで。', '테스트를 실행해. 파일을 수정하지 마.', 'Chạy test. Đừng sửa tệp nào.', 'Testleri çalıştır. Hiçbir dosyayı değiştirme.', 'Jalankan tes. Jangan ubah file apa pun.']) assert.equal(forbidsFileChanges(text), true, text);
+  for (const text of ['বাগটি ঠিক করো', 'Arregla el bug en parser.js, no cambies la API', '修复这个错误', 'No cambies los archivos en src/', 'Arregla la prueba, no cambies el código', 'ফাইলটি আপডেট করো', 'Corrige le bug sans rien casser', 'Behebe den Fehler und ändere nichts an der API', 'Do not change the file names']) assert.equal(forbidsFileChanges(text), false, text);
+});
