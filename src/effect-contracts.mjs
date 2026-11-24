@@ -30,7 +30,7 @@
 // here grants or denies anything: permissions decide as before.
 
 import { spawn } from 'node:child_process';
-import { copyFile, lstat, mkdir, mkdtemp, rm, unlink } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, mkdtemp, rm, stat, unlink, utimes } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { parseShellCommands } from './shell-ast.mjs';
@@ -155,7 +155,15 @@ export async function snapshotWorkTree(root, { store, budgetMs = EFFECT_SNAPSHOT
     if (big.excluded.length > 200) return { ok: false, reason: 'too many large untracked files', tooLarge: true };
     // Seeding with the real index lets Git reuse its stat cache: only files
     // whose size or time changed are hashed again.
-    await copyFile(repo.index, store.index).catch(() => {});
+    // The copy keeps the real index's modification time: Git re-hashes an
+    // entry whose file time is not older than the index ("racy" entries).
+    // A copy stamped now made every such entry look settled, so a same-size
+    // edit in the same timestamp tick as the last `git add` went unseen (seen
+    // as a flaky test under load).
+    await copyFile(repo.index, store.index).then(async () => {
+      const info = await stat(repo.index);
+      await utimes(store.index, info.atime, info.mtime);
+    }).catch(() => {});
     const env = { GIT_INDEX_FILE: store.index, ...storeEnv(repo, store) };
     const pathspec = ['.', ...big.excluded.map((file) => ':(exclude,literal)' + file)];
     const add = await git(['add', '-A', '--ignore-errors', '--', ...pathspec], { cwd: repo.toplevel, env, timeoutMs: Math.max(budgetMs * 3, 5000) });
