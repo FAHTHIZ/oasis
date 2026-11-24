@@ -38,8 +38,8 @@ test('the inline gate and hook texts still start the way the matcher expects', a
   assert.match(gates, /'Before finalizing, complete the post-edit verification gate\. You changed: '/);
   assert.match(gates, /'A ' \+ stopEvent \+ ' hook asked you to continue before finishing/);
   assert.match(gates, /'A TeammateIdle hook asked you to keep working/);
-  const agent = await readFile(new URL('../src/agent.mjs', import.meta.url), 'utf8');
-  assert.match(agent, /'Context digest of completed work in the current task/);
+  const compaction = await readFile(new URL('../src/agent-compaction.mjs', import.meta.url), 'utf8');
+  assert.match(compaction, /'Context digest of completed work in the current task/);
 });
 
 test('a typed prompt loses only the reminder and @file blocks OASIS appended', () => {

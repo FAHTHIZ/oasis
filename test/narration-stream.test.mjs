@@ -78,7 +78,7 @@ for (const [protocol, provider] of Object.entries(PROVIDERS)) {
       systems.push(protocol === 'anthropic' ? JSON.stringify(parsed.system) : String((parsed.messages || [])[0]?.content || ''));
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const index = requests++;
-      await provider.step(res, index, () => log.push({ type: 'server_sent_tool', index }));
+      await provider.step(res, index, () => log.push({ type: 'server_sent_tool', index, at: Date.now() }));
     });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -107,7 +107,12 @@ for (const [protocol, provider] of Object.entries(PROVIDERS)) {
       assert.equal(record.model, 'fixture');
       assert.ok(record.inputEstimate > 0, 'context size is estimated');
     }
-    assert.ok(timings[0].silentTailMs >= 120, 'the wait for the tool call after the narration is measured');
+    // The tail runs from the last visible text to the end of the request. A
+    // busy runner can read the narration late, so anchor it to the moment the
+    // server sent the tool call rather than to the server's 150ms pause.
+    const sentTool = log.find((entry) => entry.type === 'server_sent_tool' && entry.index === 0);
+    const lastVisibleAt = timings[0].endedAt - timings[0].silentTailMs;
+    assert.ok(timings[0].silentTailMs > 0 && lastVisibleAt <= sentTool.at && timings[0].endedAt >= sentTool.at, 'the wait for the tool call after the narration is measured');
     assert.equal(timings[0].toolCalls, 1);
     assert.equal(timings[2].toolCalls, 0);
     assert.ok(systems.every((system) => /Before each batch of tool calls/.test(system)), 'every request carries the narration instruction');
