@@ -93,8 +93,11 @@ test('auto mode hands unclear actions to the user', async (t) => {
   ]);
   const session = await createSession({ root, config, settings, permissionMode: 'auto' });
   const prompts = [];
-  await runAgentTurn(session, 'do it', { approval: async (message) => { prompts.push(message); return false; } });
+  const metas = [];
+  await runAgentTurn(session, 'do it', { approval: async (message, force, meta) => { prompts.push(message); metas.push(meta); return false; } });
   assert.equal(prompts.length, 1);
+  // The person (or the -p denial summary) learns what the classifier doubted.
+  assert.equal(metas[0].autoModeReason, 'Unsure.');
   closeSession(session);
 });
 

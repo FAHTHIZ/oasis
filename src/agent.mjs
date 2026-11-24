@@ -1890,6 +1890,8 @@ async function authorizeCall(session, name, args, context, options) {
         }
         return false;
       }
+      // Unsure: a person decides, and is told what the classifier doubted.
+      if (verdict.reason) { overlay.autoModeUnsure = String(verdict.reason).slice(0, 300); extra = { ...(extra || {}), autoModeReason: overlay.autoModeUnsure }; }
     }
     // dontAsk mode / permissions.denyInsteadOfPrompting: a prompt becomes a
     // denial the model can read, so unattended runs never hang on approval.
@@ -1929,7 +1931,7 @@ async function authorizeCall(session, name, args, context, options) {
   const decideApproval = overlay.approval;
   overlay.approval = async (message, force = false, extra = null) => {
     const allowed = await decideApproval(message, force, extra);
-    recordSessionEvent(session, { type: 'approval', tool: name, allowed, mode, ...(allowed ? {} : { reason: String(overlay.permissionHookDenial || 'not approved').slice(0, 500) }) }, context.env);
+    recordSessionEvent(session, { type: 'approval', tool: name, allowed, mode, ...(allowed ? {} : { reason: String(overlay.permissionHookDenial || (overlay.autoModeUnsure ? 'Auto mode was not sure: ' + overlay.autoModeUnsure : 'not approved')).slice(0, 500) }) }, context.env);
     return allowed;
   };
   const sites = webAccessSites(name, args, context.env || process.env);

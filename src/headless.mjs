@@ -317,7 +317,7 @@ export async function runHeadless(options) {
           denied.push({ tool_name: meta && meta.tool || null, detail: (answer === 'timeout' ? 'No answer before the approval timeout. ' : 'Denied with oasis bg deny. ') + String(message).replace(/\s+/g, ' ').trim().slice(0, 260) });
           return false;
         }
-        denied.push({ tool_name: meta && meta.tool || null, ...(meta && meta.input && typeof meta.input === 'object' ? { tool_input: meta.input } : {}), detail: String(message).replace(/\s+/g, ' ').trim().slice(0, 300) });
+        denied.push({ tool_name: meta && meta.tool || null, ...(meta && meta.input && typeof meta.input === 'object' ? { tool_input: meta.input } : {}), detail: String(message).replace(/\s+/g, ' ').trim().slice(0, 300), ...(meta && meta.autoModeReason ? { auto_mode_reason: meta.autoModeReason } : {}) });
         return false;
       },
       onToolStart: ({ name, args, subagent, call }) => (toolObserver && toolObserver.start && toolObserver.start({ name, args, subagent, call }), progress && !subagent && progress(progressLine(name, args)), emit({ type: 'tool_use', ...(call && call.id ? { id: call.id } : {}), name, input: args, ...(subagent ? { subagent } : {}) })),
@@ -670,8 +670,10 @@ export function deniedHint(denied, { env = process.env, mode = '' } = {}) {
   const unrulable = [];
   const protectedRules = [];
   let highRisk = false;
+  const unsure = [];
   for (const item of denied || []) {
     const input = item && item.tool_input;
+    if (item && item.auto_mode_reason && !unsure.includes(item.auto_mode_reason)) unsure.push(item.auto_mode_reason);
     // Protected configuration files ask in every mode but bypassPermissions, so
     // --yes or --permission-mode auto would not help; only a rule naming the
     // path (or OASIS_ALLOW_CONFIG_EDITS=1) does.
@@ -704,19 +706,20 @@ export function deniedHint(denied, { env = process.env, mode = '' } = {}) {
   const protectedNote = protectedRules.length ? (protectedRules.length > 1 ? 'Those are protected configuration files, which ask' : 'That is a protected configuration file, which asks') +
     ' even with --yes, --full-auto or --permission-mode auto. To allow next time: --allowedTools "' + protectedRules.slice(0, 3).join(',') + '" (a rule naming the path) or OASIS_ALLOW_CONFIG_EDITS=1.\n' : '';
   if (!commands.length && !tools.length) return head + protectedNote;
-  return head + protectedNote + deniedAdvice({ tools, shownRules, unrulable, highRisk, env, mode });
+  return head + protectedNote + deniedAdvice({ tools, shownRules, unrulable, highRisk, env, mode, unsure });
 }
 
-function deniedAdvice({ tools, shownRules, unrulable, highRisk, env, mode = '' }) {
-  // Auto mode was already on: its classifier was unsure, so only a rule helps.
+function deniedAdvice({ tools, shownRules, unrulable, highRisk, env, mode = '', unsure = [] }) {
+  // Auto mode was already on: suggesting it again would not help.
   const auto = mode === 'auto';
-  const noRule = unrulable.length ? 'A permission rule cannot pre-approve ' + unrulable.slice(0, 3).map(shownCommand).join(', ') +
-    ' (shell redirects, substitutions or a high-risk shell line always need a person); run ' + (unrulable.length > 1 ? 'them' : 'it') + ' yourself, or ask for plain commands without shell syntax.\n' : '';
+  const doubt = unsure.length ? 'Auto mode\'s check was not sure (' + unsure.slice(0, 2).map((reason) => reason.replace(/[.\s]+$/, '')).join('; ') + '), so it was not run.\n' : '';
+  const noRule = doubt + (unrulable.length ? 'A permission rule cannot pre-approve ' + unrulable.slice(0, 3).map(shownCommand).join(', ') +
+    ' (shell redirects, substitutions or a high-risk shell line always need a person); run ' + (unrulable.length > 1 ? 'them' : 'it') + ' yourself, or ask for plain commands without shell syntax.\n' : '');
   if (!shownRules.length) return noRule + (unrulable.length && !tools.length ? '' : 'To allow next time: --allowedTools' + (auto ? ' or --yes' : ', --yes or --permission-mode auto') + '.\n');
   // Inline code, wrappers and the like ask even with --full-auto or --yes; only an allow rule lets them run.
   if (highRisk) return noRule + 'High-risk commands (inline code, wrappers and the like) always ask, even with --full-auto. To allow next time: --allowedTools "' + shownRules.join(',') + '".\n';
   // --full-auto sets OASIS_SANDBOX=1; suggesting it again would not help.
   const sandboxed = String(env.OASIS_SANDBOX || '') === '1';
   const options = [...(sandboxed ? [] : ['--full-auto (edits plus commands inside the OS sandbox)']), '--allowedTools "' + shownRules.join(',') + '"', ...(auto ? [] : ['--permission-mode auto'])];
-  return noRule + (auto ? 'Auto mode\'s check was not sure about ' + (shownRules.length > 1 ? 'these' : 'this') + ', so it was not run. ' : '') + 'To allow next time: ' + (options.length > 1 ? options.slice(0, -1).join(', ') + ', or ' + options.at(-1) : options[0]) + '.\n';
+  return noRule + 'To allow next time: ' + (options.length > 1 ? options.slice(0, -1).join(', ') + ', or ' + options.at(-1) : options[0]) + '.\n';
 }
