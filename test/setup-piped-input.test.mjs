@@ -47,8 +47,8 @@ test('setup answered through a pipe, API key included, saves a verified provider
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-setup-pipe-'));
   t.after(async () => { server.close(); await rm(home, { recursive: true, force: true }); });
   const base = 'http://127.0.0.1:' + server.address().port + '/v1';
-  // API key > Other endpoint > protocol, URL, model, key.
-  const { code, out } = await runSetup(home, ['1', '5', 'openai-compatible', base, 'piped-model', 'sk-piped-secret-0123'].join('\n') + '\n');
+  // API key > Other / compatible endpoint (option 6; OASIS Route is option 5) > protocol, URL, model, key.
+  const { code, out } = await runSetup(home, ['1', '6', 'openai-compatible', base, 'piped-model', 'sk-piped-secret-0123'].join('\n') + '\n');
   assert.equal(code, 0, out);
   assert.match(out, /Provider responded successfully/);
   assert.doesNotMatch(out, /sk-piped-secret/, 'the piped key is not echoed');
