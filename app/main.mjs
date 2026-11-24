@@ -864,7 +864,7 @@ function setBusy(busy) {
 }
 
 /* ---------- Timeline: prose updates and execution groups ---------- */
-// The agent's work reads like Perplexity Computer's progress view: prose
+// The agent's work reads as a progress view: prose
 // from the agent, with tool calls folded into groups between them. A group
 // is open while it runs (its title says what is happening right now) and
 // folds into one line when the agent moves on. Every step opens to show its
@@ -1039,7 +1039,7 @@ function addTraceLink(box, item) {
   box.appendChild(link);
 }
 // The pages a search or fetch looked at, as chips (site icon and name) that
-// open the page, the way Perplexity lists a step's sources. The icon comes
+// open the page, listing each step's sources. The icon comes
 // from the site itself; a letter stands in when it has none.
 const SOURCES_SHOWN = 5;
 function sourceHost(url) {
@@ -1121,7 +1121,7 @@ function patchStepRow(item, tool) {
   set('.arg', argText && label.toLowerCase().includes(argText.toLowerCase()) ? '' : argText);
   set('.tool-status', stepStatus(tool));
   set('.dur', stepDuration(tool));
-  // Hovering the time gives when the step ran, as Perplexity's "4:00 AM · 9s".
+  // Hovering the time gives when the step ran ("4:00 AM · 9s").
   const started = Number(tool.startedAt);
   const durEl = summary.querySelector('.dur');
   const when = Number.isFinite(started) && started > 0 ? new Date(started).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : '';
@@ -1936,7 +1936,7 @@ function thoughtBlock(text, ms) {
   const block = thinkingShell(false);
   block.classList.add('thought');
   // The thought names itself by its headline ("Comparing calendar days"),
-  // as Claude and Perplexity do; how long it took sits beside it, dim.
+  // and how long it took sits beside it, dim.
   const headline = thoughtHeadline(text);
   const label = block.querySelector('.thinking-label');
   label.textContent = headline || thoughtLabel(ms);
@@ -2259,7 +2259,7 @@ function finishRun(prefix) {
   }
 }
 
-// A finished turn folds its work, as in Perplexity and ChatGPT: the steps,
+// A finished turn folds its work: the steps,
 // thoughts and narration go under one "Worked for 1m 57s · 6 steps" line
 // that opens on click, and the answer stays outside, so a long run reads as
 // its result. The worked line stays in the transcript (hidden) for the

@@ -166,7 +166,7 @@ svg.icon.i-stop{fill:currentColor}
 
 /* Timeline: execution groups and steps */
 /* ---- Activity feed: one continuous timeline rail ----
-   The agent's work reads like Claude Code and Perplexity Computer: every
+   The agent's work reads as one timeline: every
    thought and every group of steps is one quiet row on a rail (a status
    glyph in a 22px column, then what happened), and consecutive rows are
    joined by a hairline so a turn reads as one trail instead of a stack of

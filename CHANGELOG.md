@@ -299,7 +299,7 @@ First release under the 0.x numbers. Versions 1.0.0 through 1.8.0 are renumbered
 
 ### Highlights
 
-- Web: the activity feed is quieter and closer to Perplexity Computer. A finished run folds into one short line ("Worked for 22s · edited 1 file +1 −1 · 9 steps") with the full breakdown on hover, instead of a long sentence cut off mid-word.
+- Web: the activity feed is quieter and easier to scan. A finished run folds into one short line ("Worked for 22s · edited 1 file +1 −1 · 9 steps") with the full breakdown on hover, instead of a long sentence cut off mid-word.
 - Web: thoughts are titled by what they concluded ("Grep shows isOverdue in src/dates.mjs") instead of "Thought for 1s".
 - Web: plan updates no longer appear as feed steps; the Task plan card shows them.
 
@@ -317,7 +317,7 @@ First release under the 0.x numbers. Versions 1.0.0 through 1.8.0 are renumbered
 
 ### Highlights
 
-- Web: the live activity feed is redesigned as one continuous timeline, closer to Claude Code, Codex and Perplexity Computer. Steps sit on a thin rail with a small status orb instead of a bordered card each; thoughts, narration and steps read as one flow; a running group titles itself in the present tense ("Running npm test") and settles into the past tense ("Read dates.mjs and ran the tests").
+- Web: the live activity feed is redesigned as one continuous timeline, easier to follow. Steps sit on a thin rail with a small status orb instead of a bordered card each; thoughts, narration and steps read as one flow; a running group titles itself in the present tense ("Running npm test") and settles into the past tense ("Read dates.mjs and ran the tests").
 - Web: every step says what it returned in one line under it, as Claude Code's `⎿` line does: "19 passed", "Exit code 3", "Read 45 lines", "5 matches in 3 files", "7 files", "1 file changed · +1 −1", "2 of 4 done".
 - Web: edits show inline with their diff (up to 10 lines) and stay open when their group settles, so the change is visible without opening anything.
 - Web: one live status instead of three. The task bar says Working, Needs you or Waiting on the model; the status line names the running step; the old duplicate "Thinking" labels are gone. The live Thinking row is readable again (it was drawn at disabled opacity).

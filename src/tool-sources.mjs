@@ -1,5 +1,5 @@
 // The web pages a step looked at, for source chips in the activity feed
-// (Perplexity shows each search's sources as favicon + site chips): a
+// (each search's sources as favicon + site chips): a
 // web_search's results, a fetch_url's page, and any tool (an MCP search
 // server, say) whose result lists { url, title } items under results,
 // sources or citations. Only http(s) links, at most MAX_SOURCES, each
