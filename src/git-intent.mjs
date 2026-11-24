@@ -41,3 +41,40 @@ export function unrequestedGitWrite(request, name, args, { settings = {}, env = 
   if (entry && entry.intent.test(asked)) return null;
   return 'Not run: the user did not ask you to ' + action + ' in this request. Leave version control to the user. Finish the requested change, report what changed, and mention that it is not committed. If the user wants this, they will ask.';
 }
+
+// "Run the tests and tell me which fail. Do not change any files." Seen live:
+// in auto mode the model edited the code anyway, and nothing asked a person
+// (workspace edits do not reach the classifier). A request that rules out
+// file changes, unscoped ("outside src/", "other than README" keep the rest
+// editable; "the code" is left alone because "fix the test, don't change the
+// code" means the tests may change), refuses the file-editing tools for that
+// request.
+const CHANGE_VERB = '(?:change|changing|modify|modifying|edit|editing|touch|touching|alter|altering|write\\s+to|writing\\s+to|update|updating)';
+const CHANGE_OBJECT = '(?:(?:any|the|my|our|your|these|those)\\s+)?(?:files?|codebase|anything|repo|repository|workspace)';
+// Only an unqualified object counts: it must end the clause ("any files.",
+// "anything, just look", "the repo and tell me"), not lead into a scope or a
+// narrower thing ("the files in tests/", "anything else", "files named x").
+const CLAUSE_END = '(?=\\s*(?:$|[.,;:!?)\\n]|(?:and|just|only|please|yet|at\\s+all|whatsoever|while|until|for\\s+now|here|now)\\b|[-–—]\\s))';
+const NO_FILE_CHANGES = new RegExp('\\b(?:do\\s+not|don[\'’]?t|never|without|no\\s+need\\s+to)\\s+(?:\\w+\\s+)?' + CHANGE_VERB + '\\s+' + CHANGE_OBJECT + CLAUSE_END, 'i');
+const READ_ONLY_REQUEST = /\b(?:read[- ]only\s+(?:task|request|please|review|check|pass)|(?:make|with)\s+no\s+(?:file\s+)?(?:changes|edits)|no\s+file\s+(?:changes|edits))\b/i;
+
+// "If the claim is denied, do not edit anything": a condition, not a rule
+// for the whole request.
+const CONDITIONAL = /\b(?:if|when|whenever|unless|once|otherwise|before|after|in\s+case|should)\b/i;
+
+export function forbidsFileChanges(request) {
+  const text = String(request || '');
+  if (READ_ONLY_REQUEST.test(text)) return true;
+  const pattern = new RegExp(NO_FILE_CHANGES.source, 'gi');
+  for (const match of text.matchAll(pattern)) {
+    const before = text.slice(0, match.index);
+    const sentence = before.slice(Math.max(before.lastIndexOf('.'), before.lastIndexOf('!'), before.lastIndexOf('?'), before.lastIndexOf('\n')) + 1);
+    if (!CONDITIONAL.test(sentence)) return true;
+  }
+  return false;
+}
+
+export function forbiddenFileChange(request, name, editingTools) {
+  if (!editingTools.has(name) || !forbidsFileChanges(request)) return null;
+  return 'Not changed: the user asked you not to change files in this request. Do the rest of the task without editing, then describe any change you would make in your answer; the user will ask if they want it made.';
+}
