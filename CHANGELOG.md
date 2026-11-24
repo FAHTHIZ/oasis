@@ -4,6 +4,15 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ## Unreleased
 
+### Changed
+
+- Dependencies: `@agentclientprotocol/sdk` 2.8.0, `defuddle` 0.19.7, `rrule-temporal` 2.3.0; the app's icon sprite comes from `lucide-static` 1.76.0.
+- The desktop build tools pin `minimatch` 11.0.9 past GHSA-g3hv-75wg-m249; `npm audit` in `desktop/` reports nothing.
+
+### Fixed
+
+- The browser end-to-end test no longer times out waiting for an approval when the full suite loads the CPU.
+
 ## [0.11.0] - 2026-11-24
 
 Plugins and hooks from other agents run in OASIS as they are, and OASIS plugins export to them.
