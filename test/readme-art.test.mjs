@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { providers } from '../scripts/readme-scenes.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -18,5 +19,14 @@ test('README art respects reduced motion and stays self-contained', async () => 
     assert.match(svg, /^<svg[^>]+xmlns="http:\/\/www\.w3\.org\/2000\/svg"/, name);
     assert.ok(!/<script|href="https?:/i.test(svg), `${name} must not load scripts or remote resources`);
     if (svg.includes('@keyframes')) assert.ok(svg.includes('prefers-reduced-motion'), `${name} must honour prefers-reduced-motion`);
+  }
+});
+
+test('provider artwork visibly includes OASIS Route in both themes', () => {
+  for (const theme of ['dark', 'light']) {
+    const svg = providers(theme);
+    assert.match(svg, />LOCAL ROUTING<\/text>/, theme + ' provider row label');
+    assert.match(svg, />OASIS Route<\/text>/, theme + ' visible OASIS Route pill');
+    assert.match(svg, /Self-hosted gateways: OASIS Route, OmniRoute, FreeLLMAPI/, theme + ' accessible provider description');
   }
 });
