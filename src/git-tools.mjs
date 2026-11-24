@@ -192,13 +192,20 @@ async function gitLog(root, args, options) {
 async function stagedSecretHits(root, prefixes, env) {
   if (/^(0|off|false)$/i.test(String((env && env.OASIS_COMMIT_SECRET_SCAN) ?? process.env.OASIS_COMMIT_SECRET_SCAN ?? ''))) return [];
   const { findSecretsInDiff } = await import('./secret-shield.mjs');
-  const { mkdtemp, copyFile, rm } = await import('node:fs/promises');
+  const { mkdtemp, copyFile, rm, stat, utimes } = await import('node:fs/promises');
   const os = await import('node:os');
   const indexPath = (await git(root, ['rev-parse', '--git-path', 'index'], { env })).stdout.trim();
   const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-commit-scan-'));
   try {
     const tempIndex = path.join(dir, 'index');
-    try { await copyFile(path.resolve(root, indexPath), tempIndex); } catch { /* no index yet */ }
+    // Keep the index's time on the copy so Git still re-hashes "racy"
+    // entries (a same-size edit in the tick of the last `git add`); a copy
+    // stamped now would scan the stale cached content instead.
+    try {
+      await copyFile(path.resolve(root, indexPath), tempIndex);
+      const info = await stat(path.resolve(root, indexPath));
+      await utimes(tempIndex, info.atime, info.mtime);
+    } catch { /* no index yet */ }
     const scanEnv = { ...env, GIT_INDEX_FILE: tempIndex };
     const add = await git(root, ['add', '-A', '--', ...(prefixes.length ? prefixes : ['.'])], { env: scanEnv });
     if (add.exitCode !== 0) return [];

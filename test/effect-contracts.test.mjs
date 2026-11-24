@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, writeFile, readFile, rm, access, mkdir } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm, access, mkdir, stat, utimes } from 'node:fs/promises';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { rewind } from '../src/checkpoints.mjs';
 import {
@@ -87,6 +87,27 @@ test('snapshots observe exactly what a command changed, without touching the ind
   assert.equal(await readFile(path.join(root, 'a.txt'), 'utf8'), 'one\n');
   assert.equal(await readFile(path.join(root, 'b.txt'), 'utf8'), 'two\n');
   await assert.rejects(access(path.join(root, 'c.txt')));
+});
+
+// Flaky under load before the fix: a same-size edit in the same timestamp
+// tick as the last `git add` was missed, because the snapshot's copy of the
+// index was stamped "now" and Git then trusted its stat cache. Pinned here
+// by giving the file and the index one time (and ignoring ctime, which a
+// test cannot set).
+test('a same-size edit made in the same timestamp tick as the index is still seen', async (t) => {
+  const root = await repo(t, { 'a.txt': '1\n' });
+  execFileSync('git', ['config', 'core.trustctime', 'false'], { cwd: root });
+  const file = path.join(root, 'a.txt');
+  const index = path.join(root, '.git', 'index');
+  const tick = (await stat(file)).mtime;
+  await utimes(index, tick, tick);
+  const before = await snapshotWorkTree(root);
+  await writeFile(file, '2\n');
+  await utimes(file, tick, tick);
+  await utimes(index, tick, tick);
+  const after = await snapshotWorkTree(root);
+  t.after(() => Promise.all([disposeSnapshot(before), disposeSnapshot(after)]));
+  assert.deepEqual((await diffSnapshots(before, after)).map((item) => item.path), ['a.txt']);
 });
 
 test('a workspace in a subfolder of the repository reports paths relative to itself', async (t) => {
