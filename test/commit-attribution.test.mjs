@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { isAiCredit, stripAiAttribution, commitIdentity, sanitizeCommitArgv } from '../src/commit-attribution.mjs';
 
 const AI_CREDITS = [
-  'Co-authored-by: Perplexity <noreply@perplexity.ai>',
   'Co-authored-by: Claude <noreply@anthropic.com>',
   'Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>',
   'Co-authored-by: Cursor Agent <cursoragent@cursor.com>',
@@ -15,8 +14,7 @@ const AI_CREDITS = [
   'Signed-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>',
   'Generated-by: Gemini CLI',
   '🤖 Generated with [Claude Code](https://claude.com/claude-code)',
-  'Generated with Codex',
-  '<sub>Created with [Perplexity](https://www.perplexity.ai/computer/tasks/x)</sub>'
+  'Generated with Codex'
 ];
 const HUMAN = [
   'Co-authored-by: Claude Monet <monet@gmail.com>',
@@ -37,7 +35,7 @@ test('AI and bot credits are recognised; people and ordinary lines are not', () 
 test('stripAiAttribution keeps the message and human trailers', () => {
   const message = 'Fix login\n\nBody text.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nSigned-off-by: Fahim Hussain <gtxnrg@gmail.com>\n';
   assert.equal(stripAiAttribution(message), 'Fix login\n\nBody text.\n\n\nSigned-off-by: Fahim Hussain <gtxnrg@gmail.com>\n');
-  assert.equal(stripAiAttribution('Summary\n\n---\n<sub>Created with [Perplexity](https://p.ai/x)</sub>'), 'Summary');
+  assert.equal(stripAiAttribution('Summary\n\n---\n<sub>Created with [Claude Code](https://claude.ai/code)</sub>'), 'Summary');
   assert.equal(stripAiAttribution('a\r\nCo-authored-by: Codex <codex@openai.com>\r\n'), 'a\r\n');
   assert.equal(stripAiAttribution('nothing to do\n'), 'nothing to do\n');
   assert.equal(stripAiAttribution(''), '');
