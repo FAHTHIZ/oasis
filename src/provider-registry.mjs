@@ -45,7 +45,7 @@ const BUILTIN = {
   jan: { label: 'Jan', protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:1337/v1', keyEnv: [], model: '', local: { probe: '/v1/models', kind: 'openai' } },
   // OASIS Route is the first-party self-hosted gateway. Port 8081 avoids
   // llama.cpp's local-model port 8080; the service itself can bind any port.
-  oasis-route: { label: 'OASIS Route', protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:8081/v1', keyEnv: ['OASIS_ROUTE_API_KEY'], model: 'auto', gateway: true },
+  'oasis-route': { label: 'OASIS Route', protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:8081/v1', keyEnv: ['OASIS_ROUTE_API_KEY'], model: 'auto', gateway: true },
   // OmniRoute is a self-hosted gateway on loopback that forwards to cloud
   // providers, so `gateway` keeps it from being priced or tuned as a local model.
   omniroute: { label: 'OmniRoute', protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:20128/v1', keyEnv: ['OMNIROUTE_API_KEY'], model: 'auto', gateway: true },
