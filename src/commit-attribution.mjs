@@ -15,7 +15,7 @@
 // whole words, case-insensitively, against a trailer's name and address.
 const AI_NAMES = [
   'ai', 'llm', 'gpt', 'chatgpt', 'openai', 'codex', 'claude', 'anthropic', 'copilot', 'github copilot',
-  'gemini', 'bard', 'google ai', 'jules', 'perplexity', 'cursor', 'cursor agent', 'devin', 'cognition',
+  'gemini', 'bard', 'google ai', 'jules', 'cursor', 'cursor agent', 'devin', 'cognition',
   'aider', 'cline', 'roo', 'roo code', 'kilo code', 'continue', 'windsurf', 'codeium', 'tabnine',
   'amazon q', 'codewhisperer', 'kiro', 'qodo', 'codium', 'sourcegraph', 'cody', 'amp', 'factory', 'droid',
   'opencode', 'goose', 'hermes', 'nous', 'kimi', 'moonshot', 'qwen', 'deepseek', 'mistral', 'grok', 'xai',
@@ -29,8 +29,8 @@ const NAME_PATTERN = new RegExp('(?:^|[^a-z0-9])(?:' + AI_NAMES.map((name) => na
 // App and bot accounts, and the no-reply or agent mailboxes AI vendors use
 // (noreply@anthropic.com, cursoragent@cursor.com, devin-ai-integration[bot]...).
 // A person at one of those companies with their own address is kept.
-const AI_DOMAINS = '(?:anthropic\\.com|openai\\.com|cursor\\.(?:sh|com)|perplexity\\.ai|cognition(?:-labs)?\\.(?:ai|com)|devin\\.ai|aider\\.chat|codeium\\.com|windsurf\\.com|tabnine\\.com|sourcegraph\\.com|deepmind\\.com|google\\.com|x\\.ai|mistral\\.ai|moonshot\\.(?:ai|cn)|deepseek\\.com|qwen\\.ai|replit\\.com|lovable\\.dev|factory\\.ai|ampcode\\.com|sourcegraph\\.com|warp\\.dev|zed\\.dev|augmentcode\\.com|jetbrains\\.com|all-hands\\.dev|coderabbit\\.ai|github\\.com|oasis\\.invalid)';
-const ADDRESS_PATTERN = new RegExp('\\[bot\\]|(?:^|[^a-z0-9])bots?@|^[^@]*(?:no-?reply|agent|assistant|copilot|claude|codex|gemini|devin|aider|(?:^|[^a-z])ai(?:[^a-z]|$))[^@]*@(?:[a-z0-9-]+\\.)*' + AI_DOMAINS + '$|@(?:[a-z0-9-]+\\.)*(?:aider\\.chat|devin\\.ai|perplexity\\.ai|oasis\\.invalid)$', 'i');
+const AI_DOMAINS = '(?:anthropic\\.com|openai\\.com|cursor\\.(?:sh|com)|cognition(?:-labs)?\\.(?:ai|com)|devin\\.ai|aider\\.chat|codeium\\.com|windsurf\\.com|tabnine\\.com|sourcegraph\\.com|deepmind\\.com|google\\.com|x\\.ai|mistral\\.ai|moonshot\\.(?:ai|cn)|deepseek\\.com|qwen\\.ai|replit\\.com|lovable\\.dev|factory\\.ai|ampcode\\.com|sourcegraph\\.com|warp\\.dev|zed\\.dev|augmentcode\\.com|jetbrains\\.com|all-hands\\.dev|coderabbit\\.ai|github\\.com|oasis\\.invalid)';
+const ADDRESS_PATTERN = new RegExp('\\[bot\\]|(?:^|[^a-z0-9])bots?@|^[^@]*(?:no-?reply|agent|assistant|copilot|claude|codex|gemini|devin|aider|(?:^|[^a-z])ai(?:[^a-z]|$))[^@]*@(?:[a-z0-9-]+\\.)*' + AI_DOMAINS + '$|@(?:[a-z0-9-]+\\.)*(?:aider\\.chat|devin\\.ai|oasis\\.invalid)$', 'i');
 
 // Trailers that only ever carry credit; any of these naming a tool or bot goes.
 const CREDIT_TRAILERS = /^(?:co-authored-by|co-author|coauthored-by|co-developed-by|assisted-by|generated-by|created-by|made-with|written-by|authored-by|ai-assisted|ai-generated|with-help-from|helped-by|signed-off-by|reviewed-by|suggested-by)\s*:/i;
