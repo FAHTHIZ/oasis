@@ -2298,11 +2298,19 @@ async function configCommand(args, root) {
   process.exitCode = 1;
 }
 
+// A shortened description ends at a word with an ellipsis, not mid-word.
+export function clipDescription(text, max) {
+  const value = text.replace(/\s+/g, ' ').trim();
+  if (value.length <= max) return value;
+  const cut = value.slice(0, max - 1);
+  return (cut.lastIndexOf(' ') > max / 2 ? cut.slice(0, cut.lastIndexOf(' ')) : cut).replace(/[\s,;:.]+$/, '') + '…';
+}
+
 async function interactiveCommandList(root) {
   const list = Object.entries(BUILTIN_COMMANDS).map(([name, description]) => ({ name, description }));
   list.push({ name: 'init', description: 'Create project instructions for this workspace' }, { name: 'quit', description: 'Exit Oasis' });
   try { for (const [name, command] of (await loadCustomCommands(root, { env: process.env })).entries()) list.push({ name, description: (command && command.description) || 'Custom command' }); } catch {}
-  try { for (const skill of await listAvailableSkills(root, { env: process.env })) list.push({ name: skill.name, description: skill.description ? 'Skill: ' + String(skill.description).slice(0, 70) : 'Skill' }); } catch {}
+  try { for (const skill of await listAvailableSkills(root, { env: process.env })) list.push({ name: skill.name, description: skill.description ? 'Skill: ' + clipDescription(String(skill.description), 70) : 'Skill' }); } catch {}
   return list;
 }
 
