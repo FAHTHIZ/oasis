@@ -706,6 +706,10 @@ export function appendLspUnavailableNotice(text, state) {
   // A passing project check already verified the change; a missing language
   // server is then noise on every reply (it stays in /status and -p JSON).
   if (state && state.lastVerificationKind && state.lastVerificationExitCode === 0) return String(text || '');
+  // So did running each changed script with exit 0 after its last edit (a
+  // throwaway analysis script for a data question, say). Seen live: a CSV
+  // answer ended with advice to install a TypeScript language server.
+  if (state && state.changedPaths instanceof Set && changedSourcesAllRan(state)) return String(text || '');
   // Group files that share the same reason so one missing server is one short line.
   const groups = new Map();
   for (const [file, result] of unavailable) {

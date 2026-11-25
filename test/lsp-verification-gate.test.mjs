@@ -121,3 +121,15 @@ test('a passing project check drops the missing-language-server note', async () 
   assert.match(appendLspUnavailableNotice('Fixed.', state), /LSP verification unavailable/);
   assert.equal(appendLspUnavailableNotice('Fixed.', { ...state, lastVerificationKind: 'test', lastVerificationExitCode: 0 }), 'Fixed.');
 });
+
+test('no language-server note when every changed script ran cleanly after its last edit', () => {
+  const reason = 'No typescript language server found. Install one with: npm install -g typescript-language-server typescript.';
+  const state = {
+    changedPaths: new Set(['compute_sales.js']),
+    lspVerificationByPath: new Map([['compute_sales.js', { status: 'unavailable', reason }]]),
+    ranPaths: new Set(['compute_sales.js'])
+  };
+  assert.equal(appendLspUnavailableNotice('North 255, South 250, East 155.', state), 'North 255, South 250, East 155.');
+  state.ranPaths = new Set();
+  assert.match(appendLspUnavailableNotice('Done.', state), /LSP verification unavailable/);
+});
