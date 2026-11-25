@@ -133,6 +133,8 @@ To run a routine when something happens instead of on a clock, use `webhook` as 
 
 If webhook events pile up while a run is busy (a burst of pushes, for example), `--coalesce` runs all the waiting ones together: the payload becomes a JSON array of them, oldest first, so it costs one model call instead of one per event.
 
+To post the result back to GitHub, deliver to `github:OWNER/REPO#NUMBER`. A webhook routine can fill it in from the event: `oasis schedule add webhook "Review pull request {pull_request.number}" --event pull_request.opened --deliver 'github:{repository.full_name}#{pull_request.number}'` comments on each new pull request. It uses `OASIS_GITHUB_TOKEN` or `GITHUB_TOKEN`, or the signed-in `gh` CLI.
+
 For a startup checklist (Hermes calls it BOOT.md), use `at startup`: the routine runs once after each boot, when the scheduler first starts. `oasis schedule add "at startup" "Check disk space and that the dev servers are up; report only problems" --deliver home`. Restarting `oasis web` or the TUI does not run it again until the next boot.
 
 To build a pipeline, use `after NAME` as the schedule: the routine runs each time NAME finishes successfully (`after NAME failed` for an alert, `after NAME any` for both). Its prompt gets the earlier run's output, and `{output}` and `{status}` can be used in it: `oasis schedule add "after collect" "Post this to the team channel: {output}" --deliver slack:C123`. Loops are refused.

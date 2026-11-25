@@ -100,3 +100,29 @@ test('"at startup" routines run once per boot of the computer', async () => {
   // After a reboot it runs again.
   assert.deepEqual(await queueStartupRuns(env, new Date('2026-11-12T09:00:00Z'), 40), [job.id]);
 });
+
+test('github: delivery comments on the issue or pull request named by the event', async () => {
+  const { receiveWebhook, parseDeliver, resolveDeliverTarget } = await import('../src/routines.mjs');
+  const crypto = await import('node:crypto');
+  assert.throws(() => parseDeliver('github:nope'), /OWNER\/REPO#NUMBER/);
+  assert.equal(parseDeliver('github:me/app#12'), 'github:me/app#12');
+  assert.equal(resolveDeliverTarget('github:{repository.full_name}#{number}', { payload: '{"repository":{"full_name":"a/b"},"number":7}' }), 'github:a/b#7');
+  assert.equal(resolveDeliverTarget('github:{x}#{number}', { payload: '{"x":"a b; rm","number":7}' }), 'github:{x}#7', 'odd values are not used');
+  const env = { ...(await tempEnv()), OASIS_GITHUB_TOKEN: 'tok', OASIS_GITHUB_API_BASE: 'https://gh.test' };
+  const bg = fakeBackgrounds(env.HOME);
+  const t0 = new Date('2026-11-11T10:00:00Z');
+  const job = await createJob({ schedule: 'webhook', prompt: 'Review PR {pull_request.number}', deliver: 'github:{repository.full_name}#{pull_request.number}' }, { env, now: t0 });
+  const body = Buffer.from(JSON.stringify({ action: 'opened', repository: { full_name: 'me/app' }, pull_request: { number: 42 } }));
+  await receiveWebhook(job.id, body, { signature: 'sha256=' + crypto.createHmac('sha256', job.webhookSecret).update(body).digest('hex'), event: 'pull_request', env, now: t0 });
+  await tick({ env, now: t0, backgrounds: bg });
+  await bg.finish(0, '{"type":"result","subtype":"success","result":"Looks good."}');
+  const calls = [];
+  const fetchImpl = async (url, init) => { calls.push({ url, init }); return { ok: true, status: 201, json: async () => ({}) }; };
+  await tick({ env, now: t0, backgrounds: bg, fetchImpl });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://gh.test/repos/me/app/issues/42/comments');
+  assert.equal(calls[0].init.headers.authorization, 'Bearer tok');
+  assert.match(JSON.parse(calls[0].init.body).body, /Looks good\./);
+  const { runs } = await listRuns(job.id, { env });
+  assert.equal(runs.at(-1).delivery, 'github:me/app#42');
+});

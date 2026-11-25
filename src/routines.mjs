@@ -195,8 +195,15 @@ export function parseDeliver(value) {
   const text = String(value || 'local').trim();
   if (text === 'local') return 'local';
   if (text === 'home') return 'home';
+  // github:OWNER/REPO#NUMBER comments on an issue or pull request. Parts can
+  // be {payload.paths} from the webhook event, e.g.
+  // github:{repository.full_name}#{pull_request.number}.
+  if (/^github:/.test(text)) {
+    if (!/^github:(?:[\w.-]+\/[\w.-]+|\{[\w.-]+\}|\{[\w.-]+\}\/\{[\w.-]+\})#(?:\d+|\{[\w.-]+\})$/.test(text)) throw new Error('github: needs OWNER/REPO#NUMBER, e.g. github:me/app#12 or github:{repository.full_name}#{pull_request.number}');
+    return text;
+  }
   const match = new RegExp('^(telegram|slack|discord|webhook|' + Object.keys(GATEWAY_DELIVERY).join('|') + '):(.+)$').exec(text);
-  if (!match) throw new Error('Unknown delivery target ' + text + '. Use local, home (the chat where you sent /sethome), telegram:CHAT_ID, slack:CHANNEL, discord:CHANNEL_ID, ' + Object.values(GATEWAY_DELIVERY).map((item) => item.example).join(', ') + ' or webhook:https://...');
+  if (!match) throw new Error('Unknown delivery target ' + text + '. Use local, home (the chat where you sent /sethome), telegram:CHAT_ID, slack:CHANNEL, discord:CHANNEL_ID, ' + Object.values(GATEWAY_DELIVERY).map((item) => item.example).join(', ') + ', github:OWNER/REPO#NUMBER or webhook:https://...');
   if (match[1] === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(match[2])) throw new Error('email: needs an address, e.g. email:me@example.com');
   if (match[1] === 'webhook') {
     let url;
@@ -584,6 +591,31 @@ async function preflight(job, env) {
   return null;
 }
 
+async function githubToken(env) {
+  const own = env.OASIS_GITHUB_TOKEN || env.GITHUB_TOKEN || env.GH_TOKEN;
+  if (own) return own;
+  try {
+    const { execFile } = await import('node:child_process');
+    return await new Promise((resolve) => execFile('gh', ['auth', 'token'], { env, timeout: 10_000 }, (error, stdout) => resolve(error ? '' : String(stdout).trim())));
+  } catch { return ''; }
+}
+
+// Fills {dotted.path} placeholders in a delivery target from the event
+// payload with the raw value (github:{repository.full_name}#{issue.number}).
+// Only plain names and numbers are used, so a payload cannot point the
+// delivery anywhere a target could not name anyway.
+export function resolveDeliverTarget(target, event) {
+  if (!target || !target.includes('{') || !event) return target;
+  let data = null;
+  try { data = JSON.parse(event.payload); } catch {}
+  return target.replace(/\{([A-Za-z_][\w-]*(?:\.[\w-]+)*)\}/g, (match, dotted) => {
+    let value = data;
+    for (const key of dotted.split('.')) { if (value === null || typeof value !== 'object' || !Object.hasOwn(value, key)) return match; value = value[key]; }
+    const text = typeof value === 'number' || typeof value === 'string' ? String(value) : '';
+    return /^[\w.\/-]{1,200}$/.test(text) ? text : match;
+  });
+}
+
 export async function deliverOutput(job, text, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
   let target = job.deliver || 'local';
   if (target === 'local') return { delivered: 'local' };
@@ -611,6 +643,15 @@ export async function deliverOutput(job, text, { env = process.env, fetchImpl = 
     for (const part of chunkText(body, 1900)) await post(base + '/channels/' + dest + '/messages', { content: part, allowed_mentions: { parse: [] } }, { authorization: 'Bot ' + env.OASIS_DISCORD_BOT_TOKEN });
   } else if (kind === 'webhook') {
     await post(dest, { routine: job.id, name: job.name || null, text: body });
+  } else if (kind === 'github') {
+    const parsed = /^([\w.-]+)\/([\w.-]+)#(\d+)$/.exec(dest);
+    if (!parsed) throw new Error('github: target ' + dest + ' is not OWNER/REPO#NUMBER (a {placeholder} the event did not fill?)');
+    const token = await githubToken(env);
+    if (!token) throw new Error('github: needs OASIS_GITHUB_TOKEN, GITHUB_TOKEN or a signed-in gh CLI');
+    const base = String(env.OASIS_GITHUB_API_BASE || 'https://api.github.com').replace(/\/+$/, '');
+    // GitHub caps a comment at 65536 characters.
+    const comment = body.length > 60_000 ? body.slice(0, 60_000) + '\n\n[truncated]' : body;
+    await post(base + '/repos/' + parsed[1] + '/' + parsed[2] + '/issues/' + parsed[3] + '/comments', { body: comment }, { authorization: 'Bearer ' + token, accept: 'application/vnd.github+json', 'user-agent': 'oasis-routines' });
   } else if (GATEWAY_DELIVERY[kind]) {
     const deliver = await GATEWAY_DELIVERY[kind].load();
     await deliver(dest, body, { env, fetchImpl });
@@ -724,7 +765,7 @@ async function launch(job, env, backgrounds, now, event = null, precheckOutput =
   const entry = job.kind === 'script'
     ? await backgrounds.startExecJob({ root, command: job.prompt, name, env: childEnv })
     : await backgrounds.startBackgroundSession({ root, prompt: event ? eventPrompt(job, event, eventFile) : composePrompt(job, checked ? checked.text : ''), name, ...(job.fromSession && job.kind !== 'script' ? { resumeId: job.fromSession, fork: true } : {}), model: job.model, permissionMode: job.permissionMode, env: childEnv });
-  return { fireId: randomUUID(), backgroundId: entry.id, startedAt: now.toISOString(), manual: false, ...(entry.sessionId ? { sessionId: entry.sessionId } : {}), ...(event ? { eventId: event.id, eventFile } : {}) };
+  return { fireId: randomUUID(), backgroundId: entry.id, startedAt: now.toISOString(), manual: false, ...(entry.sessionId ? { sessionId: entry.sessionId } : {}), ...(event ? { eventId: event.id, eventFile } : {}), ...(event && job.deliver?.includes('{') ? { deliverTo: resolveDeliverTarget(job.deliver, event) } : {}) };
 }
 
 // How long one run may take before the scheduler stops it: the routine's
@@ -788,7 +829,7 @@ async function reconcile(job, env, backgrounds, options) {
     const label = (precheck ? 'precheck ' : '') + (status === 'timed_out' ? 'stopped after its ' + Math.round(runTimeoutMs(job, env) / 60_000) + '-minute timeout' : status);
     const message = (status === 'ok' ? output : 'Run ' + label + (output ? ':\n' + output : '.') + '\nLogs: oasis bg logs ' + run.backgroundId)
       + (pauseForFailures ? '\n\nPaused after ' + streak + ' failed runs in a row. Fix it, then: oasis schedule resume ' + (job.name || job.id) : '');
-    try { record.delivery = (await deliverOutput(job, message, { env, fetchImpl: options.fetchImpl })).delivered; } catch (error) { record.deliveryError = error.message; }
+    try { record.delivery = (await deliverOutput(run.deliverTo ? { ...job, deliver: run.deliverTo } : job, message, { env, fetchImpl: options.fetchImpl })).delivered; } catch (error) { record.deliveryError = error.message; }
   }
   await appendRun(job.id, record, env);
   job.lastStatus = status; job.lastRunAt = run.startedAt; job.lastFinishedAt = finishedAt;
