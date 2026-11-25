@@ -35,7 +35,8 @@ Options:
   --workdir DIR            run in this project folder (default: home folder)
   --script                 PROMPT is a shell command; no model is used
   --model MODEL            model for this routine
-  --permission-mode MODE   default, acceptEdits, plan, auto or dontAsk
+  --permission-mode MODE   manual (default), accept-edits, plan, auto
+                           or dont-ask
   --skill NAME             load a skill first (repeatable)
   --deliver TARGET         local (default), home (the chat where you sent
                            /sethome), telegram:CHAT_ID, slack:CHANNEL,
@@ -112,7 +113,7 @@ export async function scheduleCommand(args = [], { env = process.env, write = (t
     const job = await createJob({ ...fields, schedule, prompt }, { env });
     say('Created ' + describeJob(job));
     if (job.schedule.type === 'event') say('Webhook: POST /hooks/routines/' + job.id + ' on oasis web, signed with the secret from: oasis schedule show ' + job.id);
-    say(job.enabled ? 'It runs while the scheduler is running: oasis schedule daemon' : 'It is paused. Resume it with: oasis schedule resume ' + job.id);
+    say(job.enabled ? 'It runs while the scheduler is running: oasis schedule install (once; starts with the computer) or oasis schedule daemon' : 'It is paused. Resume it with: oasis schedule resume ' + job.id);
     return job;
   }
   if (sub === 'list' || sub === 'ls') {

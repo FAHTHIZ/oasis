@@ -32,6 +32,7 @@ import { atomicWriteFile } from './atomic-write.mjs';
 import { redactSecrets } from './auto-memory.mjs';
 import { chunkText } from './gateway-core.mjs';
 import { detectInjection, stripInvisible } from './untrusted-content.mjs';
+import { normalizePermissionMode, permissionModeName } from './permission-modes.mjs';
 
 const MAX_JOBS = 200;
 const MAX_PROMPT = 20_000;
@@ -276,8 +277,11 @@ function normalizeFields(fields, existing = {}, now = new Date()) {
   }
   if (fields.model !== undefined) { const model = String(fields.model || '').trim(); if (model) job.model = model; else delete job.model; }
   if (fields.permissionMode !== undefined) {
-    const mode = String(fields.permissionMode || '').trim();
-    if (mode && !PERMISSION_MODES.includes(mode)) throw new Error('permission mode must be one of ' + PERMISSION_MODES.join(', ') + '.');
+    // The same spellings --permission-mode accepts (manual, accept-edits,
+    // dont-ask), stored canonically; bypass mode is never allowed unattended.
+    const raw = String(fields.permissionMode || '').trim();
+    const mode = raw ? normalizePermissionMode(raw) || raw : '';
+    if (mode && !PERMISSION_MODES.includes(mode)) throw new Error('permission mode must be one of ' + PERMISSION_MODES.map(permissionModeName).join(', ') + '.');
     if (mode) job.permissionMode = mode; else delete job.permissionMode;
   }
   if (fields.skills !== undefined) job.skills = [...new Set((fields.skills || []).map((s) => String(s).trim()).filter((s) => /^[\w.:-]{1,80}$/.test(s)))];

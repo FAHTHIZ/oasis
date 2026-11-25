@@ -23,6 +23,7 @@ A stability release from a final pass over OASIS as a first-time user: research,
 
 ### Fixed
 
+- `oasis schedule add --permission-mode` accepts the same spellings as `oasis --permission-mode` (`manual`, `accept-edits`, `dont-ask`). Before, a routine refused the names the main help shows, and its error listed different ones. After creating a routine, OASIS also points to `oasis schedule install` so it keeps running after a restart.
 - OASIS Route setup reads `OASIS_ROUTE_API_KEY` or asks for the key. Before, the loopback branch never asked, so the Route choice always failed its probe with HTTP 401.
 - A gateway's `auto` model alias (OASIS Route) no longer borrows OpenRouter's 2M-token window, so OASIS plans and compacts for the model's real context and `oasis models` shows it.
 - A reply no longer ends with advice to install a language server when every script the agent changed ran cleanly after its last edit (a helper script for a CSV question, for example).
