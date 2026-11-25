@@ -36,7 +36,8 @@ export function chunkMessage(text, size = MAX_MESSAGE) {
 export function createTelegramGateway(options = {}) {
   const env = options.env || process.env;
   const token = options.token || env.OASIS_TELEGRAM_BOT_TOKEN;
-  if (!token || !/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) throw new Error('Set OASIS_TELEGRAM_BOT_TOKEN to the bot token from @BotFather.');
+  if (!token) throw new Error('Set OASIS_TELEGRAM_BOT_TOKEN to the bot token from @BotFather.');
+  if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) throw new Error('OASIS_TELEGRAM_BOT_TOKEN does not look like a bot token (it should look like 123456789:AA...). Copy it again from @BotFather.');
   const pairing = createPairing({ platform: 'telegram', root: options.root, env, log: (line) => (options.log || ((text) => process.stderr.write('[oasis gateway] ' + text + '\n')))(line) });
   const allowed = withPairing(options.allowedChats || parseAllowedChats(env.OASIS_TELEGRAM_ALLOWED_CHATS), pairing);
   // Optional: in an allowed group, only these Telegram user IDs may send tasks or answer approvals.
@@ -395,8 +396,11 @@ export async function runGateway(args = [], options = {}) {
     return;
   }
   const gateway = kind === 'all' ? await createAllGateways(options) : await createGateway(kind, options);
-  const onSignal = () => { gateway.stop(); process.exit(0); };
+  // Routines start only once the platform is configured, so a missing token is a plain error
+  // instead of "Routine daemon started" followed by one.
+  const stopReady = typeof options.onReady === 'function' ? await options.onReady() : null;
+  const onSignal = () => { gateway.stop(); Promise.resolve(typeof stopReady === 'function' && stopReady()).finally(() => process.exit(0)); };
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
-  await gateway.run();
+  try { await gateway.run(); } finally { if (typeof stopReady === 'function') await stopReady(); }
 }

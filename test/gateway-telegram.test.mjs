@@ -153,3 +153,9 @@ test('OASIS_TELEGRAM_ALLOWED_USERS limits who in an allowed group can send tasks
   await flush();
   assert.equal(approved, true);
 });
+
+test('a missing Telegram token and a malformed one get different messages', async () => {
+  const create = createTelegramGateway;
+  assert.throws(() => create({ env: {} }), /Set OASIS_TELEGRAM_BOT_TOKEN/);
+  assert.throws(() => create({ env: { OASIS_TELEGRAM_BOT_TOKEN: 'x' } }), /does not look like a bot token/);
+});

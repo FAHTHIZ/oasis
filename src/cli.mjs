@@ -3584,18 +3584,17 @@ async function main() {
   }
   if (command === 'gateway') {
     const { runGateway } = await import('./gateway-telegram.mjs');
-    let scheduler = null;
-    // Host routines only for a real gateway; a usage error must still exit.
-    const { GATEWAY_PLATFORMS } = await import('./gateway-telegram.mjs');
-    if ([...GATEWAY_PLATFORMS, 'all'].includes(String(rest[0] || '').toLowerCase())) {
+    // Routines are hosted only once a platform is configured (onReady), so a missing token
+    // is a plain error and a usage error still exits.
+    const onReady = async () => {
       try {
         const { hostScheduler } = await import('./routines.mjs');
-        scheduler = await hostScheduler({ env: process.env, log: (line) => stderr.write('[routines] ' + line + '\n') });
+        const scheduler = await hostScheduler({ env: process.env, log: (line) => stderr.write('[routines] ' + line + '\n') });
         if (!scheduler.hosted && process.env.OASIS_DEBUG) stderr.write('[routines] not hosted: ' + scheduler.reason + '\n');
-      } catch (error) { stderr.write('Routines are not running: ' + error.message + '\n'); }
-    }
-    try { await runGateway(rest, { root: workspace, env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null }); }
-    finally { if (scheduler) await scheduler.stop().catch(() => {}); }
+        return () => scheduler.stop().catch(() => {});
+      } catch (error) { stderr.write('Routines are not running: ' + error.message + '\n'); return null; }
+    };
+    await runGateway(rest, { root: workspace, env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null, onReady });
     return;
   }
   if (command === 'app-server') {
