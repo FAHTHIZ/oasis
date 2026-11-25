@@ -101,3 +101,10 @@ test('web: preview serves project files sandboxed, refuses secrets and proxies a
   const closed = await fetch(origin + info.base + ':80/');
   assert.equal(closed.status, 400);
 });
+
+test('the web app note offers Preview only for something to look at', async () => {
+  const { WEB_APP_NOTE } = await import('../src/web.mjs');
+  assert.match(WEB_APP_NOTE, /Preview tab/);
+  assert.match(WEB_APP_NOTE, /When you built or changed a web page or app/);
+  assert.match(WEB_APP_NOTE, /Do not mention Preview for other work/);
+});

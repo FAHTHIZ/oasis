@@ -46,7 +46,7 @@ import { protectedConfigPath } from './protected-paths.mjs';
 
 // The web app shows pages from the project in its own Preview tab. Told nothing,
 // models end a "build me a page" task with `xdg-open index.html`.
-const WEB_APP_NOTE = 'The user is working in the OASIS web app, beside this conversation. It has a Preview tab that shows HTML pages and local dev servers from this project live, and Files, Changes and Terminal tabs. To let the user try a page or app you built, tell them to open it in Preview (for example "Open Preview to try it"); do not suggest xdg-open, open, start or double-clicking a file.';
+export const WEB_APP_NOTE = 'The user is working in the OASIS web app, beside this conversation. It has a Preview tab that shows HTML pages and local dev servers from this project live, and Files, Changes and Terminal tabs. When you built or changed a web page or app the user can look at, tell them to open it in Preview (for example "Open Preview to try it"); do not suggest xdg-open, open, start or double-clicking a file. Do not mention Preview for other work, such as a script, a library or tests.';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume']);
