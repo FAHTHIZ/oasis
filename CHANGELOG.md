@@ -10,6 +10,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- Terminal: when the bytes of an arrow key or Shift+Tab arrive a little apart (SSH, a busy machine), the rest is decoded as the key instead of typing `[Z` or `[A` into the prompt. Esc stays instant and vim's Esc-then-key is unchanged.
 - Web app: archiving a session shows an Undo button in the toast instead of telling you to run `oasis sessions unarchive` in a terminal.
 - Terminal voice dictation before the first message: `/voice` no longer prints "on" and then "Voice dictation: off", a second `/voice` turns it off again, and Alt+V honours a saved `/voice on` instead of saying dictation is off. With no transcription key, Alt+V now says so before recording rather than after you have spoken.
 - `oasis gateway` starts routines only after the platform is configured, so a missing token is one clear error instead of "Routine daemon started" followed by it. A Telegram token that is set but malformed now says so instead of asking you to set it.

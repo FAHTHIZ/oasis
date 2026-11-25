@@ -65,3 +65,24 @@ test('emoji, CJK and combining marks come through as one text run', () => {
   assert.deepEqual(keys('日本😀👨‍👩‍👧é'), [{ name: 'char', text: '日本😀👨‍👩‍👧é' }]);
   assert.deepEqual(keys('😀'), [{ name: 'char', text: '😀', stroke: '😀' }]);
 });
+
+test('the rest of a key sequence that arrives just after a flushed Esc is decoded, not typed', async () => {
+  const later = [];
+  const decoder = new KeyDecoder({ onKeys: (k) => later.push(...k) });
+  decoder.feed('\x1b');
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.deepEqual(later.map((k) => k.name), ['escape']);
+  assert.notEqual(decoder.feed('[Z')[0]?.name, 'char', 'Shift+Tab tail is not text');
+  decoder.feed('\x1b');
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.equal(decoder.feed('[').length, 0, 'a lone [ right after a flushed Esc waits for the rest');
+  assert.deepEqual(decoder.feed('A').map((k) => k.name), ['up']);
+  // Typed keys after Esc (vim NORMAL commands) stay keys.
+  decoder.feed('\x1b');
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.deepEqual(decoder.feed('O').map((k) => k.text), ['O']);
+  decoder.feed('\x1b');
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.deepEqual(decoder.feed('[Z').map((k) => k.text), ['[Z'], 'long after the Esc it is text');
+  decoder.destroy();
+});

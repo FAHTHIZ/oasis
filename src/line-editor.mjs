@@ -162,6 +162,8 @@ function sequenceKey(seq) {
 // (CRLF and CR normalised to LF), even across reads. Incomplete sequences
 // wait for the next read. A lone Esc is reported at once, or, when `onKeys`
 // is given, after a short timeout so a split Alt+key is not read as Esc + key.
+const SPLIT_ESCAPE_WINDOW_MS = 150;
+
 export class KeyDecoder {
   constructor({ onKeys = null, onReply = null, escapeTimeout } = {}) {
     this.onKeys = onKeys;
@@ -172,7 +174,25 @@ export class KeyDecoder {
     this.buffer.on('data', (seq) => this.queue.push({ seq }));
     this.buffer.on('paste', (text) => this.queue.push({ paste: text }));
     // Sequences flushed by StdinBuffer's timer (outside feed) go to onKeys.
-    this.buffer.on('data', () => { if (!this.feeding) this.drainLater(); });
+    this.buffer.on('data', (seq) => {
+      if (this.feeding) return;
+      this.loneEscAt = seq === '\x1b' ? Date.now() : 0;
+      this.drainLater();
+    });
+  }
+
+  // A lone Esc is reported after a short timeout so Esc stays instant. Over SSH or on a
+  // busy machine the rest of an arrow key or Shift+Tab can arrive just after that, and
+  // "[Z" or "[A" was typed into the prompt. When the next read follows a flushed Esc
+  // closely and is the rest of a CSI or SS3 key, it is decoded as that key instead.
+  // A person cannot type a whole "[Z" or "OA" within one read, so Esc then O (vim)
+  // stays two keys.
+  rejoinSplitEscape(chunk) {
+    const at = this.loneEscAt;
+    this.loneEscAt = 0;
+    if (!at || Date.now() - at > SPLIT_ESCAPE_WINDOW_MS || this.buffer.getBuffer()) return chunk;
+    if (/^(?:\[[0-9;:?<>=]*[\x40-\x7e]|O[\x40-\x7e]|\[[0-9;:?<>=]*$)/.test(chunk)) return `\x1b${chunk}`;
+    return chunk;
   }
 
   drainLater() {
@@ -187,7 +207,7 @@ export class KeyDecoder {
 
   feed(chunk) {
     this.feeding = true;
-    try { this.buffer.process(String(chunk)); } finally { this.feeding = false; }
+    try { this.buffer.process(this.rejoinSplitEscape(String(chunk))); } finally { this.feeding = false; }
     if (!this.onKeys) {
       // Without a callback nothing can be reported later: a lone Esc is a
       // key now, and the timer must not drop a partial sequence.
