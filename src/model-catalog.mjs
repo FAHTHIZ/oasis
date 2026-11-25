@@ -201,6 +201,14 @@ export function findCatalogModel(model, { baseURL, provider, env = process.env, 
   if (!model) return null;
   const catalog = loadModelCatalog(env);
   const hint = provider && catalog.lower[provider] ? provider : providerForBaseURL(baseURL, env);
+  // "auto" is a router alias, not a model: OpenRouter's auto router lists a 2M
+  // window, but on OASIS Route, OmniRoute or LiteLLM it picks some upstream
+  // whose window is unknown. Borrowing OpenRouter's entry made OASIS plan for
+  // 2M tokens and never compact on a 32K local model behind Route.
+  if (/^auto$/i.test(String(model).trim())) {
+    const entry = hint === 'openrouter' && catalog.lower.openrouter ? (catalog.lower.openrouter.get('openrouter/auto') || catalog.lower.openrouter.get('auto')) : null;
+    return entry && (!need || entry[need]) ? { provider: 'openrouter', ...entry } : null;
+  }
   const names = candidates(model);
   const search = (providers) => {
     for (const table of [catalog.lower, catalog.bare]) {
