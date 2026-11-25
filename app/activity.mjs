@@ -453,7 +453,15 @@ function fillDetail(row, step) {
   actions.append(meta, jump);
   // A step that did not work says why first, before its arguments.
   const why = ['failed', 'timed_out', 'blocked', 'declined'].includes(step.outcome) ? stepWhy(step.tool) : '';
+  // When the Error box would only repeat that sentence, leave it out.
+  const errorBox = why ? box.querySelector('.inspect-pre.output.failed') : null;
+  if (errorBox && errorBox.parentElement !== box && repeatsWhy(errorBox.textContent, why)) errorBox.parentElement.remove();
   detail.replaceChildren(...[actions, why ? el('p', 'trace-why' + (STATUS_CLASS[step.outcome] === 'fail' ? ' fail' : ''), why) : null, box].filter(Boolean));
+}
+
+// True when an Error box says only what the "why" line above it says.
+export function repeatsWhy(output, why) {
+  return Boolean(why) && String(output || '').replace(/^This step failed:\s*/, '').trim() === why;
 }
 
 // The first line of a step's error ("old_string and new_string are identical"),

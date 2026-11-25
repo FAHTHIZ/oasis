@@ -10,3 +10,11 @@ test('a failed step in the Activity panel says why, from JSON or text results', 
   assert.equal(stepWhy({}), '');
   assert.ok(stepWhy({ content: 'x'.repeat(500) }).length <= 300);
 });
+
+test('an Error box that only repeats the why line is recognised', async () => {
+  const { repeatsWhy } = await import('../app/activity.mjs');
+  assert.equal(repeatsWhy('This step failed: Bad args.', 'Bad args.'), true);
+  assert.equal(repeatsWhy('Bad args.', 'Bad args.'), true);
+  assert.equal(repeatsWhy('Bad args.\nstack trace line', 'Bad args.'), false);
+  assert.equal(repeatsWhy('anything', ''), false);
+});
