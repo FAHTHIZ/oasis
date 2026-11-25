@@ -31,6 +31,8 @@ test('web /api/routines lists, creates and manages routines for the signed-in ow
   assert.equal(job.state, 'scheduled');
   assert.equal((await post({ action: 'pause', id: 'nightly' })).body.routines[0].enabled, false);
   assert.equal((await post({ action: 'resume', id: job.id })).body.routines[0].enabled, true);
+  // Run now shows as queued until the scheduler's next pass starts it.
+  assert.equal((await post({ action: 'run', id: job.id })).body.routines[0].state, 'queued');
   const bad = await post({ action: 'create', fields: { schedule: 'whenever', prompt: 'x' } });
   assert.equal(bad.status, 400);
   assert.match(bad.body.error, /schedule/i);

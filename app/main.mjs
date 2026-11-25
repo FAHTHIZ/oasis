@@ -4651,6 +4651,16 @@ $('mcpAddButton').addEventListener('click', async () => {
 });
 // Routines (`oasis schedule`) on the computer running `oasis web` (/api/routines).
 let routineItems = [];
+// Routine ids whose Recent results are open, kept across refreshes.
+const routineResultsOpen = new Set();
+let routinePoll = 0;
+// While Settings is open and a run is queued or running, refresh every few
+// seconds so the state and results update without reopening Settings.
+function scheduleRoutinePoll() {
+  clearTimeout(routinePoll);
+  if (!routineItems.some((job) => job.state === 'running' || job.state === 'queued')) return;
+  routinePoll = setTimeout(() => { if (!$('settingsSheet').hidden) void refreshRoutines(); }, 4000);
+}
 function routineSetStatus(text, kind = '') { const node = $('routineStatus'); node.textContent = text; node.className = 'test-result' + (kind === 'error' ? ' fail' : ''); }
 function renderRoutines(data, problem = '') {
   routineItems = (data && data.routines) || [];
@@ -4689,7 +4699,7 @@ function renderRoutines(data, problem = '') {
       actions.append(b);
     };
     if (job.state === 'running') button('Stop run', 'cancel');
-    else button('Run now', 'run');
+    else if (job.state !== 'queued') button('Run now', 'run');
     button(job.enabled ? 'Pause' : 'Resume', job.enabled ? 'pause' : 'resume');
     button('Remove', 'remove', true);
     const results = document.createElement('details');
@@ -4699,7 +4709,8 @@ function renderRoutines(data, problem = '') {
     const body = document.createElement('div');
     results.append(summary, body);
     results.addEventListener('toggle', async () => {
-      if (!results.open) return;
+      if (!results.open) { routineResultsOpen.delete(job.id); return; }
+      routineResultsOpen.add(job.id);
       body.textContent = 'Loading…';
       try {
         const data = await RT.client.api('/api/routines?runs=' + encodeURIComponent(job.id));
@@ -4717,7 +4728,9 @@ function renderRoutines(data, problem = '') {
     info.append(results);
     li.append(info, actions);
     list.appendChild(li);
+    if (routineResultsOpen.has(job.id)) results.open = true;
   }
+  scheduleRoutinePoll();
 }
 async function refreshRoutines() {
   if (!mcpAvailable()) return;
