@@ -2038,6 +2038,7 @@ function addReasoning(delta, reset) {
   const block = showThinking();
   block._text = (reset ? '' : block._text) + String(delta || '');
   if (block._entry) block._entry.reasoning = { text: block._text, ms: 0 };
+  block.classList.add('has-text');
   const head = block.querySelector('.thinking-head');
   head.disabled = false;
   const body = block.querySelector('.thinking-text');

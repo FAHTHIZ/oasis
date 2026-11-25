@@ -291,6 +291,9 @@ code.inspect-text{font:12px var(--mono)}
 .thinking-head:disabled .thinking-chev{display:none}
 .thinking-head[aria-expanded="true"] .thinking-chev{transform:rotate(45deg)}
 .thinking-text{margin:0 0 6px var(--rail-x);padding:2px 8px 4px 19px;border-left:1px solid var(--line-strong);color:var(--muted);font-size:13px;line-height:1.6;max-height:260px;overflow:auto;overflow-wrap:anywhere}
+/* Until reasoning streams, the live block is just the orb: the status line
+   above the message box already says "Thinking · 4s", once is enough. */
+.thinking.live:not(.has-text) .thinking-label{display:none}
 .thinking.live .thinking-text{max-height:9.6em;border-left-color:color-mix(in srgb,var(--accent) 35%,var(--line-strong))}
 .thinking.live .thinking-text.overflow{-webkit-mask-image:linear-gradient(to bottom,transparent,#000 1.6em);mask-image:linear-gradient(to bottom,transparent,#000 1.6em)}
 .thinking-text>:first-child{margin-top:0}
