@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- MCP tool approvals read "OASIS wants to use the “room_code” tool from the “vault” MCP server with:" followed by the arguments as one code block. The web sheet used to show the JSON braces as plain text with only the inner lines as code, under a generic "asking permission to take this action" line. Tools whose names say delete, drop, wipe and the like are still marked risky.
 - When an answer the user asked to cite has no sources, the internal reminder lists the pages the model read ("cite the pages you read, by URL: https://www.python.org/downloads/release/python-3152/"). With only "the result cites no sources", gpt-oss re-sent the same uncited answer.
 - Finished web steps say what they did: "Searched the web for 'latest Python release'" and "Read a page on python.org". A search followed by two page reads used to show three identical "Looked up information online" rows in Activity.
 - Web access approvals are written in plain words and show what is being sent: "OASIS wants to search the web for: latest Python release. The search goes to html.duckduckgo.com and www.bing.com…" and "OASIS wants to read web pages from www.python.org: <url>". They used to read "OASIS is asking permission to take this action: Allow web_search to send this query…" without the query.

@@ -129,7 +129,17 @@ test('a plan approval shows the whole plan; other long prompts say what was cut'
   const other = formatApprovalMessage('Call MCP server "x" tool "y" with arguments:\n' + 'z'.repeat(5000), { tool: 'mcp_x_y' });
   // The start and the end stay visible; the middle is counted.
   assert.match(other.message, /\[2\d{3} characters in the middle not shown\]/);
-  assert.match(other.message, /z{1000}$/);
+  assert.match(other.message, /z{1000}\nMCP tools can read outside data/);
+});
+
+// The braces showed as plain text with only the indented JSON line as code.
+test('an MCP call approval names the tool and server and shows the arguments as one block', async () => {
+  const { formatApprovalMessage } = await import('../src/approval-language.mjs');
+  const prompt = 'Call MCP server "vault" tool "room_code" with arguments:\n{\n  "room": "demo"\n}\nMCP tools can read external data or change systems according to this server’s permissions.';
+  const shown = formatApprovalMessage(prompt, { tool: 'mcp_vault_room_code' });
+  assert.equal(shown.message, 'OASIS wants to use the “room_code” tool from the “vault” MCP server with:\n  {\n    "room": "demo"\n  }\nMCP tools can read outside data or change other systems, depending on what this server allows.');
+  assert.equal(shown.risky, false);
+  assert.match(formatApprovalMessage('Call MCP server "gh" tool "delete_repo" with arguments:\n{}', {}).message, /^WARNING — RISKY ACTION\nOASIS wants to use the “delete_repo” tool from the “gh” MCP server\.\n/);
 });
 
 test('a reworded command prompt keeps the rehearsal result and the high-risk reason', () => {

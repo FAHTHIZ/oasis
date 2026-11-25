@@ -127,6 +127,15 @@ export function formatApprovalMessage(prompt, meta = {}) {
     message = search
       ? 'OASIS wants to search the web' + (query ? ' for:\n  ' + headAndTail(redactApprovalSecrets(query), 500) + '\n' : '. ') + 'The search goes to ' + hosts + '. Allowing covers searches for the rest of this session; opening a result page asks separately.'
       : 'OASIS wants to read web pages from ' + hosts + (url ? ':\n  ' + headAndTail(redactApprovalSecrets(url), 500) + '\n' : '. ') + 'Allowing covers that site for the rest of this session.';
+  } else if (/^Call MCP server "[^"\n]+" tool "[^"\n]+" with arguments:\n/.test(original)) {
+    // Only the JSON lines that happened to be indented showed as code, with
+    // the braces as plain text around them. Indent the whole block.
+    const [, server, toolName, body = ''] = original.match(/^Call MCP server "([^"\n]+)" tool "([^"\n]+)" with arguments:\n([\s\S]*?)(?:\nMCP tools can [^\n]*)?$/) || [];
+    const json = headAndTail(body.trim(), 3000);
+    const empty = !json || json === '{}';
+    message = 'OASIS wants to use the ' + safeLabel(toolName) + ' tool from the ' + safeLabel(server) + ' MCP server' + (empty ? '.' : ' with:\n' + json.split('\n').map((line) => '  ' + line).join('\n')) +
+      '\nMCP tools can read outside data or change other systems, depending on what this server allows.';
+    risky = /\b(?:delete|remove|drop|destroy|uninstall|overwrite|wipe|purge|truncate)/i.test(toolName || '');
   } else if (tool === 'delete_file' || /^delete (?:the workspace )?file\b/i.test(original)) {
     const match = original.match(/^Delete the workspace file\s+(.+?)\?\s*/i);
     const target = path || (match && match[1]) || '';
