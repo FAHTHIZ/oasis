@@ -3096,11 +3096,14 @@ const ONE_WORD_TASKS = new Set(['lint', 'test', 'tests', 'build', 'run', 'fix', 
 // Chat controls that only make sense inside a session (`oasis undo` used to
 // send "undo" to the model as a task). Task-like slash commands (fix, review,
 // commit, test, simplify …) are left out: as a one-word task they are fine.
-const CHAT_ONLY_COMMANDS = new Set(['undo', 'rewind', 'cost', 'usage', 'compact', 'autocompact', 'clear', 'context', 'logout', 'login', 'exit', 'fork', 'rename', 'copy', 'export', 'recap', 'keys', 'theme', 'vim', 'statusline', 'todos', 'bashes', 'heapdump', 'effort', 'fast', 'model', 'style', 'output-style', 'language', 'color', 'sounds', 'voice', 'privacy-settings', 'terminal-setup', 'release-notes', 'tips', 'presets', 'add-dir', 'disconnect', 'focus', 'btw']);
+const CHAT_ONLY_COMMANDS = new Set(['undo', 'rewind', 'cost', 'usage', 'compact', 'autocompact', 'clear', 'context', 'logout', 'login', 'exit', 'fork', 'rename', 'copy', 'export', 'recap', 'keys', 'theme', 'vim', 'statusline', 'todos', 'bashes', 'heapdump', 'effort', 'fast', 'model', 'style', 'output-style', 'language', 'color', 'sounds', 'voice', 'privacy-settings', 'terminal-setup', 'release-notes', 'tips', 'presets', 'add-dir', 'disconnect', 'focus', 'btw', 'hooks', 'commands', 'inbox', 'notify', 'mode', 'worktrees', 'followups', 'personality', 'sandbox', 'auto-commit', 'reload-plugins', 'reload-skills', 'list-agents', 'update-config', 'install-github-app', 'artifact', 'advisor']);
 export function chatOnlyCommand(args) {
   if (!Array.isArray(args) || args.length !== 1) return '';
   const word = String(args[0] || '').toLowerCase();
-  return CHAT_ONLY_COMMANDS.has(word) ? word : '';
+  if (CHAT_ONLY_COMMANDS.has(word)) return word;
+  // An alias of one (stats for /usage, tokens for /context) gets the same hint.
+  const alias = Object.hasOwn(COMMAND_ALIASES, word) ? COMMAND_ALIASES[word] : '';
+  return alias && CHAT_ONLY_COMMANDS.has(alias) ? word : '';
 }
 export function commandTypo(args) {
   if (!Array.isArray(args) || args.length !== 1) return '';

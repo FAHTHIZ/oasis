@@ -30,7 +30,7 @@ function oasis(args, home) {
 test('a chat-only command given as the only argument points to the slash command', async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-chatcmd-'));
   t.after(() => rm(home, { recursive: true, force: true }));
-  for (const word of ['undo', 'cost', 'usage', 'compact', 'logout', 'rewind', 'export']) {
+  for (const word of ['undo', 'cost', 'usage', 'compact', 'logout', 'rewind', 'export', 'hooks', 'stats', 'install-github-app']) {
     const r = await oasis([word], home);
     assert.equal(r.code, 1, word + ': ' + r.out);
     assert.match(r.out, new RegExp('/' + word + '\\b'), word + ': ' + r.out);
@@ -44,4 +44,8 @@ test('task-like words and sentences still go to the agent', () => {
     assert.equal(chatOnlyCommand(args), '', args.join(' '));
   }
   assert.equal(chatOnlyCommand(['Undo']), 'undo');
+  // Aliases of chat-only commands (stats is /usage, tokens is /context).
+  assert.equal(chatOnlyCommand(['stats']), 'stats');
+  assert.equal(chatOnlyCommand(['tokens']), 'tokens');
+  assert.equal(chatOnlyCommand(['code-review']), '');
 });

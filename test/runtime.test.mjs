@@ -403,6 +403,9 @@ test('plain-English installation requests are parsed without accepting command f
   assert.deepEqual(parseInstallIntent('Please install ripgrep in yourself'), { packageName: 'ripgrep', ecosystem: 'auto' });
   assert.deepEqual(parseInstallIntent('install yourself'), { action: 'self' });
   assert.deepEqual(parseInstallIntent('install npm package @org/tool@1.2.0'), { packageName: '@org/tool@1.2.0', ecosystem: 'npm' });
+  // A chat command that starts with install- is not a package request.
+  assert.equal(parseInstallIntent('install-github-app'), null);
+  assert.equal(parseInstallIntent('installation notes for the README'), null);
   assert.deepEqual(parseInstallIntent('install global npm package @org/tool@1.2.0'), { packageName: '@org/tool@1.2.0', ecosystem: 'npm-global' });
   assert.equal(parseInstallIntent('install pnpm and configure the project'), null);
   assert.equal(parseInstallIntent('please explain how package installation works'), null);

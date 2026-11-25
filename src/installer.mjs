@@ -26,7 +26,9 @@ export function normalizePackageName(raw) {
 
 export function parseInstallIntent(text) {
   const original = String(text || '').trim();
-  if (!/^(?:please\s+)?(?:can you\s+)?install\b/i.test(original)) return null;
+  // install followed by a space or the end: install-github-app is a chat
+  // command, not a request to apt-get install a package of that name.
+  if (!/^(?:please\s+)?(?:can you\s+)?install(?:\s|$)/i.test(original)) return null;
   if (/\b(?:and then|then configure|and configure|and set up|and setup|and build|and test)\b/i.test(original)) return null;
   let rest = original.replace(/^(?:please\s+)?(?:can you\s+)?install\s+/i, '').trim();
   if (/^(?:yourself|the oasis cli|oasis|oasis-oss|oasis oss|oasis itself)[.!?]*$/i.test(rest)) return { action: 'self' };
