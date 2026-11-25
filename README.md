@@ -394,7 +394,16 @@ By default OASIS works in the folder you start it in, on your machine, with appr
 
 **Skills and plugins.** Skills, slash commands, hooks, subagents and MCP servers can be packaged as plugins. Existing Claude Code setups (`CLAUDE.md`, `.claude/agents`, skills, hooks, settings, `.mcp.json` and plugins) load without conversion, and Codex plugins and Gemini CLI extensions are converted on install. What loads and what does not is in [Compatibility](docs/COMPATIBILITY.md).
 
-**Inference gateways.** [OASIS Route](https://github.com/FAHTHIZ/OASIS-ROUTE) is the first-party self-hosted router, with encrypted provider connections, quota-aware selection, spend policy and failover. The native terminal `oasis-route` provider and setup choice are on OASIS `main` and will ship in the next OASIS release; until then, released builds can connect through the generic OpenAI-compatible endpoint. OASIS also has built-in provider entries for third-party [OmniRoute](https://github.com/cheaper-inference/OmniRoute) and [FreeLLMAPI](https://github.com/Azhan787/FreeLLMAPI). These are separate services; OASIS remains the agent runtime. Gateways can expose free and paid upstreams, so `--zero-budget` does not assume a router is free. Setup: [OASIS Route](docs/CONFIGURATION.md#oasis-route-gateway), [OmniRoute](docs/CONFIGURATION.md#omniroute-gateway), [FreeLLMAPI](docs/CONFIGURATION.md#freellmapi-gateway).
+### First-party companions
+
+**[EXTREMIS](https://github.com/FAHTHIZ/EXTREMIS) — capability discovery and activation.** EXTREMIS complements the OASIS runtime with 64 Agent Skills, 6 workflows, 10 specialist-agent profiles, 45 built-in tools, progressive capability activation, a public skill finder and executable verification. Connect it to OASIS through its MCP server and install its small Agent Skills gateway skill; OASIS remains responsible for the agent loop, orchestration, permissions and subagent execution. EXTREMIS is a separate, optional project—not a bundled dependency or a replacement runtime. Setup: [First-party ecosystem](docs/ECOSYSTEM.md#extremis-capability-discovery-and-activation).
+
+```sh
+oasis mcp add extremis -- npx -y github:FAHTHIZ/EXTREMIS mcp
+npx skills add FAHTHIZ/EXTREMIS
+```
+
+**Inference gateways.** [OASIS Route](https://github.com/FAHTHIZ/OASIS-ROUTE) is the first-party self-hosted inference gateway, with encrypted provider connections, eligibility and spend policy, quota-aware model selection and failover. Its built-in terminal provider and dedicated setup choice shipped in OASIS `v0.12.0`; choose **OASIS Route** in `oasis setup`, or use the documented OpenAI-compatible endpoint. Route is a separate service and OASIS remains the agent runtime. The web app has a separate provider catalogue; use the terminal runtime for this integration. OASIS also has built-in provider entries for third-party [OmniRoute](https://github.com/cheaper-inference/OmniRoute) and [FreeLLMAPI](https://github.com/Azhan787/FreeLLMAPI). Gateways can expose free and paid upstreams, so `--zero-budget` does not assume a router is free. Setup: [OASIS Route](docs/CONFIGURATION.md#oasis-route-gateway), [OmniRoute](docs/CONFIGURATION.md#omniroute-gateway), [FreeLLMAPI](docs/CONFIGURATION.md#freellmapi-gateway). See also the [first-party ecosystem guide](docs/ECOSYSTEM.md).
 
 <details>
 <summary><b>Model, MCP and plugin commands</b></summary>
@@ -462,7 +471,7 @@ Engineering benchmarks of the harness itself (tool-call repair, edit application
 | [User guide](docs/USER-GUIDE.md) | [Architecture](docs/ARCHITECTURE.md) · [Task model](docs/TASK-MODEL.md) | [Capabilities and status](docs/CAPABILITIES.md) |
 | [First run](docs/FIRST-RUN.md) | [Agent network](docs/AGENT-NETWORK.md) · [Subagents](docs/SUBAGENTS.md) | [Changelog](CHANGELOG.md) |
 | [Workflows](docs/WORKFLOWS.md) | [Configuration](docs/CONFIGURATION.md) | [Contributing](CONTRIBUTING.md) |
-| [Terminal guide](docs/TERMINAL.md) | [Skills, hooks, MCP and plugins](docs/EXTENDING.md) | [Security](SECURITY.md) |
+| [Terminal guide](docs/TERMINAL.md) | [Skills, hooks, MCP and plugins](docs/EXTENDING.md) · [First-party ecosystem](docs/ECOSYSTEM.md) | [Security](SECURITY.md) |
 | [Interfaces](docs/INTERFACES.md) | [Execution backends](docs/EXECUTION-BACKENDS.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) · [FAQ](docs/FAQ.md) |
 | [Desktop app](docs/DESKTOP.md) | [Remote access](docs/REMOTE-ACCESS.md) | [Support](SUPPORT.md) |
 | [Downloads and releases](docs/RELEASES.md) | [Compatibility](docs/COMPATIBILITY.md) | [Brand guidelines](docs/BRAND.md) |
