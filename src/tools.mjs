@@ -2151,7 +2151,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       args = editFileArgs(args);
       if (typeof args.old_string !== 'string' || typeof args.new_string !== 'string') throw new Error('old_string and new_string must be strings.');
       if (!args.old_string.length) throw new Error('old_string must not be empty. To create a new file, use write_file.');
-      if (args.old_string === args.new_string) throw new Error('old_string and new_string are identical; nothing to change.');
+      if (args.old_string === args.new_string) throw new Error('old_string and new_string are identical; nothing to change. To insert new code, set old_string to an existing line next to where it goes and new_string to that line plus the new code.');
       if (Buffer.byteLength(args.old_string, 'utf8') > MAX_EDIT_FILE || Buffer.byteLength(args.new_string, 'utf8') > MAX_EDIT_FILE) throw new Error('The edit exceeds the 64 MiB text limit.');
       const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
       let info;

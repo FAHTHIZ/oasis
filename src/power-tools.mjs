@@ -406,7 +406,7 @@ export async function multiEditFile(root, args = {}, context = {}) {
     const label = 'Edit ' + (index + 1) + ': ';
     if (!edit || typeof edit.old_string !== 'string' || typeof edit.new_string !== 'string') throw new Error(label + 'old_string and new_string must be strings.');
     if (!edit.old_string) throw new Error(label + 'old_string must not be empty.');
-    if (edit.old_string === edit.new_string) throw new Error(label + 'old_string and new_string are identical.');
+    if (edit.old_string === edit.new_string) throw new Error(label + 'old_string and new_string are identical. To insert new code, set old_string to an existing line next to where it goes and new_string to that line plus the new code.');
     assertNoNewElision(edit.old_string, edit.new_string, target.relative.split(path.sep).join('/'));
     const count = next.split(edit.old_string).length - 1;
     if (!count) {
