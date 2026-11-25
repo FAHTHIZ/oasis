@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- The Files and Changes tabs re-read the workspace when you pick them, so files made outside OASIS (an editor, a terminal) appear without a reload.
 - Routines in Settings: Run now shows the routine as queued, and the list refreshes on its own while a run is queued or running, keeping Recent results open, instead of staying on "scheduled" and "No runs yet" until Settings is reopened.
 - Choosing a theme in Settings previews it straight away; closing Settings without saving puts the saved theme back.
 - The command palette (Ctrl K / sidebar Search) now finds chats, plugins and skills as its subtitle promises, not only the fixed actions.

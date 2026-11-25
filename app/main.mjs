@@ -5186,6 +5186,8 @@ function showPanelTab(name) {
   if (name === 'terminal') void openTerminal();
   if (name === 'preview') void openPreview();
   if (name === 'activity') refreshActivity();
+  // Files made outside OASIS (an editor, a terminal) show up when the tab is picked.
+  if ((name === 'files' || name === 'changes') && RT && workspace && !agent.busy && !$('filesPanel').hidden) refreshFiles();
   localStorage.setItem('oasis.panelTab', name === 'terminal' || name === 'preview' ? 'files' : name);
 }
 function currentPanelTab() { const tab = document.querySelector('#filesPanel .tab.active'); return tab ? tab.dataset.tab : 'files'; }
