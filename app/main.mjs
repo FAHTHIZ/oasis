@@ -2750,7 +2750,10 @@ function handleRunEvent(event) {
       const signIn = event.servers.filter((server) => server.signInUrl);
       const rest = event.servers.filter((server) => !server.signInUrl);
       if (rest.length) addMessage('note', (rest.length === 1 ? 'A tool server did not start. ' : rest.length + ' tool servers did not start. ') + rest.map((server) => server.name + ': ' + String(server.error).replace(/^MCP server \S+ (?:could not start: )?/, '')).join(' · '));
-      for (const server of signIn.slice(0, 3)) connectShortcut('/connect ' + server.signInUrl, { reason: server.name + ' needs you to sign in before its tools can be used.' });
+      // "Not now" is remembered for a week, so the card does not come back with every new task.
+      for (const server of signIn.filter((item) => !signInSnoozed(item.name)).slice(0, 3)) {
+        connectShortcut('/connect ' + server.signInUrl, { reason: server.name + ' needs you to sign in before its tools can be used.', onSkip: () => { snoozeSignIn(server.name); toast('OASIS will not ask about ' + server.name + ' again this week. Connect it any time in Settings → Apps.'); } });
+      }
       break;
     }
     case 'notices': for (const note of event.notices || []) addMessage('note', note); break;
@@ -3597,7 +3600,19 @@ async function knownConnectors() {
   if (!connectorList) connectorList = RT.client.api('/api/connectors').then((body) => body.connectors || []).catch(() => { connectorList = null; return []; });
   return connectorList;
 }
-async function connectShortcut(message, { reason = '', keepInput = false } = {}) {
+const SIGN_IN_SNOOZE_KEY = 'oasis.signInSnoozed';
+const SIGN_IN_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+function signInSnoozes() {
+  try { const value = JSON.parse(localStorage.getItem(SIGN_IN_SNOOZE_KEY) || '{}'); return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch { return {}; }
+}
+function signInSnoozed(name) { return Number(signInSnoozes()[String(name)]) > Date.now(); }
+function snoozeSignIn(name) {
+  const all = signInSnoozes();
+  for (const key of Object.keys(all)) if (!(Number(all[key]) > Date.now())) delete all[key];
+  all[String(name)] = Date.now() + SIGN_IN_SNOOZE_MS;
+  try { localStorage.setItem(SIGN_IN_SNOOZE_KEY, JSON.stringify(all)); } catch { /* private mode */ }
+}
+async function connectShortcut(message, { reason = '', keepInput = false, onSkip = null } = {}) {
   const intent = connectIntent(message);
   if (!intent) return false;
   const list = await knownConnectors();
@@ -3628,7 +3643,10 @@ async function connectShortcut(message, { reason = '', keepInput = false } = {})
     act: (body) => RT.client.api('/api/connectors/' + encodeURIComponent(view.id), { method: 'POST', body }),
     status: () => RT.client.api('/api/connectors/' + encodeURIComponent(view.id))
   };
-  connectService(view, actions).then(() => { connectorList = null; });
+  connectService(view, actions).then((settled) => {
+    connectorList = null;
+    if (onSkip && settled && settled.status === 'skipped') onSkip();
+  });
   return true;
 }
 // Settings → Apps: every catalog app with its status and one Connect button.
