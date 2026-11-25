@@ -149,3 +149,14 @@ test('plan updates are not counted as steps, matching the chat', () => {
   assert.equal(trace.totals.steps, 2);
   assert.equal(trace.turns[0].steps.length, 4, 'the rows are still listed');
 });
+
+test('agents from two task steps in one turn are numbered 1 and 2', async () => {
+  const { buildTrace } = await import('../app/core/trace.mjs');
+  const display = [
+    { role: 'user', content: 'go', at: 1 },
+    { role: 'assistant', at: 2, tools: [{ id: 't1', name: 'task', ok: true, startedAt: 2, endedAt: 5 }], subagents: [{ id: 'a', description: 'First', status: 'completed', startedAt: 2, endedAt: 5 }] },
+    { role: 'assistant', at: 6, tools: [{ id: 't2', name: 'task', ok: true, startedAt: 6, endedAt: 9 }], subagents: [{ id: 'b', description: 'Second', status: 'completed', startedAt: 6, endedAt: 9 }] }
+  ];
+  const turn = buildTrace(display, { now: 10 }).turns[0];
+  assert.deepEqual(turn.steps.flatMap((step) => step.agents.map((agent) => agent.index + ':' + agent.description)), ['1:First', '2:Second']);
+});

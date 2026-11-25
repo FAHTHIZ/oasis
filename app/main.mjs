@@ -3,7 +3,7 @@
 // drives the agent on that computer (runtime engine, core/runtime.mjs).
 import { PRESETS, testProvider } from './core/providers.mjs';
 import { alwaysAllowLabel, alwaysAllowTitle } from './core/approval-rule.mjs';
-import { SUBAGENT_STATUS_TEXT, friendlyBudget } from './core/subagents.mjs';
+import { SUBAGENT_STATUS_TEXT, friendlyBudget, workersByStep } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
 import { sideWork, liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline, formatTokens } from './core/live-status.mjs';
@@ -1884,6 +1884,7 @@ function showAllMessages() {
 // message and its tool calls join the live execution group.
 let activeGroup = null;     // the group tool calls are joining right now
 let lastTaskGroup = null;   // where subagent updates go once the agent moves on
+let workerHomes = new Map(); // subagent id -> the group that started it, this turn
 const groupOf = new WeakMap();
 function clearCursor() { for (const body of document.querySelectorAll('#transcript .body.cursor')) body.classList.remove('cursor'); }
 function startStep() {
@@ -2454,6 +2455,7 @@ function handleRunEvent(event) {
       if (event.steer) { handleEvent({ type: 'steer', content: event.content }); break; }
       endTurn('');
       lastTaskGroup = null;
+      workerHomes = new Map();
       runClock.start(Date.now());
       // The Undo button already dimmed the turn; a "/undo" bubble repeats it.
       if (quietUndo && event.content === '/undo') { quietUndo = false; break; }
@@ -2667,10 +2669,13 @@ function handleRunEvent(event) {
       markWaitingTools(false);
       break;
     case 'subagents': {
-      const group = lastTaskGroup || ensureGroup();
-      const owner = group.taskEntry || (currentTurn && currentTurn.entry);
-      if (owner) owner.subagents = event.workers;
-      renderSubagents(group, event.workers);
+      const current = lastTaskGroup || ensureGroup();
+      // Each step shows the agents it started, not every agent so far.
+      for (const [group, workers] of workersByStep(workerHomes, event.workers, current)) {
+        const owner = group.taskEntry || (group === current && currentTurn && currentTurn.entry);
+        if (owner) owner.subagents = workers;
+        renderSubagents(group, workers);
+      }
       liveModel.workers = Array.isArray(event.workers) ? event.workers : [];
       runClock.tick();
       break;
@@ -3458,6 +3463,7 @@ async function restoreChat({ keepChat = false } = {}) {
   $('transcript').replaceChildren();
   showWholeChat = false;
   display = [];
+  workerHomes = new Map();
   resetActivity();
   agent.reset();
   renderTodos([]);

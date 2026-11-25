@@ -94,3 +94,26 @@ test('a quiet agent says why: queued on the endpoint, or waiting out a retry', a
   t.update({ agent_id: 'a1', type: 'agent.completed' });
   assert.equal(t.pause('Run npm test', 'x'), false);
 });
+
+test('a second delegation step shows only the agents it started', async () => {
+  const { workersByStep } = await import('../app/core/subagents.mjs');
+  const homes = new Map();
+  const first = { name: 'first' };
+  const second = { name: 'second' };
+  const a = { id: 'a', status: 'running' };
+  let split = workersByStep(homes, [a], first);
+  assert.deepEqual([...split.keys()], [first]);
+  const aDone = { id: 'a', status: 'completed' };
+  const b = { id: 'b', status: 'running' };
+  split = workersByStep(homes, [aDone, b], second);
+  assert.deepEqual(split.get(first), [aDone], 'the earlier step keeps its agent and gets its update');
+  assert.deepEqual(split.get(second), [b]);
+});
+
+test('a JSON-wrapped subagent report shows as its text', async () => {
+  const { plainReport } = await import('../app/core/subagents.mjs');
+  assert.equal(plainReport('{"summary":"• one\\n• two"}'), '• one\n• two');
+  assert.equal(plainReport('{"summary":"x","files":["a"]}'), '{"summary":"x","files":["a"]}');
+  assert.equal(plainReport('Plain words.'), 'Plain words.');
+  assert.equal(plainReport('{"summary": 3}'), '{"summary": 3}');
+});

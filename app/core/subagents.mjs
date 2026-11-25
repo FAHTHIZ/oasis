@@ -33,7 +33,7 @@ export class SubagentTracker {
     if (type === 'agent.approval_pending') current.waitingApproval = true;
     if (type === 'agent.approval_granted' || type === 'agent.approval_denied') current.waitingApproval = false;
     if (data.budget) current.budget = String(data.budget).slice(0, 200);
-    const detail = String(data.report || data.detail || '').replace(/\s+/g, ' ').trim();
+    const detail = plainReport(String(data.report || data.detail || '')).replace(/\s+/g, ' ').trim();
     // Skip runtime counters such as "tool_calls=0 duration_ms=812".
     if (detail && !type.startsWith('agent.approval_') && !/^(?:[a-z_]+=\S+\s*)+$/i.test(detail)) current.detail = detail.slice(0, 240);
     this.workers.set(id, current);
@@ -138,4 +138,35 @@ export function friendlyBudget(text) {
     const value = short(spent);
     return (limit ? value + ' of ' + short(limit) : value) + ' ' + (!limit && value === '1' ? one : many);
   }).filter(Boolean).join(' · ');
+}
+
+// Small models sometimes end a subagent with {"summary": "…"} instead of
+// prose. Show the text, not the JSON around it (only for one text field).
+export function plainReport(text) {
+  const raw = String(text || '').trim();
+  if (!/^\{[\s\S]*\}$/.test(raw)) return String(text || '');
+  let value;
+  try { value = JSON.parse(raw); } catch { return String(text || ''); }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return String(text || '');
+  const keys = Object.keys(value);
+  const key = keys.length === 1 && /^(?:summary|report|result|answer|findings|output|text|response|message|content)$/i.test(keys[0]) ? keys[0] : '';
+  return key && typeof value[key] === 'string' && value[key].trim() ? value[key].trim() : String(text || '');
+}
+
+// Which delegation step each subagent belongs to. A turn's subagent updates
+// list every agent so far; each one stays with the step that was current when
+// it first appeared, so a second "task" step shows only the agents it started.
+// Returns a Map of step -> its workers (in update order), touching only steps
+// that own at least one worker.
+export function workersByStep(homes, workers = [], step) {
+  const byStep = new Map();
+  for (const worker of Array.isArray(workers) ? workers : []) {
+    if (!worker) continue;
+    const key = worker.id || worker.description;
+    if (!homes.has(key)) homes.set(key, step);
+    const home = homes.get(key);
+    if (!byStep.has(home)) byStep.set(home, []);
+    byStep.get(home).push(worker);
+  }
+  return byStep;
 }

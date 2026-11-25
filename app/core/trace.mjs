@@ -111,11 +111,15 @@ export function buildTrace(entries = [], { now = Date.now(), running = false, ti
 
 function finishTurn(turn, { now, running }) {
   const rows = [];
+  // Agents are numbered across the turn: a second task step's agent is 2, not 1 again.
+  let agentCount = 0;
   for (const { tool, entryIndex, agents } of turn.steps) {
     const span = stepSpan(tool, now);
     const outcome = stepOutcome(tool);
+    const lanes = agentLanes(agents, now, agentCount);
+    agentCount += lanes.length;
     rows.push({
-      agents: agentLanes(agents, now),
+      agents: lanes,
       id: String(tool.id || ''),
       name: String(tool.name || ''),
       kind: toolKind(tool.name),
@@ -196,7 +200,7 @@ export function budgetTokens(text) {
 }
 
 // One lane per agent a task step started: its span, status and own steps.
-export function agentLanes(workers, now = Date.now()) {
+export function agentLanes(workers, now = Date.now(), offset = 0) {
   if (!Array.isArray(workers)) return [];
   return workers.filter(Boolean).map((worker, index) => {
     const done = AGENT_DONE.has(worker.status);
@@ -213,8 +217,8 @@ export function agentLanes(workers, now = Date.now()) {
     const detail = String(worker.detail || '');
     return {
       id: String(worker.id || 'agent_' + (index + 1)),
-      index: index + 1,
-      description: String(worker.description || worker.id || 'Agent ' + (index + 1)),
+      index: offset + index + 1,
+      description: String(worker.description || worker.id || 'Agent ' + (offset + index + 1)),
       status: String(worker.status || 'unknown'),
       outcome: AGENT_OUTCOME[worker.status] || (worker.waitingApproval ? 'waiting' : 'running'),
       waiting: Boolean(worker.waitingApproval),
