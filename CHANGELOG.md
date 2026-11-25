@@ -4,6 +4,10 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ## Unreleased
 
+## [0.12.1] - 2026-11-25
+
+A bug-fix and polish release from hands-on use of the web app and CLI with a keyless model: clearer approvals, a more accurate Activity feed and subagent cards, more dependable web research, and smaller fixes across skills, MCP, the terminal, undo and doctor.
+
 ### Fixed
 
 - The web app's Settings showed "OASIS 1.5.0", a constant left over from the old numbering. It now shows the version the connected runtime reports, the runtime status includes that version, and a test keeps the fallback equal to package.json.

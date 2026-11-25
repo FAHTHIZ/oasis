@@ -1,6 +1,6 @@
 {
   "name": "oasis-oss",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Open-source, model-agnostic agent platform and runtime: collaborating agents that plan, act and verify across software, research, analysis, writing, automation and computer use — from the terminal, browser, desktop, editors and chat.",
   "type": "module",
   "main": "./src/sdk.mjs",
@@ -174,7 +174,7 @@
   },
   "oasisRelease": {
     "channel": "stable",
-    "stableTag": "v0.12.0",
+    "stableTag": "v0.12.1",
     "published": true
   },
   "homepage": "https://github.com/FAHTHIZ/oasis#readme",

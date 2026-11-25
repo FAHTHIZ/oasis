@@ -42,7 +42,7 @@ const suggest = { token: null, items: [], index: 0, commands: null, files: null,
 
 // Kept equal to package.json (test/version-lineage.test.mjs); a connected
 // runtime reports its own version, which wins.
-const APP_VERSION = '0.12.0';
+const APP_VERSION = '0.12.1';
 const $ = (id) => document.getElementById(id);
 const store = new IndexedDBStore();
 const sandbox = new FrameSandbox();
