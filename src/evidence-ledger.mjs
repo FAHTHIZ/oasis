@@ -238,7 +238,9 @@ export function evidenceFromToolResult(name, args = {}, result = {}, context = {
   // A workspace file that was read: local sources a research answer may
   // rest on ("using only the files in sources/"). Only the path is kept.
   if (name === 'read_file' && typeof result.error !== 'string' && typeof result.path === 'string' && result.path) {
-    return { kind: 'read', tool: name, path: result.path.replace(/\\/g, '/').replace(/^\.\//, '').slice(0, 400), digest };
+    const table = result.table && Number.isInteger(result.table.dataRows) && !result.truncated
+      ? { table: { dataRows: result.table.dataRows, header: Array.isArray(result.table.columns) } } : {};
+    return { kind: 'read', tool: name, path: result.path.replace(/\\/g, '/').replace(/^\.\//, '').slice(0, 400), ...table, digest };
   }
   if (context.edited && context.path) {
     return { kind: 'edit', tool: name, path: String(context.path).slice(0, 400), digest };

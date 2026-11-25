@@ -121,10 +121,35 @@ function supported(number, produced) {
   return false;
 }
 
+// "301 data rows (the first line is the header)": seen live after `wc -l`
+// printed 301. A line count is not a data-row count when the file has a
+// header; say so, so the agent subtracts it instead of reporting it.
+function headerCountedAsData(text, events) {
+  const prose = String(text || '').replace(/```[\s\S]*?```/g, ' ');
+  const out = [];
+  for (const match of prose.matchAll(/(\d[\d,]*)\s+(data\s+rows|rows\s+of\s+data|(?:rows|records|entries)\s*\(?\s*(?:excluding|not counting|without|besides|plus|after)\s+(?:the\s+)?header)/gi)) {
+    const value = Number(match[1].replace(/,/g, ''));
+    if (!Number.isInteger(value) || value < 2) continue;
+    const read = (events || []).find((event) => event.kind === 'read' && event.table && event.table.header && event.table.dataRows === value - 1);
+    const read2 = (events || []).some((event) => event.kind === 'read' && event.table && event.table.dataRows === value);
+    const counted = (events || []).some((event) => (event.kind === 'command' || event.kind === 'execution') && /\bwc\b[^|;&]*\s-\w*l/.test(String(event.command || '')) && (event.numbers || []).map(Number).includes(value));
+    if (!read2 && (read || counted)) out.push({ value, path: read ? read.path : '' });
+  }
+  if (!out.length) return [];
+  const first = out[0];
+  return [{
+    domain: 'analysis',
+    reason: 'the report says ' + first.value + ' data rows, but ' + (first.path || 'the file') + ' has ' + first.value + ' lines including its header row, so ' + (first.value - 1) + ' data rows',
+    numbers: out.map((item) => String(item.value))
+  }];
+}
+
 export function analysisContract(text, events) {
   const numbers = reportedNumbers(text);
   if (!numbers.length) return [];
   const produced = producedNumbers(events);
+  const header = headerCountedAsData(text, events);
+  if (header.length) return header;
   const missing = numbers.filter((number) => !supported(number, produced) && !lessHeader(number, produced));
   if (!missing.length) return [];
   const listed = [...new Set(missing.map((number) => number.raw))];
@@ -149,7 +174,9 @@ function analysisApplies(events, domains) {
 export function checkReport(text, events, { domains = [] } = {}) {
   const declared = (Array.isArray(domains) ? domains : [domains]).map((domain) => String(domain || '').toLowerCase()).filter((domain) => CONTRACT_DOMAINS.includes(domain));
   const issues = [...codeContract(text, events), ...researchContract(text, events), ...quoteContract(text, events)];
+  // A header counted as a data row is wrong whatever the task was.
   if (analysisApplies(events, declared)) issues.push(...analysisContract(text, events));
+  else issues.push(...headerCountedAsData(text, events));
   return issues;
 }
 
