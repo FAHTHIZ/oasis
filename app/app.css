@@ -398,7 +398,10 @@ code.inspect-text{font:12px var(--mono)}
 .file-list,.changes-list{flex:1;overflow:auto;padding:0 6px 8px}
 .file-row{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border-radius:8px;font:12.5px var(--mono);color:var(--text-2);text-align:left}
 .file-row:hover{background:var(--raised)}
-.file-row .dir{color:var(--faint)}
+.file-row .path{display:flex;min-width:0;overflow:hidden;white-space:nowrap}
+.file-row .dir{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--faint)}
+.file-row .base{flex:none}
+.file-row .diff-stat,.file-row .tag{flex:none}
 .file-row .tag{margin-left:auto;font:600 10.5px var(--font);padding:1px 6px;border-radius:5px}
 .file-row .diff-stat{margin:0 0 0 auto;padding:0;font-size:11.5px}
 .file-row .diff-stat + .tag{margin-left:0}

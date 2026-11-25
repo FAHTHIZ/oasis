@@ -5563,8 +5563,14 @@ function fileRow(path, status, stat) {
   dir.className = 'dir';
   dir.textContent = slash >= 0 ? path.slice(0, slash + 1) : '';
   const base = document.createElement('span');
+  base.className = 'base';
   base.textContent = path.slice(slash + 1);
-  row.append(dir, base);
+  // One label keeps the folder and the file name together (no flex gap between them).
+  const label = document.createElement('span');
+  label.className = 'path';
+  label.title = path;
+  label.append(dir, base);
+  row.append(label);
   if (stat && (stat.added || stat.removed)) {
     const counts = document.createElement('span');
     counts.className = 'diff-stat';
