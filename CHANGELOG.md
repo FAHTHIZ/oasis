@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- When OASIS answers without using any tools, Activity now says so ("OASIS answered without reading files or running anything") instead of showing the first-run hint under a turn that reads "0 steps".
 - Reopening a chat, or reloading the page, keeps the Undo and Preview buttons on the last reply when that turn changed files. Before, they disappeared and the only way back was typing `/undo`.
 - An expanded failed step in Activity shows its reason once: the Error box is left out when it would only repeat the red sentence above it.
 - A garbled argument list on a tool that takes no arguments (gpt-oss sometimes sends `{"":"` to `git_status`) now just runs the tool instead of failing the step and showing the task as "Done with failed steps". A failed step's output in Activity no longer repeats the error as raw `{"error":…,"tool":…}` JSON.

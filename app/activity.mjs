@@ -25,6 +25,7 @@ const el = (tag, className, text) => {
   return node;
 };
 
+const EMPTY_HINT = 'Every step OASIS takes shows up here: files it reads and edits, commands it runs, and how long each one took.';
 const OUTCOME_TEXT = { ok: 'Done', failed: 'Failed', timed_out: 'Timed out', declined: 'Declined', blocked: 'Blocked', cancelled: 'Stopped', running: 'Running' };
 const STATUS_CLASS = { ok: 'ok', failed: 'fail', timed_out: 'fail', declined: 'skip', blocked: 'skip', cancelled: 'skip', running: 'running' };
 
@@ -139,6 +140,8 @@ function render() {
   const scroller = $('activityList');
   const empty = $('activityEmpty');
   empty.hidden = trace.turns.some((turn) => turn.steps.length || turn.status === 'running');
+  // Finished turns with no steps: OASIS answered without using any tools.
+  empty.textContent = trace.turns.length ? 'No steps yet: OASIS answered without reading files or running anything. Steps show up here when it does.' : EMPTY_HINT;
   // Filters, search and export have nothing to act on until there are steps.
   $('activityTools').hidden = !empty.hidden;
   const seenTurns = new Set();
