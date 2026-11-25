@@ -47,6 +47,7 @@ Options:
   --precheck CMD           agent routines: run CMD first and start the model only
                            if it prints something (its output joins the prompt;
                            nothing or [SILENT] = skipped, no model call)
+  SCHEDULE "at startup"    run once after each boot, when the scheduler starts
   SCHEDULE "after NAME"    run when routine NAME finishes ok ("after NAME failed",
                            "after NAME any"); {output} and {status} hold its result
   --coalesce               webhook routines: events that pile up run as one batch
@@ -117,7 +118,8 @@ export async function scheduleCommand(args = [], { env = process.env, write = (t
     if (!schedule || !prompt) return say(SCHEDULE_USAGE);
     const job = await createJob({ ...fields, schedule, prompt }, { env });
     say('Created ' + describeJob(job));
-    if (job.schedule.source === 'routine') say('It runs each time ' + job.schedule.display.replace(/^after /, '') + ' finishes' + (job.schedule.on === 'failed' ? ' with a failure.' : job.schedule.on === 'any' ? ' (ok or failed).' : ' successfully.') + ' Use {output} and {status} in the prompt for its result.');
+    if (job.schedule.source === 'startup') say('It runs once after each boot of this computer, when the scheduler first starts (oasis schedule install starts it at login).');
+    else if (job.schedule.source === 'routine') say('It runs each time ' + job.schedule.display.replace(/^after /, '') + ' finishes' + (job.schedule.on === 'failed' ? ' with a failure.' : job.schedule.on === 'any' ? ' (ok or failed).' : ' successfully.') + ' Use {output} and {status} in the prompt for its result.');
     else if (job.schedule.type === 'event') say('Webhook: POST /hooks/routines/' + job.id + ' on oasis web, signed with the secret from: oasis schedule show ' + job.id);
     say(job.enabled ? 'It runs while the scheduler is running: oasis schedule install (once; starts with the computer) or oasis schedule daemon' : 'It is paused. Resume it with: oasis schedule resume ' + job.id);
     return job;
@@ -141,7 +143,8 @@ export async function scheduleCommand(args = [], { env = process.env, write = (t
     if (job.coalesce) say('  coalesce: waiting webhook events run together');
     if (job.timeoutMinutes) say('  timeout: ' + job.timeoutMinutes + ' min per run');
     if (job.fromSession) say('  continues: ' + job.fromSession + (job.chain ? ' (chained: each run continues the last one)' : ' (each run forks it)'));
-    if (job.schedule.source === 'routine') { if (job.pendingEvents?.length) say('  waiting: ' + job.pendingEvents.length + ' finished run(s) to act on'); }
+    if (job.schedule.source === 'startup') { if (job.pendingEvents?.length) say('  waiting: queued at scheduler start'); }
+    else if (job.schedule.source === 'routine') { if (job.pendingEvents?.length) say('  waiting: ' + job.pendingEvents.length + ' finished run(s) to act on'); }
     else if (job.schedule.type === 'event') {
       if (job.events?.length) say('  events:  ' + job.events.join(', '));
       say('  webhook: POST <oasis web address>/hooks/routines/' + job.id + (job.pendingEvents?.length ? '  (' + job.pendingEvents.length + ' waiting)' : ''));

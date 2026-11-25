@@ -26,6 +26,7 @@ import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { watch } from 'node:fs';
 import { appendFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { getConfigDirectory, loadConfig } from './config.mjs';
 import { readHome } from './gateway-home.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
@@ -108,6 +109,9 @@ export function parseSchedule(input, { now = new Date(), timezone } = {}) {
   if (/^(on\s+)?webhook$/i.test(text)) return { type: 'event', source: 'webhook', display: 'on webhook' };
   // "after digest", "after digest failed", "after digest any": run when another
   // routine finishes (a pipeline). The name is resolved to an id on save.
+  // "at startup": runs each time the scheduler starts (after a reboot, when
+  // the scheduler is installed as a service). Hermes calls this BOOT.md.
+  if (/^(?:at|on)\s+(?:startup|boot|start)$|^@reboot$/i.test(text)) return { type: 'event', source: 'startup', display: 'at startup' };
   const after = /^after\s+(\S+)(?:\s+(ok|succeeds|done|failed|fails|any))?$/i.exec(text);
   if (after) {
     const on = /^fail/i.test(after[2] || '') ? 'failed' : /^any$/i.test(after[2] || '') ? 'any' : 'ok';
@@ -340,7 +344,7 @@ function normalizeFields(fields, existing = {}, now = new Date()) {
   if (fields.schedule !== undefined || fields.timezone !== undefined) {
     job.schedule = parseSchedule(fields.schedule !== undefined ? fields.schedule : job.schedule.display, { now, timezone: job.timezone });
     if (job.enabled !== false) job.nextRunAt = job.schedule.type === 'once' ? job.schedule.at : nextOccurrence(job, now);
-    if (job.schedule.type === 'event' && job.schedule.source !== 'routine') { if (!job.webhookSecret) job.webhookSecret = randomBytes(24).toString('hex'); }
+    if (job.schedule.type === 'event' && (job.schedule.source || 'webhook') === 'webhook') { if (!job.webhookSecret) job.webhookSecret = randomBytes(24).toString('hex'); }
     else if (job.schedule.type === 'event') { delete job.webhookSecret; delete job.events; }
     else { delete job.webhookSecret; delete job.pendingEvents; delete job.events; }
   }
@@ -688,6 +692,7 @@ function coalesceEvents(events) {
 
 function eventPrompt(job, event, file) {
   const preview = event.payload.length > 4000 ? event.payload.slice(0, 4000) + '\n[truncated; full payload in the file]' : event.payload;
+  if (event.source === 'startup') return composePrompt(job) + '\n\nThis run started because the routine scheduler started at ' + event.receivedAt + ' (the first scheduler start since this computer booted).';
   if (event.source === 'routine') {
     let upstream = {};
     try { upstream = JSON.parse(event.payload); } catch {}
@@ -862,7 +867,7 @@ export async function tick(options = {}) {
         continue;
       }
       try {
-        const event = eventDue ? (job.coalesce && job.schedule.source !== 'routine' && job.pendingEvents.length > 1 ? coalesceEvents(job.pendingEvents.splice(0)) : job.pendingEvents.shift()) : null;
+        const event = eventDue ? (job.coalesce && (job.schedule.source || 'webhook') === 'webhook' && job.pendingEvents.length > 1 ? coalesceEvents(job.pendingEvents.splice(0)) : job.pendingEvents.shift()) : null;
         if (event && !job.pendingEvents.length) delete job.pendingEvents;
         job.activeRun = { ...(await launch(job, env, backgrounds, now, event)), manual: manual && !due, slot: due && !event ? job.nextRunAt : null };
         running++;
@@ -927,6 +932,26 @@ export async function hostScheduler({ env = process.env, intervalMs = 30_000, lo
   return { hosted: true, reason: '', routines, stop: async () => { controller.abort(); await done; } };
 }
 
+// Queues one run of every enabled "at startup" routine, once per boot of
+// this computer: a scheduler that oasis web or the TUI hosts restarts often,
+// and the routine should not run again each time. Called when the scheduler
+// starts; a run already waiting is not queued twice.
+export async function queueStartupRuns(env = process.env, now = new Date(), uptimeSeconds = os.uptime()) {
+  const bootedAt = now.getTime() - uptimeSeconds * 1000;
+  return mutate(env, (jobs) => {
+    const queued = [];
+    for (const job of jobs) {
+      if (job.schedule?.source !== 'startup' || job.enabled === false || job.pendingEvents?.length) continue;
+      // A minute of slack: uptime and the clock drift apart a little.
+      if (job.startupQueuedAt && Date.parse(job.startupQueuedAt) > bootedAt - 60_000) continue;
+      job.startupQueuedAt = now.toISOString();
+      job.pendingEvents = [{ id: 'ev-' + randomUUID().replace(/-/g, '').slice(0, 10), receivedAt: now.toISOString(), payload: JSON.stringify({ startedAt: now.toISOString(), host: os.hostname() }), name: 'scheduler.started', source: 'startup' }];
+      queued.push(job.id);
+    }
+    return queued;
+  });
+}
+
 // Long-running scheduler loop. Only one daemon per config folder.
 export async function runDaemon({ env = process.env, intervalMs = 30_000, log = () => {}, signal } = {}) {
   const dir = schedulesDirectory(env);
@@ -935,6 +960,8 @@ export async function runDaemon({ env = process.env, intervalMs = 30_000, log = 
   const other = await runningDaemonPid(env);
   if (other) throw new Error('A routine daemon is already running (pid ' + other + ').');
   await writeFile(pidFile, String(process.pid) + '\n', { mode: 0o600 });
+  const booted = await queueStartupRuns(env).catch((error) => { log('could not queue startup routines: ' + error.message); return []; });
+  if (booted.length) log('queued startup routines: ' + booted.join(', '));
   log('Routine daemon started (pid ' + process.pid + '); checking every ' + Math.round(intervalMs / 1000) + 's.');
   let woken = false;
   let resolveSleep = null;

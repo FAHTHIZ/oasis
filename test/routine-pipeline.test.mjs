@@ -80,3 +80,23 @@ test('--coalesce runs a burst of webhook events as one batch', async () => {
   assert.match(agent.options.prompt, /started by a batch of webhook events[\s\S]*<webhook_payload>\n\[\{"n":1\},\{"n":2\},\{"n":3\}\]\n<\/webhook_payload>/);
   assert.equal((await readJobs(env))[0].pendingEvents, undefined);
 });
+
+test('"at startup" routines run once per boot of the computer', async () => {
+  const { queueStartupRuns } = await import('../src/routines.mjs');
+  const env = await tempEnv();
+  const bg = fakeBackgrounds(env.HOME);
+  const t0 = new Date('2026-11-11T10:00:00Z');
+  const job = await createJob({ schedule: 'at startup', prompt: 'Check the disks.', name: 'boot' }, { env, now: t0 });
+  assert.equal(job.schedule.display, 'at startup');
+  assert.equal(job.webhookSecret, undefined);
+  assert.deepEqual(await queueStartupRuns(env, t0, 30), [job.id]);
+  const summary = await tick({ env, now: t0, backgrounds: bg });
+  assert.deepEqual(summary.fired, [job.id]);
+  assert.match([...bg.entries.values()][0].options.prompt, /Check the disks\.[\s\S]*first scheduler start since this computer booted/);
+  await bg.finish(0, '{"type":"result","subtype":"success","result":"ok"}');
+  await tick({ env, now: t0, backgrounds: bg });
+  // The scheduler restarts an hour later without a reboot: nothing queued.
+  assert.deepEqual(await queueStartupRuns(env, new Date('2026-11-11T11:00:00Z'), 3630), []);
+  // After a reboot it runs again.
+  assert.deepEqual(await queueStartupRuns(env, new Date('2026-11-12T09:00:00Z'), 40), [job.id]);
+});
