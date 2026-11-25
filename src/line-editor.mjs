@@ -1006,6 +1006,10 @@ export function readInput(options = {}) {
         draw();
         return true;
       }
+      // Enter on a command prefix that matches exactly one command (/hel, with
+      // only /help listed) runs that command instead of "Unknown command. Did
+      // you mean /help?".
+      if (key.name === 'enter' && liveMenu.selected < 0 && liveMenu.kind === 'command' && liveMenu.candidates.length === 1 && liveMenu.candidates[0].value !== state.text.slice(liveMenu.start, liveMenu.end)) liveMenu.selected = 0;
       if ((key.name === 'enter' || key.name === 'tab') && liveMenu.selected >= 0) {
         const candidate = liveMenu.candidates[liveMenu.selected];
         const menu = liveMenu;

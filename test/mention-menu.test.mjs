@@ -89,3 +89,18 @@ test('Enter with no entry picked still submits what was typed', async () => {
   input.write('\r');
   assert.equal((await done).text, '/c');
 });
+
+// "/hel" with only /help listed: Enter runs /help instead of sending "/hel"
+// (which answered "Unknown command. Did you mean /help?"). A full command name
+// and an ambiguous prefix still submit what was typed.
+test('Enter on a slash prefix with one match runs that command', async () => {
+  const commands = ['/help', '/plan', '/review', '/review-pr'];
+  const complete = async (text) => ({ start: 0, end: text.length, candidates: commands.filter((c) => c.startsWith(text)).map((value) => ({ value })) });
+  for (const [typed, expected] of [['/hel', '/help'], ['/help', '/help'], ['/rev', '/rev'], ['/review', '/review']]) {
+    const { input, output } = harness();
+    const done = readInput({ input, output, prompt: '> ', color: false, complete });
+    for (const ch of typed) { input.write(ch); await tick(); }
+    input.write('\r');
+    assert.equal((await done).text, expected, typed);
+  }
+});
