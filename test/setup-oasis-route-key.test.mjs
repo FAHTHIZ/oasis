@@ -59,3 +59,11 @@ test('OASIS Route setup asks for the Oasis Key when none is in the environment',
   const saved = JSON.parse(await readFile(path.join(home, '.config', 'oasis', 'config.json'), 'utf8'));
   assert.equal(saved.model, 'auto');
 });
+
+test('OASIS Route is also offered under Advanced provider', async (t) => {
+  const { seen, home, base } = await fakeRoute(t);
+  const { code, out } = await runSetup(home, '3\n5\n\n', { OASIS_PROVIDER_OASIS_ROUTE_BASE_URL: base, OASIS_ROUTE_API_KEY: 'oasis_live_env_key_0123' });
+  assert.equal(code, 0, out);
+  assert.match(out, /5\. OASIS Route \(self-hosted gateway\)/);
+  assert.equal(seen.auth, 'Bearer oasis_live_env_key_0123');
+});

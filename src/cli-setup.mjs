@@ -130,12 +130,14 @@ export async function configureProvider(root = process.cwd(), options = {}) {
         presetName = await chooseApiPreset(defaultPreset);
       } else if (answer === '3') {
         stdout.write('\nChoose an advanced provider:\n');
-        stdout.write('  1. AWS Bedrock\n  2. Google Vertex AI\n  3. Microsoft Foundry\n  4. Custom / compatible endpoint\n');
-        const advancedDefault = ({ bedrock: '1', vertex: '2', foundry: '3', custom: '4' })[defaultPreset] || '4';
-        const advancedAnswer = await askChoice('Choose [1/2/3/4] (default ' + advancedDefault + '): ', (a) => /^[1-4]$/.test(a) || ['bedrock', 'vertex', 'foundry', 'custom'].includes(a), advancedDefault, 'Type a number from 1 to 4.');
-        const advancedProviders = { '1': 'bedrock', '2': 'vertex', '3': 'foundry', '4': 'custom' };
-        presetName = advancedProviders[advancedAnswer] || (['bedrock', 'vertex', 'foundry', 'custom'].includes(advancedAnswer) ? advancedAnswer : '');
-        if (!presetName) throw new Error('Choose a number from 1 to 4 for the advanced provider.');
+        // OASIS Route is a self-hosted gateway, so people look for it here too;
+        // it is appended so the numbers scripts already use stay the same.
+        stdout.write('  1. AWS Bedrock\n  2. Google Vertex AI\n  3. Microsoft Foundry\n  4. Custom / compatible endpoint\n  5. OASIS Route (self-hosted gateway)\n');
+        const advancedDefault = ({ bedrock: '1', vertex: '2', foundry: '3', custom: '4', 'oasis-route': '5' })[defaultPreset] || '4';
+        const advancedAnswer = await askChoice('Choose [1/2/3/4/5] (default ' + advancedDefault + '): ', (a) => /^[1-5]$/.test(a) || ['bedrock', 'vertex', 'foundry', 'custom', 'oasis-route'].includes(a), advancedDefault, 'Type a number from 1 to 5.');
+        const advancedProviders = { '1': 'bedrock', '2': 'vertex', '3': 'foundry', '4': 'custom', '5': 'oasis-route' };
+        presetName = advancedProviders[advancedAnswer] || (['bedrock', 'vertex', 'foundry', 'custom', 'oasis-route'].includes(advancedAnswer) ? advancedAnswer : '');
+        if (!presetName) throw new Error('Choose a number from 1 to 5 for the advanced provider.');
       } else {
         throw new Error('Choose 1, 2, or 3. No provider settings were changed.');
       }
