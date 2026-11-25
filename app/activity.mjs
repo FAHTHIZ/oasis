@@ -113,9 +113,8 @@ function renderTaskBar(trace) {
   bar.classList.toggle('stalled', stalled);
   if ($('taskStateText').textContent !== word) $('taskStateText').textContent = word;
   const parts = [];
-  // Plan updates live in the Task plan card, not the feed, so the count here
-  // matches the feed's "9 steps" rather than counting them too.
-  const shownSteps = last.steps.filter((row) => !(String(row.name) === 'todo_write' && row.outcome === 'ok')).length;
+  // Plan updates live in the Task plan card; stats.steps leaves them out.
+  const shownSteps = last.stats.steps;
   if (shownSteps) parts.push(shownSteps + ' step' + (shownSteps === 1 ? '' : 's'));
   if (last.stats.failed) parts.push(last.stats.failed + ' failed');
   if (last.files.length) parts.push(last.files.length + ' file' + (last.files.length === 1 ? '' : 's') + ' changed');

@@ -162,7 +162,9 @@ function finishTurn(turn, { now, running }) {
   turn.durationMs = spanMs || null;
   turn.files = files;
   turn.stats = {
-    steps: rows.length,
+    // Plan updates show in the Task plan card, and the chat's "6 steps" skips
+    // them; counting them here made the panel say "8 steps" for the same turn.
+    steps: rows.filter((row) => !(row.name === 'todo_write' && row.outcome === 'ok')).length,
     failed: count('failed', 'timed_out'),
     skipped: count('declined', 'blocked', 'cancelled'),
     running: count('running'),

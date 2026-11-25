@@ -139,3 +139,13 @@ test('the Now strip times an agent from when its current state began', async () 
   tracker.pause('A', 'Waiting its turn on the model', { at: t0 + 45_000 });
   assert.equal(tracker.list({ now: t0 + 50_000 })[0].activityAt, t0 + 40_000, 'a repeated note keeps the original time');
 });
+
+// The chat said "6 steps" and the Activity panel "8 steps" for one turn.
+test('plan updates are not counted as steps, matching the chat', () => {
+  const t0 = 3_000_000;
+  const tool = (id, name, at) => ({ id, name, args: {}, startedAt: at, endedAt: at + 10, ok: true });
+  const trace = buildTrace([{ role: 'user', content: 'x', at: t0 }, { role: 'assistant', content: 'done', tools: [tool('a', 'read_file', t0 + 1), tool('b', 'todo_write', t0 + 2), tool('c', 'edit_file', t0 + 3), tool('d', 'todo_write', t0 + 4)] }], { now: t0 + 100 });
+  assert.equal(trace.turns[0].stats.steps, 2);
+  assert.equal(trace.totals.steps, 2);
+  assert.equal(trace.turns[0].steps.length, 4, 'the rows are still listed');
+});
