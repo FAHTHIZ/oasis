@@ -341,6 +341,10 @@
         <label for="routinePrompt">Task</label>
         <textarea class="field" id="routinePrompt" rows="3" placeholder="Summarize yesterday's CI failures and open pull requests"></textarea>
         <label class="check"><input type="checkbox" id="routineScript"> Run the task as a shell command (no model)</label>
+        <label for="routinePrecheck">Only run when this command prints something (optional, agent tasks)</label>
+        <input id="routinePrecheck" autocapitalize="off" spellcheck="false" placeholder="gh issue list --label new">
+        <label for="routineTimeout">Stop a run after (minutes, optional)</label>
+        <input id="routineTimeout" type="number" min="0" max="10080" step="1" inputmode="numeric" placeholder="no limit">
         <label for="routineDeliver">Send results to</label>
         <input id="routineDeliver" autocapitalize="off" spellcheck="false" placeholder="local, telegram:CHAT_ID, slack:CHANNEL, webhook:https://…">
         <div class="row"><button class="btn" type="button" id="routineAddButton">Add routine</button><span class="test-result" id="routineStatus" role="status"></span></div>

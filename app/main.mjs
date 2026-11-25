@@ -4738,6 +4738,7 @@ function renderRoutines(data, problem = '') {
     const what = document.createElement('span');
     what.textContent = (job.kind === 'script' ? '$ ' : '') + job.prompt.slice(0, 160) + (job.deliver && job.deliver !== 'local' ? ' → ' + job.deliver : '');
     info.append(title, when, what);
+    if (job.precheck || job.timeoutMinutes) { const guard = document.createElement('span'); guard.textContent = [job.precheck ? 'runs only when “' + job.precheck.slice(0, 80) + '” prints something' : '', job.timeoutMinutes ? 'stops after ' + job.timeoutMinutes + ' min' : ''].filter(Boolean).join(' · '); info.append(guard); }
     if (job.webhookPath) {
       const hook = document.createElement('span');
       hook.textContent = 'POST ' + location.origin + job.webhookPath + ' · sign with secret ' + job.webhookSecret + (job.pendingEvents ? ' · ' + job.pendingEvents + ' waiting' : '');
@@ -4805,7 +4806,8 @@ async function routineAction(body, done, { inline = false } = {}) {
   }
 }
 $('routineAddButton').addEventListener('click', async () => {
-  const fields = { name: $('routineName').value.trim(), schedule: $('routineSchedule').value.trim(), prompt: $('routinePrompt').value.trim(), kind: $('routineScript').checked ? 'script' : 'agent', deliver: $('routineDeliver').value.trim() };
+  const fields = { name: $('routineName').value.trim(), schedule: $('routineSchedule').value.trim(), prompt: $('routinePrompt').value.trim(), kind: $('routineScript').checked ? 'script' : 'agent', deliver: $('routineDeliver').value.trim(), precheck: $('routinePrecheck').value.trim(), timeoutMinutes: $('routineTimeout').value.trim() };
+  if (fields.kind === 'script' && fields.precheck) { routineSetStatus('A shell-command routine can test the condition itself; clear the precheck.', 'error'); return; }
   if (!fields.schedule || !fields.prompt) { routineSetStatus('Add a schedule and a task.', 'error'); return; }
   // Check the schedule and name first: a schedule it cannot read used to be
   // confirmed, then refused, and the reason flashed by in a toast.
@@ -4818,7 +4820,7 @@ $('routineAddButton').addEventListener('click', async () => {
   if (fields.kind === 'script' && !confirm('This command will run on your computer on schedule "' + fields.schedule + '":\n\n' + fields.prompt + '\n' + next)) { routineSetStatus(''); return; }
   routineSetStatus('Saving…');
   if (await routineAction({ action: 'create', fields }, 'Routine added.' + (next ? next.replace('\n', ' ') : ''), { inline: true })) {
-    for (const id of ['routineName', 'routineSchedule', 'routinePrompt', 'routineDeliver']) $(id).value = '';
+    for (const id of ['routineName', 'routineSchedule', 'routinePrompt', 'routineDeliver', 'routinePrecheck', 'routineTimeout']) $(id).value = '';
     $('routineScript').checked = false;
     $('routineAdd').open = false;
     routineSetStatus('');

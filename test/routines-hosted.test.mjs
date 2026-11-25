@@ -44,6 +44,15 @@ test('web /api/routines lists, creates and manages routines for the signed-in ow
   assert.match(unreadable.body.error, /every 30m/);
   assert.match((await post({ action: 'check', fields: { name: 'nightly', schedule: 'every 2h', prompt: 'x' } })).body.error, /already exists/);
   assert.equal((await (await fetch(base, { headers })).json()).routines.length, 1, 'check saves nothing');
+  // Precheck and timeout round-trip through create and edit.
+  const guarded = await post({ action: 'create', fields: { name: 'gated', schedule: 'every 1h', prompt: 'triage', precheck: 'gh issue list', timeoutMinutes: '15' } });
+  const gated = guarded.body.routines.find((item) => item.name === 'gated');
+  assert.equal(gated.precheck, 'gh issue list');
+  assert.equal(gated.timeoutMinutes, 15);
+  const edited = (await post({ action: 'edit', id: 'gated', fields: { precheck: '', timeoutMinutes: '' } })).body.routines.find((item) => item.name === 'gated');
+  assert.equal(edited.precheck, ''); assert.equal(edited.timeoutMinutes, 0);
+  assert.match((await post({ action: 'create', fields: { schedule: 'every 1h', prompt: 'true', kind: 'script', precheck: 'x' } })).body.error, /agent routines/);
+  await post({ action: 'remove', id: 'gated' });
   const bad = await post({ action: 'create', fields: { schedule: 'whenever', prompt: 'x' } });
   assert.equal(bad.status, 400);
   assert.match(bad.body.error, /schedule/i);
