@@ -184,3 +184,13 @@ test('the friendly approval text shows the end of a long command and marks hidde
   const generic = formatApprovalMessage('Do the thing?\n' + 'x'.repeat(5000) + '\nand then delete everything', { tool: 'custom_tool' });
   assert.match(generic.message, /and then delete everything/);
 });
+
+// "OASIS is asking permission to take this action: Allow web_search to..." named the tool and hid the query.
+test('web access approvals say what OASIS will search or read, in plain words', async () => {
+  const { formatApprovalMessage: format } = await import('../src/approval-language.mjs');
+  const search = format('Allow web_search to send this query to html.duckduckgo.com and www.bing.com for the rest of this session? Search results may refer to other websites; fetching any result page will ask separately.', { tool: 'web_search', input: { query: 'latest Python release' } }).message;
+  assert.match(search, /^OASIS wants to search the web for:\n {2}latest Python release\nThe search goes to html\.duckduckgo\.com and www\.bing\.com\./);
+  assert.doesNotMatch(search, /web_search|asking permission/);
+  const page = format('Allow fetch_url to retrieve public pages from www.python.org for the rest of this session?', { tool: 'fetch_url', input: { url: 'https://www.python.org/downloads/' } }).message;
+  assert.match(page, /^OASIS wants to read web pages from www\.python\.org:\n {2}https:\/\/www\.python\.org\/downloads\/\nAllowing covers that site/);
+});

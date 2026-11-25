@@ -117,6 +117,16 @@ export function formatApprovalMessage(prompt, meta = {}) {
     // The whole plan: the user approves what they read, and it was cut at
     // 1,800 characters (the generic branch), hiding most steps of a real plan.
     message = redactApprovalSecrets(String(prompt == null ? '' : prompt).trim()).slice(0, 110_000) || 'The plan was not provided.';
+  } else if (/^Allow (?:web_search to send this query to|fetch_url to retrieve public pages from) /.test(original)) {
+    // "OASIS is asking permission to take this action: Allow web_search to..."
+    // read as two questions and named the tool; the query was not shown.
+    const search = original.startsWith('Allow web_search');
+    const hosts = (original.match(/ (?:this query to|public pages from) (.+?) for the rest of this session\?/) || [])[1] || 'the web';
+    const query = inputValue(input, 'query');
+    const url = inputValue(input, 'url');
+    message = search
+      ? 'OASIS wants to search the web' + (query ? ' for:\n  ' + headAndTail(redactApprovalSecrets(query), 500) + '\n' : '. ') + 'The search goes to ' + hosts + '. Allowing covers searches for the rest of this session; opening a result page asks separately.'
+      : 'OASIS wants to read web pages from ' + hosts + (url ? ':\n  ' + headAndTail(redactApprovalSecrets(url), 500) + '\n' : '. ') + 'Allowing covers that site for the rest of this session.';
   } else if (tool === 'delete_file' || /^delete (?:the workspace )?file\b/i.test(original)) {
     const match = original.match(/^Delete the workspace file\s+(.+?)\?\s*/i);
     const target = path || (match && match[1]) || '';
