@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- Opening the Terminal tab while a task ran showed the task as "Waiting for you" and "Needs you", chimed, counted the wait against the running step, and offered a "tell OASIS what to do instead" box. The terminal's own approval no longer touches the running task.
 - Between steps, the Activity panel's live line said "Reading your message" while the chat's status line said "Retrying · attempt 2" or "Rate limited". The panel now shows the same state as the status line.
 - An image sent in the web app disappeared from its message after a reload, leaving only "1 image attached". A small thumbnail (a few KB) is now saved with the chat; the full image is still not kept.
 - When a model passed a tool's name to `load_skill` (for example `task_contract`), it got only "Skill names must be a short identifier." The error now says what skill names look like, to call a tool directly, and to use `list_skills`.

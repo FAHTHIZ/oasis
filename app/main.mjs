@@ -57,6 +57,8 @@ const LITE_PARAM = new URLSearchParams(location.search).get('lite');
 const LITE = LITE_PARAM === '1' ? true : LITE_PARAM === '0' ? false : Boolean((navigator.deviceMemory && navigator.deviceMemory <= 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2) || (navigator.connection && navigator.connection.saveData) || matchMedia('(prefers-reduced-motion: reduce)').matches);
 document.documentElement.classList.toggle('lite', LITE);
 const failedModels = {};  // connectionId|model -> time it last failed, for the fallback chain
+// True while the approval sheet shows a request no task waits on (Terminal tab).
+let approvalStandalone = false;
 let turnPlugins = [];      // plugins tapped for the next message only
 let settings = loadSettings();
 let workspace = null;
@@ -401,7 +403,7 @@ function closeSheet(id, { fromHistory = false } = {}) {
   if (!fromHistory && history.state && history.state.sheet === id) { ignorePop = true; history.back(); }
   openSheets.splice(openSheets.indexOf(id), 1);
   if (!openSheets.some((open) => !$(open).classList.contains('docked'))) $('backdrop').hidden = true;
-  if (id === 'approvalSheet') { markWaitingTools(false); runClock.tick(); }
+  if (id === 'approvalSheet') { markWaitingTools(false); approvalStandalone = false; runClock.tick(); }
   if (id === 'approvalSheet' && approvalResolve) { approvalResolve(false); approvalResolve = null; }
   if (id === 'questionSheet' && questionResolve) { questionResolve(''); questionResolve = null; }
 }
@@ -2224,7 +2226,7 @@ const runClock = {
     const el = $('runStatus');
     if (!el) return;
     if (!document.body.classList.contains('busy') || !this.startedAt) { restStatus(el); return; }
-    const waiting = !$('approvalSheet').hidden;
+    const waiting = taskApprovalOpen();
     const now = Date.now();
     // Nothing running, nothing streaming for a moment: show Thinking, so the
     // page never sits blank while the model works.
@@ -3348,7 +3350,7 @@ async function renderSidebar() {
   if (ticket !== sidebarRender) return;
   const items = index.list.slice(0, 40);
   const busy = document.body.classList.contains('busy');
-  const waiting = !$('approvalSheet').hidden;
+  const waiting = taskApprovalOpen();
   if (!items.some((item) => item.id === chatId) && display.some((entry) => entry.role === 'user')) items.unshift({ id: chatId, title: chatTitle(), updatedAt: Date.now() });
   $('sideTasksLabel').textContent = workspace ? (workspace.project.name || 'Tasks') : 'Tasks';
   list.replaceChildren();
@@ -3648,9 +3650,13 @@ function filterApps() {
 /* ---------- Approvals ---------- */
 let approvalResolve = null;
 let approvalAlways = null;
-async function requestApproval({ name, args, runtime = false }) {
-  attention('input', 'OASIS needs your approval to continue.');
-  sound('input');
+// The approval sheet open for the running task (not one the Terminal tab
+// asked for, which the task is not waiting on).
+function taskApprovalOpen() { return !$('approvalSheet').hidden && !approvalStandalone; }
+async function requestApproval({ name, args, runtime = false, standalone = false }) {
+  approvalStandalone = Boolean(standalone);
+  // The person just asked for this (Start terminal): no alert or chime.
+  if (!standalone) { attention('input', 'OASIS needs your approval to continue.'); sound('input'); }
   const summary = $('approvalSummary');
   const detail = $('approvalDetail');
   detail.replaceChildren();
@@ -3663,7 +3669,7 @@ async function requestApproval({ name, args, runtime = false }) {
   // task is waiting on (opening the terminal panel) hide it, so typing meant
   // for the terminal cannot land in it and deny with Enter.
   $('approvalInstead').value = '';
-  $('approvalInstead').hidden = !(agent && agent.busy && typeof agent.steer === 'function');
+  $('approvalInstead').hidden = standalone || !(agent && agent.busy && typeof agent.steer === 'function');
   $('denyButton').textContent = 'Deny';
   $('allowButton').textContent = 'Allow';
   $('approvalTitle').textContent = 'Allow this?';
@@ -3777,6 +3783,7 @@ function setWaiting(tool, waiting) {
 function markWaitingTools(waiting) {
   const group = activeGroup;
   if (!group) return;
+  if (waiting && approvalStandalone) return;
   for (const tool of group.steps) {
     if (tool.ok !== undefined || Boolean(tool.waiting) === waiting) continue;
     setWaiting(tool, waiting);
@@ -5402,7 +5409,7 @@ function ensureTerminal() {
   if (!terminal) {
     terminal = new RuntimeTerminal({
       client: RT.client,
-      approve: requestApproval,
+      approve: (request) => requestApproval({ ...request, standalone: true }),
       onStatus: (text) => { $('terminalStatus').textContent = text; },
       onOutput: (data, { truncated }) => { if (terminalOnlyHint) { xterm.clear(); xterm.write('\x1b[2K\r'); terminalOnlyHint = false; } if (truncated) xterm.writeln('\r\n[older output dropped]'); xterm.write(data); },
       onExit: (code, { lost = false } = {}) => {
