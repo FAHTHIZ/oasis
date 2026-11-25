@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { alwaysAllowLabel } from '../app/core/approval-rule.mjs';
+import { alwaysAllowLabel, alwaysAllowTitle } from '../app/core/approval-rule.mjs';
 
 test('approval rules read as plain words on the Always allow button', () => {
-  assert.equal(alwaysAllowLabel('run_command(npm test:*)'), 'Always allow npm test commands');
+  assert.equal(alwaysAllowLabel('run_command(npm test:*)'), 'Always allow npm test');
+  assert.equal(alwaysAllowLabel('run_command(node cart.test.js:*)'), 'Always allow node cart.test.js');
+  assert.equal(alwaysAllowLabel('run_command(git:*)'), 'Always allow git commands');
+  assert.match(alwaysAllowTitle('run_command(npm test:*)'), /npm test with more arguments/);
   assert.equal(alwaysAllowLabel('run_command(git status)'), 'Always allow git status');
   assert.equal(alwaysAllowLabel('run_command'), 'Always allow commands');
   assert.equal(alwaysAllowLabel('edit_file(src/**)'), 'Always allow edits in src');

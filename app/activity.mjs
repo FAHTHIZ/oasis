@@ -365,6 +365,10 @@ function renderLanes(row, step) {
     if (agent.waiting) facts[0] = 'Needs you';
     else if (current) facts.push(current.label);
     else if (agent.activity && agent.outcome === 'running') facts.push(agent.activity);
+    // What its last step came to ("✓ exit 0 · 3 passed"), so a finished lane
+    // says more than "Done".
+    const lastBrief = !current && (agent.steps.filter((item) => item.brief).at(-1) || {}).brief;
+    if (lastBrief && !agent.waiting) facts.push(lastBrief);
     if (agent.outcome !== 'running' && agent.stepCount) facts.push(agent.stepCount + (agent.stepCount === 1 ? ' step' : ' steps'));
     if (agent.tokens) facts.push(compact(agent.tokens) + ' tokens');
     if (agent.branch) facts.push('on branch ' + agent.branch);
@@ -384,7 +388,7 @@ function renderLanes(row, step) {
 }
 
 function fillLane(body, agent) {
-  const stamp = agent.steps.map((item) => item.outcome + (item.endedAt || '')).join(',') + '|' + agent.detail.length + '|' + agent.status;
+  const stamp = agent.steps.map((item) => item.outcome + (item.endedAt || '') + (item.brief || '')).join(',') + '|' + agent.detail.length + '|' + agent.status;
   if (body.dataset.stamp === stamp) {
     // Only the clocks moved: patch the running bars in place.
     body.querySelectorAll('.trace-sub').forEach((li, index) => { const item = agent.steps[index]; if (!item) return; const i = li.querySelector('.trace-track i'); i.style.left = item.offset + '%'; i.style.width = item.width + '%'; li.querySelector('.trace-dur').textContent = item.outcome === 'running' ? dur(item.durationMs) || '…' : dur(item.durationMs); });
@@ -398,7 +402,8 @@ function fillLane(body, agent) {
     kind.setAttribute('aria-hidden', 'true');
     kind.innerHTML = state.deps.iconFor(item.kind);
     const label = el('span', 'trace-label', item.label);
-    label.title = item.label;
+    if (item.brief) label.append(el('span', 'trace-brief', ' · ' + item.brief));
+    label.title = item.label + (item.brief ? ' · ' + item.brief : '');
     const lines = el('span', 'trace-lines');
     if (item.lines) { lines.append(el('span', 'add', '+' + item.lines.added), el('span', 'del', '−' + item.lines.removed)); }
     const track = el('span', 'trace-track');

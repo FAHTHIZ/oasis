@@ -614,7 +614,7 @@ export class RuntimeAgent {
           case 'model_timing': this.emit('model_timing', { ...data }); break;
           case 'tool_result': {
             if (data.subagent) {
-              if (subagents.step(data.subagent, '', { finished: true, at: at.at || Date.now(), ok: data.outcome ? String(data.outcome) === 'ok' : !/^(error|failed|denied|blocked)$/i.test(String(data.status || '')), ...(data.lines ? { lines: data.lines } : {}), ...(data.outcome && data.outcome !== 'ok' ? { outcome: String(data.outcome).slice(0, 20) } : {}) })) this.emit('subagents', { workers: subagents.list() });
+              if (subagents.step(data.subagent, '', { finished: true, at: at.at || Date.now(), ok: data.outcome ? String(data.outcome) === 'ok' : !/^(error|failed|denied|blocked)$/i.test(String(data.status || '')), ...(data.lines ? { lines: data.lines } : {}), ...(data.outcome && data.outcome !== 'ok' ? { outcome: String(data.outcome).slice(0, 20) } : {}), ...(data.brief ? { brief: String(data.brief).slice(0, 120) } : {}) })) this.emit('subagents', { workers: subagents.list() });
               break;
             }
             const outcome = TOOL_OUTCOMES.has(String(data.outcome || '')) ? String(data.outcome) : '';

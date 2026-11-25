@@ -43,7 +43,7 @@ export class SubagentTracker {
   // tool_start events name the subagent by description, not id, so the newest
   // running worker with that description is the one at work. Without this the
   // row said only "Working" for minutes while the child read, ran and edited.
-  step(description, text, { finished = false, at = Date.now(), name: toolName = '', path = '', ok = true, lines = null, outcome = '' } = {}) {
+  step(description, text, { finished = false, at = Date.now(), name: toolName = '', path = '', ok = true, lines = null, outcome = '', brief = '' } = {}) {
     const name = String(description || '').slice(0, 200);
     const label = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 160);
     if (!name) return false;
@@ -54,11 +54,13 @@ export class SubagentTracker {
       worker.steps = (worker.steps || 0) + 1;
       // Its last step is over: say so instead of showing it as still running.
       if (worker.status === 'running' || worker.status === 'unknown') worker.activity = 'Thinking about the next step';
+      worker.lastBrief = brief ? String(brief).slice(0, 120) : '';
       const open = (worker.log || []).find((item) => !item.endedAt);
       if (open) {
         open.endedAt = at;
         open.ok = ok !== false;
         if (outcome) open.outcome = outcome;
+        if (brief) open.brief = String(brief).slice(0, 120);
         if (lines && (Number(lines.added) > 0 || Number(lines.removed) > 0)) open.lines = { added: Math.max(0, Number(lines.added) || 0), removed: Math.max(0, Number(lines.removed) || 0) };
       }
       return true;

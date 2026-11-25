@@ -1029,6 +1029,7 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .trace-label{font-weight:550;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .trace-row.fail .trace-label{color:var(--danger)}
 .trace-row.skip .trace-label{color:var(--muted)}
+.trace-brief{font-weight:400;color:var(--muted)}
 .trace-target{font:11.5px var(--mono);color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .trace-track{position:relative;height:14px;border-radius:3px;background:repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px 25%)}
 .trace-track i{position:absolute;top:4px;height:6px;min-width:2px;border-radius:3px;background:var(--accent-2)}

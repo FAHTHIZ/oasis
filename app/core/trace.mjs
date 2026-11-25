@@ -206,7 +206,7 @@ export function agentLanes(workers, now = Date.now()) {
       const start = finite(item.startedAt);
       const end = finite(item.endedAt) ?? (done ? start : now);
       const outcome = item.endedAt ? (item.ok === false ? (item.outcome === 'declined' || item.outcome === 'blocked' ? item.outcome : 'failed') : 'ok') : done ? 'cancelled' : 'running';
-      return { label: String(item.label || item.name || 'Step'), name: String(item.name || ''), kind: toolKind(item.name || ''), path: String(item.path || '').replaceAll(String.fromCharCode(92), '/'), startedAt: start, endedAt: end, durationMs: start !== null && end !== null ? Math.max(0, end - start) : null, outcome, lines: item.lines || null };
+      return { label: String(item.label || item.name || 'Step'), name: String(item.name || ''), kind: toolKind(item.name || ''), path: String(item.path || '').replaceAll(String.fromCharCode(92), '/'), startedAt: start, endedAt: end, durationMs: start !== null && end !== null ? Math.max(0, end - start) : null, outcome, lines: item.lines || null, brief: String(item.brief || '') };
     });
     const detail = String(worker.detail || '');
     return {

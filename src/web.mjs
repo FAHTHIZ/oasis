@@ -3,6 +3,7 @@ import { noteToSubagent as noteToChild } from './deny-note.mjs';
 import { createServer as createHttpsServer } from 'node:https';
 import { constants as fsConstants, readFileSync, statSync } from 'node:fs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
+import { describeToolResult } from './terminal-ui.mjs';
 import { describeDraft } from './tool-draft.mjs';
 import { toolSources } from './tool-sources.mjs';
 import { labelToolActivity, presentToolActivity, safeToolActivityArgs, toolActivityArtifacts, toolActivityCategory, toolActivityOutcome, toolActivityStatus, toolActivityWarning } from './tool-activity.mjs';
@@ -68,6 +69,13 @@ export function webSessionState(session, env = process.env) {
     costUsd: Math.max(0, Number(session.budgetLedger && session.budgetLedger.spentUsd || session.costUsd) || 0),
     costPartial: Boolean(session.budgetLedger && session.budgetLedger.unknownRequests > 0)
   };
+}
+
+function stepBrief(name, value) {
+  try {
+    if (!value || typeof value !== 'object') return '';
+    return redactApprovalSecrets(String(describeToolResult(String(name || ''), value, { color: false }) || '').replace(/^\s*⎿\s*/, '').replace(/\s+/g, ' ').trim()).slice(0, 120);
+  } catch { return ''; }
 }
 
 function monitorText(value, max = 500) {
@@ -1296,7 +1304,9 @@ export function createOasisWebServer(options = {}) {
               ...(() => { const sources = toolSources(name, args, value).map((source) => ({ url: redactApprovalSecrets(source.url), ...(source.title ? { title: redactApprovalSecrets(source.title) } : {}) })); return sources.length ? { sources } : {}; })(),
               ...(value && typeof value === 'object' && !value.error && (Number(value.added) > 0 || Number(value.removed) > 0) ? { lines: { added: Math.max(0, Math.floor(Number(value.added) || 0)), removed: Math.max(0, Math.floor(Number(value.removed) || 0)) } } : {}),
               ...(artifacts.length ? { artifacts, previewJobId: job.id } : {}),
-              ...(subagent ? { subagent: String(subagent).slice(0, 100) } : {})
+              // A subagent's card shows what its last step came to ("✓ exit 0 ·
+              // 3 passed"), the same line the terminal prints under a step.
+              ...(subagent ? { subagent: String(subagent).slice(0, 100), ...(() => { const brief = stepBrief(name, value); return brief ? { brief } : {}; })() } : {})
             });
           },
           onCompactionProgress: (info) => {

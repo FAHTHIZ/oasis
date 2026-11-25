@@ -11,8 +11,14 @@ export function alwaysAllowLabel(rule) {
   const short = (value) => value.length > 48 ? value.slice(0, 47) + '…' : value;
   if (/^(run_command|run_shell|powershell|bash)$/i.test(tool)) {
     if (!spec || spec === '*') return 'Always allow commands';
-    if (spec.endsWith(':*')) return 'Always allow ' + short(spec.slice(0, -2)) + ' commands';
-    if (spec.endsWith(' *')) return 'Always allow ' + short(spec.slice(0, -2)) + ' commands';
+    // `git:*` reads as "git commands"; `node cart.test.js:*` read as "node
+    // cart.test.js commands", which is not English. A prefix of two words or
+    // more is named as it is (it also covers the same command with more
+    // arguments, which the button's hover text says).
+    if (spec.endsWith(':*') || spec.endsWith(' *')) {
+      const prefix = spec.slice(0, -2).trim();
+      return 'Always allow ' + short(prefix) + (/\s/.test(prefix) ? '' : ' commands');
+    }
     return 'Always allow ' + short(spec);
   }
   if (WRITE_TOOLS.has(tool)) {
@@ -26,4 +32,12 @@ export function alwaysAllowLabel(rule) {
   }
   if (tool.startsWith('mcp_')) return 'Always allow this tool';
   return 'Always allow ' + tool.replace(/_/g, ' ') + (spec && spec !== '*' ? ' ' + short(spec) : '');
+}
+
+// Hover text for the button: what exactly stops asking.
+export function alwaysAllowTitle(rule, scope = 'this session') {
+  const match = /^(run_command|run_shell|powershell|bash)\((.+)(?::\*| \*)\)$/is.exec(String(rule || '').trim());
+  if (!match) return '';
+  const prefix = match[2].trim();
+  return 'Runs ' + prefix + ' and ' + prefix + ' with more arguments without asking again in ' + scope;
 }

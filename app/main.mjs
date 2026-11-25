@@ -2,7 +2,7 @@
 // in this browser. Opened from `oasis web`, the same UI
 // drives the agent on that computer (runtime engine, core/runtime.mjs).
 import { PRESETS, testProvider } from './core/providers.mjs';
-import { alwaysAllowLabel } from './core/approval-rule.mjs';
+import { alwaysAllowLabel, alwaysAllowTitle } from './core/approval-rule.mjs';
 import { SUBAGENT_STATUS_TEXT, friendlyBudget } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
@@ -1403,7 +1403,9 @@ function renderSubagents(group, workers = []) {
     item.querySelector('.sa-status').textContent = (SUBAGENT_STATUS_TEXT[worker.status] || worker.status) + (worker.waitingApproval ? ' · needs approval' : '');
     // While it works: the step in progress and how many it has finished.
     const live = (worker.status === 'running' || worker.status === 'unknown') && worker.activity
-      ? worker.activity + '…' + (worker.steps ? ' · ' + worker.steps + (worker.steps === 1 ? ' step done' : ' steps done') : '')
+      ? (worker.lastBrief && /^Thinking about the next step/.test(worker.activity)
+        ? 'Last step: ' + worker.lastBrief + ' · thinking…'
+        : worker.activity + '…') + (worker.steps ? ' · ' + worker.steps + (worker.steps === 1 ? ' step done' : ' steps done') : '')
       : '';
     const finished = !live && worker.steps && !worker.detail ? worker.steps + (worker.steps === 1 ? ' step' : ' steps') : '';
     const detailEl = item.querySelector('.sa-detail');
@@ -3666,7 +3668,7 @@ async function requestApproval({ name, args, runtime = false }) {
       approvalAlways = 'always';
       $('allowAllButton').hidden = false;
       $('allowAllButton').textContent = alwaysAllowLabel(args.suggestion);
-      $('allowAllButton').title = 'Adds the rule ' + String(args.suggestion).slice(0, 200) + ' to this project';
+      $('allowAllButton').title = [alwaysAllowTitle(args.suggestion, 'this project'), 'Adds the rule ' + String(args.suggestion).slice(0, 200) + ' to this project'].filter(Boolean).join('. ');
     }
     // The command already ran once in a throwaway copy: offer to keep exactly those changes.
     $('rehearsalButton').hidden = !args.rehearsal;
