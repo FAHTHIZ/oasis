@@ -153,7 +153,7 @@ not collide with llama.cpp's common `8080` port.
    another provider. If you run Route on another port, set
    `OASIS_PROVIDER_OASIS_ROUTE_BASE_URL` to its `/v1` URL.
 
-The native terminal `oasis-route` provider and setup choice are on OASIS `main` and will ship in its next release. Released OASIS builds can still connect through the generic custom OpenAI-compatible endpoint. The browser app has a separate provider catalogue, and Route does not yet enable cross-origin requests; use the terminal runtime for this integration.
+The native terminal `oasis-route` provider and setup choice shipped in OASIS `v0.12.0`; current released terminal builds can select it directly. The browser app has a separate provider catalogue, and Route does not yet enable cross-origin requests; use the terminal runtime for this integration.
 
 Route's `free_only` policy is enforced by Route itself. OASIS `--zero-budget`
 still treats an arbitrary gateway as unknown unless its no-billing behaviour is
