@@ -76,7 +76,7 @@ test('publishing remains blocked when package-manager options precede the verb',
 
 test('explicit inline-code classification remains intact', () => {
   assert.match(analyzeCommand('node', ['-e', 'process.exit(0)']).highRisk || '', /runs inline code/);
-  assert.match(analyzeCommand('python3', ['-c', 'print(1)']).highRisk || '', /runs inline code/);
+  assert.match(analyzeCommand('python3', ['-c', "import os; os.system('id')"]).highRisk || '', /runs inline code/);
 });
 
 test('git global options with a separate value do not hide a destructive subcommand', () => {
@@ -98,7 +98,7 @@ test('git global options with a separate value do not hide a destructive subcomm
 });
 
 test('clustered short flags that run inline code are high-risk', () => {
-  for (const [command, args] of [['node', ['-pe', 'x']], ['perl', ['-le', 'system(1)']], ['perl', ['-pie', 's/a/b/', 'f']], ['ruby', ['-we', 'x']], ['python3', ['-Bc', 'x']]]) {
+  for (const [command, args] of [['node', ['-pe', "require('child_process')"]], ['perl', ['-le', 'system(1)']], ['perl', ['-pie', 's/a/b/', 'f']], ['ruby', ['-we', 'x']], ['python3', ['-Bc', 'x']]]) {
     assert.match(analyzeCommand(command, args).highRisk || '', /inline code/, command + ' ' + args.join(' '));
   }
   assert.equal(analyzeCommand('node', ['--trace-warnings', 'script.js']).highRisk, undefined);

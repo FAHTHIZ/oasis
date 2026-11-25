@@ -1400,7 +1400,13 @@ function renderSubagents(group, workers = []) {
     item.innerHTML = '<span class="state" aria-hidden="true"></span><span class="sa-name"></span><span class="sa-status"></span><span class="sa-detail"></span><span class="sa-budget"></span>';
     item.querySelector('.sa-name').textContent = worker.description || worker.id;
     item.querySelector('.sa-status').textContent = (SUBAGENT_STATUS_TEXT[worker.status] || worker.status) + (worker.waitingApproval ? ' · needs approval' : '');
-    item.querySelector('.sa-detail').textContent = worker.waitingApproval ? 'Waiting for you: /tasks approve ' + worker.id + ' or /tasks deny ' + worker.id : (worker.detail || '');
+    // While it works: the step in progress and how many it has finished.
+    const live = (worker.status === 'running' || worker.status === 'unknown') && worker.activity
+      ? worker.activity + '…' + (worker.steps ? ' · ' + worker.steps + (worker.steps === 1 ? ' step done' : ' steps done') : '')
+      : '';
+    const finished = !live && worker.steps && !worker.detail ? worker.steps + (worker.steps === 1 ? ' step' : ' steps') : '';
+    item.querySelector('.sa-detail').textContent = worker.waitingApproval ? 'Waiting for you: /tasks approve ' + worker.id + ' or /tasks deny ' + worker.id : (live || worker.detail || finished);
+    item.querySelector('.sa-detail').classList.toggle('live', Boolean(live) && !worker.waitingApproval);
     // Spent and limit, from the same budget projection as /tasks.
     item.querySelector('.sa-budget').textContent = worker.budget || '';
     list.appendChild(item);

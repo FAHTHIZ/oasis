@@ -41,3 +41,17 @@ test('the tracker shows budget and a waiting approval until it is answered', () 
   [worker] = tracker.list();
   assert.equal(worker.waitingApproval, false);
 });
+
+test('a running subagent row shows the step it is on and how many it finished', () => {
+  const tracker = new SubagentTracker();
+  tracker.update({ type: 'agent.started', agent_id: 'a1', description: 'Review cart.js' });
+  assert.equal(tracker.step('Review cart.js', 'Reading cart.js'), true);
+  assert.equal(tracker.list()[0].activity, 'Reading cart.js');
+  tracker.step('Review cart.js', '', { finished: true });
+  tracker.step('Review cart.js', 'Running npm test');
+  assert.equal(tracker.list()[0].activity, 'Running npm test');
+  assert.equal(tracker.list()[0].steps, 1);
+  assert.equal(tracker.step('Someone else', 'Reading x'), false);
+  tracker.update({ type: 'agent.completed', agent_id: 'a1', description: 'Review cart.js', detail: 'tool_calls=2' });
+  assert.equal(tracker.list()[0].activity, '');
+});

@@ -35,7 +35,7 @@ test('a run_shell line with nobody to approve it points at run_command', async (
 test('with someone to ask, a refusal keeps its usual wording', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-unattended-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const result = await executeTool('run_command', { command: 'python3', args: ['-c', 'print(1)'] }, { root, autoApprove: true, approval: async () => false });
+  const result = await executeTool('run_command', { command: 'python3', args: ['-c', "open('x', 'w').write('y')"] }, { root, autoApprove: true, approval: async () => false });
   assert.equal(result.approved, false);
   assert.equal(result.unattended, undefined);
   assert.match(result.message, /Command was not approved/);

@@ -104,7 +104,7 @@ test('auto mode hands unclear actions to the user', async (t) => {
 
 test('high-risk commands skip the classifier and always reach the user', async (t) => {
   const root = await tmp(t);
-  const { config, requests } = await scriptedModel(t, [toolCall('c1', 'run_command', { command: process.execPath, args: ['-e', 'console.log(1)'] }), { content: 'done' }]);
+  const { config, requests } = await scriptedModel(t, [toolCall('c1', 'run_command', { command: process.execPath, args: ['-e', "process.env.OASIS_T='1';console.log(1)"] }), { content: 'done' }]);
   const session = await createSession({ root, config, settings, permissionMode: 'auto' });
   const prompts = [];
   await runAgentTurn(session, 'do it', { approval: async (message) => { prompts.push(message); return false; } });

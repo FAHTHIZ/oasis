@@ -513,6 +513,18 @@ function lastLine(text) {
   return lines.length ? lines[lines.length - 1] : '';
 }
 
+// What a successful command printed, in one line. Only the last line hid the
+// answer: a script ranking four regions showed "West: 8286.53", the lowest, as
+// though it were the result. Short output is shown whole ("South: 9609.28 ·
+// East: 9190.93 · …"); longer output keeps its last line, usually a summary,
+// and says how much more there is.
+export function successLine(text) {
+  const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lines.length <= 1) return lines[0] || '';
+  if (lines.length <= 4) return lines.join(' · ');
+  return lines[lines.length - 1] + ' (' + lines.length + ' lines)';
+}
+
 // The line of a failed command's output that explains the failure. Runtimes
 // end crashes with noise ("Node.js v22.20.0", a stack frame, "^"), so prefer
 // the error line itself: "AssertionError [ERR_ASSERTION]: Expected ...".
@@ -565,7 +577,7 @@ export function describeToolResult(name, result, { color = true } = {}) {
     const combined = String(result.stdout || '') + '\n' + String(result.stderr || '');
     const tests = summarizeTestOutput(combined);
     const ok = result.exitCode === 0;
-    const detail = tests || (result.timedOut ? 'timed out' : clip(ok ? lastLine(result.stdout || result.stderr) : failureLine(result.stderr || result.stdout), 110));
+    const detail = tests || (result.timedOut ? 'timed out' : clip(ok ? successLine(result.stdout || result.stderr) : failureLine(result.stderr || result.stdout), 110));
     const mark = ok ? green + '✓' + off + dim : red + '✗';
     return '  ⎿ ' + dim + mark + ' exit ' + result.exitCode + (detail ? ' · ' + detail : '') + off;
   }

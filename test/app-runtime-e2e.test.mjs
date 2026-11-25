@@ -58,7 +58,7 @@ function mockProvider() {
         return reply(res, 200, text(note ? 'Checked, and noted: use tabs.' : 'Checked.'));
       }
       if (last.role === 'user' && /tabs/.test(String(last.content))) return reply(res, 200, text('Checked, and noted: use tabs.'));
-      return reply(res, 200, toolCall('run_command', { command: 'node', args: ['-e', 'console.log(1)'] }));
+      return reply(res, 200, toolCall('run_command', { command: 'node', args: ['-e', "process.env.OASIS_T='1';console.log(1)"] }));
     }
     if (last.role === 'tool') {
       const wrote = messages.filter((m) => m.role === 'tool').length;
@@ -66,7 +66,7 @@ function mockProvider() {
         if (wrote === 1) return reply(res, 200, toolCall('write_file', { path: 'style.css', content: 'h1{color:green}' }));
         return reply(res, 200, toolCall('write_file', { path: 'app.js', content: "const b=document.getElementById('b');b.onclick=()=>b.textContent=Number(b.textContent)+1;" }));
       }
-      if (/counter/i.test(ask) && wrote === 3) return reply(res, 200, toolCall('run_command', { command: 'node', args: ['-e', 'console.log(40 + 2)'] }));
+      if (/counter/i.test(ask) && wrote === 3) return reply(res, 200, toolCall('run_command', { command: 'node', args: ['-e', "process.env.OASIS_T='1';console.log(40 + 2)"] }));
       return reply(res, 200, text('Done. I built the counter in index.html with style.css and app.js.'));
     }
     if (/counter/i.test(ask)) return reply(res, 200, toolCall('write_file', { path: 'index.html', content: PAGE }));

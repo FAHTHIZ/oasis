@@ -574,7 +574,10 @@ export class RuntimeAgent {
           case 'compaction_progress': if (live) this.emit('compacting_progress', { outChars: Number(data.outChars) || 0, ...(data.promptProgress ? { promptProgress: data.promptProgress } : {}) }); break;
           case 'tool_start': {
             // A subagent's own steps show in its row, not the main timeline.
-            if (data.subagent) break;
+            if (data.subagent) {
+              if (subagents.step(data.subagent, data.present || data.label || data.name)) this.emit('subagents', { workers: subagents.list() });
+              break;
+            }
             const id = data.callId || 'call_' + event.id;
             const call = { id, name: data.name, args: toolArgs(data) };
             if (data.name === 'todo_write') {
@@ -598,7 +601,10 @@ export class RuntimeAgent {
           // Where each model request's time went (debug timing).
           case 'model_timing': this.emit('model_timing', { ...data }); break;
           case 'tool_result': {
-            if (data.subagent) break;
+            if (data.subagent) {
+              if (subagents.step(data.subagent, '', { finished: true })) this.emit('subagents', { workers: subagents.list() });
+              break;
+            }
             const outcome = TOOL_OUTCOMES.has(String(data.outcome || '')) ? String(data.outcome) : '';
             const ok = outcome ? outcome === 'ok' : !/^(error|failed|denied|blocked)$/i.test(String(data.status || ''));
             const content = [data.result, data.warning].filter(Boolean).join('\n');

@@ -74,6 +74,16 @@ export async function configureProvider(root = process.cwd(), options = {}) {
     return new Promise((resolve, reject) => { waiting = { resolve: (line) => { stdout.write('\n'); resolve(line); }, reject }; });
   };
   let protocol, baseURL, model, presetName;
+  // A typo at a numbered menu used to end setup with an error, so a beginner
+  // had to start over. In a terminal, say what was wrong and ask again;
+  // piped input still fails fast so scripts get a clear error.
+  const askChoice = async (question, isValid, fallback, hint) => {
+    for (;;) {
+      const answer = (await ask(question)).trim().toLowerCase() || fallback;
+      if (isValid(answer) || !stdin.isTTY) return answer;
+      stdout.write('  "' + answer + '" is not one of the choices. ' + hint + '\n');
+    }
+  };
   const presets = {
     ...Object.fromEntries(['openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'oasis-route'].map((id) => {
       const entry = getProvider(id);
@@ -87,7 +97,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
     stdout.write('\nChoose your API-key provider:\n');
     stdout.write('  1. OpenAI\n  2. Anthropic\n  3. OpenRouter\n  4. Gemini\n  5. OASIS Route (self-hosted)\n  6. Other / compatible endpoint\n');
     const preferred = ({ openai: '1', anthropic: '2', openrouter: '3', gemini: '4', 'oasis-route': '5', custom: '6' })[preferredPreset] || '1';
-    const answer = (await ask('Choose [1/2/3/4/5/6] (default ' + preferred + '): ')).trim().toLowerCase() || preferred;
+    const answer = await askChoice('Choose [1/2/3/4/5/6] (default ' + preferred + '): ', (a) => /^[1-6]$/.test(a) || ['openai', 'anthropic', 'openrouter', 'gemini', 'oasis-route', 'custom'].includes(a), preferred, 'Type a number from 1 to 6.');
     const providers = { '1': 'openai', '2': 'anthropic', '3': 'openrouter', '4': 'gemini', '5': 'oasis-route', '6': 'custom' };
     const selected = providers[answer] || (['openai', 'anthropic', 'openrouter', 'gemini', 'oasis-route', 'custom'].includes(answer) ? answer : '');
     if (!selected) throw new Error('Choose a number from 1 to 6 for the API-key provider.');
@@ -109,8 +119,8 @@ export async function configureProvider(root = process.cwd(), options = {}) {
       stdout.write('  3. Advanced provider or custom endpoint\n');
       const defaultChoice = defaultPreset === 'ollama' ? '2'
         : ['bedrock', 'vertex', 'foundry', 'custom'].includes(defaultPreset) ? '3' : '1';
-      const answer = (await ask('Choose [1/2/3] (default ' + defaultChoice + '): ')).trim().toLowerCase() || defaultChoice;
       const directPresets = ['openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'oasis-route', 'bedrock', 'vertex', 'foundry', 'custom'];
+      const answer = await askChoice('Choose [1/2/3] (default ' + defaultChoice + '): ', (a) => /^[123]$/.test(a) || directPresets.includes(a), defaultChoice, 'Type 1, 2 or 3. To connect a server address or key directly, run oasis connect <address-or-key>.');
       if (directPresets.includes(answer)) {
         // Keep accepting named presets for existing scripts and experienced users.
         presetName = answer;
@@ -122,7 +132,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
         stdout.write('\nChoose an advanced provider:\n');
         stdout.write('  1. AWS Bedrock\n  2. Google Vertex AI\n  3. Microsoft Foundry\n  4. Custom / compatible endpoint\n');
         const advancedDefault = ({ bedrock: '1', vertex: '2', foundry: '3', custom: '4' })[defaultPreset] || '4';
-        const advancedAnswer = (await ask('Choose [1/2/3/4] (default ' + advancedDefault + '): ')).trim().toLowerCase() || advancedDefault;
+        const advancedAnswer = await askChoice('Choose [1/2/3/4] (default ' + advancedDefault + '): ', (a) => /^[1-4]$/.test(a) || ['bedrock', 'vertex', 'foundry', 'custom'].includes(a), advancedDefault, 'Type a number from 1 to 4.');
         const advancedProviders = { '1': 'bedrock', '2': 'vertex', '3': 'foundry', '4': 'custom' };
         presetName = advancedProviders[advancedAnswer] || (['bedrock', 'vertex', 'foundry', 'custom'].includes(advancedAnswer) ? advancedAnswer : '');
         if (!presetName) throw new Error('Choose a number from 1 to 4 for the advanced provider.');
@@ -210,10 +220,15 @@ export async function configureProvider(root = process.cwd(), options = {}) {
   stdout.write('\nTesting tool calling with an inert validation probe (the probe will not be executed)...\n');
   const probe = await testProviderConnection({ protocol, baseURL, model, apiKey }, { timeoutMs: 30000 });
   if (probe && probe.reliabilityWarning) stdout.write('Note: ' + probe.note + '\n');
-  const configPath = await saveConfig({ protocol, baseURL, model, apiKey });
+  // The probe just answered without a key, so this remote endpoint is keyless.
+  // Without the flag, loadConfig() reports it unconfigured and every later run
+  // stops with "No model provider is configured" right after a passing setup.
+  const cloudProtocol = protocol === 'bedrock' || protocol === 'vertex' || protocol === 'foundry';
+  const keyless = !apiKey && !isLoopbackUrl(baseURL) && !cloudProtocol;
+  const configPath = await saveConfig({ protocol, baseURL, model, apiKey, ...(keyless ? { keyless: true } : {}) });
   stdout.write('Provider responded successfully. Saved settings to ' + configPath + '\n');
   stdout.write('Protocol: ' + protocol + '\n');
-  stdout.write('Authentication: ' + (apiKey ? 'configured' : (isLoopbackUrl(baseURL) ? 'local endpoint; no API key required' : 'not configured')) + '\n');
+  stdout.write('Authentication: ' + (apiKey ? 'configured' : (isLoopbackUrl(baseURL) ? 'local endpoint; no API key required' : (keyless ? 'none needed; this endpoint answered without a key' : 'not configured'))) + '\n');
   stdout.write('The provider is verified. Oasis can now inspect workspaces and use approved tools.\n');
   } finally { rl.close(); }
 }

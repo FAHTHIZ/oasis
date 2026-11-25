@@ -8,6 +8,7 @@
 //   mcp_github                every tool from one MCP server (prefix), or an exact MCP tool name
 //   Bash(...), Edit(...), Write(...), Read(...), WebFetch(...), Grep, Glob are accepted aliases.
 // Precedence: deny > ask > allow > mode default.
+import { isReadOnlyInlineScript } from './inline-code-readonly.mjs';
 import { discardReason, gitSubcommandIndex } from './git-safety.mjs';
 import { containerHostAccess } from './container-risk.mjs';
 import path from 'node:path';
@@ -671,6 +672,18 @@ export function ruleMatches(rule, toolName, args = {}, options = {}) {
   if (!rule.tools.includes(toolName)) return false;
   if (toolName === 'run_command' || toolName === 'monitor') {
     if (toolName === 'monitor' && !args.command) return false;
+    // An allow rule naming only the program (run_command(node:*), saved after
+    // approving `node app.js`) must not also approve `node -e <any code>`: that
+    // silently skipped the HIGH RISK prompt for inline scripts that write files
+    // or start programs. Inline code is allowed only by a rule that names the
+    // flag too (run_command(node -e:*)) or by a blanket rule.
+    if (options.requireEveryCommand !== false && rule.specifier && rule.specifier !== '*') {
+      const prefix = String(rule.specifier).replace(/:\*$|\*$/, '').trim();
+      if (prefix && !/\s/.test(prefix)) {
+        const risk = analyzeCommand(args.command, args.args || []);
+        if (risk.highRisk && /^runs inline code/.test(risk.highRisk)) return false;
+      }
+    }
     if (matchCommandSpecifier(rule.specifier, argvLine(args.command, args.args), { requireEveryCommand: options.requireEveryCommand !== false })) return true;
     // Deny/ask rules also catch the same program called by path (rm:* blocks /bin/rm).
     return Boolean(options.matchBasename) && /[\\/]/.test(String(args.command || '')) && matchCommandSpecifier(rule.specifier, argvLine(path.basename(String(args.command)), args.args), { requireEveryCommand: options.requireEveryCommand !== false });
@@ -1036,7 +1049,9 @@ export function analyzeCommand(command, args = [], depth = 0) {
     const shortLetters = evalFlags.filter((flag) => /^-[a-zA-Z]$/.test(flag)).map((flag) => flag[1]);
     const hit = args.find((a) => evalFlags.includes(String(a).split('=')[0]) ||
       (/^-[a-zA-Z]{2,}$/.test(String(a)) && [...String(a).slice(1)].some((letter) => shortLetters.includes(letter))));
-    if (hit) return { highRisk: 'runs inline code (' + base + ' ' + hit + ')', effective: { base, args } };
+    // A script that only reads and prints (summing a CSV, reading a JSON
+    // field) is no riskier than cat; see inline-code-readonly.mjs.
+    if (hit && !isReadOnlyInlineScript(base, args)) return { highRisk: 'runs inline code (' + base + ' ' + hit + ')', effective: { base, args } };
   }
   // Inline evaluation is handled above. In addition, flag explicit remote
   // package execution and high-impact project-runner verbs. Ordinary script/test
