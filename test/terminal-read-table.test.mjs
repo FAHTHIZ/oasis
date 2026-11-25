@@ -20,3 +20,8 @@ test('command headers quote an argument with a single quote without the hard-to-
     if (!arg.includes('!')) assert.ok(!quoted.includes("'\\''"), quoted);
   }
 });
+
+test('wc -l on a CSV shows the data rows next to the line count', () => {
+  const line = ui.describeToolResult('run_command', { exitCode: 0, stdout: '301 sales.csv\n', tableNote: 'sales.csv has a header row (date, amount), so its data rows are 300, not the line count.' }, { color: false });
+  assert.match(line, /✓ exit 0 · 301 sales\.csv \(300 data rows \+ header\)/);
+});

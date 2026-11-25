@@ -583,7 +583,8 @@ export function describeToolResult(name, result, { color = true } = {}) {
     const ok = result.exitCode === 0;
     const detail = tests || (result.timedOut ? 'timed out' : clip(ok ? successLine(result.stdout || result.stderr) : failureLine(result.stderr || result.stdout), 110));
     const mark = ok ? green + '✓' + off + dim : red + '✗';
-    return '  ⎿ ' + dim + mark + ' exit ' + result.exitCode + (detail ? ' · ' + detail : '') + off;
+    const rows = /data rows are (\d+)/.exec(String(result.tableNote || ''));
+    return '  ⎿ ' + dim + mark + ' exit ' + result.exitCode + (detail ? ' · ' + detail : '') + (rows ? ' (' + rows[1] + ' data rows + header)' : '') + off;
   }
   if (name === 'read_file' && typeof result.content === 'string') {
     const lines = result.content.replace(/\n$/, '').split('\n').length;
