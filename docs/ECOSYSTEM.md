@@ -29,8 +29,8 @@ finder for agent hosts. Its current catalogue includes:
 
 EXTREMIS does not supply a model or take over the host's agent loop. Its
 specialist agents are reusable profiles/prompts, not separate OASIS processes.
-OASIS continues to schedule and execute its own subagents and retain control of
-the session and permission boundary.
+OASIS continues to schedule and execute its own subagents. EXTREMIS is invoked
+through its separate MCP process and applies its own tool-runner permissions.
 
 ### Connect EXTREMIS to OASIS
 
