@@ -365,6 +365,13 @@ $('commandPaletteInput').addEventListener('keydown', (event) => {
 });
 for (const id of ['commandPaletteDialog', 'shortcutsDialog']) {
   $(id).addEventListener('click', (event) => { if (event.target === $(id)) closeNativeDialog(id); });
+  // A search box with text spends Escape on clearing itself, so it took two
+  // presses to close. One press closes, as in other command palettes.
+  $(id).addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || event.isComposing || !(event.target instanceof HTMLInputElement) || event.target.type !== 'search') return;
+    event.preventDefault();
+    closeNativeDialog(id);
+  });
   $(id).addEventListener('close', () => restoreDialogFocus(id));
 }
 
