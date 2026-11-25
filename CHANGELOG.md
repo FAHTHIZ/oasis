@@ -10,6 +10,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- In the terminal, a slash command typed while a task runs (`/status`, `/rewind`) runs as soon as the task ends instead of being sent to the model as a note. An MCP server waiting for sign-in now gets one short line (`[MCP] linear needs sign-in · run /mcp login linear`) instead of an error that included instructions meant for the agent.
 - Pasting a file copied from the file manager (a PDF, a CSV) into the message box adds it to the project and mentions it, as dropping it does. It used to vanish without a word.
 - The Changes and Files lists show a path like `out/stamp.txt` as one name again instead of "out/ stamp.txt", and a long folder path is shortened before the file name is.
 - Control Room (in the app and `oasis control-room`) names each session after its chat or first task, with a short id, instead of showing a cut-off 24-character id.

@@ -346,7 +346,7 @@ export async function connectMcpServers(options = {}) {
     } catch (error) {
       debugLog('mcp', 'failed ' + config.name + ': ' + error.message);
       // Keep the config (non-enumerable, so it never ends up in JSON output) for /mcp reconnect.
-      failures.push(Object.defineProperty({ name: config.name, error: error.message }, 'config', { value: { ...config, source }, enumerable: false }));
+      failures.push(Object.defineProperty({ name: config.name, error: error.message, ...(error.code === 'MCP_AUTH_REQUIRED' ? { code: error.code } : {}) }, 'config', { value: { ...config, source }, enumerable: false }));
       if (client) client.close();
     }
   }));

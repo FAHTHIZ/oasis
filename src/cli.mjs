@@ -173,6 +173,17 @@ export function rateLimitNotice(event = {}, color = false) {
   }
   return color ? '\x1b[2m' + text + '\x1b[22m' : text;
 }
+// "/rewind", "/model fast", "/plugin:cmd": a command. "/tmp/x is empty" and "//" are text.
+export function isSlashCommandLine(text) {
+  return /^\/[A-Za-z][\w:.-]*(?:\s|$)/.test(String(text || '').trim());
+}
+// One line per MCP server that did not start. A server waiting for sign-in gets the command to
+// run, not the full error: that also carries instructions meant for the agent (connect_service).
+export function mcpFailureLine(failure = {}) {
+  const name = String(failure.name || 'server');
+  if (failure.code === 'MCP_AUTH_REQUIRED' || /^MCP server \S+ needs sign-in\./.test(String(failure.error || ''))) return '[MCP] ' + name + ' needs sign-in · run /mcp login ' + name + ' to connect it';
+  return '[MCP] ' + name + ' did not start: ' + failure.error + (failure.config ? ' (retry with /mcp reconnect ' + name + ')' : '');
+}
 let queuedDraft = '';
 let turnDraft = ''; // what is typed while a turn runs, echoed in the status line
 let turnKeys = null;
@@ -199,11 +210,13 @@ function startTurnKeys(onInterrupt, onSteer = null) {
       else if (key.name === 'backspace') { buffer = buffer.slice(0, -1); showDraft(); }
       else if ((key.name === 'enter' || key.name === 'tab') && buffer.trim()) {
         const preview = buffer.replace(/\s+/g, ' ').slice(0, 90);
-        if (key.name === 'enter' && onSteer && onSteer(buffer)) {
+        // A slash command typed mid-turn (/rewind, /model) is a command, not a note for the
+        // model: it used to be sent to the model as text. It runs as soon as the turn ends.
+        if (key.name === 'enter' && !isSlashCommandLine(buffer) && onSteer && onSteer(buffer)) {
           noticeLine(dim('  ↳ sent: ' + preview + ' · Oasis reads it at the next step (Tab queues for after the turn, Ctrl+O expands the last output)'));
         } else {
           QUEUED_INPUT.push(buffer);
-          noticeLine(dim('  ↳ queued for after this turn: ' + preview));
+          noticeLine(dim('  ↳ ' + (isSlashCommandLine(buffer) ? 'command runs' : 'queued') + ' after this turn: ' + preview));
         }
         buffer = '';
         showDraft();
@@ -1613,7 +1626,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     for (const failure of session.mcpFailures) {
       if (failure.reported) continue;
       Object.defineProperty(failure, 'reported', { value: true, enumerable: false, configurable: true });
-      stdout.write('[MCP] ' + failure.name + ' did not start: ' + failure.error + (failure.config ? ' (retry with /mcp reconnect ' + failure.name + ')' : '') + '\n');
+      stdout.write(mcpFailureLine(failure) + '\n');
     }
   }
   // Ctrl+C stops the current task and returns to the prompt; a second Ctrl+C exits.
