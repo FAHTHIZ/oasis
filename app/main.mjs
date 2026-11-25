@@ -4722,7 +4722,7 @@ function scheduleRoutinePoll() {
 function routineSetStatus(text, kind = '') { const node = $('routineStatus'); node.textContent = text; node.className = 'test-result' + (kind === 'error' ? ' fail' : ''); }
 function renderRoutines(data, problem = '') {
   routineItems = (data && data.routines) || [];
-  $('routineScheduler').textContent = problem || (data && data.scheduler === 'running' ? 'The scheduler is running.' : 'The scheduler is not running, so routines will not fire until oasis web restarts or you run oasis schedule daemon.');
+  $('routineScheduler').textContent = problem || (data && data.scheduler === 'running' ? 'The scheduler is running.' : 'The scheduler is not running, so routines will not fire until oasis web restarts or you run oasis schedule install.');
   const list = $('routineList');
   list.replaceChildren();
   if (!routineItems.length && !problem) { const li = document.createElement('li'); li.className = 'hint'; li.textContent = 'No routines yet. You can also ask the agent, for example: check CI every weekday at 9.'; list.appendChild(li); }
