@@ -214,3 +214,16 @@ test('removing content from a file is a change, removing a thing is an operation
   assert.equal(classifyIntent('Delete old logs from the server'), 'operate');
   assert.equal(classifyIntent('Remove the user from the database'), 'operate');
 });
+
+// The reminder said only "the result cites no sources" and the model sent the same answer back.
+test('the missing-citation reminder names the pages the model read', async () => {
+  const { gateProblems, taskGateNudge, gateNotice } = await import('../src/task-model.mjs');
+  const spec = deriveTaskSpec('What is the latest Python release? Search the web and cite a source.');
+  const events = [{ seq: 1, kind: 'fetch', url: 'https://www.python.org/downloads/release/python-3152/' }];
+  const outcome = assessOutcome(spec, { events, reply: 'Python 3.15.2, released October 25, 2026.', root: os.tmpdir() });
+  const problems = gateProblems(outcome);
+  const cite = problems.find((item) => item.kind === 'cites_sources');
+  assert.ok(cite, JSON.stringify(outcome.acceptance.criteria));
+  assert.match(taskGateNudge(problems), /cites no sources \(cite the pages you read, by URL: https:\/\/www\.python\.org\/downloads\/release\/python-3152\/\)/);
+  assert.doesNotMatch(gateNotice(problems), /pages you read/, 'the user-facing note stays short');
+});

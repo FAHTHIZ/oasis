@@ -742,7 +742,11 @@ export function evaluateAcceptance(spec, { events = [], reply = '', root = '', r
             if (local.length < min) return set('unmet', 'fewer than ' + min + ' sources cited');
             return set('met', local.length + ' cited workspace file(s), all read', events.filter((event) => event.kind === 'read' && local.includes(event.path)).slice(-10).map((event) => event.seq));
           }
-          return set('unmet', 'the result cites no sources');
+          set('unmet', 'the result cites no sources');
+          // The reminder used to say only that, and the model sent the same
+          // answer back. Name the pages it read so it can cite them.
+          if (fetched.size) result.hint = 'cite the pages you read, by URL: ' + [...fetched].slice(-4).join(', ');
+          return result;
         }
         if (assessed.claims.citations.supported < cited) return set('unmet', (cited - assessed.claims.citations.supported) + ' cited URL(s) were never fetched');
         if (criterion.params.independent) {
@@ -844,7 +848,7 @@ export function assessOutcome(spec, { status = 'completed', partial = false, eve
     execution,
     evidence: { events: events.length, counts },
     claims: { checked: report.checked, supported: report.supported, byKind: report.claims, byStatus: ledger.counts, items: ledger.claims, issues: report.issues.map(({ domain, reason }) => ({ domain, reason })) },
-    acceptance: { ...tally, criteria: acceptance.map(({ id, kind, description, status: s, detail, evidence }) => ({ id, kind, description, status: s, ...(detail ? { detail } : {}), ...(evidence && evidence.length ? { evidence } : {}) })) },
+    acceptance: { ...tally, criteria: acceptance.map(({ id, kind, description, status: s, detail, hint, evidence }) => ({ id, kind, description, status: s, ...(detail ? { detail } : {}), ...(hint ? { hint: clean(hint, 400) } : {}), ...(evidence && evidence.length ? { evidence } : {}) })) },
     independent,
     assessedAt: Date.now()
   };
@@ -899,7 +903,7 @@ export function gateProblems(outcome) {
   const out = [];
   for (const item of outcome.acceptance.criteria) {
     if (item.status !== 'unmet' || ['check_passes', 'claims_supported', 'manual', 'independent_review'].includes(item.kind)) continue;
-    out.push({ kind: item.kind, description: item.description, detail: item.detail || '' });
+    out.push({ kind: item.kind, description: item.description, detail: item.detail || '', ...(item.hint ? { hint: item.hint } : {}) });
   }
   for (const issue of (outcome.claims && outcome.claims.issues) || []) {
     if (issue.domain === 'code') continue;
@@ -922,7 +926,7 @@ export function admitsShortfall(text) {
 /** The completion gate's note to the model, listing gateProblems(). */
 export function taskGateNudge(problems) {
   return '<system-reminder>Before you finish, OASIS checked your answer against this turn\'s tool results and found:\n'
-    + problems.slice(0, 8).map((item) => '- ' + (item.detail || item.description)).join('\n')
+    + problems.slice(0, 8).map((item) => '- ' + (item.detail || item.description) + (item.hint ? ' (' + item.hint + ')' : '')).join('\n')
     + '\nFix what you can now (write the missing file, fetch the page you cite or drop the citation, rerun the calculation and use its output). If something cannot be done, say so plainly in your answer instead of presenting it as done. This note is internal; do not mention it.</system-reminder>';
 }
 

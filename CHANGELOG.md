@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- When an answer the user asked to cite has no sources, the internal reminder lists the pages the model read ("cite the pages you read, by URL: https://www.python.org/downloads/release/python-3152/"). With only "the result cites no sources", gpt-oss re-sent the same uncited answer.
 - Finished web steps say what they did: "Searched the web for 'latest Python release'" and "Read a page on python.org". A search followed by two page reads used to show three identical "Looked up information online" rows in Activity.
 - Web access approvals are written in plain words and show what is being sent: "OASIS wants to search the web for: latest Python release. The search goes to html.duckduckgo.com and www.bing.com…" and "OASIS wants to read web pages from www.python.org: <url>". They used to read "OASIS is asking permission to take this action: Allow web_search to send this query…" without the query.
 - gpt-oss citation markers such as `【fetch_url】`, `【3†L10-L20】` and `【turn0search1】` are removed from replies; one answer ended "October 2, 2023【fetch_url】." Ordinary CJK brackets like 【注意】 are kept.
