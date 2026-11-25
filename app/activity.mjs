@@ -274,7 +274,11 @@ function patchTurn(section, turn, { folded }) {
     bar.title = 'Model request ' + span.step + ': ' + dur(span.durationMs) + (span.ttftMs !== null ? ', first token after ' + dur(span.ttftMs) : '') + (span.inputTokens || span.outputTokens ? ', ' + span.inputTokens + ' in / ' + span.outputTokens + ' out' : '') + (span.toolCalls ? ', asked for ' + span.toolCalls + ' tool call' + (span.toolCalls === 1 ? '' : 's') : '');
     return bar;
   }));
-  model.replaceChildren(el('span', 'trace-lane-label', turn.model.length + (turn.model.length === 1 ? ' model request' : ' model requests')), lane);
+  // How long the model took in all, so a slow turn says where its time went
+  // ("11 model requests · 7m 58s" next to steps that took a second).
+  const modelMs = turn.model.reduce((sum, span) => sum + (Number(span.durationMs) || 0), 0);
+  const modelLabel = turn.model.length + (turn.model.length === 1 ? ' model request' : ' model requests') + (modelMs >= 1000 ? ' · ' + dur(modelMs) : '');
+  model.replaceChildren(el('span', 'trace-lane-label', modelLabel), lane);
   const rows = section.querySelector('.trace-rows');
   const wanted = steps.map((step) => rowFor(turn, step));
   const keep = new Set(wanted);
@@ -443,7 +447,27 @@ function fillDetail(row, step) {
   jump.type = 'button';
   jump.addEventListener('click', () => state.deps.showInChat(step.id));
   actions.append(meta, jump);
-  detail.replaceChildren(actions, box);
+  // A step that did not work says why first, before its arguments.
+  const why = ['failed', 'timed_out', 'blocked', 'declined'].includes(step.outcome) ? stepWhy(step.tool) : '';
+  detail.replaceChildren(...[actions, why ? el('p', 'trace-why' + (STATUS_CLASS[step.outcome] === 'fail' ? ' fail' : ''), why) : null, box].filter(Boolean));
+}
+
+// The first line of a step's error ("old_string and new_string are identical"),
+// from a JSON result's error or reason, or plain text output.
+export function stepWhy(tool = {}) {
+  const raw = String(tool.fullContent || tool.content || '');
+  let text = raw;
+  // The result may be JSON followed by notes on later lines.
+  for (const candidate of [raw, raw.split('\n')[0]]) {
+    try {
+      const value = JSON.parse(candidate);
+      if (value && typeof value === 'object') { text = String(value.error || value.reason || value.message || value.stderr || ''); break; }
+    } catch { /* not JSON */ }
+  }
+  const quoted = text === raw && /"(?:error|reason)":"((?:[^"\\]|\\.)*)"/.exec(raw);
+  if (quoted) { try { text = JSON.parse('"' + quoted[1] + '"'); } catch { text = quoted[1]; } }
+  const line = text.split('\n').map((part) => part.trim()).find(Boolean) || '';
+  return line.length > 300 ? line.slice(0, 297) + '…' : line;
 }
 
 function toggleRow(row) {
