@@ -33,6 +33,7 @@ export function printQuickHelp() {
       ['oasis mcp list|add|remove', 'Model Context Protocol servers'],
       ['oasis skills | oasis plugins', 'Agent Skills and native plugins'],
       ['oasis ide | oasis acp', 'VS Code, Cursor, Zed, JetBrains and other editors'],
+      ['oasis schedule add WHEN TASK', 'Routines: run a task on a schedule, a webhook, at startup or after another routine'],
       ['oasis gateway', 'Chat with OASIS from Telegram, WhatsApp, Slack, Discord, Mattermost, Matrix, Signal or email']
     ]),
     '',
@@ -126,7 +127,7 @@ export function helpText() {
     '  oasis --bg "TASK"              Run a task in a background session; oasis bg list|logs|attach|stop|rm ID',
     '  oasis bg [list] | logs ID [--follow] | send ID "MSG" | approve ID | deny ID | attach|stop|rm|respawn ID   Manage background sessions',
     '  oasis --bg --exec "CMD"        Run a shell command as a background job',
-    '  oasis schedule add WHEN TASK  Durable routines on a schedule (cron, every 2h, in 30m); oasis schedule daemon runs them',
+    '  oasis schedule add WHEN TASK  Durable routines: cron, every 2h, in 30m, webhook, at startup, after NAME; oasis schedule install runs them',
     '  oasis deploy [DIR]            Build and publish a static site to GitHub Pages (gh-pages branch)',
     '  oasis diff --watch            Live view of uncommitted changes that redraws as files change (/diff --watch in a session)',
     '  oasis cloud run "TASK"        Run an agent on GitHub Actions; --here hands off this branch; oasis cloud pull ID brings it back',
