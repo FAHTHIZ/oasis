@@ -3070,6 +3070,10 @@ async function applyToolResults(session, options, turn) {
     if (name === 'run_command' && result && verification.syntaxCheckIds && verification.syntaxCheckIds.has(call.id)) {
       (verification.syntaxResults ||= new Map()).set(call.id, result.approved !== false ? result.exitCode : null);
     }
+    // The user turned a step down: from here on they steer, so the "you
+    // described the work instead of doing it" nudges stand down (seen live: a
+    // subagent answered the user's redirect and was then told to edit files).
+    if (result && typeof result === 'object' && result.approved === false) verification.userDenied = true;
     if (name === 'run_command' && result) {
       const args = safeToolArguments(call.function && call.function.arguments);
       // A check that was not approved cannot be satisfied by asking again;

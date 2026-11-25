@@ -162,6 +162,9 @@ export function providerForBaseURL(baseURL, env = process.env) {
   if (!host) return null;
   const registered = getProvider(providerForEndpoint(baseURL, undefined, { env }), { env });
   if (registered && registered.catalog) return registered.catalog;
+  // A catalog entry whose API sits on loopback (a desktop app's local server)
+  // says nothing about which provider a localhost gateway fronts.
+  if (/^(?:localhost|127(?:\.\d+){3}|\[?::1\]?|0\.0\.0\.0)$/.test(host)) return null;
   const { hosts } = loadModelCatalog(env);
   if (hosts.has(host)) return hosts.get(host);
   for (const [known, id] of hosts) if (host.endsWith('.' + known)) return id;
@@ -192,7 +195,9 @@ function candidates(model) {
   return out;
 }
 
-export function findCatalogModel(model, { baseURL, provider, env = process.env } = {}) {
+// `need` names a field the entry must have (catalogPrice asks for 'cost'), so
+// a reseller listing without prices does not hide the maker's priced entry.
+export function findCatalogModel(model, { baseURL, provider, env = process.env, need = '' } = {}) {
   if (!model) return null;
   const catalog = loadModelCatalog(env);
   const hint = provider && catalog.lower[provider] ? provider : providerForBaseURL(baseURL, env);
@@ -202,7 +207,7 @@ export function findCatalogModel(model, { baseURL, provider, env = process.env }
       for (const name of names) {
         for (const id of providers) {
           const entry = table[id] && table[id].get(name);
-          if (entry) return { provider: id, ...entry };
+          if (entry && (!need || entry[need])) return { provider: id, ...entry };
         }
       }
     }
@@ -255,7 +260,7 @@ export function catalogReasoningReplay(model, options = {}) {
 // USD per million tokens in Oasis's pricing shape, with the first context tier as
 // the per-request long-context rate.
 export function catalogPrice(model, options = {}) {
-  const entry = findCatalogModel(model, options);
+  const entry = findCatalogModel(model, { ...options, need: 'cost' });
   if (!entry || !entry.cost) return null;
   const price = toPrice(entry.cost);
   const tier = (entry.cost.tiers || [])[0];

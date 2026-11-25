@@ -569,7 +569,7 @@ export class RuntimeAgent {
           case 'stream_restarted': stepText = ''; this.emit('retry', { attempt: data.attempt || 1 }); break;
           case 'endpoint_wait':
             if (data.subagent) {
-              if (subagents.pause(data.subagent, data.ready ? '' : 'Waiting its turn on the model (this endpoint answers one request at a time)')) this.emit('subagents', { workers: subagents.list() });
+              if (subagents.pause(data.subagent, data.ready ? '' : 'Waiting its turn on the model')) this.emit('subagents', { workers: subagents.list() });
             }
             break;
           case 'provider_retry':

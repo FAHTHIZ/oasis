@@ -253,7 +253,7 @@ export async function runCompletionGates(turn, host) {
   }
   // Smaller models often answer "create X" with a tutorial instead of doing it.
   // They also announce the next step ("I need to create the file") and stop.
-  if (g.actionNudges < 2 && !verification.changedPaths.size && !options.planOnly && permissionMode(session, options) !== 'plan' && asksForAction(request)) {
+  if (g.actionNudges < 2 && !verification.changedPaths.size && !verification.userDenied && !options.planOnly && permissionMode(session, options) !== 'plan' && asksForAction(request)) {
     const reported = asksForReport(request) && verification.lastVerificationExitCode != null;
     const kind = !String(text || '').trim() ? 'empty' : claimsUnmadeChange(text) ? 'false-claim' : !reported && readsLikeInstructions(text) ? 'described' : announcesNextStep(text) ? 'announced' : givesUpEarly(text) ? 'gave-up' : '';
     if (kind) {
