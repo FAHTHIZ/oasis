@@ -584,7 +584,10 @@ export function describeToolResult(name, result, { color = true } = {}) {
   }
   if (name === 'read_file' && typeof result.content === 'string') {
     const lines = result.content.replace(/\n$/, '').split('\n').length;
-    return '  ⎿ ' + dim + 'Read ' + lines + ' line' + (lines === 1 ? '' : 's') + (result.truncated ? ' (truncated)' : '') + off;
+    const table = result.table && Number.isInteger(result.table.dataRows) && !result.truncated
+      ? ' (' + plural(result.table.dataRows, 'row', 'rows') + (result.table.columns ? ' + header' : '') + ')'
+      : '';
+    return '  ⎿ ' + dim + 'Read ' + lines + ' line' + (lines === 1 ? '' : 's') + table + (result.truncated ? ' (truncated)' : '') + off;
   }
   if ((name === 'search_files' || name === 'grep') && Array.isArray(result.matches)) {
     const files = new Set(result.matches.map((m) => m.path)).size;
