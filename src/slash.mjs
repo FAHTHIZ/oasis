@@ -2021,6 +2021,22 @@ export async function runBuiltinCommand(name, argument, state) {
           return { output: registry.formatSearchResults(rows, query).replace(/\n\nInstall one with:.*$/, '\n\nInstall one from a terminal with: oasis mcp install NAME (it shows the source and asks first); it starts with your next session.') };
         } catch (error) { return { output: 'MCP Registry search failed: ' + error.message }; }
       }
+      // The terminal starts its session (and MCP servers) with the first message, so before that
+      // "No MCP servers are connected" read as if the configured servers were missing.
+      if (!session) {
+        const names = [];
+        try {
+          const { loadMcpServers } = await import('./mcp.mjs');
+          for (const server of (await loadMcpServers({ env })).servers) names.push(server.name + (server.enabled === false ? ' (disabled)' : ''));
+        } catch {}
+        try {
+          const { loadUserMcpJson } = await import('./mcp-project.mjs');
+          for (const server of (await loadUserMcpJson({ env })).servers) if (!names.some((name) => name.split(' ')[0] === server.name)) names.push(server.name);
+        } catch {}
+        return { output: names.length
+          ? 'MCP servers (they connect when you send your first message):\n' + names.map((name) => '  ' + name).join('\n') + '\nProject .mcp.json and plugin servers are checked then too.'
+          : 'No MCP servers are set up. Add one with oasis mcp add NAME -- COMMAND, or find one with /mcp search QUERY.' };
+      }
       const clients = session && session.mcpClients instanceof Map ? session.mcpClients : new Map();
       const failures = session && Array.isArray(session.mcpFailures) ? session.mcpFailures : [];
       if (!clients.size) {

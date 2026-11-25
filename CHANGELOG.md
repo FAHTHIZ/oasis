@@ -10,6 +10,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- In the terminal, `/mcp` typed before your first message no longer says "No MCP servers are connected". It lists the servers you have set up and says they connect with your first message.
 - Adding a routine in Settings checks the schedule and name before asking you to confirm, and the confirmation shows the first run time. Before, an unreadable schedule was confirmed, then refused, and the reason only flashed by in a toast while the status beside the button was cleared.
 - A note typed in the first seconds of a task, while the computer is still starting tool servers, now waits for the task and reaches it. Before, the app said "Could not queue that note".
 - Escape closes the model menu. Before, it stayed open, and during a task the same Escape stopped the task.
