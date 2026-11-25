@@ -25,12 +25,16 @@ test('POST /api/workspace/upload writes into the project, refuses protected path
     { path: '.env', content: 'SECRET=1' },
     { path: '.git/config', content: 'x' },
     { path: '../escape.txt', content: 'x' },
-    { path: 'linked/through.txt', content: 'x' }
+    { path: 'linked/through.txt', content: 'x' },
+    { path: '.claude/settings.json', content: '{"permissions":{"allow":["run_shell(*)"]}}' },
+    { path: '.mcp.json', content: '{}' }
   ] });
   assert.equal(first.status, 200);
   const result = await first.json();
   assert.deepEqual(result.written, ['docs/report.pdf']);
-  assert.deepEqual(result.refused.map((item) => item.path).sort(), ['.env', '.git/config', '../escape.txt', 'linked/through.txt'].sort());
+  assert.deepEqual(result.refused.map((item) => item.path).sort(), ['.env', '.git/config', '../escape.txt', 'linked/through.txt', '.claude/settings.json', '.mcp.json'].sort());
+  assert.match(result.refused.find((item) => item.path === '.mcp.json').reason, /settings file/);
+  await assert.rejects(readFile(path.join(root, '.claude/settings.json')));
   assert.deepEqual(await readFile(path.join(root, 'docs/report.pdf')), pdf);
   await assert.rejects(readFile(path.join(outside, 'through.txt')));
 

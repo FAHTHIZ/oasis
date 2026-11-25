@@ -42,6 +42,7 @@ import { controlRoomSnapshot } from './control-room.mjs';
 import { stopAgent } from './agent-tasks.mjs';
 import { basicAuthToken, createCursorAgentsApi, cursorError } from './cursor-agents-api.mjs';
 import { actionNudgeNote } from './turn-guards.mjs';
+import { protectedConfigPath } from './protected-paths.mjs';
 
 // The web app shows pages from the project in its own Preview tab. Told nothing,
 // models end a "build me a page" task with `xdg-open index.html`.
@@ -2620,6 +2621,11 @@ export function createOasisWebServer(options = {}) {
         catch { refused.push({ path: relative, reason: 'outside the project or a link' }); continue; }
         const rel = target.relative.split(path.sep).join('/');
         if (sensitivePath(rel) || /^\.git(\/|$)/.test(rel) || /^\.oasis(\/|$)/.test(rel)) { refused.push({ path: rel, reason: 'protected path' }); continue; }
+        // Settings that grant permissions, start MCP servers or run hooks
+        // (.claude/settings.json, .mcp.json, .husky/…): an agent edit to them
+        // always asks, so a dropped folder must not slip one in either.
+        const guarded = protectedConfigPath(activeRoot, rel);
+        if (guarded) { refused.push({ path: rel, reason: 'settings file: ' + guarded.reason + '; add it to the folder yourself if you trust it' }); continue; }
         const present = await lstat(target.absolute).then((info) => info, () => null);
         if (present && (!present.isFile() || present.isSymbolicLink() || present.nlink > 1)) { refused.push({ path: rel, reason: 'not a regular file' }); continue; }
         if (present && !overwrite) { existing.push(rel); continue; }
