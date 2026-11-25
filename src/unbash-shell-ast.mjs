@@ -266,8 +266,13 @@ function walk(node, out, state, bindings = new Map(), wrapperDepth = 0) {
     // destructive target through the loop variable. Analyse its visible body
     // for specific denials, but tell callers this is not a complete parse so
     // shell-risk keeps the request behind an explicit approval.
-    state.unparsable = true;
-    return walk(body, out, state, bindings, wrapperDepth);
+    // A body made only of plain readers (`for f in *.js; do wc -l "$f"; done`)
+    // cannot do harm whatever the loop variable holds, so it is left as a
+    // normal command rather than a "could not be parsed" high-risk one.
+    const before = out.length;
+    const result = walk(body, out, state, bindings, wrapperDepth);
+    if (!out.slice(before).every(loopSafeReader)) state.unparsable = true;
+    return result;
   }
 
   if (node.type === 'Redirected') {
@@ -304,6 +309,21 @@ function walk(node, out, state, bindings = new Map(), wrapperDepth = 0) {
     if (result.last) last = result.last;
   });
   return { first, last, primary: first || last };
+}
+
+// Readers with no option that writes, deletes or runs anything else.
+const LOOP_READERS = new Set(['echo', 'printf', 'wc', 'cat', 'head', 'tail', 'grep', 'egrep', 'fgrep', 'rg', 'ls', 'stat', 'file', 'basename', 'dirname', 'du', 'md5sum', 'sha1sum', 'sha256sum', 'test', '[', 'true', 'false']);
+const WRITING_OPTION = /^--?(?:o|output|pre|exec|exec-batch|replace|r|follow)(?:=|$)/;
+
+function loopSafeReader(command) {
+  const [program, ...args] = command.tokens || [];
+  if (!LOOP_READERS.has(program)) return false;
+  // Output redirects come through as tokens (`cat "$f" > out.txt`); any of
+  // them makes the loop a writer. `rg --pre cmd` runs a program.
+  // `2>&1` arrives as `>&` then `1`: a descriptor copy, not a file write.
+  const fdCopy = (i) => args[i] === '>&' && /^\d+$/.test(args[i + 1] || '');
+  if (args.some((arg, i) => !fdCopy(i) && (/^\d*(?:>|&>)/.test(arg) || /^\d*<>/.test(arg)))) return false;
+  return !(program === 'rg' && args.some((arg) => WRITING_OPTION.test(arg)));
 }
 
 function parseNested(source, out, state, bindings, wrapperDepth) {
