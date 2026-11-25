@@ -4,12 +4,22 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ## Unreleased
 
+## [0.13.0] - 2026-11-25
+
+A stability release from a final pass over OASIS as a first-time user: research, data analysis, documents, writing, memory, the browser, routines, `/goal`, parallel agents, MCP, connectors, skills, voice and image attachments in the terminal, web app and desktop app. Unattended runs can now read the web, a new user can start with a free model that needs no key, and routines pause themselves after repeated failures.
+
 ### Added
 
+- Routines pause after three failed runs in a row instead of failing (and alerting) on every slot. The failure message says so with the resume command, `oasis schedule resume` starts a fresh count, and `OASIS_ROUTINE_MAX_FAILURES` sets the limit (0 never pauses).
+- `oasis schedule list` and `show` print times in the routine's `--tz` or the local zone with a relative hint ("next 2026-11-26 09:00 (in 12h)") instead of raw UTC.
+- `oasis setup` also lists OASIS Route under Advanced provider, next to the custom endpoint (option 5, so existing numbers keep working).
+- `oasis schedule add --timeout MINUTES` (or `OASIS_ROUTINE_TIMEOUT_MINUTES` as a default) stops a run that takes too long. It is recorded as timed out and counts toward the failure pause, so one hung run no longer blocks every later slot.
 - A Playwright tour of the web app as a first-time user runs in CI beside the end-to-end task test (`.github/scripts/browser-tour.mjs`): every sheet opens and closes, the command palette finds actions and chats, a theme previews and reverts, Settings lists connectors, the Files tab picks up new files, an attached image reaches the model and keeps its thumbnail after a reload, and the phone layout never scrolls sideways.
 
 ### Fixed
 
+- OASIS Route setup reads `OASIS_ROUTE_API_KEY` or asks for the key. Before, the loopback branch never asked, so the Route choice always failed its probe with HTTP 401.
+- A gateway's `auto` model alias (OASIS Route) no longer borrows OpenRouter's 2M-token window, so OASIS plans and compacts for the model's real context and `oasis models` shows it.
 - A reply no longer ends with advice to install a language server when every script the agent changed ran cleanly after its last edit (a helper script for a CSV question, for example).
 - Web search and page fetches now follow the permission mode. In auto mode the classifier answers the per-site question (public web reads are on its default allow list), and an allow rule such as `WebFetch` or bypass mode skips it. Before, `oasis -p --permission-mode auto` and scheduled research routines could never read the web, and the model answered from memory. Manual mode still asks once per site.
 - Web app on a phone: the model name in the composer no longer shrinks to "o…" once a chat starts. The context percentage folds into its ring there (hover or long-press for the numbers) and comes back past 70%.
