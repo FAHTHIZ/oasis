@@ -773,3 +773,22 @@ export function repeatsEarlierReply(entries = [], entry, text) {
   }
   return false;
 }
+
+// Whether the last turn of a saved chat changed files, and the page it wrote,
+// so a reopened chat still offers Undo (and Preview) on its last reply.
+export function lastTurnEdits(display = []) {
+  let edited = false;
+  let page = '';
+  for (let i = display.length - 1; i >= 0; i--) {
+    const entry = display[i];
+    if (!entry || entry.role === 'user') break;
+    for (const tool of Array.isArray(entry.tools) ? entry.tools : []) {
+      if (!tool || tool.ok === false) continue;
+      const name = String(tool.name || '');
+      if (/write|edit|patch|delete|move|rename|notebook/i.test(name)) edited = true;
+      const target = String((tool.args && tool.args.path) || '');
+      if (!page && /^(write_file|edit_file|multi_edit)$/.test(name) && /\.html?$/i.test(target)) page = target.replace(/^\.\//, '');
+    }
+  }
+  return { edited, page };
+}

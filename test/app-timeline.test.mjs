@@ -358,3 +358,17 @@ test('a lone command group names its command beside a generic title', async () =
   assert.equal(loneCommandArg([{ id: 'r', name: 'read_file', args: { path: 'a.js' }, ok: true }], 'Read a.js'), '');
   assert.match(loneCommandArg([{ ...step, ok: false }], 'Command failed'), /^node -e/);
 });
+
+test('a reopened chat knows whether its last turn changed files', async () => {
+  const { lastTurnEdits } = await import('../app/core/timeline.mjs');
+  const display = [
+    { role: 'user', content: 'first' },
+    { role: 'assistant', tools: [{ name: 'write_file', ok: true, args: { path: 'old.html' } }] },
+    { role: 'user', content: 'make a page' },
+    { role: 'assistant', tools: [{ name: 'git_status', ok: false }, { name: 'write_file', ok: true, args: { path: './index.html' } }] },
+    { role: 'worked', content: 'Worked for 2m' }
+  ];
+  assert.deepEqual(lastTurnEdits(display), { edited: true, page: 'index.html' });
+  assert.deepEqual(lastTurnEdits(display.slice(0, 3)), { edited: false, page: '' });
+  assert.deepEqual(lastTurnEdits([{ role: 'user' }, { role: 'assistant', tools: [{ name: 'edit_file', ok: false, args: { path: 'a.html' } }] }]), { edited: false, page: '' });
+});

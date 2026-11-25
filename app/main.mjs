@@ -7,7 +7,7 @@ import { SUBAGENT_STATUS_TEXT, friendlyBudget } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
 import { sideWork, liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline, formatTokens } from './core/live-status.mjs';
-import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, thoughtHeadline, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit, stepResult, liveLabel, diffPreview, isPlanStep, feedSteps, loneCommandArg } from './core/timeline.mjs';
+import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, thoughtHeadline, splitTextToolCall, elapsedSince, lastTurnEdits, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit, stepResult, liveLabel, diffPreview, isPlanStep, feedSteps, loneCommandArg } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, diffStat, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
 import { Agent, answeredHistory, textOf } from './core/agent.mjs';
@@ -3473,6 +3473,7 @@ async function restoreChat({ keepChat = false } = {}) {
     const resumeId = RT && agent.resumeJobId && await agent.jobStatus(agent.resumeJobId) ? agent.resumeJobId : '';
     display = resumeId && Number.isInteger(saved.turnStart) ? saved.display.slice(0, saved.turnStart) : saved.display;
     renderSavedDisplay(display);
+    if (!resumeId) { ({ edited: turnEdited, page: turnPage } = lastTurnEdits(display)); offerUndo(); }
     scrollDown(true);
     // Keep where the turn starts: leaving this chat again saves it.
     if (resumeId) { turnStart = Number.isInteger(saved.turnStart) ? saved.turnStart : display.length; void resumeTurn(resumeId); }
