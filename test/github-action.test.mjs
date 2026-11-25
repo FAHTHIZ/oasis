@@ -49,7 +49,7 @@ function fakeGitHub() {
 }
 
 test('GitHub Action never treats an unavailable or unapproved LSP as successful verification', () => {
-  const notApproved = 'Verification incomplete: Oasis did not mark this change as successful because the LSP gate remains blocked.\n' +
+  const notApproved = 'Verification incomplete: OASIS did not mark this change as successful because the LSP gate remains blocked.\n' +
     '- LSP verification unavailable for src/app.ts: Starting the TypeScript language server was not approved. Use grep or read_file instead.\n' +
     'Fix or explicitly resolve these diagnostics, then run verification again.';
   assert.equal(
@@ -216,7 +216,7 @@ test('an @oasis issue comment runs the agent, pushes a branch, opens a PR, and r
   assert.match(calls[3].body.body, /pushed changes, but verification is incomplete[\s\S]*Fixed login[\s\S]*Opened https:\/\/github\.com\/acme\/app\/pull\/8[\s\S]*actions\/runs\/42/);
 });
 
-test('on a same-repo pull request, Oasis commits to the PR branch and opens no new PR', async (t) => {
+test('on a same-repo pull request, OASIS commits to the PR branch and opens no new PR', async (t) => {
   const { remote, work } = await repoWithRemote(t);
   git(work, 'checkout', '-q', '-b', 'feature');
   await writeFile(path.join(work, 'feature.txt'), 'wip\n');
@@ -276,7 +276,7 @@ test('questions get an answer and no push', async (t) => {
   const sdk = { run: async () => ({ is_error: false, subtype: 'success', result: 'login() lives in login.js.' }) };
   const outcome = await runAction({ env: { ...gitEnv, GITHUB_EVENT_NAME: 'issue_comment', GITHUB_REPOSITORY: 'acme/app' }, root: work, event: comment('@oasis where is login?'), request, sdk, log: () => {} });
   assert.equal(outcome.published.changed, false);
-  assert.match(calls.at(-1).body.body, /\*\*Oasis\*\* finished; no code changes were verified\.\n\nlogin\(\) lives in login\.js\./);
+  assert.match(calls.at(-1).body.body, /\*\*OASIS\*\* finished; no code changes were verified\.\n\nlogin\(\) lives in login\.js\./);
   const skipped = await runAction({ env: { GITHUB_EVENT_NAME: 'issue_comment' }, root: work, event: comment('thanks'), request, sdk, log: () => {} });
   assert.equal(skipped.responded, false);
 });

@@ -43,7 +43,7 @@ export function sandboxDoctor(settings, root, { env = process.env, indent = '  '
 export async function workspaceDoctor(root, { env = process.env, session = null } = {}) {
   const lines = [];
   const problems = [];
-  lines.push('Oasis doctor: ' + root);
+  lines.push('OASIS doctor: ' + root);
   lines.push('  Node.js ' + process.version + ' on ' + process.platform + '/' + process.arch + (isNodeVersionSupported() ? '' : ' (Node.js ' + MIN_NODE_VERSION + ' or newer required)'));
   const ripgrep = describeRipgrep(env);
   const tools = ['git', 'rg', 'gh'].map((name) => name + (name === 'rg' ? (ripgrep ? ' ' + ripgrep : ' no') : onPathSync(name, env) ? ' yes' : ' no'));

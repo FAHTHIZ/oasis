@@ -128,7 +128,7 @@ export async function resolveActiveTarget(target, options = {}) {
   const matches = active.filter((record) => record.name && record.name.toLowerCase() === query.toLowerCase() && sameWorkspace(record));
   if (matches.length === 1) return matches[0];
   if (matches.length > 1) throw new Error('More than one active session is named "' + query + '" in this workspace. Target its active session ID instead.');
-  throw new Error('No active Oasis session matches "' + query + '" in this workspace. Only live sessions in the same workspace can receive messages.');
+  throw new Error('No active OASIS session matches "' + query + '" in this workspace. Only live sessions in the same workspace can receive messages.');
 }
 
 async function enforceRateLimit(sourceId, env) {

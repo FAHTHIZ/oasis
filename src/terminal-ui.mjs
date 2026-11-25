@@ -111,15 +111,15 @@ async function packageVersion() {
 }
 
 const STARTUP_TIPS = [
-  'Ask Oasis to read the project and explain it before changing files.',
+  'Ask OASIS to read the project and explain it before changing files.',
   'Use /plan before a large or risky change.',
   'Use /undo to review and rewind the last turn when needed.',
   'Use /doctor when setup or the model connection seems broken.',
-  'Read each approval prompt; Oasis runs commands with your account permissions.',
+  'Read each approval prompt; OASIS runs commands with your account permissions.',
   'Use /context to see how much of the model context is in use.',
   'Use /cost to review estimated usage for this session.',
-  'Ask Oasis to run the relevant tests before it says a change is done.',
-  'Type /connect github (or linear, notion, sentry, ...) to give Oasis an app in one step.'
+  'Ask OASIS to run the relevant tests before it says a change is done.',
+  'Type /connect github (or linear, notion, sentry, ...) to give OASIS an app in one step.'
 ];
 
 // The banner's "via …": a server name people recognise instead of the wire
@@ -210,12 +210,12 @@ export async function appTip(root, env = process.env) {
   const shown = missing.slice(0, 3);
   const names = shown.map((item) => item.name);
   const list = names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0];
-  return 'This project uses ' + list + '. /connect ' + shown.map((item) => item.id).join(' ') + ' gives Oasis ' + (shown.length > 1 ? 'their' : 'its') + ' tools.';
+  return 'This project uses ' + list + '. /connect ' + shown.map((item) => item.id).join(' ') + ' gives OASIS ' + (shown.length > 1 ? 'their' : 'its') + ' tools.';
 }
 
 // Prompt and footer -------------------------------------------------------
 
-// /color: a per-session prompt color, so several Oasis terminals are easy to tell apart.
+// /color: a per-session prompt color, so several OASIS terminals are easy to tell apart.
 export const PROMPT_COLORS = { red: [239, 68, 68], blue: [59, 130, 246], green: [50, 224, 122], yellow: [234, 179, 8], purple: [168, 85, 247], orange: [249, 115, 22], pink: [236, 72, 153], cyan: [6, 182, 212] };
 let promptColor = null;
 export function setPromptColor(name) {
@@ -302,7 +302,7 @@ export function transcriptLines(messages, { color = true, width = 100, maxResult
     } else if (m.role === 'assistant') {
       const text = textOf(m.content);
       if (m.reasoning || m.reasoning_content) out.push(dim('∴ thinking'), ...wrap(String(m.reasoning || m.reasoning_content)).map(dim), '');
-      if (text.trim()) out.push(bold('● Oasis'), ...wrap(text.trim()), '');
+      if (text.trim()) out.push(bold('● OASIS'), ...wrap(text.trim()), '');
       for (const call of m.tool_calls || []) {
         const fn = call.function || {};
         let args = fn.arguments || '{}';
@@ -361,7 +361,7 @@ export function footerFor({
       else if (used >= 50) parts.push('budget ' + Math.round(used) + '% used');
     }
   }
-  if (String(text).startsWith('!')) parts.push('! shell mode — runs in your terminal; output is shared with Oasis');
+  if (String(text).startsWith('!')) parts.push('! shell mode — runs in your terminal; output is shared with OASIS');
   else if (MODE_LABELS[mode]) parts.push(MODE_LABELS[mode] + ' (shift+tab to cycle)');
   if (queued) parts.push(queued + ' queued');
   if (!parts.length) return '';

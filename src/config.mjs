@@ -193,7 +193,7 @@ export async function loadConfig(options = {}) {
     const parsed = JSON.parse(await readFile(configPath, 'utf8'));
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) saved = parsed;
   } catch (error) {
-    if (error.code !== 'ENOENT') throw new Error('Could not read Oasis configuration: ' + error.message + ' (' + configPath + '). Fix the file, or run oasis setup to replace it; setup keeps a copy of the unreadable file.');
+    if (error.code !== 'ENOENT') throw new Error('Could not read OASIS configuration: ' + error.message + ' (' + configPath + '). Fix the file, or run oasis setup to replace it; setup keeps a copy of the unreadable file.');
   }
 
   let savedBaseURL = '';
@@ -271,7 +271,7 @@ export async function saveDefaultModel(model, options = {}) {
   let parsed;
   try { parsed = JSON.parse(await readFile(configPath, 'utf8')); } catch (error) {
     if (error.code === 'ENOENT') return false;
-    throw new Error('Could not read Oasis configuration: ' + error.message + ' (' + configPath + ').');
+    throw new Error('Could not read OASIS configuration: ' + error.message + ' (' + configPath + ').');
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !(parsed.protocol || parsed.baseURL)) return false;
   parsed.model = String(model).trim();

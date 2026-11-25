@@ -1,4 +1,4 @@
-// Regression: /compact's preview listed "oasis/followups.json" (from Oasis's
+// Regression: /compact's preview listed "oasis/followups.json" (from OASIS's
 // own follow-up reminder, with the dot lost) and missed the bare "math.mjs"
 // the conversation was about.
 import test from 'node:test';

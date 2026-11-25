@@ -15,7 +15,7 @@
 // Domain filtering (Linux and macOS): "allowedDomains": ["registry.npmjs.org", ...]
 //   runs commands under Anthropic's sandbox-runtime (src/sandbox-runtime.mjs),
 //   whose proxy allows only those hosts; the filesystem policy is the same.
-// Other platforms report the OS sandbox as unavailable; Oasis then falls back to
+// Other platforms report the OS sandbox as unavailable; OASIS then falls back to
 // approvals. Enable with settings { "sandbox": { "enabled": true } } or OASIS_SANDBOX=1.
 import { normalizeSshSettings, detectSshRuntime, sshWrap, DEFAULT_SSH_EXCLUDES } from './ssh-backend.mjs';
 import { normalizeDaytonaSettings, ensureDaytonaSync, daytonaSshSettings } from './daytona-backend.mjs';

@@ -35,7 +35,7 @@ test('a chat-only command given as the only argument points to the slash command
     assert.equal(r.code, 1, word + ': ' + r.out);
     assert.match(r.out, new RegExp('/' + word + '\\b'), word + ': ' + r.out);
     assert.match(r.out, /oasis -c/, word);
-    assert.doesNotMatch(r.out, /Oasis>|ECONNREFUSED|could not reach/i, word);
+    assert.doesNotMatch(r.out, /OASIS>|ECONNREFUSED|could not reach/i, word);
   }
 });
 

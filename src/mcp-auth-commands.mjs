@@ -33,7 +33,7 @@ export async function findHttpServer(root, name, { env = process.env } = {}) {
 export async function mcpLogin(root, name, { env = process.env, print = () => {}, session = null, fetch: fetchImpl, open } = {}) {
   const server = await findHttpServer(root, name, { env });
   const result = await loginMcpServer(server, { env, print, ...(fetchImpl ? { fetch: fetchImpl } : {}), ...(open ? { open } : {}) });
-  let message = 'Signed in to ' + name + (result.scope ? ' (scope: ' + result.scope + ')' : '') + '. The token is stored in your Oasis config folder, not in the project.';
+  let message = 'Signed in to ' + name + (result.scope ? ' (scope: ' + result.scope + ')' : '') + '. The token is stored in your OASIS config folder, not in the project.';
   if (session && session.mcpClients) {
     try {
       const client = await reconnectMcpServer(session, server, { env, ...(fetchImpl ? { fetch: fetchImpl } : {}) });

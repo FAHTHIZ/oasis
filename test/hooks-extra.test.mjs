@@ -77,7 +77,7 @@ test('PermissionRequest hooks approve or deny before the user is asked', async (
   closeSession(session);
 });
 
-test('Notification hooks fire when Oasis waits for permission', async (t) => {
+test('Notification hooks fire when OASIS waits for permission', async (t) => {
   const root = await tmp(t);
   const log = path.join(root, 'notes.jsonl');
   const { config } = await scriptedModel(t, [toolCall('c1', 'run_command', { command: process.execPath, args: ['-e', '1'] }), { content: 'done' }]);

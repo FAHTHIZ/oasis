@@ -9,7 +9,7 @@
 // terminalSafe() is for text that should contain no control sequences at all
 // (model replies). guardTerminalStream() wraps a TTY stream so the sequences
 // with side effects outside the screen are dropped from everything written to
-// it, except what Oasis itself writes through writeTrusted() (for example
+// it, except what OASIS itself writes through writeTrusted() (for example
 // /copy falling back to OSC 52).
 
 // eslint-disable-next-line no-control-regex
@@ -28,7 +28,7 @@ export function terminalSafe(text) {
 // Sequences with effects beyond the visible screen: clipboard (OSC 52),
 // window and icon titles (OSC 0, 1, 2), and device control strings (DCS, in
 // 7-bit and 8-bit form). Colours, cursor moves, hyperlinks (OSC 8),
-// notifications (OSC 9, 99) and inline images stay, because Oasis draws with
+// notifications (OSC 9, 99) and inline images stay, because OASIS draws with
 // them.
 // eslint-disable-next-line no-control-regex
 const SIDE_EFFECT_SEQUENCE = /(?:\x1b\]|\x9d)(?:52|[012])\s*;[^\x07\x1b\x9c]*(?:\x07|\x1b\\|\x9c)?|(?:\x1bP|\x90)[^\x1b\x9c]*(?:\x1b\\|\x9c)?/g;
@@ -48,7 +48,7 @@ export function guardTerminalStream(stream) {
   return stream;
 }
 
-/** Writes Oasis's own sequence (such as an OSC 52 copy) past the guard. */
+/** Writes OASIS's own sequence (such as an OSC 52 copy) past the guard. */
 export function writeTrusted(stream, text) {
   return (stream && stream[TRUSTED] ? stream[TRUSTED] : stream.write.bind(stream))(text);
 }

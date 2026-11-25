@@ -35,7 +35,7 @@ export function escalate(state, { evidence, step, signal }) {
   if (!canEscalate(state)) return '';
   const reason = String(evidence || '').replace(/^I[’']m stuck:\s*/, '').trim();
   state.done = { step, signal, from: state.from, to: state.to, reason: reason.slice(0, 500) };
-  return '<system-reminder>Oasis handed this task from ' + state.from + ' to you (' + state.to + ') because the run was stuck: ' +
+  return '<system-reminder>OASIS handed this task from ' + state.from + ' to you (' + state.to + ') because the run was stuck: ' +
     reason + ' Everything above is the earlier model\'s work. Do not repeat what already failed. Re-read the exact error and the code it points to, ' +
     'find the cause, and finish the task the user asked for.</system-reminder>';
 }

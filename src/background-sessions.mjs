@@ -1,5 +1,5 @@
 // Background sessions (`--bg`, /background and /bg): a detached headless
-// Oasis process works on a task while the terminal is free. Each run has a registry entry
+// OASIS process works on a task while the terminal is free. Each run has a registry entry
 // in <oasis config>/background/<id>.json and a stream-json log next to it.
 //
 //   oasis --bg "task"          start a new background session

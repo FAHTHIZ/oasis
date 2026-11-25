@@ -311,7 +311,7 @@ test('startup tip names the project apps that are not connected', async (t) => {
   const { appTip } = await import('../src/terminal-ui.mjs');
   assert.equal(await appTip(root, env), '');
   await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ dependencies: { stripe: '1', '@sentry/node': '8' } }));
-  assert.equal(await appTip(root, env), 'This project uses Stripe and Sentry. /connect stripe sentry gives Oasis their tools.');
+  assert.equal(await appTip(root, env), 'This project uses Stripe and Sentry. /connect stripe sentry gives OASIS their tools.');
   assert.equal(await appTip(root, { ...env, OASIS_TIP: 'off' }), '');
 });
 

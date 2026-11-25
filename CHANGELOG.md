@@ -10,6 +10,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- The product name is spelled OASIS everywhere in the terminal and the web app; about 290 messages still said "Oasis". Settings folders on macOS and Windows keep their existing names.
 - Terminal: when the bytes of an arrow key or Shift+Tab arrive a little apart (SSH, a busy machine), the rest is decoded as the key instead of typing `[Z` or `[A` into the prompt. Esc stays instant and vim's Esc-then-key is unchanged.
 - Web app: archiving a session shows an Undo button in the toast instead of telling you to run `oasis sessions unarchive` in a terminal.
 - Terminal voice dictation before the first message: `/voice` no longer prints "on" and then "Voice dictation: off", a second `/voice` turns it off again, and Alt+V honours a saved `/voice on` instead of saying dictation is off. With no transcription key, Alt+V now says so before recording rather than after you have spoken.

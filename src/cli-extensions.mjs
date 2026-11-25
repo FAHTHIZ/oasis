@@ -181,14 +181,14 @@ export async function manageMcp(rest, root = process.cwd(), { approve, askLine, 
     const command = rest[separator + 1];
     const args = rest.slice(separator + 2);
     const entry = validateMcpServerConfig({ name, command, args, passEnv, enabled: true });
-    const summary = 'Configure MCP server "' + name + '"?\nExecutable: ' + command + '\nArguments: ' + JSON.stringify(args) + '\nEnvironment passthrough: ' + (passEnv.join(', ') || 'none') + '\nThis starts third-party code inside your user account when Oasis sessions start. Review the server source and package identity before approving.';
+    const summary = 'Configure MCP server "' + name + '"?\nExecutable: ' + command + '\nArguments: ' + JSON.stringify(args) + '\nEnvironment passthrough: ' + (passEnv.join(', ') || 'none') + '\nThis starts third-party code inside your user account when OASIS sessions start. Review the server source and package identity before approving.';
     if (!(await approve(summary, true, false))) {
       stdout.write('MCP configuration cancelled. The previous configuration was kept.\n');
       process.exitCode = 1;
       return;
     }
     const output = await saveMcpServers(config.servers.filter((server) => server.name !== name).concat(entry), { configPath: config.configPath });
-    stdout.write('Configured MCP server "' + name + '" in ' + output + '. It will start next time you run Oasis.\n');
+    stdout.write('Configured MCP server "' + name + '" in ' + output + '. It will start next time you run OASIS.\n');
     return;
   }
   if (action === 'remove') {
@@ -270,7 +270,7 @@ export async function manageExternalExtensions(root, args, autoApprove, { approv
   if (!['self', 'project', 'both'].includes(scope)) throw new Error('Scope must be self, project, or both.');
   if (action === 'list') {
     const data = await listInstalledExtensions({ root });
-    stdout.write('Oasis external agent/skill extensions\n\n');
+    stdout.write('OASIS external agent/skill extensions\n\n');
     if (!data.extensions.length) { stdout.write('No external extensions are installed yet.\n'); return; }
     for (const item of data.extensions) {
       stdout.write(item.name + ' [' + item.scope + '] — ' + item.importedFiles + ' Markdown prompt(s)\n');
@@ -291,7 +291,7 @@ export async function manageExternalExtensions(root, args, autoApprove, { approv
     stdout.write('Importable Markdown prompts: ' + report.importCount + (report.limited ? ' (bounded selection)' : '') + '\n');
     stdout.write('Executable/source files detected (not imported): ' + report.executableFilesDetected + '\n');
     stdout.write('Policy: ' + report.executionPolicy + '\n');
-    stdout.write('\nImportable Markdown commands (registered as Oasis aliases after installation):\n');
+    stdout.write('\nImportable Markdown commands (registered as OASIS aliases after installation):\n');
     for (const command of report.commands || []) stdout.write('  /' + command.alias + ' [' + command.sourceFormat + '] — ' + command.sourcePath + '\n');
     if (!(report.commands || []).length) stdout.write('  None detected in supported Markdown command layouts.\n');
     stdout.write('\nNormalized adapter plan (detection does not activate features):\n');
@@ -330,7 +330,7 @@ export async function manageExternalExtensions(root, args, autoApprove, { approv
     }
     const approved = await approve(
       'Update ' + report.repository.fullName + ' in ' + scope + ' to reviewed commit ' + report.repository.commitSha +
-      '? Oasis verifies existing file hashes, keeps the previous revision for rollback, and does not execute scripts or enable MCP servers.',
+      '? OASIS verifies existing file hashes, keeps the previous revision for rollback, and does not execute scripts or enable MCP servers.',
       false, autoApprove
     );
     if (!approved) { stdout.write('Update cancelled; the installed revision was not changed.\n'); return; }
@@ -413,7 +413,7 @@ export async function manageExternalExtensions(root, args, autoApprove, { approv
     const approved = await approve(
       'Import ' + report.importCount + ' Markdown prompt file(s) from ' + report.repository.fullName +
       ' at commit ' + report.repository.commitSha + ' into ' + scope +
-      '? Oasis will not execute repository scripts, install packages, or enable MCP servers.',
+      '? OASIS will not execute repository scripts, install packages, or enable MCP servers.',
       false,
       autoApprove
     );
@@ -428,7 +428,7 @@ export async function manageExternalExtensions(root, args, autoApprove, { approv
     const name = positional[0];
     if (!name) throw new Error('Usage: oasis extensions remove NAME --scope self|project');
     if (!['self', 'project'].includes(scope)) throw new Error('Remove accepts scope self or project, not both.');
-    if (!(await approve('Remove the Oasis-managed "' + name + '" extension from scope "' + scope + '"? Any edited or unexpected files cause removal to be refused.', false, autoApprove))) {
+    if (!(await approve('Remove the OASIS-managed "' + name + '" extension from scope "' + scope + '"? Any edited or unexpected files cause removal to be refused.', false, autoApprove))) {
       stdout.write('Removal cancelled.\n'); return;
     }
     const result = await removeGitHubExtension({ root, scope, name });

@@ -148,7 +148,7 @@ export async function doctor(args = [], root = process.cwd(), { fallbackModel = 
   await doctorWorkspaceReport(root, { modelConfigured, nodeOK });
 }
 
-// Workspace-level checks: tools Oasis relies on, settings/trust, sandbox, MCP,
+// Workspace-level checks: tools OASIS relies on, settings/trust, sandbox, MCP,
 // memory and extension files. Problems are listed with a suggested fix.
 export async function updateOasis(args = [], { ask } = {}) {
   if (args.includes('--help') || args.includes('-h')) {
@@ -218,7 +218,7 @@ export async function updateOasis(args = [], { ask } = {}) {
   } finally {
     if (verified) { const { rm } = await import('node:fs/promises'); await rm(verified.dir, { recursive: true, force: true }).catch(() => {}); }
   }
-  stdout.write('Oasis updated to ' + latest.tag + ' (' + latest.sha.slice(0, 7) + '). Restart any running oasis sessions.\n');
+  stdout.write('OASIS updated to ' + latest.tag + ' (' + latest.sha.slice(0, 7) + '). Restart any running oasis sessions.\n');
 }
 
 

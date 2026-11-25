@@ -62,7 +62,7 @@ export const COMMAND_ALIASES = { tokens: 'context', approvals: 'permissions', as
 
 export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
-  notify: 'Send a structured, non-executable message to another live Oasis session (/notify lists them; /notify SESSION [--warning|--blocking] MESSAGE)',
+  notify: 'Send a structured, non-executable message to another live OASIS session (/notify lists them; /notify SESSION [--warning|--blocking] MESSAGE)',
   inbox: 'Read and manage durable messages for this session (/inbox [list|read ID|dismiss ID])',
   artifact: 'Create and update a local investigation page (/artifact NAME, /artifact add NAME TYPE DETAILS)',
   status: 'Show the model provider configuration',
@@ -77,7 +77,7 @@ export const BUILTIN_COMMANDS = {
   cost: 'Show token usage for this session',
   usage: 'Show token usage for this session (same as /cost)',
   effort: 'Show or set reasoning effort for this session (/effort [low|medium|high|max|auto])',
-  'install-github-app': 'Set up the Oasis GitHub Action for this repo: writes .github/workflows/oasis.yml (/install-github-app [@trigger] [force] [save])',
+  'install-github-app': 'Set up the OASIS GitHub Action for this repo: writes .github/workflows/oasis.yml (/install-github-app [@trigger] [force] [save])',
   'auto-commit': 'Commit each turn\'s file changes to Git automatically, Aider-style (/auto-commit [on|off])',
   fast: 'Toggle fast mode: faster output on Opus 5.5 / 5 / 4.8 via the Anthropic API, at a higher price (/fast [on|off])',
   model: 'Show or switch the model for this session (/model [id] [effort])',
@@ -139,7 +139,7 @@ export const BUILTIN_COMMANDS = {
   sandbox: 'Show or change the OS sandbox for this session (/sandbox [on|off|network on|network off])',
   config: 'Settings pane (theme, model, mode, editor, output style, verbose, auto-compact, memory...); /config list | get KEY | set KEY VALUE',
   doctor: 'Check this workspace: tools, language servers, sandbox, settings, provider',
-  'release-notes': 'Show recent changes to Oasis',
+  'release-notes': 'Show recent changes to OASIS',
   export: 'Save this conversation as Markdown or a standalone HTML page (/export FILE.md | FILE.html)',
   receipt: 'Write a signed, verifiable receipt of this session\'s work (/receipt [FILE.json]); check it with oasis receipt verify',
   resume: 'List saved sessions or resume one (/resume [ID])',
@@ -148,7 +148,7 @@ export const BUILTIN_COMMANDS = {
   focus: 'Show the last prompt, a one-line summary of each tool call with edit line counts, and the final response',
   background: 'Move this conversation to a background session and free the terminal (/background [one more instruction])',
   debug: 'Turn on debug logging and troubleshoot an issue from the session debug log (/debug [description] | /debug off)',
-  'team-onboarding': 'Write a team onboarding guide for this project from your last 30 days of Oasis usage (/team-onboarding [DAYS])',
+  'team-onboarding': 'Write a team onboarding guide for this project from your last 30 days of OASIS usage (/team-onboarding [DAYS])',
   heapdump: 'Write a JavaScript heap snapshot and memory breakdown for diagnosing high memory use',
   chrome: 'Turn the browser tool on or off for this session (/chrome [on|off|status]; same as /browser)',
   browser: 'Turn the browser tool on or off, or see which engine runs it (/browser [on|off|status|install])',
@@ -173,7 +173,7 @@ export const BUILTIN_COMMANDS = {
   ultrareview: 'Deep multi-agent code review with independent verification of every finding; alias for /code-review ultra',
   simplify: 'Review changed code for reuse, simplicity, efficiency and abstraction, then apply fixes (/simplify [target])',
   verify: 'Build and run the app to confirm a change really works (/verify [what to check])',
-  test: 'Run the tests and hand any failure to Oasis to fix (/test [COMMAND]; defaults to the autoTest setting or npm test)',
+  test: 'Run the tests and hand any failure to OASIS to fix (/test [COMMAND]; defaults to the autoTest setting or npm test)',
   batch: 'Plan a large change as independent units and run them in parallel worktree subagents (/batch INSTRUCTION)',
   schedule: 'Schedule a prompt in this session (/schedule CRON PROMPT, /schedule list, /schedule delete ID), or a durable routine (/schedule durable DESCRIPTION, /schedule routines)',
   'fewer-permission-prompts': 'Find safe read-only commands you approve often and add them to the project allowlist',
@@ -188,14 +188,14 @@ export const BUILTIN_COMMANDS = {
   'reload-plugins': 'Reload plugins, skills, agents, hooks and MCP servers without losing the conversation',
   'reload-skills': 'Re-scan skill and command directories without losing the conversation',
   'list-agents': 'List running subagents, agent teams and background processes (alias /peers)',
-  statusline: 'Have Oasis set up a status line command for you (/statusline [what to show])',
-  'update-config': 'Describe a settings change and have Oasis edit the matching settings.json',
+  statusline: 'Have OASIS set up a status line command for you (/statusline [what to show])',
+  'update-config': 'Describe a settings change and have OASIS edit the matching settings.json',
   theme: 'List or switch color themes (/theme NAME, custom:<slug>, plugin:<plugin>:<slug>, auto)',
   'terminal-setup': 'Set up Shift+Enter for newlines in your terminal',
-  'privacy-settings': 'Show what Oasis sends where and how to turn things off',
+  'privacy-settings': 'Show what OASIS sends where and how to turn things off',
   stop: 'Stop background agents and processes in this session',
   init: 'Inspect this project and create or carefully update OASIS.md',
-  exit: 'Leave Oasis'
+  exit: 'Leave OASIS'
 };
 
 export const SKILL_COMMANDS = Object.freeze({
@@ -787,7 +787,7 @@ export async function runBuiltinCommand(name, argument, state) {
           'Command/build/test output (subset of history): ~' + formatNumber(tokensFor(commandMessages)) + ' tokens across ' + commandMessages.length + ' tool results.',
           'Largest individual messages/tool results:',
           ...largest.map((item) => '  #' + item.index + ' ' + item.role + (item.name ? '/' + item.name : '') + ' ~' + formatNumber(item.tokens) + ' tokens — ' + item.preview),
-          'Token figures are estimates (o200k BPE counts). Provider-specific tokenization and hidden request metadata are unavailable to Oasis.'
+          'Token figures are estimates (o200k BPE counts). Provider-specific tokenization and hidden request metadata are unavailable to OASIS.'
         ].join('\n') };
       }
       return { output: [
@@ -799,7 +799,7 @@ export async function runBuiltinCommand(name, argument, state) {
         '  Conversation (' + (session.messages.length - 1) + ' messages): ~' + formatNumber(Math.max(0, conversationTokens - system)),
         ...(startup > 15000 ? ['Warning: startup context is over 15,000 tokens before your messages. Disconnect unused tools or trim long project instructions.'] : []),
         'These are estimates. Tool schemas and hidden provider metadata can change the real count.',
-        'Oasis compacts automatically at about 60% of the window. Override the window with contextWindow in the provider config or OASIS_CONTEXT_WINDOW. Use /compact to summarize now.'
+        'OASIS compacts automatically at about 60% of the window. Override the window with contextWindow in the provider config or OASIS_CONTEXT_WINDOW. Use /compact to summarize now.'
       ].join('\n') };
     }
     case 'teams': {
@@ -1167,7 +1167,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
       const log = await runGitTool('git_log', appRoot, { limit: Number.parseInt(argument, 10) || 15 }, { env }).catch(() => null);
       if (!log || !log.ok || !log.commits.length) return { output: 'Release notes: https://github.com/FAHTHIZ/oasis/commits/main (this install has no Git history). Update with oasis update.' };
-      return { output: ['Recent Oasis changes:', ...log.commits.map((c) => '  ' + c.date + '  ' + c.subject), 'Full history: https://github.com/FAHTHIZ/oasis/commits/main'].join('\n') };
+      return { output: ['Recent OASIS changes:', ...log.commits.map((c) => '  ' + c.date + '  ' + c.subject), 'Full history: https://github.com/FAHTHIZ/oasis/commits/main'].join('\n') };
     }
     case 'goal': {
       const stopWords = ['clear', 'stop', 'off', 'reset', 'none', 'cancel'];
@@ -1247,10 +1247,10 @@ export async function runBuiltinCommand(name, argument, state) {
       if (String(argument).trim().toLowerCase() === 'off') { dbg.disableDebug(); return { output: 'Debug logging off.' }; }
       const file = dbg.debugEnabled() ? dbg.debugFile() : dbg.enableDebug({ categories: env.OASIS_DEBUG || 'all', file: env.OASIS_DEBUG_FILE || null, env, sessionId: session && session.sessionId });
       if (session) session.debugFile = file;
-      if (!argument) return { output: 'Debug logging on: ' + file + '\nReproduce the problem, then run /debug DESCRIPTION to have Oasis read the log and troubleshoot it.' };
+      if (!argument) return { output: 'Debug logging on: ' + file + '\nReproduce the problem, then run /debug DESCRIPTION to have OASIS read the log and troubleshoot it.' };
       return {
         output: 'Debug log: ' + file + '. Troubleshooting.',
-        prompt: 'Troubleshoot this Oasis problem: ' + argument + '\n\nThe session debug log is at ' + file + ' (lines tagged [API], [TOOLS], [HOOKS], [MCP], [PERMISSIONS], [SESSION]). Read the end of it with run_command (for example `tail -n 200 ' + JSON.stringify(file) + '`), together with relevant settings files (.claude/settings.json, .oasis/settings.json, ~/.claude/settings.json), hook scripts and MCP configs. Identify the root cause, explain it in plain words, and propose or apply the fix. If the log does not show the problem yet, say what to reproduce.'
+        prompt: 'Troubleshoot this OASIS problem: ' + argument + '\n\nThe session debug log is at ' + file + ' (lines tagged [API], [TOOLS], [HOOKS], [MCP], [PERMISSIONS], [SESSION]). Read the end of it with run_command (for example `tail -n 200 ' + JSON.stringify(file) + '`), together with relevant settings files (.claude/settings.json, .oasis/settings.json, ~/.claude/settings.json), hook scripts and MCP configs. Identify the root cause, explain it in plain words, and propose or apply the fix. If the log does not show the problem yet, say what to reproduce.'
       };
     }
     case 'team-onboarding': {
@@ -1261,7 +1261,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const usage = [insightsSummaryText(stats), 'Slash commands used: ' + top(stats.commands, 12) + '.', 'Files touched most: ' + top(stats.files, 12) + '.', 'File types: ' + top(stats.extensions, 8) + '.'].join('\n');
       return {
         output: '[team-onboarding] Drafting an onboarding guide from ' + stats.sessions + ' sessions in the last ' + days + ' days.',
-        prompt: 'Write a team onboarding guide for working on this project with Oasis (or Claude Code, which reads the same files). Base it on how the project is actually worked on. Usage over the last ' + days + ' days:\n' + usage + '\n\nAlso read, read-only: CLAUDE.md / AGENTS.md / OASIS.md and .claude/rules, .claude/settings.json and .oasis/settings.json (permissions, hooks, env; never copy secrets), .claude/commands, .claude/agents and .claude/skills, .mcp.json, the README, package scripts or Makefile targets, and the test setup. Then write ONBOARDING.md at the workspace root (ask before overwriting an existing file) with these sections: What this project is; Setup (install, provider/model config, MCP servers to connect); Everyday workflow (the commands, skills and agents people actually use, with when to use each); Project conventions the agent already follows (from the instruction files); Permissions and hooks in place, and why; Testing and verification; Common pitfalls (from the friction numbers above: tool errors, denials, corrections); and First tasks to try. Keep it concrete and short, and say where each fact came from.'
+        prompt: 'Write a team onboarding guide for working on this project with OASIS (or Claude Code, which reads the same files). Base it on how the project is actually worked on. Usage over the last ' + days + ' days:\n' + usage + '\n\nAlso read, read-only: CLAUDE.md / AGENTS.md / OASIS.md and .claude/rules, .claude/settings.json and .oasis/settings.json (permissions, hooks, env; never copy secrets), .claude/commands, .claude/agents and .claude/skills, .mcp.json, the README, package scripts or Makefile targets, and the test setup. Then write ONBOARDING.md at the workspace root (ask before overwriting an existing file) with these sections: What this project is; Setup (install, provider/model config, MCP servers to connect); Everyday workflow (the commands, skills and agents people actually use, with when to use each); Project conventions the agent already follows (from the instruction files); Permissions and hooks in place, and why; Testing and verification; Common pitfalls (from the friction numbers above: tool errors, denials, corrections); and First tasks to try. Keep it concrete and short, and say where each fact came from.'
       };
     }
     case 'heapdump': {
@@ -1485,7 +1485,7 @@ export async function runBuiltinCommand(name, argument, state) {
         if (pkg && pkg.scripts && typeof pkg.scripts.test === 'string' && !/no test specified/i.test(pkg.scripts.test)) { command = 'npm test'; source = 'package.json'; }
       }
       if (!command) {
-        return { output: '[test] No test command is configured, so Oasis will find and run the tests (commands still ask for approval). Set one with /test COMMAND, or "autoTest" in settings.', prompt: 'Find how this project runs its tests (package scripts, Makefile, pyproject, CI config, README), run them, and report the exact command and result. If any fail, fix the cause with minimal changes and rerun them. Do not weaken, skip, or delete tests.' };
+        return { output: '[test] No test command is configured, so OASIS will find and run the tests (commands still ask for approval). Set one with /test COMMAND, or "autoTest" in settings.', prompt: 'Find how this project runs its tests (package scripts, Makefile, pyproject, CI config, README), run them, and report the exact command and result. If any fail, fix the cause with minimal changes and rerun them. Do not weaken, skip, or delete tests.' };
       }
       const { runAutoTest } = await import('./auto-test.mjs');
       if (typeof state.print === 'function') state.print('[test] Running ' + command + (source === 'argument' ? '' : ' (from ' + source + ')') + '…');
@@ -1496,7 +1496,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const lines = result.output.trim().split('\n');
       const status = result.timedOut ? 'timed out' : 'failed with exit code ' + result.exitCode;
       return {
-        output: '[test] ' + command + ' ' + status + ' (' + seconds + '). Last lines:\n' + lines.slice(-12).join('\n') + '\n[test] Handing the failure to Oasis.',
+        output: '[test] ' + command + ' ' + status + ' (' + seconds + '). Last lines:\n' + lines.slice(-12).join('\n') + '\n[test] Handing the failure to OASIS.',
         prompt: ['I ran the tests myself and they ' + status + '.', 'Command: ' + command, 'Output (tail):', '```', result.output.trim() || '(no output)', '```', 'Find the cause and fix it with minimal changes, then rerun the same command to confirm. Do not weaken, skip, or delete tests unless I asked for that. If the failure is unrelated to recent changes, say so plainly.'].join('\n')
       };
     }
@@ -1537,7 +1537,7 @@ export async function runBuiltinCommand(name, argument, state) {
       } catch (error) { return { output: error.message + '\nUsage: /schedule CRON PROMPT, for example /schedule "0 9 * * 1-5" summarize open PRs' }; }
     }
     case 'fewer-permission-prompts':
-      return { output: '[permissions] Looking for safe commands to allowlist.', prompt: 'Help me get fewer permission prompts. Read this project\'s saved Oasis sessions and settings (.oasis/settings.json, .oasis/settings.local.json; sessions are listed by /resume) and find commands and MCP tools I approved repeatedly. Keep only clearly read-only ones (for example git status, git diff, git log, ls, test runners, linters, read-only MCP getters). Never include anything that writes, deletes, installs, pushes, or runs arbitrary code (no rm, curl | sh, npm install, git push, bash -c). Show the prioritized list with a one-line reason each, then add them to permissions.allow in .oasis/settings.json using rules like "run_command(git status)" or "run_command(npm test:*)" after I approve.' };
+      return { output: '[permissions] Looking for safe commands to allowlist.', prompt: 'Help me get fewer permission prompts. Read this project\'s saved OASIS sessions and settings (.oasis/settings.json, .oasis/settings.local.json; sessions are listed by /resume) and find commands and MCP tools I approved repeatedly. Keep only clearly read-only ones (for example git status, git diff, git log, ls, test runners, linters, read-only MCP getters). Never include anything that writes, deletes, installs, pushes, or runs arbitrary code (no rm, curl | sh, npm install, git push, bash -c). Show the prioritized list with a one-line reason each, then add them to permissions.allow in .oasis/settings.json using rules like "run_command(git status)" or "run_command(npm test:*)" after I approve.' };
     case 'diff': {
       const { spawnSync } = await import('node:child_process');
       const git = (args) => spawnSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, env });
@@ -1597,10 +1597,10 @@ export async function runBuiltinCommand(name, argument, state) {
       return { output: lines.join('\n') };
     }
     case 'statusline':
-      return { output: '[statusline] Setting up a status line.', prompt: 'Set up an Oasis status line for me' + (argument ? ': ' + argument : ' that shows the model, the current directory and the Git branch') + '. Oasis runs the "statusLine" command from settings ({ "statusLine": { "type": "command", "command": "...", "padding": 0 } }) and pipes JSON session data on stdin (model.display_name, workspace.current_dir, cost, session_id and so on); the first line of stdout is shown under the prompt, ANSI colors allowed. If ~/.claude/settings.json already has a statusLine, reuse it. Write a small script under ~/.config/oasis/ (or the OASIS config directory), make it executable, test it by piping sample JSON into it, then add statusLine to my user settings file. Show me the result.' };
+      return { output: '[statusline] Setting up a status line.', prompt: 'Set up an OASIS status line for me' + (argument ? ': ' + argument : ' that shows the model, the current directory and the Git branch') + '. OASIS runs the "statusLine" command from settings ({ "statusLine": { "type": "command", "command": "...", "padding": 0 } }) and pipes JSON session data on stdin (model.display_name, workspace.current_dir, cost, session_id and so on); the first line of stdout is shown under the prompt, ANSI colors allowed. If ~/.claude/settings.json already has a statusLine, reuse it. Write a small script under ~/.config/oasis/ (or the OASIS config directory), make it executable, test it by piping sample JSON into it, then add statusLine to my user settings file. Show me the result.' };
     case 'update-config':
       if (!argument) return { output: 'Usage: /update-config DESCRIPTION (for example: /update-config always allow npm test, or /update-config use the light theme)' };
-      return { output: '[config] Updating settings.', prompt: 'Change my Oasis settings: ' + argument + '\n\nPick the right file: project .oasis/settings.json (shared with the team), .oasis/settings.local.json (personal, this project) or the user settings file in the OASIS config directory (all projects). Claude Code settings keys work (permissions.allow/deny/ask, hooks, env, model, statusLine, theme, outputStyle, sandbox, enabledPlugins, and so on). Read the file first, make the smallest edit that keeps it valid JSON, then tell me what changed and where.' };
+      return { output: '[config] Updating settings.', prompt: 'Change my OASIS settings: ' + argument + '\n\nPick the right file: project .oasis/settings.json (shared with the team), .oasis/settings.local.json (personal, this project) or the user settings file in the OASIS config directory (all projects). Claude Code settings keys work (permissions.allow/deny/ask, hooks, env, model, statusLine, theme, outputStyle, sandbox, enabledPlugins, and so on). Read the file first, make the smallest edit that keeps it valid JSON, then tell me what changed and where.' };
     case 'theme': {
       // Claude Code-compatible themes; the choice is saved as "theme" in user settings.
       const themes = await import('./themes.mjs');
@@ -1759,12 +1759,12 @@ export async function runBuiltinCommand(name, argument, state) {
       ].join('\n') };
     case 'privacy-settings':
       return { output: [
-        'Oasis has no telemetry. Nothing is sent anywhere except:',
+        'OASIS has no telemetry. Nothing is sent anywhere except:',
         '  - your configured model provider (' + ((session && session.config && session.config.protocol) || 'see /status') + '): prompts, file contents you share, tool results',
         '  - web_search / fetch_url when the model uses them (turn off with "permissions": {"deny": ["web_search", "fetch_url"]})',
         '  - MCP servers you configured (see /mcp)',
         'Local data: saved sessions (oasis --no-session-persistence to skip saving), prompt history in ~/.oasis/history.jsonl (OASIS_NO_HISTORY=1), auto memory (/memory).',
-        'For fully local use, point Oasis at Ollama or LM Studio with /setup.'
+        'For fully local use, point OASIS at Ollama or LM Studio with /setup.'
       ].join('\n') };
     case 'stop': {
       if (!session) return { output: 'Nothing is running.' };
@@ -2072,7 +2072,7 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!words.length || (words.length === 1 && ['list', 'peers', '--list'].includes(words[0].toLowerCase()))) {
         const peers = await messaging.listPeerSessions(session, { env });
         const usageLine = 'Usage: /notify SESSION [--warning|--blocking] MESSAGE   (SESSION is an ID or name from this list)';
-        if (!peers.length) return { output: 'No other live Oasis sessions in this workspace.\n' + usageLine };
+        if (!peers.length) return { output: 'No other live OASIS sessions in this workspace.\n' + usageLine };
         return { output: 'Live sessions in this workspace:\n' + peers.map((peer) => '  ' + peer.id + (peer.name ? '  ' + peer.name : '') + '  ' + peer.state).join('\n') + '\n' + usageLine };
       }
       const target = words.shift();
@@ -2321,7 +2321,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const root = (session && session.root) || state.root || process.cwd();
       if (sub === 'list') {
         const proposals = await learning.listSkillProposals(root, { env });
-        if (!proposals.length) return { output: 'No learned-skill proposals yet. After a non-trivial task is successfully verified, Oasis may propose a reusable skill for your review.' };
+        if (!proposals.length) return { output: 'No learned-skill proposals yet. After a non-trivial task is successfully verified, OASIS may propose a reusable skill for your review.' };
         return { output: [
           'Learned skill proposals:',
           ...proposals.map((item) => '  ' + item.id + '  ' + item.status.padEnd(8) + ' ' + item.scope.padEnd(7) + ' ' + item.name + ' — ' + item.description),
@@ -2500,13 +2500,13 @@ function messageText(content) {
 }
 
 export function conversationMarkdown(session) {
-  const lines = ['# Oasis conversation', '', 'Workspace: ' + session.root, 'Model: ' + (session.config && session.config.model || 'unknown'), 'Exported: ' + new Date().toISOString(), ''];
+  const lines = ['# OASIS conversation', '', 'Workspace: ' + session.root, 'Model: ' + (session.config && session.config.model || 'unknown'), 'Exported: ' + new Date().toISOString(), ''];
   for (const message of session.messages.slice(1)) {
     if (message.role === 'user' && typeof message.content === 'string' && isOasisAuthoredPrompt(message.content)) continue;
     if (message.role === 'user') lines.push('## User', '', messageText(message.content), '');
     else if (message.role === 'assistant') {
       const text = messageText(message.content);
-      if (text) lines.push('## Oasis', '', text, '');
+      if (text) lines.push('## OASIS', '', text, '');
       for (const call of message.tool_calls || []) lines.push('> Tool call: `' + (call.function && call.function.name) + '` ' + String(call.function && call.function.arguments || '').slice(0, 300), '');
     } else if (message.role === 'tool') {
       const text = messageText(message.content);

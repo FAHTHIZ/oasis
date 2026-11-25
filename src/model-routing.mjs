@@ -56,7 +56,7 @@ function hasComplexSignals(classification) {
 /**
  * Conservative model routing.
  *
- * The local classifier supplies a deterministic task classification. Oasis
+ * The local classifier supplies a deterministic task classification. OASIS
  * retains its own safety, mutation, tool-intent and benchmark-hint overrides;
  * only clearly simple, high-confidence, non-actionable requests can use the
  * configured cheaper model.

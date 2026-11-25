@@ -130,7 +130,7 @@ test('--tools limits the offered tools, --system-prompt replaces the prompt, --a
   assert.ok(!names.includes('run_command'));
   assert.ok(!names.includes('write_file'));
   assert.ok(session.messages[0].content.startsWith('You are a test.'));
-  assert.ok(!session.messages[0].content.includes('Oasis OSS'));
+  assert.ok(!session.messages[0].content.includes('OASIS OSS'));
   assert.equal(session.agents.checker.description, 'Checks things');
   assert.deepEqual(session.agents.checker.tools, ['read_file']);
 });
@@ -210,7 +210,7 @@ test('a headless fallback is announced on stderr and as a stream-json event', as
   assert.deepEqual({ from: event.from, to: event.to }, { from: 'does-not-exist', to: 'backup' });
 });
 
-test('the terminal prints Oasis notices with their own tag, and hook output as [hook]', async () => {
+test('the terminal prints OASIS notices with their own tag, and hook output as [hook]', async () => {
   const { sessionNoticeLine } = await import('../src/cli.mjs');
   assert.equal(sessionNoticeLine('[fallback] main is overloaded; switched to backup.'), '[fallback] main is overloaded; switched to backup.');
   assert.equal(sessionNoticeLine('[key-pool] provider returned 429; switched to the next API key.'), '[key-pool] provider returned 429; switched to the next API key.');

@@ -9,7 +9,7 @@ export function formatLspVerificationBlocker(issues) {
     issue.startsWith('LSP verification unavailable') || issue.startsWith('LSP reports ')
   );
   if (!blockers.length) return null;
-  return 'Verification incomplete: Oasis did not mark this change as successful because the LSP gate remains blocked.\n' +
+  return 'Verification incomplete: OASIS did not mark this change as successful because the LSP gate remains blocked.\n' +
     blockers.map((issue) => '- ' + issue).join('\n') +
     '\nFix or explicitly resolve these diagnostics, then run verification again.';
 }

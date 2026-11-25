@@ -1615,7 +1615,7 @@ async function authorizeCall(session, name, args, context, options) {
     }
     if (!baseApproval) return false;
     if (hasHooks(session.hooks, 'Notification')) {
-      runHooks('Notification', { session_id: session.sessionId || 'unsaved', notification_type: 'permission_prompt', title: 'Permission needed', message: 'Oasis needs your permission to use ' + (CLAUDE_TOOL_NAMES[name] || name) }, hookOptions(session, context.env))
+      runHooks('Notification', { session_id: session.sessionId || 'unsaved', notification_type: 'permission_prompt', title: 'Permission needed', message: 'OASIS needs your permission to use ' + (CLAUDE_TOOL_NAMES[name] || name) }, hookOptions(session, context.env))
         .then((note) => session.hookMessages.push(...note.messages)).catch(() => {});
     }
     const nearMiss = policy && typeof policy.allowNearMiss === 'function' ? policy.allowNearMiss(name, args) : '';
@@ -3881,7 +3881,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       }
       pruneHistory(session);
       return {
-        text: 'Oasis stopped before executing the requested tools because the token budget was exhausted.' + (text ? '\nLast model note: ' + text : ''),
+        text: 'OASIS stopped before executing the requested tools because the token budget was exhausted.' + (text ? '\nLast model note: ' + text : ''),
         toolCalls: totalToolCalls,
         tokensUsed,
         tokenBudget,
@@ -3953,7 +3953,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         role: 'tool',
         tool_call_id: call.id,
         name,
-        content: 'Not executed: Oasis tool-call cap reached (' + MAX_TOOL_BATCH + ' calls per batch, ' + maxToolCalls + ' per task, ' + MAX_SESSION_TOOL_CALLS + ' per session). This call did not run.'
+        content: 'Not executed: OASIS tool-call cap reached (' + MAX_TOOL_BATCH + ' calls per batch, ' + maxToolCalls + ' per task, ' + MAX_SESSION_TOOL_CALLS + ' per session). This call did not run.'
       });
     }
 
@@ -4074,7 +4074,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     if (totalToolCalls >= maxToolCalls || session.toolCallsThisSession >= MAX_SESSION_TOOL_CALLS) {
       pruneHistory(session);
       return {
-        text: (options.maxToolCalls ? 'Oasis reached this bounded run’s tool-call cap (' + maxToolCalls + ')' : 'Oasis reached its tool-call budget (' + maxToolCalls + '; raise maxToolCalls or OASIS_MAX_TOOL_CALLS)') + '. Review the work completed so far; the task may be incomplete.',
+        text: (options.maxToolCalls ? 'OASIS reached this bounded run’s tool-call cap (' + maxToolCalls + ')' : 'OASIS reached its tool-call budget (' + maxToolCalls + '; raise maxToolCalls or OASIS_MAX_TOOL_CALLS)') + '. Review the work completed so far; the task may be incomplete.',
         toolCalls: totalToolCalls,
         tokensUsed,
         tokenBudget,
@@ -4104,11 +4104,11 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     if (options.onUsage && final.usage) options.onUsage({ ...final.usage, costUsd: finalCost, step: maxSteps + 1 });
   } catch (error) {
     if (options.signal && options.signal.aborted) throw error;
-    const text = 'Oasis reached its tool-step limit and could not get a final provider summary: ' + error.message;
+    const text = 'OASIS reached its tool-step limit and could not get a final provider summary: ' + error.message;
     pruneHistory(session);
     return { text, toolCalls: totalToolCalls, tokensUsed, tokenBudget, finished: false, limitReached: true, verification: verificationSummary(verification) };
   }
-  const baseFinalText = typeof final.content === 'string' && final.content.trim() ? final.content.trim() : 'Oasis reached its tool-step limit without a final text summary.';
+  const baseFinalText = typeof final.content === 'string' && final.content.trim() ? final.content.trim() : 'OASIS reached its tool-step limit without a final text summary.';
   const finalIssues = verificationIssues(verification);
   const finalText = finalIssues.length ? baseFinalText + '\n\nVerification incomplete: ' + finalIssues.join('; ') + '.' : baseFinalText;
   const finalMessage = { role: 'assistant', content: finalText };

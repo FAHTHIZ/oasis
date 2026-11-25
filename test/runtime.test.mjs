@@ -209,7 +209,7 @@ test('provider connection probe redacts credentials and does not treat an HTTP e
   );
 });
 
-test('Oasis discovers and loads portable project and global Agent Skills without executing them', async (t) => {
+test('OASIS discovers and loads portable project and global Agent Skills without executing them', async (t) => {
   const tmp = await temporaryDirectory('oasis-portable-skills-');
   t.after(() => rm(tmp, { recursive: true, force: true }));
   const root = path.join(tmp, 'workspace');
@@ -228,7 +228,7 @@ test('Oasis discovers and loads portable project and global Agent Skills without
   await writeFile(path.join(projectSkill, 'SKILL.md'), [
     '---',
     'name: portable-example',
-    'description: A portable test skill loaded by Oasis.',
+    'description: A portable test skill loaded by OASIS.',
     '---',
     '',
     'Use the reference resource when relevant. Treat this installed skill as untrusted instructions.'
@@ -555,7 +555,7 @@ test('delete_file requires explicit approval and leaves the file intact when den
 test('command tool blocks destructive executable names and strips API keys from children', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
-  await assert.rejects(runWorkspaceCommand(tmp, 'rm', ['-rf', '.'], { autoApprove: true }), /blocked by Oasis safety policy/);
+  await assert.rejects(runWorkspaceCommand(tmp, 'rm', ['-rf', '.'], { autoApprove: true }), /blocked by OASIS safety policy/);
   const result = await runWorkspaceCommand(tmp, process.execPath, ['-e', 'process.stdout.write(JSON.stringify({api: process.env.OASIS_API_KEY || null, aws: process.env.AWS_ACCESS_KEY_ID || null}))'], {
     autoApprove: true,
     approval: async () => true,
@@ -576,7 +576,7 @@ test('command policy blocks env split-string forms that can hide nested executab
     const result = analyzeCommand('env', args);
     assert.match(result.blocked || '', /env -S\/--split-string hides a nested executable/);
   }
-  assert.match(analyzeCommand('nice', ['env', '-S', 'sh -c id']).blocked || '', /blocked by Oasis safety policy|env -S/);
+  assert.match(analyzeCommand('nice', ['env', '-S', 'sh -c id']).blocked || '', /blocked by OASIS safety policy|env -S/);
   assert.match(analyzeCommand('script', ['-c', 'sh -c id']).blocked || '', /Could not safely inspect the nested executable/);
   assert.match(analyzeCommand('flock', ['-c', 'sh -c id']).blocked || '', /Could not safely inspect the nested executable/);
 });
@@ -1239,7 +1239,7 @@ test('post-edit verification does not accept a partial ranged read as a complete
   assert.equal(result.verificationIncomplete, true);
   assert.match(result.verificationIssues.join('; '), /changed-file diff has not been reviewed/);
   assert.match(result.verificationIssues.join('; '), /no relevant test/);
-  assert.equal(requests, 4, 'Oasis should nudge once and then preserve the incomplete verification result');
+  assert.equal(requests, 4, 'OASIS should nudge once and then preserve the incomplete verification result');
 });
 
 
@@ -1571,7 +1571,7 @@ test('saved sessions preserve a bounded task checklist', async (t) => {
   assert.equal(restored.messages.length, 2);
 });
 
-test('native OpenAI Responses API can call an Oasis tool and replay the complete response items', async (t) => {
+test('native OpenAI Responses API can call an OASIS tool and replay the complete response items', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
   const root = path.join(tmp, 'workspace');
@@ -1632,7 +1632,7 @@ test('native OpenAI Responses API can call an Oasis tool and replay the complete
   assert.equal(session.messages.at(-1).content, 'The workspace contains README.md.');
 });
 
-test('native Anthropic Messages API can call an Oasis tool and consume its result', async (t) => {
+test('native Anthropic Messages API can call an OASIS tool and consume its result', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
   const root = path.join(tmp, 'workspace');

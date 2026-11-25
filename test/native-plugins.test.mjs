@@ -18,7 +18,7 @@ function git(cwd, ...args) {
     cwd,
     encoding: 'utf8',
     stdio: 'pipe',
-    env: { ...process.env, GIT_AUTHOR_NAME: 'Oasis Test', GIT_AUTHOR_EMAIL: 'oasis-test@example.invalid', GIT_COMMITTER_NAME: 'Oasis Test', GIT_COMMITTER_EMAIL: 'oasis-test@example.invalid' }
+    env: { ...process.env, GIT_AUTHOR_NAME: 'OASIS Test', GIT_AUTHOR_EMAIL: 'oasis-test@example.invalid', GIT_COMMITTER_NAME: 'OASIS Test', GIT_COMMITTER_EMAIL: 'oasis-test@example.invalid' }
   });
 }
 
@@ -32,7 +32,7 @@ async function setup(t) {
 }
 async function writePackage(pkg,{version='1.0.0',permissions=['commands','skills','agents','hooks','mcp'],subagents=false,minimumOasisVersion='0.3.0'}={}) {
   const entries={};
-  const manifest={schemaVersion:1,name:'review-helper',version,description:'A local review helper plugin.',author:'Oasis Test Suite',license:'MIT',minimumOasisVersion,permissions,metadata:{owner:'test'}};
+  const manifest={schemaVersion:1,name:'review-helper',version,description:'A local review helper plugin.',author:'OASIS Test Suite',license:'MIT',minimumOasisVersion,permissions,metadata:{owner:'test'}};
   if(permissions.includes('commands')) {
     entries['commands/review.md']='Review the changes; preserve all project rules.\n';
     manifest.commands={review:{source:'commands/review.md',description:'Review a diff'}};
@@ -104,19 +104,19 @@ test('native plugin validates and installs only explicitly granted capabilities'
   assert.equal((await listNativePlugins({env})).length,1);
 });
 
-test('native plugin manifest requires author, license, and a compatible minimum Oasis version',async t=>{
+test('native plugin manifest requires author, license, and a compatible minimum OASIS version',async t=>{
   const {pkg}=await setup(t);await writePackage(pkg,{permissions:['commands']});
   const manifestPath=path.join(pkg,'plugin.json');
   const valid=JSON.parse(await readFile(manifestPath,'utf8'));
   delete valid.author;await writeFile(manifestPath,JSON.stringify(valid));
   await assert.rejects(validateNativePluginPackage(pkg),/author is required/i);
-  valid.author='Oasis Test Suite';delete valid.license;await writeFile(manifestPath,JSON.stringify(valid));
+  valid.author='OASIS Test Suite';delete valid.license;await writeFile(manifestPath,JSON.stringify(valid));
   await assert.rejects(validateNativePluginPackage(pkg),/license is required/i);
   valid.license='MIT';valid.minimumOasisVersion='999.0.0';await writeFile(manifestPath,JSON.stringify(valid));
-  await assert.rejects(validateNativePluginPackage(pkg),/requires Oasis 999.0.0 or newer/i);
+  await assert.rejects(validateNativePluginPackage(pkg),/requires OASIS 999.0.0 or newer/i);
   valid.minimumOasisVersion='0.3.0';await writeFile(manifestPath,JSON.stringify(valid));
   const checked=await validateNativePluginPackage(pkg);
-  assert.equal(checked.author,'Oasis Test Suite');
+  assert.equal(checked.author,'OASIS Test Suite');
   assert.equal(checked.license,'MIT');
   assert.equal(checked.minimumOasisVersion,'0.3.0');
 });
@@ -230,7 +230,7 @@ test('oasis plugin validate|list|update|uninstall handle native OASIS plugins en
   const lines = [];
   const run = (...args) => pluginCli(root, args, { env, write: (text) => lines.push(text) });
   await run('validate', pkg);
-  assert.match(lines.join(''), /OASIS plugin "review-helper" v1\.0\.0 by Oasis Test Suite \(MIT\)/);
+  assert.match(lines.join(''), /OASIS plugin "review-helper" v1\.0\.0 by OASIS Test Suite \(MIT\)/);
   assert.match(lines.join(''), /Requests permissions: commands, skills, agents, hooks, mcp\.\nValid\./);
   const installed = await installNativePlugin(pkg, { env, grantedPermissions: ['commands', 'skills'] });
   lines.length = 0; await run('list');

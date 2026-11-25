@@ -40,7 +40,7 @@ test('SIGTERM during oasis -p stops the running command and exits 143', { skip: 
   assert.match(outText, /Stopped by SIGTERM before the task finished\./);
   assert.doesNotMatch(outText, /cancelled by the user/);
   for (let i = 0; i < 60 && alive(pid); i++) await new Promise((resolve) => setTimeout(resolve, 50));
-  assert.equal(alive(pid), false, 'the command was stopped with Oasis');
+  assert.equal(alive(pid), false, 'the command was stopped with OASIS');
 });
 
 test('a -p run stopped part-way is saved and says how to resume it', { skip: process.platform === 'win32' }, async (t) => {

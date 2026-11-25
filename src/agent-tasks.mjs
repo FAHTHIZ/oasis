@@ -32,7 +32,7 @@ export const AGENT_TOOL_DEFINITIONS = [
     id: { type: 'string', description: 'Agent id such as agent_1; omit to list all' },
     wait_seconds: { type: 'integer', description: 'Wait up to this many seconds for the agent to finish' }
   }, required: [] } } },
-  { type: 'function', function: { name: 'neuron_network', description: 'Inspect the Oasis Neuron Network as a bounded, read-only graph: agent hierarchy, roles, statuses, teams, shared tasks, workspace isolation and aggregate usage. It never exposes worker prompts, transcripts, reports, or tool arguments.', parameters: { type: 'object', properties: {
+  { type: 'function', function: { name: 'neuron_network', description: 'Inspect the OASIS Neuron Network as a bounded, read-only graph: agent hierarchy, roles, statuses, teams, shared tasks, workspace isolation and aggregate usage. It never exposes worker prompts, transcripts, reports, or tool arguments.', parameters: { type: 'object', properties: {
     status: { type: 'string', enum: ['running', 'completed', 'failed', 'cancelled', 'stalled', 'interrupted'], description: 'Optional lifecycle filter' },
     team_id: { type: 'string', description: 'Optional team ID filter' },
     parent_id: { type: 'string', description: 'Optional direct-parent filter, such as main or agent_2' },
@@ -270,7 +270,7 @@ export function agentEvents(session, args = {}) {
 }
 
 export function neuronNetworkSnapshot(session, args = {}) {
-  if (!isMainCoordinator(session)) throw new Error('Only the main coordinator can inspect the full Oasis Neuron Network.');
+  if (!isMainCoordinator(session)) throw new Error('Only the main coordinator can inspect the full OASIS Neuron Network.');
   return buildNeuronNetworkSnapshot(agentRegistry(session), args);
 }
 

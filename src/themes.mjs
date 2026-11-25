@@ -22,7 +22,7 @@ const THEME_TOKENS = [
   'userMessageBackground', 'bashMessageBackgroundColor', 'memoryBackgroundColor', 'code', 'link', 'keyword', 'number'
 ];
 
-// Tokens Claude Code themes may carry that Oasis accepts but does not paint yet.
+// Tokens Claude Code themes may carry that OASIS accepts but does not paint yet.
 export const KNOWN_TOKENS = new Set([...THEME_TOKENS,
   'effortUltra', 'userMessageBackgroundHover', 'selectionBg', 'composerSidebarBackground', 'rate_limit_fill', 'rate_limit_empty', 'briefLabelYou', 'briefLabelClaude',
   'warningShimmer', 'permissionShimmer', 'promptBorderShimmer', 'inactiveShimmer', 'fastModeShimmer',
@@ -223,7 +223,7 @@ export function themePreview(theme) {
   const f = (token) => (c[token] && !c[token].none ? c[token].fg : '');
   const b = (token) => (c[token] && !c[token].none ? c[token].bg : '');
   return [
-    f('claude') + '⏺ Oasis' + '\x1b[39m  ' + f('success') + '✓ success\x1b[39m  ' + f('error') + '✗ error\x1b[39m  ' + f('warning') + '! warning\x1b[39m  ' + f('planMode') + '⏸ plan\x1b[39m  ' + f('autoAccept') + '⏵⏵ auto\x1b[39m',
+    f('claude') + '⏺ OASIS' + '\x1b[39m  ' + f('success') + '✓ success\x1b[39m  ' + f('error') + '✗ error\x1b[39m  ' + f('warning') + '! warning\x1b[39m  ' + f('planMode') + '⏸ plan\x1b[39m  ' + f('autoAccept') + '⏵⏵ auto\x1b[39m',
     '    ' + b('diffAdded') + f('success') + '+ const answer = 42;' + '\x1b[39m\x1b[49m',
     '    ' + b('diffRemoved') + f('error') + '- const answer = 41;' + '\x1b[39m\x1b[49m',
     '    ' + f('keyword') + 'return' + '\x1b[39m ' + f('code') + '`code`' + '\x1b[39m ' + f('link') + 'link' + '\x1b[39m ' + f('inactive') + '// hint' + '\x1b[39m'

@@ -1495,7 +1495,7 @@ async function saveResults(results, metadata, options = {}) {
 }
 
 function printValidation(report, output = process.stdout) {
-  output.write('Oasis eval suite validation\n');
+  output.write('OASIS eval suite validation\n');
   for (const result of report.results) {
     output.write((result.ok ? '  PASS ' : '  FAIL ') + result.id + (result.category ? ' [' + result.category + '/' + (result.difficulty || 'unspecified') + ']' : '') + (result.error ? ': ' + result.error : '') + '\n');
   }

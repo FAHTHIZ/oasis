@@ -313,7 +313,7 @@ test('parallel lookups fold into one line', async () => {
 
 test('Esc and Ctrl+C interrupts say what happens next', async () => {
   const { interruptNotice } = await import('../src/cli.mjs');
-  assert.equal(interruptNotice('escape'), '  ⎿ Interrupted · tell Oasis what to do instead');
+  assert.equal(interruptNotice('escape'), '  ⎿ Interrupted · tell OASIS what to do instead');
   assert.equal(interruptNotice('ctrlC'), '  ⎿ Interrupted · press Ctrl+C again to quit');
 });
 

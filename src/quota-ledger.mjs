@@ -16,7 +16,7 @@
 //
 // Keys are never stored: a key is identified by the first 10 hex characters of
 // its SHA-256. OASIS_QUOTA_LEDGER=off turns the ledger off.
-// Several Oasis processes may update the file at once; each write re-reads it
+// Several OASIS processes may update the file at once; each write re-reads it
 // and changes only its own record, so a lost update is possible but rare and
 // only affects counts.
 
@@ -273,7 +273,7 @@ function ago(ms) {
 
 /** Human-readable report for `oasis quota`. */
 export function formatQuotaReport(routes, now = Date.now()) {
-  if (!routes.length) return 'No model usage recorded yet. Oasis records usage per provider, key and model as requests are made.\n';
+  if (!routes.length) return 'No model usage recorded yet. OASIS records usage per provider, key and model as requests are made.\n';
   const lines = ['Model usage today (UTC) per provider, key and model. Keys are shown as SHA-256 fingerprints.', ''];
   const sorted = [...routes].sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
   for (const route of sorted) {

@@ -1,4 +1,4 @@
-// Live "working" line shown while Oasis waits for the model's first token.
+// Live "working" line shown while OASIS waits for the model's first token.
 //
 // Without it, a slow provider (or a local model reading a long prompt on a
 // laptop) looks exactly like a hang. The line shows what is happening, how long

@@ -21,7 +21,7 @@ test('transcriptLines expands prompts, tool calls and results', () => {
   assert.match(text, /⏺ read_file\n    \{\n      "path": "x.js"/);
   assert.match(text, /⎿ result\n    const x = 1;/);
   assert.match(text, /⎿ error/);
-  assert.match(text, /● Oasis\n  Done\./);
+  assert.match(text, /● OASIS\n  Done\./);
 });
 
 test('Ctrl+O opens a full-screen pager and q returns to the prompt', async () => {

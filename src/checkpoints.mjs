@@ -1,4 +1,4 @@
-// Checkpoints: every user turn records the original content of each file Oasis
+// Checkpoints: every user turn records the original content of each file OASIS
 // edits, writes, or deletes, right before the first change in that turn. /rewind
 // restores those files (deleting files the turn created) and can also drop the
 // conversation back to before that turn. Changes made by shell commands are

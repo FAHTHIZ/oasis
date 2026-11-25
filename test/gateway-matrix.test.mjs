@@ -53,8 +53,8 @@ test('matrix helpers', () => {
   assert.equal(stripMatrixMention('OASIS: run the tests', '@bot:x', 'OASIS'), 'run the tests');
   assert.equal(stripMatrixMention('@bot:x fix it', '@bot:x', ''), 'fix it');
   assert.ok(matrixMentions({ body: 'hey', 'm.mentions': { user_ids: ['@bot:x'] } }, '@bot:x', ''));
-  assert.ok(matrixMentions({ body: 'oasis, look' }, '@bot:x', 'Oasis'));
-  assert.ok(!matrixMentions({ body: 'oasisland' }, '@bot:x', 'Oasis'));
+  assert.ok(matrixMentions({ body: 'oasis, look' }, '@bot:x', 'OASIS'));
+  assert.ok(!matrixMentions({ body: 'oasisland' }, '@bot:x', 'OASIS'));
 });
 
 test('matrix requires homeserver, token and allowlist', () => {
@@ -101,7 +101,7 @@ test('matrix ignores strangers once, encrypted rooms and unmentioned group messa
   const server = fakeHomeserver();
   const turns = [];
   const agent = fakeAgent(async (_s, text) => { turns.push(text); return { text: 'ok' }; });
-  const gateway = createMatrixGateway({ homeserver: 'https://m.org', token: 'syt_token_123', allowedUsers: new Set(['@me:m.org']), userId: '@bot:m.org', displayName: 'Oasis', fetchImpl: server.fetchImpl, deps: deps(agent), root: PAIR_ROOT, log: () => {} });
+  const gateway = createMatrixGateway({ homeserver: 'https://m.org', token: 'syt_token_123', allowedUsers: new Set(['@me:m.org']), userId: '@bot:m.org', displayName: 'OASIS', fetchImpl: server.fetchImpl, deps: deps(agent), root: PAIR_ROOT, log: () => {} });
   gateway.memberCounts.set('!group:m.org', 8);
   gateway.memberCounts.set('!dm:m.org', 2);
   await gateway.handleEvent('!group:m.org', { type: 'm.room.message', sender: '@me:m.org', content: { msgtype: 'm.text', body: 'chatting with people' } });
@@ -109,7 +109,7 @@ test('matrix ignores strangers once, encrypted rooms and unmentioned group messa
   await gateway.handleEvent('!dm:m.org', { type: 'm.room.message', sender: '@x:m.org', content: { msgtype: 'm.text', body: 'hi again' } });
   await gateway.handleEvent('!dm:m.org', { type: 'm.room.encrypted', sender: '@me:m.org', content: {} });
   await gateway.handleEvent('!dm:m.org', { type: 'm.room.encrypted', sender: '@me:m.org', content: {} });
-  await gateway.handleEvent('!group:m.org', { type: 'm.room.message', sender: '@me:m.org', content: { msgtype: 'm.text', body: 'Oasis: summarise the README' } });
+  await gateway.handleEvent('!group:m.org', { type: 'm.room.message', sender: '@me:m.org', content: { msgtype: 'm.text', body: 'OASIS: summarise the README' } });
   await flush();
   const bodies = server.calls.filter((c) => c.method === 'PUT' && c.path.includes('/send/')).map((c) => c.body.body);
   assert.equal(bodies.filter((b) => /Your Matrix ID is @x:m.org/.test(b)).length, 1);

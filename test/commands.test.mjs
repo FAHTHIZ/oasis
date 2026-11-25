@@ -144,7 +144,7 @@ test('/review, /security-review, /export, /resume and /mcp built-ins', async () 
   const markdown = await readFile(path.join(root, 'chat.md'), 'utf8');
   assert.match(markdown, /## User\n\nfix the bug/);
   assert.match(markdown, /Tool call: `read_file`/);
-  assert.match(markdown, /## Oasis\n\nFixed it\./);
+  assert.match(markdown, /## OASIS\n\nFixed it\./);
   await assert.rejects(runBuiltinCommand('export', 'chat.md', state), /already exists/);
   assert.match((await runBuiltinCommand('export', '../outside.md', state)).output, /inside the workspace/);
 

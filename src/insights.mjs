@@ -163,7 +163,7 @@ function renderInsightsHtml(stats, narrative = '') {
   if (stats.effects && stats.effects.afterFailure > 2) tips.push(stats.effects.afterFailure + ' calls reported an error after they had already taken effect. Those are usually timeouts on slow commands; a larger timeout for them avoids the confusion.');
   if (!tips.length) tips.push('No major friction patterns detected. Nice.');
   const days = [...stats.byDay.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Oasis insights</title>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OASIS insights</title>
 <style>
 :root{--bg:#0f1115;--card:#171a21;--text:#e6e8ee;--muted:#9aa3b2;--accent:#5eb8ff;--warn:#f0b35a}
 @media (prefers-color-scheme:light){:root{--bg:#f6f7f9;--card:#fff;--text:#1b1f27;--muted:#5d6675;--accent:#0a6cc2;--warn:#a35d00}}
@@ -178,7 +178,7 @@ h1{font-size:26px;margin:0 0 4px}h2{font-size:17px;margin:0 0 12px}
 .fill{display:block;height:8px;border-radius:4px;background:var(--accent)}.num{text-align:right;color:var(--muted)}
 li{margin:6px 0}.tip{border-left:3px solid var(--warn);padding-left:10px}code{font-size:12px}
 </style></head><body><main>
-<h1>Oasis insights</h1><p class="muted">Last ${stats.days} days on this machine, generated ${esc(new Date().toISOString().slice(0, 16).replace('T', ' '))} UTC. Computed locally from saved sessions.</p>
+<h1>OASIS insights</h1><p class="muted">Last ${stats.days} days on this machine, generated ${esc(new Date().toISOString().slice(0, 16).replace('T', ' '))} UTC. Computed locally from saved sessions.</p>
 <div class="kpis">
 <div class="kpi"><b>${stats.sessions}</b><span class="muted">sessions</span></div>
 <div class="kpi"><b>${stats.userTurns}</b><span class="muted">prompts</span></div>

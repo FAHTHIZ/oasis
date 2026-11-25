@@ -8,7 +8,7 @@ import { createSession, closeSession, runAgentTurn } from '../src/agent.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
 // Seen in the live OVH benchmark (taskflow-emoji-truncate, gpt-oss-120b):
-// asked to "add a regression test", Oasis added two asserts to an existing
+// asked to "add a regression test", OASIS added two asserts to an existing
 // test() case. The fix was right, but the task's verifier expected a new
 // case, and no test reports on the fix by itself.
 test('asked for a regression test, asserts added to an existing case get a gate note asking for a separate case', async (t) => {

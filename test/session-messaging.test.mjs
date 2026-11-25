@@ -56,8 +56,8 @@ test('busy targets retain queued messages until the session returns idle', async
 test('stale targets are rejected and forwarding loops are blocked', async (t) => {
   const { env, source, target } = await fixture(t);
   await unregisterActiveSession(target, { env });
-  await assert.rejects(resolveActiveTarget(target.activeSessionId, { env }), /No active Oasis session/);
-  await assert.rejects(sendSessionMessage(source, target.activeSessionId, 'stale', { env }), /No active Oasis session/);
+  await assert.rejects(resolveActiveTarget(target.activeSessionId, { env }), /No active OASIS session/);
+  await assert.rejects(sendSessionMessage(source, target.activeSessionId, 'stale', { env }), /No active OASIS session/);
   await registerActiveSession(target, { env });
   await assert.rejects(sendSessionMessage(source, target.activeSessionId, 'loop', { env, forwardDepth: 1 }), /disabled to prevent loops/);
   await assert.rejects(sendSessionMessage(source, source.activeSessionId, 'self', { env }), /cannot notify itself/);
@@ -149,5 +149,5 @@ test('/notify lists live peers, sends by name with a priority, and the receiver 
   assert.match(inbox.output, /\[blocking\] unread/);
   assert.match(inbox.output, /stop editing api\.mjs, I am refactoring it/);
   const missing = await runBuiltinCommand('notify', 'nobody hello', { root, session: source, env });
-  assert.match(missing.output, /No active Oasis session matches "nobody"/);
+  assert.match(missing.output, /No active OASIS session matches "nobody"/);
 });

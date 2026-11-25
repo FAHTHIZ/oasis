@@ -413,7 +413,7 @@ export class OasisOAuthProvider {
 
   get clientMetadata() {
     return {
-      client_name: 'Oasis',
+      client_name: 'OASIS',
       redirect_uris: [this.redirectUrl],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
@@ -534,7 +534,7 @@ export function openInBrowser(url, { env = process.env, platform = process.platf
 }
 
 function callbackPage(text) {
-  return '<!doctype html><title>Oasis</title><body style="font-family:sans-serif;padding:2rem">' + text + '</body>';
+  return '<!doctype html><title>OASIS</title><body style="font-family:sans-serif;padding:2rem">' + text + '</body>';
 }
 
 // Interactive sign-in. print(text) shows the URL; open(url) launches a browser.
@@ -569,7 +569,7 @@ export async function loginMcpServer(server, { env = process.env, fetch: fetchIm
     if (url.pathname !== '/callback') { res.writeHead(404).end(); return; }
     const outcome = accept(url.searchParams);
     res.writeHead(outcome === 'ok' ? 200 : 400, { 'content-type': 'text/html; charset=utf-8' });
-    res.end(callbackPage(outcome === 'stale' ? 'This sign-in link is not the one Oasis is waiting for. Return to Oasis and use the latest link.' : outcome === 'ok' ? 'Signed in to ' + String(server.name).replace(/[<>&]/g, '') + '. You can close this tab and return to Oasis.' : 'Sign-in failed. Return to Oasis and try again.'));
+    res.end(callbackPage(outcome === 'stale' ? 'This sign-in link is not the one OASIS is waiting for. Return to OASIS and use the latest link.' : outcome === 'ok' ? 'Signed in to ' + String(server.name).replace(/[<>&]/g, '') + '. You can close this tab and return to OASIS.' : 'Sign-in failed. Return to OASIS and try again.'));
   });
   if (typeof onCallbackReady === 'function') {
     onCallbackReady((address) => {

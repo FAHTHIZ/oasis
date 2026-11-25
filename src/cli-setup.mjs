@@ -229,7 +229,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
   stdout.write('Provider responded successfully. Saved settings to ' + configPath + '\n');
   stdout.write('Protocol: ' + protocol + '\n');
   stdout.write('Authentication: ' + (apiKey ? 'configured' : (isLoopbackUrl(baseURL) ? 'local endpoint; no API key required' : (keyless ? 'none needed; this endpoint answered without a key' : 'not configured'))) + '\n');
-  stdout.write('The provider is verified. Oasis can now inspect workspaces and use approved tools.\n');
+  stdout.write('The provider is verified. OASIS can now inspect workspaces and use approved tools.\n');
   } finally { rl.close(); }
 }
 

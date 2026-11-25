@@ -118,7 +118,7 @@ async function writeMcpJsonServer(name, entry, { root, env, approve, scope }) {
     (Object.keys(serverEnv).length ? '\nEnvironment: ' + Object.keys(serverEnv).join(', ') + ' (values hidden)' : '') +
     '\nFile: ' + file +
     (remote ? (isLoopbackUrl(String(entry.url)) ? '' : '\nThe server is remote; each of its tool calls still asks for approval by default.')
-      : '\nThis starts third-party code inside your user account when Oasis sessions start. Review the server source and package identity before approving.');
+      : '\nThis starts third-party code inside your user account when OASIS sessions start. Review the server source and package identity before approving.');
   if (!(await approve(summary))) return { cancelled: true, message: 'MCP configuration cancelled. Nothing was changed.' };
   await mkdir(path.dirname(file), { recursive: true, ...(scope === 'user' ? { mode: 0o700 } : {}) });
   await atomicWriteFile(file, JSON.stringify({ ...parsed, mcpServers: { ...servers, [name]: entry } }, null, 2) + '\n', scope === 'user' ? { mode: 0o600 } : {});

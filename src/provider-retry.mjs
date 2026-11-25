@@ -78,7 +78,7 @@ export function shortRateLimitMs(body) {
   }
   // FreeLLMAPI states its pool's reset only in the body, with no Retry-After:
   // "All models exhausted: ... Soonest reset ~28s." (seen live in the OVH
-  // head-to-head, where Oasis gave up after two quick retries).
+  // head-to-head, where OASIS gave up after two quick retries).
   const stated = STATED_RESET.exec(text);
   if (stated && !LONG_LIMIT_WORDING.test(text)) {
     const ms = Number(stated[1]) * (/^m/i.test(stated[2]) ? 60000 : 1000);

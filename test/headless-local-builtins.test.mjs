@@ -44,7 +44,7 @@ test('oasis -p /cost, /doctor and /help answer without a model call', async (t) 
   assert.equal(r.code, 0, r.out);
   assert.match(r.out, /Session usage: 0 tokens/);
   r = await run(['-p', '/doctor'], elsewhere);
-  assert.match(r.out, /Oasis doctor:/);
+  assert.match(r.out, /OASIS doctor:/);
   r = await run(['-p', '/help'], elsewhere);
   assert.match(r.out, /Core workflows/);
   r = await run(['-p', '/cost', '--output-format', 'json'], elsewhere);

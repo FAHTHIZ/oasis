@@ -157,7 +157,7 @@ function attachMonitors(session) {
 // Esc reads as Claude Code's "Interrupted · What should Claude do instead?";
 // only Ctrl+C mentions that a second press quits.
 export function interruptNotice(kind, color = false) {
-  const text = kind === 'escape' ? '  ⎿ Interrupted · tell Oasis what to do instead' : '  ⎿ Interrupted · press Ctrl+C again to quit';
+  const text = kind === 'escape' ? '  ⎿ Interrupted · tell OASIS what to do instead' : '  ⎿ Interrupted · press Ctrl+C again to quit';
   return color ? '\x1b[31m' + text + '\x1b[39m' : text;
 }
 // "  ⎿ Rate limited · waiting 13s (until 14:51:00)", in the dim style of the
@@ -213,7 +213,7 @@ function startTurnKeys(onInterrupt, onSteer = null) {
         // A slash command typed mid-turn (/rewind, /model) is a command, not a note for the
         // model: it used to be sent to the model as text. It runs as soon as the turn ends.
         if (key.name === 'enter' && !isSlashCommandLine(buffer) && onSteer && onSteer(buffer)) {
-          noticeLine(dim('  ↳ sent: ' + preview + ' · Oasis reads it at the next step (Tab queues for after the turn, Ctrl+O expands the last output)'));
+          noticeLine(dim('  ↳ sent: ' + preview + ' · OASIS reads it at the next step (Tab queues for after the turn, Ctrl+O expands the last output)'));
         } else {
           QUEUED_INPUT.push(buffer);
           noticeLine(dim('  ↳ ' + (isSlashCommandLine(buffer) ? 'command runs' : 'queued') + ' after this turn: ' + preview));
@@ -223,7 +223,7 @@ function startTurnKeys(onInterrupt, onSteer = null) {
       }
     }
   };
-  // Type-ahead is echoed in the live status line, so typing while Oasis
+  // Type-ahead is echoed in the live status line, so typing while OASIS
   // works never feels like the keys went nowhere.
   const showDraft = () => { turnDraft = buffer; if (liveTurn) liveTurn.status.update({ typed: buffer }); else if (waitIndicator && waitIndicator.active) waitIndicator.update({ draft: buffer }); };
   const handle = {
@@ -807,7 +807,7 @@ function sessionCreateOptions() {
   };
 }
 
-// Hook output and Oasis's own notices share session.hookMessages. Notices that
+// Hook output and OASIS's own notices share session.hookMessages. Notices that
 // carry their own tag ([fallback], [key-pool], [session]) printed as
 // "[hook] [fallback] …", as if a user hook had switched the model.
 export function sessionNoticeLine(message) {
@@ -1052,7 +1052,7 @@ async function purgeCommand(root, rest, autoApprove) {
   else if (options.path) targets = [path.resolve(options.path)];
   else {
     const projects = await knownProjects(process.env);
-    if (!projects.length) { stdout.write('No projects have saved Oasis state.\n'); return; }
+    if (!projects.length) { stdout.write('No projects have saved OASIS state.\n'); return; }
     if (!(stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function')) throw new Error('Usage: oasis purge PATH | --all. Projects with saved state:\n' + projects.map((item) => '  ' + item.root + ' (' + item.sessions + ' sessions)').join('\n'));
     const { selectDialog } = await import('./select-dialog.mjs');
     stdout.write('Select a project to purge:\n');
@@ -1060,7 +1060,7 @@ async function purgeCommand(root, rest, autoApprove) {
     if (!chosen) { stdout.write('Cancelled.\n'); return; }
     targets = [chosen];
   }
-  if (!targets.length) { stdout.write('No projects have saved Oasis state.\n'); return; }
+  if (!targets.length) { stdout.write('No projects have saved OASIS state.\n'); return; }
   for (const target of targets) {
     const plan = await planPurge(target, { env: process.env, memory: options.memory });
     stdout.write(describePurge(plan) + '\n');
@@ -1188,15 +1188,15 @@ async function selfUpdate(autoApprove = false) {
   const installUrl = INSTALL_URL + latest.sha + '.tar.gz';
   const command = 'npm';
   const args = ['install', '--global', installUrl];
-  stdout.write('Oasis self-update plan\n  ' + command + ' ' + args.join(' ') + '\n');
+  stdout.write('OASIS self-update plan\n  ' + command + ' ' + args.join(' ') + '\n');
   stdout.write('This installs the latest stable release ' + latest.tag + ' from its immutable source archive.\n');
-  if (!(await approve('Install/update Oasis from stable release ' + latest.tag + ' (' + latest.sha.slice(0, 7) + ')?', false, autoApprove))) {
+  if (!(await approve('Install/update OASIS from stable release ' + latest.tag + ' (' + latest.sha.slice(0, 7) + ')?', false, autoApprove))) {
     stdout.write('Update cancelled.\n');
     return;
   }
   const result = await runInteractiveCommand(command, args);
-  if (result.code === 0) stdout.write('Oasis CLI update completed.\n');
-  else stdout.write('Oasis CLI update failed' + (result.code === null ? ': ' + result.error : ' with exit code ' + result.code) + '.\n');
+  if (result.code === 0) stdout.write('OASIS CLI update completed.\n');
+  else stdout.write('OASIS CLI update failed' + (result.code === null ? ': ' + result.error : ' with exit code ' + result.code) + '.\n');
 }
 
 async function diagnosticsCommand(rest, root, autoApprove) {
@@ -1246,7 +1246,7 @@ async function initWorkspace(root) {
   const { detectProjectCommands, projectCommandsSection } = await import('./project-commands.mjs');
   const commands = await detectProjectCommands(root).catch(() => []);
   await writeFile(target, [
-    '# Oasis workspace instructions',
+    '# OASIS workspace instructions',
     '',
     '## Project purpose',
     'Describe what this repository is for and its main constraints.',
@@ -1260,12 +1260,12 @@ async function initWorkspace(root) {
     '- Ask before destructive commands, remote publishing, or production changes.',
     ''
   ].join('\n'), { encoding: 'utf8', flag: 'wx' });
-  stdout.write('Created ' + target + (commands.length ? ' with the ' + commands.length + ' project command' + (commands.length === 1 ? '' : 's') + ' found on disk' : '') + '. Edit it to give Oasis persistent project context, or run /init in a chat to have the agent read the project and write a fuller guide.\n');
+  stdout.write('Created ' + target + (commands.length ? ' with the ' + commands.length + ' project command' + (commands.length === 1 ? '' : 's') + ' found on disk' : '') + '. Edit it to give OASIS persistent project context, or run /init in a chat to have the agent read the project and write a fuller guide.\n');
 }
 
 async function listSkills(root) {
   const skills = await listAvailableSkills(root);
-  stdout.write('Agent skills visible to Oasis (skill instructions are context, not executable code):\n');
+  stdout.write('Agent skills visible to OASIS (skill instructions are context, not executable code):\n');
   if (!skills.length) { stdout.write('  No skills found. Try "oasis skills find frontend" or install one with "oasis skills add SOURCE --skill NAME".\n'); return; }
   const sourceLabels = {
     'built-in': 'bundled',
@@ -1439,14 +1439,14 @@ async function manageSkills(root, args, autoApprove, explicitYes = false) {
 
 async function showBackups(root) {
   const backups = await listBackups(root);
-  if (!backups.length) { stdout.write('No Oasis snapshots are stored for this workspace yet.\n'); return; }
+  if (!backups.length) { stdout.write('No OASIS snapshots are stored for this workspace yet.\n'); return; }
   stdout.write('Snapshots for ' + path.resolve(root) + ':\n');
   for (const item of backups) stdout.write('  ' + item.id + '  ' + item.relativePath + '  (' + item.reason + ', ' + item.createdAt + ')\n');
 }
 
 async function restoreOne(root, backupId) {
   if (!backupId) throw new Error('Usage: oasis restore BACKUP_ID');
-  const ok = await approve('Restore snapshot ' + backupId + ' into this workspace? If the target currently exists, Oasis will snapshot it first.', true, false);
+  const ok = await approve('Restore snapshot ' + backupId + ' into this workspace? If the target currently exists, OASIS will snapshot it first.', true, false);
   if (!ok) { stdout.write('Restore cancelled.\n'); return; }
   const result = await restoreBackup(root, backupId);
   stdout.write('Restored ' + result.path + ' from snapshot ' + result.restoredFrom + '.\n');
@@ -1464,7 +1464,7 @@ function configSourceLine(config, env = process.env) {
 
 function printConfig(config) {
   const summary = getProviderSummary(config);
-  stdout.write('Oasis provider configuration\n');
+  stdout.write('OASIS provider configuration\n');
   // Before setup, baseURL/model hold built-in defaults; showing them as if
   // chosen contradicted `oasis doctor` ("not set yet").
   if (!config.configured) {
@@ -1530,7 +1530,7 @@ async function openSession(root, config, persistence) {
     persistence.recapShown = null;
     const goalNote = pausedGoalNotice(restored.goal);
     if (goalNote) stdout.write(goalNote);
-    if (restored.turnInProgress) stdout.write('[session] The last turn stopped before it finished; Oasis will ask the model to check the files before continuing.\n');
+    if (restored.turnInProgress) stdout.write('[session] The last turn stopped before it finished; OASIS will ask the model to check the files before continuing.\n');
   }
   const session = await createSession({ root, config, restore: restored, ...sessionCreateOptions(), watchFiles: true });
   if (restored && session.worldDrift) {
@@ -1570,7 +1570,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     }
   } catch {}
   if (!config.configured) {
-    stdout.write('Oasis needs a model provider for general coding tasks. ' + (INTERACTIVE_SESSION ? 'Type /setup to connect one' : 'Run oasis setup first') + ', or configure OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL, and the matching API-key environment variable. Local Ollama-style endpoints can use a loopback URL without an API key.\n');
+    stdout.write('OASIS needs a model provider for general coding tasks. ' + (INTERACTIVE_SESSION ? 'Type /setup to connect one' : 'Run oasis setup first') + ', or configure OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL, and the matching API-key environment variable. Local Ollama-style endpoints can use a loopback URL without an API key.\n');
     return session;
   }
   if (!session) {
@@ -1619,7 +1619,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       if (selection) { stdout.write('[ide] ' + selection.label + '\n'); prompt = selection.text + '\n\n' + prompt; }
     } catch {}
   }
-  if (!session.onAgentNotice) session.onAgentNotice = (text) => stdout.write('\n[agents] ' + String(text).split('\n')[0] + ' The report will be shared with Oasis on your next message (/tasks to read it now).\n');
+  if (!session.onAgentNotice) session.onAgentNotice = (text) => stdout.write('\n[agents] ' + String(text).split('\n')[0] + ' The report will be shared with OASIS on your next message (/tasks to read it now).\n');
   reportSessionNotices(session);
   if (session.mcpFailures && session.mcpFailures.length) {
     // Print each failure once, but keep it so /mcp can show it and /mcp reconnect can retry it.
@@ -1633,7 +1633,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   const controller = new AbortController();
   const onInterrupt = (kind) => {
     if (controller.signal.aborted && kind === 'escape') return;
-    if (controller.signal.aborted) { stdout.write('\nExiting Oasis.\n'); closeSession(session); exitAfterTelemetry(130); }
+    if (controller.signal.aborted) { stdout.write('\nExiting OASIS.\n'); closeSession(session); exitAfterTelemetry(130); }
     endStream();
     stdout.write('\n' + interruptNotice(kind, colorEnabled(stdout)) + '\n');
     controller.abort();
@@ -1672,7 +1672,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onThinkingBudget: (budget) => stdout.write('[thinking] Extended thinking on for this task (budget ' + budget + ' tokens).\n'),
       onReasoningEffort: (effort) => stdout.write('[thinking] Reasoning effort ' + effort + ' for this task.\n'),
       onMemoryRecall: (ids) => stdout.write('[memory] Recalled ' + ids.join(', ') + '\n'),
-      onSteer: (info) => { endStream(); stdout.write((colorEnabled(stdout) ? '\x1b[2m' : '') + '  ↳ Oasis read your ' + (info.delivered === 1 ? 'message' : info.delivered + ' messages') + ' and is adjusting' + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n'); },
+      onSteer: (info) => { endStream(); stdout.write((colorEnabled(stdout) ? '\x1b[2m' : '') + '  ↳ OASIS read your ' + (info.delivered === 1 ? 'message' : info.delivered + ' messages') + ' and is adjusting' + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n'); },
       ...(stdout.isTTY ? { onModelWait } : {}),
       ...(liveTurn ? { onReasoning: liveReasoning, onToolDraft: liveToolDraft } : {}),
       onProviderRetry: (event) => { stopWaitIndicator(); const dim = colorEnabled(process.stderr); process.stderr.write((dim ? '\x1b[2m' : '') + '  ⎿ Provider ' + (event.status ? 'error ' + event.status : 'connection failed') + (event.reason && event.status ? ' (' + event.reason + ')' : '') + ' · retrying in ' + formatWait(event.waitMs) + ' (' + event.attempt + '/' + event.limit + ')' + (dim ? '\x1b[22m' : '') + '\n'); },
@@ -1698,7 +1698,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onUsage: (usage) => recordUsage(USAGE, usage),
       onVerificationGate: (gate) => { endStream(); const dim = colorEnabled(stdout); stdout.write((dim ? '\x1b[2m' : '') + '  ⎿ Not finished yet: ' + gate.steps.join(', ') + (dim ? '\x1b[22m' : '') + '\n'); },
       onActionNudge: (nudge) => { const note = actionNudgeNote(nudge && nudge.kind); if (!note) return; endStream(); const dim = colorEnabled(stdout); stdout.write((dim ? '\x1b[2m' : '') + '  ⎿ Not finished yet: ' + note + (dim ? '\x1b[22m' : '') + '\n'); },
-      onThrash: (info) => { endStream(); stdout.write('[stuck?] `' + info.command + '` has failed the same way after ' + info.count + ' rounds of edits; Oasis asked the model to step back and diagnose before editing again.\n'); },
+      onThrash: (info) => { endStream(); stdout.write('[stuck?] `' + info.command + '` has failed the same way after ' + info.count + ' rounds of edits; OASIS asked the model to step back and diagnose before editing again.\n'); },
       onStreamRestart: (info) => { const ended = endStream(); stdout.write(streamRestartNotice(info, typeof info.partialShown === 'boolean' ? info.partialShown : ended) + '\n'); },
       onContextOverflow: (info) => { endStream(); stdout.write(info.smallContextTools ? '\n[context] ' + (info.contextWindow ? 'The model server has a ' + info.contextWindow + '-token window' : 'The provider said the first request was too large') + '; switched to the small-context tool set (others stay reachable through tool_search) and retrying.\n' : '\n[context] The provider said the request was too long for the context window; compacted (' + Math.round(info.beforeChars / 1000) + 'k → ' + Math.round(info.afterChars / 1000) + 'k chars) and retrying.\n'); },
       onCompactionStart: (info) => { endStream(); stdout.write('\n[context] Compacting ' + info.messages + ' older messages (about ' + Number(info.beforeTokens || 0).toLocaleString('en-US') + ' tokens; local fallback after ' + info.timeoutSeconds + 's)…\n'); },
@@ -1810,7 +1810,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     } else if (result.verificationIncomplete && Array.isArray(result.verificationIssues) && result.verificationIssues.length) {
       stdout.write('[verification] Incomplete: ' + result.verificationIssues.join('; ') + '. Do not treat the task as fully verified yet.\n');
     } else if (!result.finished) {
-      stdout.write('Oasis reached a safety limit before the task was fully completed. Review the summary and continue in a new turn if appropriate.\n');
+      stdout.write('OASIS reached a safety limit before the task was fully completed. Review the summary and continue in a new turn if appropriate.\n');
     }
     const changedThisTurn = result.verification && Array.isArray(result.verification.changedPaths) ? result.verification.changedPaths : [];
     if (changedThisTurn.length) {
@@ -2028,7 +2028,7 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
   if (!config.configured) throw new Error('No model provider is configured.\n  Pick one:\n    oasis connect        paste an API key, model link or local server address\n    oasis setup          guided setup in this terminal (API key, free gateway, or Ollama)\n    oasis setup --auto   detect this computer and any local model server, then configure the best fit\n    oasis web --open     set it up in the browser workspace instead\n    OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL + API key variable   for CI and scripts\n  Guide: https://github.com/FAHTHIZ/oasis#install');
   if (SESSION_OPTIONS.channels.length || SESSION_OPTIONS.devChannels.length) stderr.write('[channels] Channels need an interactive session; ignored with -p.\n');
   // CI runners and supervisors stop jobs with SIGTERM. Commands run in their own
-  // process group, so without this they would outlive Oasis and the job would
+  // process group, so without this they would outlive OASIS and the job would
   // exit 0. Abort the turn (which stops running commands), then exit 128+signal.
   const stopController = new AbortController();
   let stopSignal = null;
@@ -2359,7 +2359,7 @@ export function clipDescription(text, max) {
 
 async function interactiveCommandList(root) {
   const list = Object.entries(BUILTIN_COMMANDS).map(([name, description]) => ({ name, description }));
-  list.push({ name: 'init', description: 'Create project instructions for this workspace' }, { name: 'quit', description: 'Exit Oasis' });
+  list.push({ name: 'init', description: 'Create project instructions for this workspace' }, { name: 'quit', description: 'Exit OASIS' });
   try { for (const [name, command] of (await loadCustomCommands(root, { env: process.env })).entries()) list.push({ name, description: (command && command.description) || 'Custom command' }); } catch {}
   try { for (const skill of await listAvailableSkills(root, { env: process.env })) list.push({ name: skill.name, description: skill.description ? 'Skill: ' + clipDescription(String(skill.description), 70) : 'Skill' }); } catch {}
   return list;
@@ -2563,7 +2563,7 @@ async function interactive(root, autoApprove, persistence = {}) {
   INTERACTIVE_SESSION = true;
   let session = null;
   // Interactive mode reads from a terminal. Piped or redirected input used to
-  // print "Oasis session closed." and exit without saying why.
+  // print "OASIS session closed." and exit without saying why.
   if (!stdin.isTTY && process.env.OASIS_SIMPLE_INPUT !== '1') {
     stderr.write('oasis: interactive mode needs a terminal, and input here is piped or redirected.\n' +
       'To run a task from a script, use print mode:\n' +
@@ -3076,7 +3076,7 @@ async function startWebWorkspace(root, args) {
     if (closing) return;
     closing = true;
     // The in-process routine scheduler would otherwise keep the process alive.
-    const stopping = [scheduler ? scheduler.stop().catch(() => {}) : null, app.close().catch((error) => stderr.write('Oasis web shutdown error: ' + error.message + '\n'))];
+    const stopping = [scheduler ? scheduler.stop().catch(() => {}) : null, app.close().catch((error) => stderr.write('OASIS web shutdown error: ' + error.message + '\n'))];
     // Supervisors expect a prompt exit: once the server has closed (sessions
     // saved), exit even if an idle keep-alive socket or child handle lingers,
     // and never take longer than a few seconds after the signal.
@@ -3694,7 +3694,7 @@ async function main() {
   if (command === 'install') {
     if (!rest.length) { stdout.write('Usage: oasis install PACKAGE_NAME  (or specify an ecosystem such as "npm package prettier")\n'); return; }
     const request = parseInstallIntent(args.join(' '));
-    if (!request) throw new Error('Use one package name at a time. For compound setup requests, configure a provider and ask Oasis in plain English.');
+    if (!request) throw new Error('Use one package name at a time. For compound setup requests, configure a provider and ask OASIS in plain English.');
     return await installRequest(request, workspace, autoApprove);
   }
   // `oasis review --help` (not a command): show the help rather than sending

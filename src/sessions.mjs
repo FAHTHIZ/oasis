@@ -663,13 +663,13 @@ export async function settleMidTurnSave(session) {
 
 // A chat's title from its first prompt: what the user typed, without the file
 // contents an @mention attached ("Referenced files: <file path=...>") or
-// Oasis's own tagged blocks (<system-reminder>, <file path="...">...</file>).
+// OASIS's own tagged blocks (<system-reminder>, <file path="...">...</file>).
 // Messages OASIS itself adds to the conversation as the user role: gate and
 // guard nudges, hook feedback, compaction digests. History views, exports and
 // the resume recap hide them, since the user never typed them. Keep in step
 // with completion-gates.mjs, turn-guards.mjs, claim-check.mjs, auto-test.mjs,
 // standing-corrections.mjs and agent.mjs (test/user-facing-prompt.test.mjs).
-const OASIS_AUTHORED_PROMPT = /^(?:<system-reminder>|<oasis-|Before finalizing, complete the post-edit verification gate\.|Auto-test: Oasis ran the configured test command|Your reply (?:says|uses) |A [\w-]+ hook asked you to (?:continue|keep working)|Context digest of completed work in the current task|Summarize (?:this bounded transcript|these completed tool rounds))/;
+const OASIS_AUTHORED_PROMPT = /^(?:<system-reminder>|<oasis-|Before finalizing, complete the post-edit verification gate\.|Auto-test: OASIS ran the configured test command|Your reply (?:says|uses) |A [\w-]+ hook asked you to (?:continue|keep working)|Context digest of completed work in the current task|Summarize (?:this bounded transcript|these completed tool rounds))/;
 
 export function isOasisAuthoredPrompt(content) {
   return OASIS_AUTHORED_PROMPT.test(String(content || '').trimStart());

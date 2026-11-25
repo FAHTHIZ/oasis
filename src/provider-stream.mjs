@@ -43,7 +43,7 @@ export async function consumeServerSentEvents(response, onEvent, onStray) {
       pendingBytes += chunk.value.byteLength;
       if (receivedBytes > MAX_PROVIDER_STREAM_BYTES) {
         await reader.cancel().catch(() => {});
-        throw new Error('The model provider stream exceeded Oasis’s 512 MiB response limit.');
+        throw new Error('The model provider stream exceeded OASIS’s 512 MiB response limit.');
       }
       if (pendingBytes > MAX_PROVIDER_EVENT_BYTES) {
         await reader.cancel().catch(() => {});

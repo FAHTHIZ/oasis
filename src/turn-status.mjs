@@ -1,4 +1,4 @@
-// The live status for a running turn: one line saying what Oasis is doing
+// The live status for a running turn: one line saying what OASIS is doing
 // right now, an optional dim detail row under it (the last line of command
 // output, or a one-line glimpse of the model's reasoning), and the task
 // checklist. Rows are handed to the live region, which draws them below the

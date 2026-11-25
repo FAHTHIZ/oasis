@@ -162,9 +162,9 @@ test('/skills, /config, /doctor and /release-notes report useful information', a
   assert.match(config, /model\s+gpt-5/);
   assert.match(config, /1 deny rules/);
   const doctor = (await runBuiltinCommand('doctor', '', state)).output;
-  assert.match(doctor, /Oasis doctor/);
+  assert.match(doctor, /OASIS doctor/);
   assert.match(doctor, /Context: about/);
-  assert.match((await runBuiltinCommand('release-notes', '3', state)).output, /Oasis changes|commits\/main/);
+  assert.match((await runBuiltinCommand('release-notes', '3', state)).output, /OASIS changes|commits\/main/);
 });
 
 test('/loop parses intervals and counts', async () => {

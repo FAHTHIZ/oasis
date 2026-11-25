@@ -26,7 +26,7 @@ const KEY_RULES = [
   { test: /^tgp_v1_[A-Za-z0-9_-]{20,}$/, providers: ['together'] },
   // The unified key a self-hosted FreeLLMAPI gateway issues.
   { test: /^freellmapi-[A-Za-z0-9_-]{24,}$/, providers: ['freellmapi'] },
-  // The Oasis Key a self-hosted OASIS Route gateway issues.
+  // The OASIS Key a self-hosted OASIS Route gateway issues.
   { test: /^oasis_live_[A-Za-z0-9_-]{20,}$/, providers: ['oasis-route'] },
   { test: /^sk-(proj|svcacct|admin)-[A-Za-z0-9_-]{20,}$/, providers: ['openai'] },
   { test: /^sk-[a-f0-9]{32}$/, providers: ['deepseek', 'moonshot', 'openai'] },

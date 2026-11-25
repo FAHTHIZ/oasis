@@ -254,7 +254,7 @@ async function writeIndex(root, scope, env) {
   const dir = memoryRoots(root, env)[scope];
   const memories = await listMemories(root, { env, scope });
   if (!memories.length) { await rm(path.join(dir, 'MEMORY.md'), { force: true }).catch(() => {}); return; }
-  const lines = ['# Oasis ' + scope + ' memory', '', 'Generated index. Edit or delete the files next to it; the index rebuilds on the next save.', ''];
+  const lines = ['# OASIS ' + scope + ' memory', '', 'Generated index. Edit or delete the files next to it; the index rebuilds on the next save.', ''];
   for (const category of MEMORY_CATEGORIES) {
     const group = memories.filter((memory) => memory.category === category);
     if (!group.length) continue;

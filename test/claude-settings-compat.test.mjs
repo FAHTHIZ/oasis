@@ -19,7 +19,7 @@ async function fixture(t) {
   return { base, home, root, env, managed };
 }
 
-test('~/.claude/settings.json loads as user settings; Oasis user settings win', async (t) => {
+test('~/.claude/settings.json loads as user settings; OASIS user settings win', async (t) => {
   const { root, env } = await fixture(t);
   await writeFile(path.join(env.CLAUDE_CONFIG_DIR, 'settings.json'), JSON.stringify({ model: 'claude-model', permissions: { allow: ['Bash(npm test)'] }, env: { FROM_CLAUDE: '1', SHARED: 'claude' }, statusLine: { type: 'command', command: 'echo hi' } }));
   await writeFile(path.join(env.OASIS_CONFIG_DIR, 'settings.json'), JSON.stringify({ model: 'oasis-model', env: { SHARED: 'oasis', NUM: 3, 'BAD KEY': 'x' } }));

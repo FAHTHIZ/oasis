@@ -110,7 +110,7 @@ export function configItems() {
       }
     },
     {
-      key: 'autoMemory', label: 'Auto memory', description: 'Let Oasis save and recall project memories',
+      key: 'autoMemory', label: 'Auto memory', description: 'Let OASIS save and recall project memories',
       choices: async () => BOOL,
       current: async (state, saved) => String(saved.autoMemory !== false),
       apply: async (value, state) => { await saveSetting('autoMemory', value === 'true', state.env); return 'Auto memory ' + (value === 'true' ? 'on' : 'off') + ' (applies to new sessions).'; }

@@ -881,7 +881,7 @@ async function requestCompletionRawInner(session, options = {}) {
 }
 
 /**
- * Verify that the selected model can emit a valid tool call before Oasis persists
+ * Verify that the selected model can emit a valid tool call before OASIS persists
  * the configuration. One inert schema is offered; the returned call is inspected
  * only and is never executed. Provider response bodies and credentials are not returned.
  */
@@ -971,7 +971,7 @@ export async function testProviderConnection(rawConfig, options = {}) {
       toolCallsFromText: fromText,
       reliabilityWarning: caveat,
       note: (fromText
-        ? 'The model wrote the tool call in its reply text instead of a native tool call; Oasis recovers that format, but tool use may be less reliable with this model. '
+        ? 'The model wrote the tool call in its reply text instead of a native tool call; OASIS recovers that format, but tool use may be less reliable with this model. '
         : attempts > 1 ? 'The model needed a second try to make a valid tool call, so tool use may be less reliable with this model. ' : 'A valid tool-call response was received. ') +
         'The inert validation tool was not executed.'
     };

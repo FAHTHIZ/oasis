@@ -63,7 +63,7 @@ test('a real billing 402 still fails fast without a retry', async (t) => {
 });
 
 // FreeLLMAPI, as seen live in the OVH head-to-head on 2026-11-14: no
-// Retry-After header, only the pool's soonest reset in the body. Oasis made
+// Retry-After header, only the pool's soonest reset in the body. OASIS made
 // two quick retries and failed the task while the stated reset was 28 s away.
 const freellmapi = (eta) => JSON.stringify({ error: { message: 'All models exhausted: 1 route checked (1 rate-limited or on cooldown). Add more API keys or wait for rate limits to reset. Soonest reset ~' + eta + '. 6 models skipped: no key configured for their platform.', type: 'rate_limit_error' } });
 

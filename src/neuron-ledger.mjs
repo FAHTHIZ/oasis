@@ -1,4 +1,4 @@
-// Oasis Neuron Network ledger: an append-only record of every neuron's state
+// OASIS Neuron Network ledger: an append-only record of every neuron's state
 // transitions and budget charges, kept in node:sqlite next to the session index
 // (<config>/sessions/neuron-ledger.sqlite).
 //

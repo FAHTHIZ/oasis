@@ -183,7 +183,7 @@ export function enterPlanMode(session, args = {}) {
 
 export function notifyUser(args = {}, { env = process.env, output = process.stderr, platform = process.platform, run = spawnQuiet } = {}) {
   const message = String(args.message || '').replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 300);
-  const title = String(args.title || 'Oasis').replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 80);
+  const title = String(args.title || 'OASIS').replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 80);
   if (!message) throw new Error('notify needs a message.');
   const channels = [];
   if (output && output.isTTY) {

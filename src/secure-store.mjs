@@ -56,7 +56,7 @@ function quoteSecurityInteractiveArgument(value) {
 
 function keychainStoreCommand(account, value) {
   const accountArg = quoteSecurityInteractiveArgument(account);
-  const labelArg = quoteSecurityInteractiveArgument('Oasis: ' + account);
+  const labelArg = quoteSecurityInteractiveArgument('OASIS: ' + account);
   const secretHex = Buffer.from(String(value), 'utf8').toString('hex');
   const command = 'add-generic-password -U -s ' + quoteSecurityInteractiveArgument(SERVICE) +
     ' -a ' + accountArg + ' -l ' + labelArg + ' -X ' + secretHex + '\n';
@@ -76,7 +76,7 @@ export function secureSet(account, value, env = process.env, backend = secureSto
     return { ok: result.ok, backend, error: result.ok ? null : result.error };
   }
   if (backend === 'libsecret') {
-    const result = runImpl('secret-tool', ['store', '--label=Oasis: ' + account, 'service', SERVICE, 'account', account], { env, input: value });
+    const result = runImpl('secret-tool', ['store', '--label=OASIS: ' + account, 'service', SERVICE, 'account', account], { env, input: value });
     return { ok: result.ok, backend, error: result.ok ? null : result.error };
   }
   return { ok: false, backend: null, error: 'No OS secure storage on this platform.' };

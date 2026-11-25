@@ -122,7 +122,7 @@ test('generic approval prompts keep their lines and indented command lines', asy
 
 test('a plan approval shows the whole plan; other long prompts say what was cut', async () => {
   const { formatApprovalMessage } = await import('../src/approval-language.mjs');
-  const plan = 'Oasis has a plan:\n\n' + '1. Step\n'.repeat(1500) + 'FINAL STEP\n\nLeave plan mode and implement this plan?';
+  const plan = 'OASIS has a plan:\n\n' + '1. Step\n'.repeat(1500) + 'FINAL STEP\n\nLeave plan mode and implement this plan?';
   const shown = formatApprovalMessage(plan, { tool: 'exit_plan_mode' });
   assert.match(shown.message, /FINAL STEP/);
   assert.match(shown.message, /implement this plan\?$/);
@@ -143,7 +143,7 @@ test('an MCP call approval names the tool and server and shows the arguments as 
 });
 
 test('a reworded command prompt keeps the rehearsal result and the high-risk reason', () => {
-  const prompt = 'Run this command in the workspace?\n  ./build.sh\nRehearsal (network off, nothing kept): exit 0 in 40 ms.\n  would create (1): dist/app.js\n  would delete (1): old.js\n  It also changed 2 path(s) inside .git.\nHIGH RISK: this command rewrites history. Auto-approval does not apply.\nCommands can change project files or execute project scripts. Oasis strips common secret environment variables from the child process.';
+  const prompt = 'Run this command in the workspace?\n  ./build.sh\nRehearsal (network off, nothing kept): exit 0 in 40 ms.\n  would create (1): dist/app.js\n  would delete (1): old.js\n  It also changed 2 path(s) inside .git.\nHIGH RISK: this command rewrites history. Auto-approval does not apply.\nCommands can change project files or execute project scripts. OASIS strips common secret environment variables from the child process.';
   const { message, risky } = formatApprovalMessage(prompt, { tool: 'run_command', input: { command: './build.sh', args: [] } });
   assert.equal(risky, true);
   assert.match(message, /\n {2}\.\/build\.sh\n/);

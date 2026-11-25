@@ -31,7 +31,7 @@ export function parsePurgeArgs(rest = []) {
 
 async function exists(file) { try { await stat(file); return true; } catch { return false; } }
 
-/** Every project that has saved Oasis sessions, with its session count. */
+/** Every project that has saved OASIS sessions, with its session count. */
 export async function knownProjects(env = process.env) {
   const base = path.join(getConfigDirectory(env), 'sessions');
   const projects = [];
@@ -113,5 +113,5 @@ export async function applyPurge(plan, { env = process.env, confirm = null } = {
 
 export function describePurge(plan) {
   if (!plan.items.length) return 'Nothing to purge for ' + plan.root + '.';
-  return 'Local Oasis state for ' + plan.root + ':\n' + plan.items.map((item) => '  - ' + item.label).join('\n');
+  return 'Local OASIS state for ' + plan.root + ':\n' + plan.items.map((item) => '  - ' + item.label).join('\n');
 }

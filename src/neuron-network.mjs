@@ -1,4 +1,4 @@
-// Oasis Neuron Network: lineage and read-only graph projection for the existing agent registry.
+// OASIS Neuron Network: lineage and read-only graph projection for the existing agent registry.
 // The registry remains the source of truth; this module does not create a second worker runtime.
 
 const MAX_NEURON_DEPTH = 32;
@@ -25,7 +25,7 @@ export function attachNeuronLineage(registry, record, requestedParentId = "main"
   const parent = parentId === "main" ? null : registry.agents.get(parentId);
   const depth = parent ? Math.max(1, Math.floor(safeNumber(parent.depth, 1))) + 1 : 1;
   if (depth > MAX_NEURON_DEPTH) {
-    throw new Error("Oasis Neuron Network depth limit reached (" + MAX_NEURON_DEPTH + ").");
+    throw new Error("OASIS Neuron Network depth limit reached (" + MAX_NEURON_DEPTH + ").");
   }
   record.parentId = parentId;
   record.depth = depth;
@@ -172,7 +172,7 @@ export function buildNeuronNetworkSnapshot(registry, args = {}) {
     parent_id: null,
     depth: 0,
     role: "coordinator",
-    description: "Oasis main coordinator",
+    description: "OASIS main coordinator",
     status: "running",
     child_count: children.get("main") || 0
   }];
@@ -201,7 +201,7 @@ export function buildNeuronNetworkSnapshot(registry, args = {}) {
   const totalCost = ordered.reduce((sum, record) => sum + safeNumber(record.usage?.costUsd), 0);
   const unknownCostAgents = ordered.filter((record) => !record.usage || record.usage.costKnown === false).length;
   return {
-    network: "Oasis Neuron Network",
+    network: "OASIS Neuron Network",
     schema_version: 1,
     root_id: "main",
     nodes,

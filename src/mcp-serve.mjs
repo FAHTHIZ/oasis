@@ -1,5 +1,5 @@
-// oasis mcp serve: expose Oasis's own tools to other MCP clients over stdio
-// (Claude Desktop, Cursor, VS Code, another Oasis...). The client is in charge
+// oasis mcp serve: expose OASIS's own tools to other MCP clients over stdio
+// (Claude Desktop, Cursor, VS Code, another OASIS...). The client is in charge
 // of approvals, as with any MCP server, so only a curated set is exposed:
 // read-only tools by default, edits with --allow-edits, commands with
 // --allow-commands. Secret files and paths outside the workspace stay blocked.
@@ -55,7 +55,7 @@ function createMcpServer({ root, allowEdits = false, allowCommands = false, prom
   const tools = servedTools({ allowEdits, allowCommands, env });
   const allowed = new Set(tools.map((tool) => tool.name));
   const session = { root, background: new Map(), settings: {} };
-  const server = new Server({ name: 'oasis', version }, { capabilities: { tools: { listChanged: false }, ...(prompts ? { prompts: { listChanged: false } } : {}) }, instructions: 'Oasis workspace tools for ' + root + '. Paths are relative to that folder.' + (prompts ? ' Slash commands from every agent format in this workspace are available as prompts; skills through list_skills and load_skill.' : ' Skills are available through list_skills and load_skill.') });
+  const server = new Server({ name: 'oasis', version }, { capabilities: { tools: { listChanged: false }, ...(prompts ? { prompts: { listChanged: false } } : {}) }, instructions: 'OASIS workspace tools for ' + root + '. Paths are relative to that folder.' + (prompts ? ' Slash commands from every agent format in this workspace are available as prompts; skills through list_skills and load_skill.' : ' Skills are available through list_skills and load_skill.') });
   const text = (value, isError) => ({ content: [{ type: 'text', text: value }], isError });
   server.setRequestHandler('tools/list', async () => ({ tools }));
   if (prompts) {
@@ -77,7 +77,7 @@ function createMcpServer({ root, allowEdits = false, allowCommands = false, prom
     const name = request.params && request.params.name;
     const args = request.params && request.params.arguments || {};
     if (!allowed.has(name)) throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Unknown or disabled tool: ' + name);
-    // Oasis's own agent always asks before these edits; there is no one to ask
+    // OASIS's own agent always asks before these edits; there is no one to ask
     // here, and MCP clients often auto-approve edits, so refuse them.
     if (SERVE_EDITS.includes(name) && !protectedEditsAllowed(env)) {
       const hit = await protectedConfigTarget(root, args.path || args.notebook_path || args.file_path).catch(() => null);
@@ -108,7 +108,7 @@ export async function serveMcp({ root, args = [], env = process.env, input = pro
   const allowCommands = args.includes('--allow-commands') || args.includes('--allow-all');
   const prompts = !args.includes('--no-prompts');
   const { server, close } = createMcpServer({ root: path.resolve(root), allowEdits, allowCommands, prompts, env });
-  log.write('Oasis MCP server on stdio for ' + path.resolve(root) + ' (' + ['read-only tools', 'skills', prompts && 'commands as prompts', allowEdits && 'edits', allowCommands && 'commands'].filter(Boolean).join(', ') + ')\n');
+  log.write('OASIS MCP server on stdio for ' + path.resolve(root) + ' (' + ['read-only tools', 'skills', prompts && 'commands as prompts', allowEdits && 'edits', allowCommands && 'commands'].filter(Boolean).join(', ') + ')\n');
   const transport = new StdioServerTransport(input, output);
   const closed = new Promise((resolve) => { transport.onclose = resolve; input.once('end', resolve); input.once('close', resolve); });
   // Clients usually stop a stdio server with SIGTERM and SIGKILL it 1-2 s

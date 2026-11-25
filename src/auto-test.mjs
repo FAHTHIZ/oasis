@@ -1,8 +1,8 @@
 // Auto-test (Aider's --auto-test): after the agent edits files and is about to
-// finish, Oasis itself runs the configured test command. On failure the output
+// finish, OASIS itself runs the configured test command. On failure the output
 // is handed back to the model so it can fix the problem, up to maxAttempts.
 // The command comes from user settings, trusted project settings, or
-// OASIS_AUTO_TEST, so a cloned repository cannot make Oasis run commands.
+// OASIS_AUTO_TEST, so a cloned repository cannot make OASIS run commands.
 import { spawn } from 'node:child_process';
 
 const MAX_OUTPUT = 12000;
@@ -81,7 +81,7 @@ export async function runAutoTest(root, command, { timeoutMs = 600000, signal, e
 export function autoTestFailurePrompt(result, attempt, maxAttempts) {
   const status = result.timedOut ? 'timed out' : 'failed with exit code ' + result.exitCode;
   return [
-    'Auto-test: Oasis ran the configured test command after your edits and it ' + status + ' (attempt ' + attempt + ' of ' + maxAttempts + ').',
+    'Auto-test: OASIS ran the configured test command after your edits and it ' + status + ' (attempt ' + attempt + ' of ' + maxAttempts + ').',
     'Command: ' + result.command,
     'Output (tail):',
     '```',

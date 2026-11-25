@@ -1,4 +1,4 @@
-// Oasis Neuron Network scheduler (roadmap 1.2): one admission point for every
+// OASIS Neuron Network scheduler (roadmap 1.2): one admission point for every
 // neuron, whether it was started by `task`, a team or a workflow's agent().
 //
 // A neuron runs only while it holds a slot. Slots are limited three ways:

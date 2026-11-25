@@ -349,7 +349,7 @@ async function pushBranch(root, remote, env, options) {
   if (!remotes.stdout.split('\n').includes(remote)) return fail('There is no Git remote named ' + remote + '.');
   const out = await git(root, ['push', '--set-upstream', remote, 'HEAD:refs/heads/' + branch], { env, timeout: 300000, signal: options.signal });
   if (out.exitCode !== 0) {
-    const hint = /rejected|non-fast-forward|fetch first/i.test(out.stderr) ? ' The remote has commits you do not have; pull or rebase first. Oasis never force-pushes.' : /auth|permission|403|could not read/i.test(out.stderr) ? ' Check that Git is signed in to this remote.' : '';
+    const hint = /rejected|non-fast-forward|fetch first/i.test(out.stderr) ? ' The remote has commits you do not have; pull or rebase first. OASIS never force-pushes.' : /auth|permission|403|could not read/i.test(out.stderr) ? ' Check that Git is signed in to this remote.' : '';
     return fail('git push failed.' + hint, { exitCode: out.exitCode, output: out.stderr.slice(-4000) });
   }
   return { ok: true, branch, remote, output: (out.stderr || out.stdout).slice(-2000) };

@@ -386,7 +386,7 @@ export function createCompactionPreview(session, focus = '') {
     if (tokens > 500) large.push({ index: i + 2, role: String(message.role || 'unknown'), name: String(message.name || ''), tokens, preview: previewSafeText(text) });
     if (/\b(error|failed|exception|timed out|not found)\b/i.test(text)) errors++;
     if (/\b(test|type.?check|lint|build|diagnostic|verification)\b/i.test(text)) checks++;
-    // Oasis's own reminders (open follow-ups, memory) are not paths the
+    // OASIS's own reminders (open follow-ups, memory) are not paths the
     // conversation worked on. Dot-folders keep their dot (.oasis/x.json), and
     // a bare file name counts when its extension is a common source/doc one.
     const spoken = text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, ' ');

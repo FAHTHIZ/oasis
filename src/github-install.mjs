@@ -1,4 +1,4 @@
-// /install-github-app: set up the Oasis GitHub Action in this repository (Claude Code's
+// /install-github-app: set up the OASIS GitHub Action in this repository (Claude Code's
 // /install-github-app). Writes .github/workflows/oasis.yml and prints the secret step.
 import path from 'node:path';
 import { existsSync } from 'node:fs';
@@ -36,7 +36,7 @@ export async function githubInstallPlan(root, config = {}, options = {}) {
   const workflow = [
     '# Installed by /install-github-app. Mention ' + trigger + ' on an issue or pull request.',
     '# Needs a repository secret named OASIS_API_KEY with your provider key.',
-    'name: Oasis',
+    'name: OASIS',
     'on:',
     '  issue_comment:',
     '    types: [created]',
@@ -86,7 +86,7 @@ export async function writeInstallPlan(plan) {
     'Wrote ' + path.relative(plan.root, plan.file) + '.',
     'Next steps:',
     '  1. Add your provider key as a secret:  gh secret set OASIS_API_KEY' + repoFlag + '  (it prompts for the value)',
-    '  2. Commit and push the workflow:      git add .github/workflows/oasis.yml && git commit -m "Add Oasis GitHub Action" && git push',
+    '  2. Commit and push the workflow:      git add .github/workflows/oasis.yml && git commit -m "Add OASIS GitHub Action" && git push',
     '  3. Mention @oasis in an issue or PR comment.',
     'Docs: docs/github-action.md'
   ].join('\n');

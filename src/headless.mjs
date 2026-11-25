@@ -27,7 +27,7 @@ import { reviewRounds } from './goal-evidence.mjs';
 import { sessionEvidence } from './evidence-ledger.mjs';
 import { PermissionPolicy } from './permissions.mjs';
 
-// Finds an MCP tool by Claude-style name (mcp__server__tool) or Oasis safe name.
+// Finds an MCP tool by Claude-style name (mcp__server__tool) or OASIS safe name.
 function resolvePermissionTool(session, name) {
   if (!session || !session.mcpToolMap || !name) return null;
   if (session.mcpToolMap.has(name)) return name;

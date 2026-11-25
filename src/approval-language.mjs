@@ -163,7 +163,7 @@ export function formatApprovalMessage(prompt, meta = {}) {
       (match && match[2] ? ' by running ' + safeLabel(match[2]) : '') +
       '. This changes your environment and may run third-party installer code. Approve only if you trust the package and source.' + keptNotes(original);
     risky = true;
-  } else if (/^Install(?:\/update)? Oasis\b/i.test(original) || /^Install the reviewed Oasis plugin bundle\b/i.test(original)) {
+  } else if (/^Install(?:\/update)? OASIS\b/i.test(original) || /^Install the reviewed OASIS plugin bundle\b/i.test(original)) {
     message = 'OASIS wants to install or update project software. This changes files or dependencies and may run code. Review the source and the requested action before approving it.';
     risky = true;
   } else {

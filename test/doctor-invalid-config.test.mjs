@@ -25,7 +25,7 @@ test('oasis doctor names an unreadable config.json instead of asking for setup',
     child.stderr.on('data', (d) => { text += d; });
     child.on('close', () => resolve(text));
   });
-  assert.match(out, /Model connection: CHECK — Could not read Oasis configuration: .*config\.json/);
+  assert.match(out, /Model connection: CHECK — Could not read OASIS configuration: .*config\.json/);
   assert.match(out, /Next step: fix the configuration file named above/);
   assert.doesNotMatch(out, /Next step: run oasis setup to connect a model/);
 });

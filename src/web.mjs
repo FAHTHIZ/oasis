@@ -643,7 +643,7 @@ export function createOasisWebServer(options = {}) {
   const bindHost = options.host || '127.0.0.1';
   const tlsOptions = loadTlsOptions(options);
   if (!isLoopbackBindHost(bindHost) && !tlsOptions && options.allowInsecureLan !== true) {
-    throw new Error('Binding Oasis to a non-loopback address requires HTTPS. Provide --tls-cert and --tls-key, or explicitly opt into unencrypted LAN access with --allow-insecure-lan.');
+    throw new Error('Binding OASIS to a non-loopback address requires HTTPS. Provide --tls-cert and --tls-key, or explicitly opt into unencrypted LAN access with --allow-insecure-lan.');
   }
   let activeRoot = root;
   const env = options.env || process.env;
@@ -928,7 +928,7 @@ export function createOasisWebServer(options = {}) {
   function reserveJobSlot() {
     pruneJobs(1);
     if (jobs.size + reservedJobSlots >= MAX_JOBS) {
-      throw Object.assign(new Error('The Oasis browser runtime is at its 20-job limit. Wait for an active job to finish, cancel a pending job, or retry after completed job history is pruned.'), { statusCode: 429 });
+      throw Object.assign(new Error('The OASIS browser runtime is at its 20-job limit. Wait for an active job to finish, cancel a pending job, or retry after completed job history is pruned.'), { statusCode: 429 });
     }
     reservedJobSlots++;
     let released = false;
@@ -1165,7 +1165,7 @@ export function createOasisWebServer(options = {}) {
               emit(job, 'context_files', { files: expanded.files.slice(0, 50) });
             }
           }
-          let handled = slashName === 'sounds' || slashName === 'sound' ? { output: 'In the browser, sound effects play here in the page: turn them on or off and set the volume under Settings → Sound effects. /sounds in the terminal (oasis) controls terminal sounds.' } : terminalOnly && slashName === 'test' ? { output: '/test runs in the terminal (oasis). In the browser, type !npm test (or your test command): it asks for approval, and the output goes to Oasis with your next message.' } : terminalOnly ? { output: '/' + slashName + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slashName, commandArgument, { root: taskRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions, confirm: (question) => approvalFor(job, question, true), askUser: (question) => questionFor(job, question) });
+          let handled = slashName === 'sounds' || slashName === 'sound' ? { output: 'In the browser, sound effects play here in the page: turn them on or off and set the volume under Settings → Sound effects. /sounds in the terminal (oasis) controls terminal sounds.' } : terminalOnly && slashName === 'test' ? { output: '/test runs in the terminal (oasis). In the browser, type !npm test (or your test command): it asks for approval, and the output goes to OASIS with your next message.' } : terminalOnly ? { output: '/' + slashName + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slashName, commandArgument, { root: taskRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions, confirm: (question) => approvalFor(job, question, true), askUser: (question) => questionFor(job, question) });
           // /presets N: a saved prompt becomes this turn; a saved built-in
           // /command runs once here.
           if (handled && handled.queue) {
@@ -1513,7 +1513,7 @@ export function createOasisWebServer(options = {}) {
       cliAvailable: true,
       authenticated,
       account: authenticated && accountMatch ? accountMatch[1].slice(0, 100) : null,
-      hint: authenticated ? 'GitHub CLI authentication is available.' : 'Run gh auth login in the terminal on the computer running Oasis, then refresh this status.'
+      hint: authenticated ? 'GitHub CLI authentication is available.' : 'Run gh auth login in the terminal on the computer running OASIS, then refresh this status.'
     };
   }
 
@@ -1569,7 +1569,7 @@ export function createOasisWebServer(options = {}) {
     void (async () => {
       try {
         const approved = await approvalFor(job,
-          'Clone GitHub repository ' + repository + ' into the Oasis-managed workspace ' + relative + '? This downloads repository files but does not run its scripts. Inspect repository contents before running project commands.');
+          'Clone GitHub repository ' + repository + ' into the OASIS-managed workspace ' + relative + '? This downloads repository files but does not run its scripts. Inspect repository contents before running project commands.');
         if (!approved) {
           job.result = { approved: false, repository, message: 'Clone was denied. No repository was downloaded.' };
           job.status = 'completed';
@@ -1877,7 +1877,7 @@ export function createOasisWebServer(options = {}) {
       return;
     }
     if (!hostAllowed(req, { allowedHosts, trustProxy })) {
-      json(res, 421, { error: 'Oasis API accepts requests only on localhost, a literal IP address or a configured --public-url host, with same-origin browser requests.' });
+      json(res, 421, { error: 'OASIS API accepts requests only on localhost, a literal IP address or a configured --public-url host, with same-origin browser requests.' });
       return;
     }
     if (req.method === 'OPTIONS') {
@@ -3296,7 +3296,7 @@ export function createOasisWebServer(options = {}) {
   const requestHandler = (req, res) => {
     void handle(req, res).catch((error) => {
       if (res.headersSent) { res.destroy(); return; }
-      json(res, Number.isInteger(error.statusCode) ? error.statusCode : 500, { error: String(error && error.message || error || 'Oasis server error').slice(0, 3000), ...(error && error.activeJob ? { activeJob: error.activeJob } : {}) });
+      json(res, Number.isInteger(error.statusCode) ? error.statusCode : 500, { error: String(error && error.message || error || 'OASIS server error').slice(0, 3000), ...(error && error.activeJob ? { activeJob: error.activeJob } : {}) });
     });
   };
   const server = tlsOptions ? createHttpsServer(tlsOptions, requestHandler) : createHttpServer(requestHandler);
@@ -3308,7 +3308,7 @@ export function createOasisWebServer(options = {}) {
     async close() {
       for (const job of jobs.values()) {
         job.cancelRequested = true;
-        job.controller.abort(new Error('Oasis web server is closing.'));
+        job.controller.abort(new Error('OASIS web server is closing.'));
         for (const pending of job.pendingApprovals.values()) pending.resolve(false);
       }
       for (const jobId of [...jobWaiters.keys()]) wakeJobWaiters(jobId);

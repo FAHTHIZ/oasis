@@ -15,7 +15,7 @@
 //   agent     like prompt, but a read-only verifier subagent can inspect the workspace
 // Handlers may carry "if" (one permission rule such as "Bash(git *)" or "Edit(*.ts)")
 // on tool events, and "onFailure": "block" to treat a crash/timeout like exit 2.
-// A command controls Oasis through its exit code and optional JSON stdout:
+// A command controls OASIS through its exit code and optional JSON stdout:
 //   exit 0  success; stdout JSON may carry decision/permissionDecision/additionalContext
 //   exit 2  blocking error; stderr is fed back to the model (PreToolUse blocks the tool,
 //           UserPromptSubmit drops the prompt, Stop forces the agent to keep working)

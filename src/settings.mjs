@@ -1,4 +1,4 @@
-// Layered Oasis settings: user, project (shared), and project-local files.
+// Layered OASIS settings: user, project (shared), and project-local files.
 //
 // Settings files use the same shape as Claude Code's settings.json so teams can
 // reuse existing configuration:
@@ -7,7 +7,7 @@
 //     "sandbox": { "enabled": false, "network": false, "autoAllowCommands": true, "autoAllowShellCommands": false } }
 //
 // Trust model: a cloned repository can contain any file, so project-scoped
-// settings are split by effect. Rules that only make Oasis stricter (deny / ask)
+// settings are split by effect. Rules that only make OASIS stricter (deny / ask)
 // always apply. Rules that loosen policy (allow, hooks that run commands,
 // defaultMode, sandbox opt-outs) apply only after the user trusts the workspace
 // with `oasis trust` or `/trust`. User-level settings always apply.
@@ -42,7 +42,7 @@ export function userSettingsPath(env = process.env) {
   return path.join(getConfigDirectory(env), 'settings.json');
 }
 
-// Claude Code's user settings (~/.claude/settings.json); Oasis user settings load after it and win.
+// Claude Code's user settings (~/.claude/settings.json); OASIS user settings load after it and win.
 export function claudeUserSettingsPath(env = process.env) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
   return path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), 'settings.json');
@@ -722,7 +722,7 @@ export async function loadSettings(root, options = {}) {
     // Claude Code's autoCompactEnabled: false turns automatic compaction off.
     if (typeof settings.autoCompactEnabled === 'boolean') result.autoCompactEnabled = settings.autoCompactEnabled;
     // Auto mode classifier. Claude Code's schema { environment, allow, soft_deny, hard_deny } (each
-    // replaces the defaults unless it lists "$defaults"), plus Oasis's { model, rules, classifyAllShell, witness }.
+    // replaces the defaults unless it lists "$defaults"), plus OASIS's { model, rules, classifyAllShell, witness }.
     // Like Claude Code, shared project settings cannot loosen the classifier: from project/local scopes
     // only extra soft_deny/hard_deny entries and rules are used.
     if (settings.autoMode && typeof settings.autoMode === 'object') {
@@ -781,7 +781,7 @@ export async function loadSettings(root, options = {}) {
     // repoMap: true | false | { maxChars } — add a ranked repository outline to the first turn.
     if (typeof settings.repoMap === 'boolean') result.repoMap = settings.repoMap;
     else if (settings.repoMap && typeof settings.repoMap === 'object' && !Array.isArray(settings.repoMap)) result.repoMap = { maxChars: Math.max(1000, Math.min(30000, Number.parseInt(settings.repoMap.maxChars, 10) || 6000)) };
-    // autoTest: "npm test" | { command, maxAttempts, timeoutSeconds } — Oasis runs it after edits (trusted scopes only).
+    // autoTest: "npm test" | { command, maxAttempts, timeoutSeconds } — OASIS runs it after edits (trusted scopes only).
     if (settings.autoTest === false) result.autoTest = null;
     else if (settings.autoTest) { const autoTest = normalizeAutoTestSetting(settings.autoTest); if (autoTest) result.autoTest = autoTest; }
     if (settings.statusLine && typeof settings.statusLine === 'object' && settings.statusLine.type === 'command' && typeof settings.statusLine.command === 'string' && settings.statusLine.command.trim()) { result.statusLine = { type: 'command', command: settings.statusLine.command.trim() }; result.statusLineSource = scope; }

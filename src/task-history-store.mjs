@@ -1,7 +1,7 @@
 // Durable task metadata and event history for the OASIS host runtime.
 //
 // This is a local persistence layer, not a hosted scheduler. It deliberately
-// stores task state under the user's private Oasis config directory, never in the
+// stores task state under the user's private OASIS config directory, never in the
 // project checkout, and uses restrictive permissions plus atomic replacement.
 import { isWorktreeBranchName } from './branch-names.mjs';
 import { createHash } from 'node:crypto';
@@ -182,7 +182,7 @@ export function createTaskHistoryStore(root, options = {}) {
               const wasActive = !TERMINAL.has(record.status);
               if (wasActive) {
                 record.status = 'interrupted';
-                record.error = 'The Oasis runtime restarted before this task finished. Review its saved events and resume from the associated session if appropriate.';
+                record.error = 'The OASIS runtime restarted before this task finished. Review its saved events and resume from the associated session if appropriate.';
                 record.updatedAt = new Date().toISOString();
                 record.events.push({
                   id: record.nextEventId++,

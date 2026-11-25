@@ -1,4 +1,4 @@
-// Output styles (Claude Code compatible): change how Oasis explains its work.
+// Output styles (Claude Code compatible): change how OASIS explains its work.
 // Built-ins: default, concise, explanatory, architect, reviewer, and legacy learning. Custom styles are Markdown files in
 // .oasis/output-styles, .claude/output-styles, or the user-level equivalents.
 // Enabled Claude Code plugins add theirs as plugin-name:style.

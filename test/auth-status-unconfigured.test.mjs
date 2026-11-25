@@ -1,6 +1,6 @@
 // `oasis auth status` on a fresh install reported "apiProvider": "api.openai.com"
 // and model "gpt-6.1-sol" (built-in defaults nobody chose), and a saved keyless
-// endpoint (one that needs no key) reported loggedIn false although Oasis used it.
+// endpoint (one that needs no key) reported loggedIn false although OASIS used it.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';

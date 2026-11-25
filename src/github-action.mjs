@@ -1,4 +1,4 @@
-// GitHub Action entry point: mention @oasis on an issue or pull request and Oasis
+// GitHub Action entry point: mention @oasis on an issue or pull request and OASIS
 // does the work, pushes a branch, opens a PR (for issues), and replies in the thread.
 // See action.yml and docs/github-action.md.
 import { readFile } from 'node:fs/promises';
@@ -15,7 +15,7 @@ function input(env, name, fallback = '') {
   return value === undefined || value === '' ? fallback : String(value);
 }
 
-// Works out what triggered the run and whether Oasis should respond.
+// Works out what triggered the run and whether OASIS should respond.
 // Returns { respond, reason, request, number, isPullRequest, author, commentId, title, body }.
 export function readTrigger(eventName, event, options = {}) {
   const phrase = options.triggerPhrase || '@oasis';
@@ -67,7 +67,7 @@ export function readTrigger(eventName, event, options = {}) {
 export function buildPrompt(trigger, context) {
   const kind = trigger.isPullRequest ? 'pull request' : 'issue';
   const lines = [
-    'You are Oasis, running in GitHub Actions for ' + context.repository + '.',
+    'You are OASIS, running in GitHub Actions for ' + context.repository + '.',
     trigger.number ? '@' + (trigger.author || 'someone') + ' asked you on ' + kind + ' #' + trigger.number + ' ("' + trigger.title + '"):' : 'Task:',
     '',
     trigger.request,
@@ -104,7 +104,7 @@ function git(args, cwd) {
 }
 
 function commentBody(status, details = []) {
-  return ['**Oasis** ' + status, ...details].join('\n\n');
+  return ['**OASIS** ' + status, ...details].join('\n\n');
 }
 
 function safeVerificationText(value, maximum = 240) {
@@ -290,7 +290,7 @@ export async function runAction(options = {}) {
     label: input(env, 'label_trigger'),
     allowedAssociations: input(env, 'allowed_associations', TRUSTED_ASSOCIATIONS.join(',')).split(',').map((item) => item.trim().toUpperCase()).filter(Boolean)
   });
-  if (!trigger.respond) { log('Oasis: not responding (' + trigger.reason + ').'); return { responded: false, reason: trigger.reason }; }
+  if (!trigger.respond) { log('OASIS: not responding (' + trigger.reason + ').'); return { responded: false, reason: trigger.reason }; }
 
   const repository = env.GITHUB_REPOSITORY || (event.repository && event.repository.full_name) || '';
   const context = {
@@ -419,5 +419,5 @@ export async function checkReceipt(result, root) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   runAction().then((outcome) => {
     if (outcome.responded && outcome.result && outcome.result.is_error) process.exitCode = 1;
-  }).catch((error) => { process.stderr.write('Oasis action failed: ' + error.message + '\n'); process.exitCode = 1; });
+  }).catch((error) => { process.stderr.write('OASIS action failed: ' + error.message + '\n'); process.exitCode = 1; });
 }

@@ -1,5 +1,5 @@
 // Claude models on AWS Bedrock and Google Vertex AI. Both platforms use the Anthropic
-// Messages format, so Oasis reuses its native Anthropic support and only changes the
+// Messages format, so OASIS reuses its native Anthropic support and only changes the
 // endpoint, a few body fields, and authentication.
 //
 // Bedrock  protocol "bedrock": AWS_BEARER_TOKEN_BEDROCK, or SigV4 with AWS_ACCESS_KEY_ID /
@@ -62,7 +62,7 @@ export function cloudCredentialsPresent(protocol, env) {
   return Boolean(env.OASIS_VERTEX_ACCESS_TOKEN || env.GOOGLE_OAUTH_ACCESS_TOKEN || vertexProject(env));
 }
 
-// Endpoint for one request. Bedrock streams use a binary event format, so Oasis calls
+// Endpoint for one request. Bedrock streams use a binary event format, so OASIS calls
 // Bedrock without streaming; Vertex streams the normal Anthropic SSE events.
 export function cloudEndpoint(config, env, stream) {
   const base = String(config.baseURL || defaultCloudBaseURL(config.protocol, env)).replace(/\/+$/, '');

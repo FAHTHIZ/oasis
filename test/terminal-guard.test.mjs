@@ -36,6 +36,6 @@ test('a guarded stream drops clipboard, title and device control sequences but k
   assert.equal(out, '\x1b[31mred\x1b[39m \x1b]8;;https://example.com\x07link\x1b]8;;\x07 \x1b]9;done\x07');
   out = '';
   writeTrusted(stream, '\x1b]52;c;QQ==\x07');
-  assert.equal(out, '\x1b]52;c;QQ==\x07', 'Oasis\'s own /copy fallback still works');
+  assert.equal(out, '\x1b]52;c;QQ==\x07', 'OASIS\'s own /copy fallback still works');
   assert.equal(stripSideEffectSequences('no escapes'), 'no escapes');
 });

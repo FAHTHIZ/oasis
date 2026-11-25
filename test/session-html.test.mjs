@@ -55,5 +55,5 @@ test('/export FILE.html writes the HTML page, FILE.md still writes Markdown', as
   assert.match(html.output, /Exported \d+ messages to chat\.html/);
   assert.match(await readFile(path.join(root, 'chat.html'), 'utf8'), /^<!doctype html>/);
   await runBuiltinCommand('export', 'chat.md', { root, session: s, env: {} });
-  assert.match(await readFile(path.join(root, 'chat.md'), 'utf8'), /^# Oasis conversation/);
+  assert.match(await readFile(path.join(root, 'chat.md'), 'utf8'), /^# OASIS conversation/);
 });

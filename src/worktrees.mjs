@@ -400,11 +400,11 @@ export async function finishWorktree(root, worktree, options = {}) {
   await git(worktree.path, ['add', '-A'], env);
   const identity = [];
   const email = await git(worktree.path, ['config', 'user.email'], env).catch(() => '');
-  if (!email) identity.push('-c', 'user.name=Oasis subagent', '-c', 'user.email=oasis@localhost');
+  if (!email) identity.push('-c', 'user.name=OASIS subagent', '-c', 'user.email=oasis@localhost');
   // Unattended worker completion must not execute repository-controlled hook scripts.
   // The caller must opt in explicitly; normal/direct finishWorktree calls run hooks.
   const hookPolicy = options.skipHooks === true ? ['--no-verify'] : [];
-  await git(worktree.path, [...identity, 'commit', ...hookPolicy, '-q', '-m', 'Oasis subagent: ' + String(options.message || worktree.name).slice(0, 200)], env, 60000);
+  await git(worktree.path, [...identity, 'commit', ...hookPolicy, '-q', '-m', 'OASIS subagent: ' + String(options.message || worktree.name).slice(0, 200)], env, 60000);
   const commitSha = await git(worktree.path, ['rev-parse', 'HEAD'], env);
   const commit = commitSha.slice(0, 7);
   const stat = await git(worktree.path, ['diff', '--stat', worktree.base, 'HEAD'], env).catch(() => '');

@@ -181,12 +181,12 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'load_skill', description: 'Load a skill\'s full instructions before work that matches its description.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Skill name' }, arguments: { type: 'string', description: 'Task details; a context: fork skill runs in a subagent with them and returns its report' }, offset: { type: 'integer', minimum: 0, description: 'Character offset to continue a long skill from (the nextOffset of the previous result)' } }, required: ['name'] } } },
   { type: 'function', function: { name: 'read_skill_resource', description: 'Read a text reference or asset shipped with an installed portable Agent Skill. Only integrity-verified files under that skill’s references/ or assets/ folders can be read; scripts are not exposed by this tool.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Installed skill name returned by list_skills or load_skill' }, path: { type: 'string', description: 'Relative path under references/ or assets/, such as references/checklist.md' }, offset: { type: 'integer', minimum: 0, description: 'Character offset to continue a long file from (the nextOffset of the previous result)' } }, required: ['name', 'path'] } } },
   { type: 'function', function: { name: 'run_specialist_review', description: 'Run one bounded specialist review in a separate read-only model session. Available roles: code-review, security-review, architecture, and test-strategy. The reviewer can inspect workspace files and Git diffs, but cannot edit files, run commands, install packages, access MCP tools, or perform external side effects. Up to two reviews are allowed per task; use for an independent second opinion, not for changes.', parameters: { type: 'object', properties: { specialist: { type: 'string', enum: ['code-review', 'security-review', 'architecture', 'test-strategy'], description: 'Focus of the independent review' }, task: { type: 'string', description: 'A bounded review request; include relevant files or the question to investigate' } }, required: ['specialist', 'task'], additionalProperties: false } } },
-  { type: 'function', function: { name: 'install_extension', description: 'Inspect and import a public GitHub repository containing Markdown specialist-agent or skill prompts. Import only the selected Markdown prompts; do not execute scripts, install dependencies, or enable MCP servers. Scope self installs into Oasis user configuration, project installs into the current workspace, and both installs to both locations. Always obtain approval before importing an external repository.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public GitHub repository URL, for example https://github.com/msitarzewski/agency-agents' }, scope: { type: 'string', enum: ['self', 'project', 'both'], description: 'Install into Oasis itself, the current project, or both' } }, required: ['url', 'scope'] } } },
-  { type: 'function', function: { name: 'configure_provider', description: 'Connect Oasis to a known model provider and switch the current chat to it only after an inert tool-call probe succeeds. Providers: ' + Object.keys(BUILTIN_PROVIDERS).join(', ') + ', plus any defined under "providers" in user settings. This tool never accepts API keys; it may use only the matching saved credential or provider-specific environment variable.', parameters: { type: 'object', properties: { provider: { type: 'string', maxLength: 40, description: 'Provider id, e.g. openai, anthropic, openrouter, gemini, groq, ollama' }, model: { type: 'string', maxLength: 200, description: 'Optional exact model ID; Ollama/OpenRouter-compatible models may require an account- or server-specific ID.' } }, required: ['provider'], additionalProperties: false } } },
+  { type: 'function', function: { name: 'install_extension', description: 'Inspect and import a public GitHub repository containing Markdown specialist-agent or skill prompts. Import only the selected Markdown prompts; do not execute scripts, install dependencies, or enable MCP servers. Scope self installs into OASIS user configuration, project installs into the current workspace, and both installs to both locations. Always obtain approval before importing an external repository.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public GitHub repository URL, for example https://github.com/msitarzewski/agency-agents' }, scope: { type: 'string', enum: ['self', 'project', 'both'], description: 'Install into OASIS itself, the current project, or both' } }, required: ['url', 'scope'] } } },
+  { type: 'function', function: { name: 'configure_provider', description: 'Connect OASIS to a known model provider and switch the current chat to it only after an inert tool-call probe succeeds. Providers: ' + Object.keys(BUILTIN_PROVIDERS).join(', ') + ', plus any defined under "providers" in user settings. This tool never accepts API keys; it may use only the matching saved credential or provider-specific environment variable.', parameters: { type: 'object', properties: { provider: { type: 'string', maxLength: 40, description: 'Provider id, e.g. openai, anthropic, openrouter, gemini, groq, ollama' }, model: { type: 'string', maxLength: 200, description: 'Optional exact model ID; Ollama/OpenRouter-compatible models may require an account- or server-specific ID.' } }, required: ['provider'], additionalProperties: false } } },
   { type: 'function', function: { name: 'install_external_skill', description: 'Install a selected Agent Skill (a SKILL.md package) from a GitHub repository, Git URL or local folder. OASIS downloads and copies the files itself; it does not run skill scripts, activate hooks, or configure MCP. Requires approval and imports the instructions as untrusted content. Choose one exact skill or set all=true.', parameters: { type: 'object', properties: { source: { type: 'string', maxLength: 600, description: 'Public GitHub shorthand owner/repo, HTTPS source URL, SSH/Git URL, or a local path.' }, skill: { type: 'string', maxLength: 128, description: 'Exact skill name to install; mutually exclusive with all=true.' }, all: { type: 'boolean', description: 'Install all skills from this source into the universal Agent Skills directory.' }, scope: { type: 'string', enum: ['project', 'global'], description: 'Project .agents/skills or user-level universal skills directory.' } }, required: ['source', 'scope'], additionalProperties: false } } },
   { type: 'function', function: { name: 'configure_mcp_server', description: 'Configure and start a local stdio MCP server, then expose its tools in the current chat session. Requires manual approval even when --yes is active. The command, arguments, and environment-variable names are shown for review; never pass secret values in arguments.', parameters: { type: 'object', properties: { name: { type: 'string', maxLength: 40, description: 'Unique lowercase server name using letters, digits, hyphens, or underscores.' }, command: { type: 'string', maxLength: 500, description: 'Single executable, such as npx or a locally installed executable; no shell syntax.' }, args: { type: 'array', maxItems: 80, items: { type: 'string', maxLength: 5000 }, description: 'Argument vector passed directly without shell expansion.' }, passEnv: { type: 'array', maxItems: 50, items: { type: 'string' }, description: 'Explicit environment variable names to expose to this server; values must be configured locally, never supplied in chat.' } }, required: ['name', 'command'], additionalProperties: false } } },
   { type: 'function', function: { name: 'add_extension', description: 'Install and set up an add-on from whatever the user gave: a GitHub link or owner/repo (Claude Code, Codex and Gemini CLI plugins and marketplaces, OASIS plugins, Agent Skills, MCP servers, agent prompts), plugin@marketplace, an MCP server URL, an npm/PyPI package page, an MCP Registry name, or an install command copied from a README (npx/uvx/docker, claude|codex|gemini mcp add, /plugin install, npx skills add). OASIS detects the kind, asks the user once and configures it; MCP servers start in this chat. Use #name to pick one plugin, skill or server from a repository.', parameters: { type: 'object', properties: { source: { type: 'string', description: 'Exactly what the user gave, e.g. https://github.com/obra/superpowers, anthropics/skills#pdf, commit-commands@claude-code-plugins, https://mcp.context7.com/mcp, @playwright/mcp or github.' }, name: { type: 'string', description: 'Optional local name for an MCP server.' }, scope: { type: 'string', enum: ['user', 'project'], description: 'user (default, every project) or project.' }, env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Values it needs, such as an API key the user gave you: {"GITHUB_TOKEN": "..."}. With the name of something already installed as source, this only saves the values; for a remote server a token becomes its Authorization header.' } }, required: ['source'], additionalProperties: false } } },
-  { type: 'function', function: { name: 'install_plugin', description: 'Install one reviewed Oasis built-in capability bundle into this workspace. Bundles copy skill instruction files only; external servers, package installs, and credentials are not enabled automatically. Requires user approval unless auto-approval is explicitly enabled.', parameters: { type: 'object', properties: { name: { type: 'string', enum: ['code-quality', 'project-onboarding', 'debugging', 'ship-feature', 'mobile-development', 'web-app-development', 'api-development', 'security-review'], description: 'Name of the built-in plugin bundle from oasis plugins list' } }, required: ['name'] } } }
+  { type: 'function', function: { name: 'install_plugin', description: 'Install one reviewed OASIS built-in capability bundle into this workspace. Bundles copy skill instruction files only; external servers, package installs, and credentials are not enabled automatically. Requires user approval unless auto-approval is explicitly enabled.', parameters: { type: 'object', properties: { name: { type: 'string', enum: ['code-quality', 'project-onboarding', 'debugging', 'ship-feature', 'mobile-development', 'web-app-development', 'api-development', 'security-review'], description: 'Name of the built-in plugin bundle from oasis plugins list' } }, required: ['name'] } } }
 ];
 
 function inside(base, candidate) {
@@ -227,7 +227,7 @@ export async function setAdditionalDirectories(root, dirs = []) {
       if (!info.isDirectory()) throw new Error('not a directory');
       if (real === path.parse(real).root || real === os.homedir()) throw new Error('too broad; choose a project folder');
       // ~/.aws, ~/.ssh and the like: files inside have plain names (credentials, config).
-      if (sensitivePath(real)) throw new Error('holds credentials; Oasis will not open it');
+      if (sensitivePath(real)) throw new Error('holds credentials; OASIS will not open it');
       if (inside(rootReal, real) || accepted.includes(real)) continue;
       accepted.push(real);
     } catch (error) {
@@ -303,16 +303,16 @@ export async function resolveWorkspacePath(root, rawPath, options = {}) {
   const baseRelative = path.relative(base, target);
   // In an extra directory the folder names above it count too (a grant of ~/work/.aws).
   const checkedRelative = base === rootReal ? baseRelative : target;
-  if (!options.allowSensitive && sensitivePath(checkedRelative)) throw new Error('That file path looks sensitive. Oasis will not read, overwrite, or delete it.');
+  if (!options.allowSensitive && sensitivePath(checkedRelative)) throw new Error('That file path looks sensitive. OASIS will not read, overwrite, or delete it.');
   let cursor = target;
   while (true) {
     try {
       const linkInfo = await lstat(cursor);
-      if (cursor === target && options.rejectSymlinks && linkInfo.isSymbolicLink()) throw new Error('Oasis will not write to or delete a symbolic link.');
+      if (cursor === target && options.rejectSymlinks && linkInfo.isSymbolicLink()) throw new Error('OASIS will not write to or delete a symbolic link.');
       const resolved = await realpath(cursor);
       if (!inside(base, resolved)) throw new Error('That path resolves outside the workspace through a symbolic link.');
       const resolvedRelative = base === rootReal ? path.relative(base, resolved) : resolved;
-      if (!options.allowSensitive && sensitivePath(resolvedRelative)) throw new Error('That symbolic link resolves to a sensitive file. Oasis will not access it.');
+      if (!options.allowSensitive && sensitivePath(resolvedRelative)) throw new Error('That symbolic link resolves to a sensitive file. OASIS will not access it.');
       if (cursor === target) {
         if (!options.allowIgnored && relative) {
           const ignoreOptions = { env: options.env, isDir: linkInfo.isDirectory(), shown: relative.split(path.sep).join('/') };
@@ -887,7 +887,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     try {
     ok = approval && await approval('Run this command in the workspace?\n  ' + command + ' ' + args.map((arg) => JSON.stringify(arg)).join(' ') + rehearsal.text +
       (highRisk ? '\nHIGH RISK: ' + (configRisk ? configRisk : 'this command ' + highRisk) + '. Auto-approval does not apply.' : '') +
-      '\nCommands can change project files or execute project scripts. ' + (typeof options.clientTerminal === 'function' && !(sandbox && sandbox.available) ? 'It will run in the editor\'s terminal, with the editor\'s environment.' : 'Oasis strips common secret environment variables from the child process.') +
+      '\nCommands can change project files or execute project scripts. ' + (typeof options.clientTerminal === 'function' && !(sandbox && sandbox.available) ? 'It will run in the editor\'s terminal, with the editor\'s environment.' : 'OASIS strips common secret environment variables from the child process.') +
       (sandbox && sandbox.available ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + (sandbox.ssh.display || sandbox.ssh.host) + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : ''), Boolean(highRisk), extra);
     if (ok && typeof options.onApproved === 'function') await options.onApproved();
     if (ok && choice.value === 'rehearsal' && rehearsal.kept) return await applyRehearsedRun(rehearsal.kept, command, args);
@@ -1160,7 +1160,7 @@ async function saveVerifiedProvider(provider, config, context) {
     return { connected: false, provider, message: 'Provider verification failed; the existing configuration was left unchanged. ' + message };
   }
   if (!context.autoApprove && (!context.approval || !(await context.approval(
-    'Save the verified model provider "' + provider + '" (' + config.model + ' at ' + config.baseURL + ') as the local Oasis provider? ' +
+    'Save the verified model provider "' + provider + '" (' + config.model + ' at ' + config.baseURL + ') as the local OASIS provider? ' +
     'This updates the user-level provider configuration. The API key is never shown in this prompt.'
   )))) {
     return { connected: false, approved: false, provider, message: 'Provider configuration was not changed because approval was denied.' };
@@ -1177,7 +1177,7 @@ async function saveVerifiedProvider(provider, config, context) {
     protocol: probe.protocol,
     baseURL: config.baseURL,
     configPath,
-    message: 'Provider tool-calling verification passed and the local Oasis configuration was updated. The inert probe tool was never executed.'
+    message: 'Provider tool-calling verification passed and the local OASIS configuration was updated. The inert probe tool was never executed.'
   };
 }
 
@@ -1203,7 +1203,7 @@ async function configureProviderFromChat(args, context) {
     return {
       connected: false,
       provider,
-      message: 'No matching saved credential or provider-specific environment key is available for ' + provider + '. Use /setup in the terminal or the local Model provider form to enter the credential privately; Oasis will verify tool calling before saving.'
+      message: 'No matching saved credential or provider-specific environment key is available for ' + provider + '. Use /setup in the terminal or the local Model provider form to enter the credential privately; OASIS will verify tool calling before saving.'
     };
   }
   return await saveVerifiedProvider(provider, {
@@ -1267,12 +1267,12 @@ async function configureMcpServer(args, context, root) {
     return {
       configured: false,
       name: candidate.name,
-      message: 'An MCP server named "' + candidate.name + '" is already configured. Choose a new name or remove the existing server first; Oasis did not replace it.'
+      message: 'An MCP server named "' + candidate.name + '" is already configured. Choose a new name or remove the existing server first; OASIS did not replace it.'
     };
   }
-  if (existing.servers.length >= 40) throw new Error('Oasis already has 40 configured MCP servers; remove one before adding another.');
+  if (existing.servers.length >= 40) throw new Error('OASIS already has 40 configured MCP servers; remove one before adding another.');
   if (!context.session || !(context.session.mcpClients instanceof Map)) {
-    throw new Error('An active Oasis session is required to add an MCP server from chat.');
+    throw new Error('An active OASIS session is required to add an MCP server from chat.');
   }
   const summary = [
     'Configure and start this stdio MCP server now?',
@@ -1280,7 +1280,7 @@ async function configureMcpServer(args, context, root) {
     'Executable: ' + candidate.command,
     'Arguments: ' + JSON.stringify(candidate.args),
     'Explicit environment passthrough: ' + (candidate.passEnv.join(', ') || 'none'),
-    'Oasis will launch this third-party process under your user account, save the configuration outside the repository, and expose its discovered tools in this chat.',
+    'OASIS will launch this third-party process under your user account, save the configuration outside the repository, and expose its discovered tools in this chat.',
     'The server may read or change data available to your OS account. Secret values are not stored in this configuration and must be set in your local environment.'
   ].join('\n');
   // MCP activation always needs a conscious approval, even when the general
@@ -2155,7 +2155,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
     case 'install_plugin': {
       const name = String(args.name || '');
       if (!['code-quality', 'project-onboarding', 'debugging', 'ship-feature', 'mobile-development', 'web-app-development', 'api-development', 'security-review'].includes(name)) throw new Error('Choose a built-in bundle from oasis plugins list.');
-      if (!context.autoApprove && (!context.approval || !(await context.approval('Install the reviewed Oasis plugin bundle "' + name + '" and copy its workflow skill files into this workspace?')))) {
+      if (!context.autoApprove && (!context.approval || !(await context.approval('Install the reviewed OASIS plugin bundle "' + name + '" and copy its workflow skill files into this workspace?')))) {
         return { approved: false, name, message: 'Plugin installation was not approved. No files were installed.' };
       }
       await managePlugins(root, ['install', name], { quiet: true });

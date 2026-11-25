@@ -334,7 +334,7 @@ export async function parseMainFlags(rawArgs, flags, SESSION_OPTIONS) {
       if (!value) throw new Error('--prompt-interactive needs a message.');
       SESSION_OPTIONS.initialPrompt = value; continue;
     }
-    // Aider flags. --test-cmd plus --auto-test uses Oasis auto-test; commits use auto-commit.
+    // Aider flags. --test-cmd plus --auto-test uses OASIS auto-test; commits use auto-commit.
     if (arg === '--yes-always') { flags.autoApprove = true; continue; }
     if (arg === '--message' || arg === '--msg' || arg.startsWith('--message=')) {
       const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : takeValue();

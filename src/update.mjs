@@ -103,7 +103,7 @@ export function updatePlan(installed, latest) {
     return { upToDate: false, steps: [{ command: 'brew', args: ['upgrade', 'fahthiz/oasis/oasis-cli'] }] };
   }
   if (installed.kind === 'git') {
-    if (installed.dirty) return { upToDate: false, blocked: 'Your Oasis checkout has uncommitted changes; commit or stash them, then run oasis update.' };
+    if (installed.dirty) return { upToDate: false, blocked: 'Your OASIS checkout has uncommitted changes; commit or stash them, then run oasis update.' };
     return { upToDate: false, steps: [
       { command: 'git', args: ['-C', installed.root, 'fetch', '--no-tags', 'origin', 'refs/tags/' + latest.tag] },
       { command: 'git', args: ['-C', installed.root, 'checkout', '--detach', latest.sha] }
@@ -129,7 +129,7 @@ export function describeUpdate(installed, latest, plan) {
   ];
   if (plan.ahead) lines.push('This checkout already includes ' + latest.tag + ' and is ' + plan.ahead + ' commit' + (plan.ahead === 1 ? '' : 's') + ' newer, so oasis update leaves it alone. To follow main, run: git -C ' + JSON.stringify(installed.root) + ' pull');
   else if (plan.newer) lines.push('Installed v' + installed.version + ' is newer than ' + latest.tag + ', so oasis update leaves it alone instead of downgrading it.');
-  else if (plan.upToDate) lines.push('Oasis is up to date.');
+  else if (plan.upToDate) lines.push('OASIS is up to date.');
   else if (plan.blocked) lines.push(plan.blocked);
   else {
     if (plan.verified) lines.push('Update: download ' + latest.tarball.tarball.name + ' from the release, check it against SHA256SUMS, its package version and (with gh) its signed provenance, then install it with:');

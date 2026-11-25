@@ -518,7 +518,7 @@ export async function appendMemoryNote(root, note, options = {}) {
   let prefix = '';
   if (!existing) prefix = '# Project memory\n\n';
   else if (!existing.endsWith('\n')) prefix = '\n';
-  if (scope === 'user' && !existing) prefix = '# Oasis user memory\n\n';
+  if (scope === 'user' && !existing) prefix = '# OASIS user memory\n\n';
   await mkdir(path.dirname(target), { recursive: true });
   await appendFile(target, prefix + '- ' + text + '\n', 'utf8');
   return target;

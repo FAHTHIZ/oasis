@@ -30,7 +30,7 @@ const HOST_PROVIDERS = {
 // Without a provider hint, a bare id resolves at the model maker first.
 const FIRST_PARTY = ['anthropic', 'openai', 'google', 'xai', 'deepseek', 'moonshotai', 'zai', 'minimax', 'mistral', 'alibaba', 'cohere', 'perplexity', 'xiaomi', 'stepfun', 'openrouter'];
 
-// Keep the fields Oasis uses for limits, pricing and runtime capability checks.
+// Keep the fields OASIS uses for limits, pricing and runtime capability checks.
 // Tool-call support is tri-state: false is meaningful; an omitted upstream
 // value remains unknown rather than being treated as unsupported.
 export function trimCatalog(raw, providers) {
@@ -217,7 +217,7 @@ export function findCatalogModel(model, { baseURL, provider, env = process.env, 
   return (hint && search([hint])) || search(catalog.order);
 }
 
-// The context window Oasis plans for. When a model bills prompts above some size
+// The context window OASIS plans for. When a model bills prompts above some size
 // at a higher rate (models.dev context tiers), the window stops at that size so
 // automatic compaction keeps requests on the base price. Set contextWindow to use
 // the full advertised window.
@@ -265,7 +265,7 @@ export function catalogReasoningReplay(model, options = {}) {
   return stated && typeof stated.replay === 'string' ? stated.replay : null;
 }
 
-// USD per million tokens in Oasis's pricing shape, with the first context tier as
+// USD per million tokens in OASIS's pricing shape, with the first context tier as
 // the per-request long-context rate.
 export function catalogPrice(model, options = {}) {
   const entry = findCatalogModel(model, { ...options, need: 'cost' });

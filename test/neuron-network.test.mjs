@@ -38,7 +38,7 @@ test('network inspection exposes a bounded graph and aggregate usage without rep
   child.usage = { requests: 2, inputTokens: 120, outputTokens: 80, totalTokens: 200, costUsd: 0.004, costKnown: true };
 
   const snapshot = neuronNetworkSnapshot(main, { limit: 10 });
-  assert.equal(snapshot.network, 'Oasis Neuron Network');
+  assert.equal(snapshot.network, 'OASIS Neuron Network');
   assert.equal(snapshot.root_id, 'main');
   assert.ok(snapshot.nodes.some((node) => node.id === 'main'));
   assert.deepEqual(snapshot.edges, [

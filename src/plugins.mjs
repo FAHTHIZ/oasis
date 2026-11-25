@@ -62,14 +62,14 @@ export async function managePlugins(root, args = [], options = {}) {
   if (action === 'list' || action === 'browse') {
     const installed = await readInstalled(root);
     const installedNames = new Set(installed.map((plugin) => plugin.name));
-    log('Oasis capability catalog (bundled, reviewed text-based skill bundles)\n\n');
+    log('OASIS capability catalog (bundled, reviewed text-based skill bundles)\n\n');
     for (const plugin of catalog) {
       log((installedNames.has(plugin.name) ? '[installed] ' : '[available] ') +
         plugin.name + ' — ' + plugin.description + '\n  Skills: ' + plugin.skills.join(', ') + '\n');
     }
     if (!catalog.length) log('No built-in plugins are available.\n');
     log('\nInstall with: oasis plugins install NAME\n');
-    log('External services are configured separately with oasis mcp; Oasis will not run third-party plugin code silently.\n');
+    log('External services are configured separately with oasis mcp; OASIS will not run third-party plugin code silently.\n');
     return;
   }
 
@@ -95,7 +95,7 @@ export async function managePlugins(root, args = [], options = {}) {
     }
 
     const pluginDirectory = path.join(pluginsRoot, name);
-    if (await pathExists(pluginDirectory)) throw new Error('A plugin directory already exists at ' + pluginDirectory + '. Inspect it before retrying; Oasis will not overwrite or delete it.');
+    if (await pathExists(pluginDirectory)) throw new Error('A plugin directory already exists at ' + pluginDirectory + '. Inspect it before retrying; OASIS will not overwrite or delete it.');
     await mkdir(pluginsRoot, { recursive: true });
     await mkdir(skillsRoot, { recursive: true });
     const installedSkills = [];

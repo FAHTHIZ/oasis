@@ -151,7 +151,7 @@ test('/context all returns detailed estimated categories without claiming exact 
   assert.match(result.output, /Detailed estimated context/);
   assert.match(result.output, /categories below can overlap/i);
   assert.match(result.output, /Command\/build\/test output/);
-  assert.match(result.output, /unavailable to Oasis/i);
+  assert.match(result.output, /unavailable to OASIS/i);
 });
 
 test('a must-preserve record over the length limit is refused, not cut', () => {

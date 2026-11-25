@@ -43,7 +43,7 @@ test('/insights writes an escaped HTML report', async () => {
   const result = await runBuiltinCommand('insights', '', { root: os.tmpdir(), env });
   const file = /Report: (.+)$/m.exec(result.output)[1];
   const html = await readFile(file, 'utf8');
-  assert.match(html, /<title>Oasis insights<\/title>/);
+  assert.match(html, /<title>OASIS insights<\/title>/);
   assert.match(html, /webapp/);
   assert.match(html, /&lt;login&gt;/);
   assert.doesNotMatch(html, /<login>/);

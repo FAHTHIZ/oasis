@@ -1,4 +1,4 @@
-// Interactive prompt editor for the Oasis terminal.
+// Interactive prompt editor for the OASIS terminal.
 //
 // A dependency-free raw-mode line editor: multi-line input, bracketed paste,
 // persistent history with Ctrl+R search, Tab completion with a candidate list,

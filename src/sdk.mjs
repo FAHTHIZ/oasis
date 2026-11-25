@@ -1,4 +1,4 @@
-// Oasis SDK: build agents and automations on top of Oasis from your own Node code.
+// OASIS SDK: build agents and automations on top of OASIS from your own Node code.
 //
 //   import { query, tool } from 'oasis-oss';
 //   const weather = tool('weather', 'Current weather for a city', { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
