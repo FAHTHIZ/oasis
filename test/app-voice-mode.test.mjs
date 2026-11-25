@@ -41,3 +41,18 @@ test('loudness and the last reply of the turn', () => {
   assert.equal(lastReply(display), 'Fixed it.');
   assert.equal(lastReply([{ role: 'user', content: 'x' }]), '');
 });
+
+test('microphone problems say what went wrong instead of always "blocked"', async () => {
+  const { micProblem, micPermission } = await import('../app/core/voice-mode.mjs');
+  assert.match(micProblem({ name: 'NotAllowedError' }, 'dictate', 'denied'), /^Microphone access is blocked\. Allow it in the browser to dictate\.$/);
+  assert.match(micProblem('not-allowed', 'talk', 'prompt'), /blocked.*to talk\.$/);
+  assert.match(micProblem({ name: 'NotFoundError' }), /^No microphone was found/);
+  assert.match(micProblem({ error: 'audio-capture' }, 'talk'), /^No microphone was found.*to talk\.$/);
+  assert.match(micProblem({ name: 'NotReadableError' }), /another app/);
+  assert.match(micProblem('service-not-allowed'), /speech recognition is not available/);
+  // Chrome without a microphone or speech service reports not-allowed with permission granted.
+  assert.doesNotMatch(micProblem('not-allowed', 'dictate', 'granted'), /blocked/);
+  assert.match(micProblem({ name: 'WeirdError' }), /\(WeirdError\)/);
+  assert.equal(await micPermission({ permissions: { query: async () => ({ state: 'granted' }) } }), 'granted');
+  assert.equal(await micPermission({}), '');
+});

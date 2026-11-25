@@ -24,7 +24,7 @@ import { normalizeTaskProgress } from './core/task-progress.mjs';
 import { RuntimeTerminal, loadXterm, wrapWords } from './core/terminal.mjs';
 import { suggestToken, rankSuggestions, applySuggestion, starterCommands } from './core/composer-suggest.mjs';
 import { mcpServerFromForm, describeMcpServer } from './core/mcp.mjs';
-import { speakable, isStopPhrase, turnDetector, rmsLevel, lastReply } from './core/voice-mode.mjs';
+import { speakable, isStopPhrase, turnDetector, rmsLevel, lastReply, micProblem, micPermission } from './core/voice-mode.mjs';
 import { previewTarget } from './core/preview.mjs';
 import { anchorMenu } from './core/popover.mjs';
 import { createFocusTrap } from 'focus-trap';
@@ -5814,7 +5814,7 @@ function setupDictation() {
         write(interim);
       };
       rec.onerror = (event) => {
-        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') toast('Microphone access is blocked. Allow it in the browser to dictate.', 'error');
+        if (['not-allowed', 'service-not-allowed', 'audio-capture', 'network'].includes(event.error)) micPermission().then((state) => toast(micProblem(event.error, 'dictate', state), 'error'));
         else if (!['no-speech', 'aborted'].includes(event.error)) toast('Dictation stopped (' + event.error + ').', 'error');
       };
       rec.onend = () => { rec = null; setState(false); input.focus(); };
@@ -5837,7 +5837,7 @@ function setupDictation() {
     }
     let stream;
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-    catch { toast('Microphone access is blocked. Allow it to dictate.', 'error'); return; }
+    catch (error) { toast(micProblem(error, 'dictate', await micPermission()), 'error'); return; }
     const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
     const chunks = [];
     discard = false;
@@ -5905,7 +5905,7 @@ function listenWithRecognition(Recognition) {
       setTalkState('hearing', (finalText + interim).trim());
     };
     rec.onerror = (event) => {
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') { toast('Microphone access is blocked. Allow it in the browser to talk.', 'error'); stopTalk(); }
+      if (['not-allowed', 'service-not-allowed', 'audio-capture', 'network'].includes(event.error)) { micPermission().then((state) => toast(micProblem(event.error, 'talk', state), 'error')); stopTalk(); }
       finish(finalText.trim());
     };
     rec.onend = () => finish(finalText.trim());
@@ -5915,7 +5915,7 @@ function listenWithRecognition(Recognition) {
 async function listenWithRecorder() {
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch { toast('Microphone access is blocked. Allow it to talk.', 'error'); stopTalk(); return ''; }
+  catch (error) { toast(micProblem(error, 'talk', await micPermission()), 'error'); stopTalk(); return ''; }
   const context = new AudioContext();
   const analyser = context.createAnalyser();
   analyser.fftSize = 1024;

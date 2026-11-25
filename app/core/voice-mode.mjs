@@ -99,3 +99,30 @@ export function lastReply(display) {
   }
   return '';
 }
+
+// What to tell the person when the microphone cannot be used. Every failure
+// used to read "Microphone access is blocked", which sent people with no
+// microphone, or a browser without a speech service, to permission settings
+// that were already fine. `purpose` is "dictate" or "talk".
+//   error:      a getUserMedia DOMException (or its name), or a
+//               SpeechRecognition error code ("not-allowed", "audio-capture", …)
+//   permission: the microphone permission state when known ("granted", …)
+export function micProblem(error, purpose = 'dictate', permission = '') {
+  const code = String((error && (error.name || error.error)) || error || '');
+  const to = 'to ' + purpose;
+  if (code === 'NotFoundError' || code === 'OverconstrainedError' || code === 'DevicesNotFoundError' || code === 'audio-capture') return 'No microphone was found. Connect one and try again ' + to + '.';
+  if (code === 'NotReadableError' || code === 'TrackStartError' || code === 'AbortError') return 'The microphone could not start; another app may be using it.';
+  if (code === 'service-not-allowed') return 'This browser\u2019s speech recognition is not available. Try Chrome or Edge, or set up a transcription service (/voice in the terminal).';
+  if (code === 'network') return 'Speech recognition needs a network connection; check it and try again.';
+  if (code === 'NotAllowedError' || code === 'SecurityError' || code === 'PermissionDeniedError' || code === 'not-allowed') {
+    // The browser reports not-allowed even with permission granted when it has
+    // no microphone or speech service to give the page.
+    if (permission === 'granted') return 'The microphone is allowed but could not be used ' + to + '. Check that one is connected, or try another browser.';
+    return 'Microphone access is blocked. Allow it in the browser ' + to + '.';
+  }
+  return 'The microphone could not be used' + (code ? ' (' + code + ')' : '') + '.';
+}
+
+export async function micPermission(nav = globalThis.navigator) {
+  try { return (await nav.permissions.query({ name: 'microphone' })).state || ''; } catch { return ''; }
+}
