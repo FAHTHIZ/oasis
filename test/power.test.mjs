@@ -89,6 +89,17 @@ test('permission rules match commands, paths, domains, MCP prefixes, and Claude 
   assert.equal(policy.evaluate('run_command', { command: 'cargo', args: ['build'] }).decision, 'allow');
 });
 
+// "Always allow python -m" would also have allowed python -m pip install.
+test('always allow for python -m names the module', () => {
+  assert.equal(suggestRule('run_command', { command: 'python', args: ['-m', 'unittest', 'discover'] }), 'run_command(python -m unittest:*)');
+  assert.equal(suggestRule('run_command', { command: 'python3', args: ['-m'] }), null);
+  assert.equal(suggestRule('run_command', { command: 'node', args: ['--test'] }), 'run_command(node --test:*)');
+  const policy = new PermissionPolicy({ permissions: { allow: [], ask: [], deny: [] } });
+  policy.rememberForSession(suggestRule('run_command', { command: 'python', args: ['-m', 'unittest', 'discover'] }));
+  assert.equal(policy.evaluate('run_command', { command: 'python', args: ['-m', 'unittest'] }).decision, 'allow');
+  assert.equal(policy.evaluate('run_command', { command: 'python', args: ['-m', 'pip', 'install', 'x'] }).decision, 'default');
+});
+
 test('grep rejects a pre-cancelled search without starting either search engine', async (t) => {
   const dir = await tmp();
   t.after(() => rm(dir, { recursive: true, force: true }));

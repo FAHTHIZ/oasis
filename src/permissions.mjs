@@ -848,6 +848,9 @@ export function suggestRule(toolName, args = {}) {
     const evalFlags = INTERPRETER_EVAL_FLAGS[path.basename(raw)];
     if (evalFlags) {
       if (!argv[0] || evalFlags.includes(argv[0]) || argv.some((arg) => evalFlags.includes(arg))) return null;
+      // Flags go with what they run: "python -m unittest", not "python -m",
+      // which would also allow python -m pip install or python -m http.server.
+      if (argv[0] === '-m') return argv[1] && !argv[1].startsWith('-') ? 'run_command(' + command + ' -m ' + argv[1] + ':*)' : null;
       return 'run_command(' + command + ' ' + argv[0] + ':*)';
     }
     const first = argv[0] && !argv[0].startsWith('-') ? ' ' + argv[0] : '';
