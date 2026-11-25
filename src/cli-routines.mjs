@@ -49,6 +49,7 @@ Options:
                            nothing or [SILENT] = skipped, no model call)
   SCHEDULE "after NAME"    run when routine NAME finishes ok ("after NAME failed",
                            "after NAME any"); {output} and {status} hold its result
+  --coalesce               webhook routines: events that pile up run as one batch
   --timeout MINUTES        stop a run that takes longer (default: no limit,
                            or OASIS_ROUTINE_TIMEOUT_MINUTES)
   --event NAME             webhook routines: run only for this event, e.g.
@@ -88,6 +89,8 @@ function parseOptions(args) {
     else if (arg === '--tz' || arg === '--timezone') fields.timezone = value();
     else if (arg === '--grace' || arg === '--grace-minutes') { const v = value(); fields.graceMinutes = v === '' ? null : Number(v); }
     else if (arg === '--precheck' || arg === '--check') { fields.precheck = value() || null; }
+    else if (arg === '--coalesce') fields.coalesce = true;
+    else if (arg === '--no-coalesce') fields.coalesce = false;
     else if (arg === '--timeout' || arg === '--timeout-minutes') { const v = value(); fields.timeoutMinutes = v === '' ? null : Number(v); }
     else if (arg === '--paused') fields.paused = true;
     else if (arg === '--reason') fields.reason = value();
@@ -135,6 +138,7 @@ export async function scheduleCommand(args = [], { env = process.env, write = (t
     say('  ' + (job.kind === 'script' ? 'command: ' : 'prompt: ') + job.prompt.split('\n')[0].slice(0, 200));
     if (job.workdir) say('  workdir: ' + job.workdir);
     if (job.precheck) say('  precheck: ' + job.precheck);
+    if (job.coalesce) say('  coalesce: waiting webhook events run together');
     if (job.timeoutMinutes) say('  timeout: ' + job.timeoutMinutes + ' min per run');
     if (job.fromSession) say('  continues: ' + job.fromSession + (job.chain ? ' (chained: each run continues the last one)' : ' (each run forks it)'));
     if (job.schedule.source === 'routine') { if (job.pendingEvents?.length) say('  waiting: ' + job.pendingEvents.length + ' finished run(s) to act on'); }

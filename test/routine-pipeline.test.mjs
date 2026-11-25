@@ -60,3 +60,23 @@ test('a downstream routine runs with the upstream output; failures follow "faile
   const jobs = await readJobs(env);
   assert.equal(jobs.find((job) => job.name === 'alert').activeRun.eventId.startsWith('ev-'), true);
 });
+
+test('--coalesce runs a burst of webhook events as one batch', async () => {
+  const { receiveWebhook } = await import('../src/routines.mjs');
+  const crypto = await import('node:crypto');
+  const env = await tempEnv();
+  const bg = fakeBackgrounds(env.HOME);
+  const t0 = new Date('2026-11-11T10:00:00Z');
+  const job = await createJob({ schedule: 'webhook', prompt: 'Review: {event}', name: 'review', coalesce: true }, { env, now: t0 });
+  for (const n of [1, 2, 3]) {
+    const body = Buffer.from(JSON.stringify({ n }));
+    const sig = 'sha256=' + crypto.createHmac('sha256', job.webhookSecret).update(body).digest('hex');
+    await receiveWebhook(job.id, body, { signature: sig, event: 'push', env, now: t0 });
+  }
+  const summary = await tick({ env, now: t0, backgrounds: bg });
+  assert.deepEqual(summary.fired, [job.id]);
+  const agent = [...bg.entries.values()][0];
+  assert.match(agent.options.prompt, /Review: "3 events, oldest first: push"/);
+  assert.match(agent.options.prompt, /started by a batch of webhook events[\s\S]*<webhook_payload>\n\[\{"n":1\},\{"n":2\},\{"n":3\}\]\n<\/webhook_payload>/);
+  assert.equal((await readJobs(env))[0].pendingEvents, undefined);
+});
