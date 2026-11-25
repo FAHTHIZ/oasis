@@ -367,7 +367,9 @@ function renderLanes(row, step) {
     else if (agent.activity && agent.outcome === 'running') facts.push(agent.activity);
     // What its last step came to ("✓ exit 0 · 3 passed"), so a finished lane
     // says more than "Done".
-    const lastBrief = !current && (agent.steps.filter((item) => item.brief).at(-1) || {}).brief;
+    // A command's result says more than the file read after it.
+    const briefed = agent.steps.filter((item) => item.brief);
+    const lastBrief = !current && ((briefed.filter((item) => item.kind === 'shell').at(-1) || briefed.at(-1) || {}).brief);
     if (lastBrief && !agent.waiting) facts.push(lastBrief);
     if (agent.outcome !== 'running' && agent.stepCount) facts.push(agent.stepCount + (agent.stepCount === 1 ? ' step' : ' steps'));
     if (agent.tokens) facts.push(compact(agent.tokens) + ' tokens');
