@@ -263,6 +263,22 @@ test('keyless search falls back to Bing when DuckDuckGo refuses the query', asyn
   assert.match(off.error, /TAVILY_API_KEY/);
 });
 
+// DuckDuckGo answered 502 here while Bing was fine; the search ended with "HTTP 502".
+test('keyless search falls back to Bing when DuckDuckGo errors or is unreachable', async () => {
+  for (const ddg of [async () => ({ ok: false, status: 502, text: async () => 'bad gateway' }), async () => { throw new TypeError('fetch failed'); }]) {
+    const fetchImpl = async (url) => String(url).includes('duckduckgo') ? ddg() : { ok: true, status: 200, text: async () => BING };
+    const result = await webSearch({ query: 'open meteo' }, { env: {}, fetch: fetchImpl });
+    assert.equal(result.backend, 'bing');
+    assert.equal(result.results[0].url, 'https://open-meteo.com/en/docs/geocoding-api');
+    assert.match(result.note, /DuckDuckGo did not answer .*from Bing/);
+  }
+  const down = async () => ({ ok: false, status: 502, text: async () => '' });
+  const none = await webSearch({ query: 'open meteo' }, { env: {}, fetch: down });
+  assert.equal(none.results.length, 0);
+  assert.match(none.error, /unavailable right now \(DuckDuckGo: HTTP 502/);
+  assert.match(none.error, /instead of answering from memory/);
+});
+
 test('keyless search approval names both DuckDuckGo and the Bing fallback', async () => {
   const { webAccessSites } = await import('../src/web-access.mjs');
   assert.deepEqual(webAccessSites('web_search', {}, {}), ['html.duckduckgo.com', 'www.bing.com']);

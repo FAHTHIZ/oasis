@@ -286,12 +286,27 @@ async function searchProvider(provider, query, limit, allowed, blocked, env, fet
 
 async function searchDuckDuckGo(query, limit, allowed, blocked, fetchImpl, env = process.env) {
   const effectiveQuery = providerQuery(query, allowed);
-  const response = await request('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(effectiveQuery), {
-    headers: {
-      'user-agent': 'Mozilla/5.0 (compatible; OasisOSS/' + oasisVersion() + '; +https://github.com/FAHTHIZ/oasis)',
-      accept: 'text/html'
+  let response;
+  try {
+    response = await request('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(effectiveQuery), {
+      headers: {
+        'user-agent': 'Mozilla/5.0 (compatible; OasisOSS/' + oasisVersion() + '; +https://github.com/FAHTHIZ/oasis)',
+        accept: 'text/html'
+      }
+    }, fetchImpl);
+  } catch (error) {
+    // DuckDuckGo answering 502/403 or not at all used to end the search with
+    // a bare "HTTP 502" while Bing was reachable; the model then answered
+    // from memory. Try Bing before giving up.
+    const why = Number(error && error.status) ? 'HTTP ' + Number(error.status) : String(error && error.message || 'request failed');
+    if (keylessFallbackEnabled(env)) {
+      try {
+        const results = await searchBing(query, limit, allowed, blocked, fetchImpl);
+        if (results.length) return { results, provider: 'bing', note: 'DuckDuckGo did not answer (' + why + '), so these results come from Bing.' };
+      } catch {}
     }
-  }, fetchImpl);
+    return { results: [], error: 'Keyless web search is unavailable right now (DuckDuckGo: ' + why + (keylessFallbackEnabled(env) ? '; Bing returned nothing' : '') + '). Say so instead of answering from memory, or configure TAVILY_API_KEY, BRAVE_SEARCH_API_KEY, EXA_API_KEY, FIRECRAWL_API_KEY, or OASIS_SEARXNG_URL.' };
+  }
   const html = await response.text();
   const items = normalizeItems(parseDuckDuckGoHtml(html), 'duckduckgo');
   if (!items.length && (response.status === 202 || /anomaly|challenge/i.test(html))) {
