@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { alwaysAllowLabel } from '../app/core/approval-rule.mjs';
+import { deliverDenyNote } from './deny-note.mjs';
 import stringWidth from 'string-width';
 import stripAnsi from 'strip-ansi';
 import { distance as levenshtein } from 'fastest-levenshtein';
@@ -362,6 +364,7 @@ function approve(prompt, forceInteractive = false, autoApprove = false, meta = {
 }
 
 let CURRENT_TURN_STARTED_AT = 0;
+let CURRENT_DENY_NOTE = null;
 let soundsWarmed = false;
 let CURRENT_TURN_WAITED_MS = 0;
 
@@ -424,7 +427,8 @@ export function renderApprovalText(approval, { color = false, columns = 80, maxD
 export function approvalSummary(chosen, meta = {}) {
   if (!chosen) return '  ⎿ Denied';
   if (chosen.value === 'rehearsal') return '  ⎿ Applied the rehearsed changes';
-  if (chosen.value === 'always') return '  ⎿ Allowed for this session' + (meta && meta.suggestion ? ': ' + meta.suggestion : '');
+  if (chosen.value === 'always') return '  ⎿ ' + (meta && meta.suggestion ? alwaysAllowLabel(meta.suggestion).replace(/^Always allow/, 'Allowing') + ' for this session' : 'Allowed for this session');
+  if (chosen.value === 'note') return '  ⎿ Denied';
   if (chosen.value === true && meta && meta.scope === 'session') return '  ⎿ Allowed for this session' + (Array.isArray(meta.sites) && meta.sites.length ? ': ' + meta.sites.join(', ') : '');
   return chosen.value === true ? '  ⎿ Allowed once' : '  ⎿ Denied';
 }
@@ -446,8 +450,9 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
       const { selectDialog } = await import('./select-dialog.mjs');
       // A site approval holds for the session, so its button says so.
       const options = [{ label: meta && meta.scope === 'session' ? 'Allow for this session' : 'Allow once', value: true, hotkey: 'yes' }];
-      if (offerAlways) options.push({ label: 'Always allow this session for ' + meta.suggestion, value: 'always', hotkey: 'always' });
+      if (offerAlways) options.push({ label: alwaysAllowLabel(meta.suggestion) + ' this session', value: 'always', hotkey: 'always' });
       if (offerRehearsal) options.push({ label: 'Apply the rehearsed changes only (do not run it again)', value: 'rehearsal', hotkey: 'rehearsal' });
+      if (CURRENT_DENY_NOTE) options.push({ label: 'No, and tell OASIS what to do instead', value: 'note' });
       options.push({ label: 'No', value: false, hotkey: 'no' });
       stdout.write((richOutput() ? '\x1b[1mDo you want to proceed?\x1b[22m' : 'Do you want to proceed?') + '\n');
       const paused = turnKeys;
@@ -455,10 +460,23 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
       // Rows printed above the options: the blank line, the message (wrapped
       // at the terminal width) and the question.
       const collapse = { rows: approvalRows('\n' + shown + '\nDo you want to proceed?', stdout.columns), summary: (chosen) => approvalSummary(chosen, meta) };
-      try { return await selectDialog({ input: stdin, output: stdout, options, color: colorEnabled(stdout), signal, collapse }); }
+      try {
+        const picked = await selectDialog({ input: stdin, output: stdout, options, color: colorEnabled(stdout), signal, collapse });
+        if (picked !== 'note') return picked;
+        const ask = () => askLineRaw((richOutput() ? '\x1b[1m' : '') + 'What should OASIS do instead? ' + (richOutput() ? '\x1b[22m' : ''), signal).catch(() => '');
+        // "3" picks this option at once; an Enter pressed right after it is
+        // not the answer, so an instant empty line asks again.
+        const askedAt = Date.now();
+        let note = String(await ask()).trim();
+        if (!note && Date.now() - askedAt < 400 && !(signal && signal.aborted)) { if (stdout.isTTY) stdout.write('\x1b[1A\r\x1b[2K'); note = String(await ask()).trim(); }
+        const deliver = CURRENT_DENY_NOTE;
+        const to = note && deliver ? deliver(meta && meta.subagent ? String(meta.subagent) : '', note) : '';
+        stdout.write(to === 'agent' ? '  ⎿ Sent to the agent "' + String(meta.subagent).slice(0, 80) + '"; it will see it at its next step\n' : to === 'main' ? '  ⎿ Sent; OASIS will see it at its next step\n' : '');
+        return false;
+      }
       finally { if (paused && turnKeys === paused) paused.resume(); }
     }
-    const question = offerAlways ? 'Allow once [y] / [N]o / [a]lways allow ' + meta.suggestion + ' this session' + (offerRehearsal ? ' / [r] apply the rehearsal' : '') + ': '
+    const question = offerAlways ? 'Allow once [y] / [N]o / [a] ' + alwaysAllowLabel(meta.suggestion).replace(/^Always/, 'always') + ' this session' + (offerRehearsal ? ' / [r] apply the rehearsal' : '') + ': '
       : offerRehearsal ? 'Allow once [y] / [N]o / [r] apply the rehearsed changes only: '
         : (meta && meta.scope === 'session' ? 'Allow for this session? [y/N] ' : 'Allow once? [y/N] ');
     const answer = (await askLine(question, signal)).trim().toLowerCase();
@@ -1606,6 +1624,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   let todosDone = completedTodoCount(session && session.todos);
   rateLimitWaitsThisTurn = 0;
   turnKeys = startTurnKeys(onInterrupt, (text) => !controller.signal.aborted && !modeOptions.fork && steerSession(session, text));
+  // "No, and tell OASIS what to do instead" in the approval dialog.
+  CURRENT_DENY_NOTE = (subagent, note) => controller.signal.aborted || modeOptions.fork ? '' : deliverDenyNote(session, { subagent, note });
   beginLiveTurn(session);
   try {
     const fork = modeOptions.fork;
@@ -1796,6 +1816,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     terminalProgress().set(turnFailed ? 'error' : 'clear');
     process.removeListener('SIGINT', onInterrupt);
     if (turnKeys) { turnKeys.stop(); turnKeys = null; }
+    CURRENT_DENY_NOTE = null;
     // Steering that arrived too late for this turn (or after Esc) is never lost:
     // it becomes the next message.
     const undelivered = takeSteering(session);

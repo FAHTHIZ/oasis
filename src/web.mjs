@@ -1,4 +1,5 @@
 import { createServer as createHttpServer } from 'node:http';
+import { noteToSubagent as noteToChild } from './deny-note.mjs';
 import { createServer as createHttpsServer } from 'node:https';
 import { constants as fsConstants, readFileSync, statSync } from 'node:fs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
@@ -37,7 +38,7 @@ import { createPreviewHandler } from './web-preview.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { connectFromPaste } from './provider-connect.mjs';
 import { controlRoomSnapshot } from './control-room.mjs';
-import { agentRegistry, stopAgent } from './agent-tasks.mjs';
+import { stopAgent } from './agent-tasks.mjs';
 import { basicAuthToken, createCursorAgentsApi, cursorError } from './cursor-agents-api.mjs';
 import { actionNudgeNote } from './turn-guards.mjs';
 
@@ -769,12 +770,7 @@ export function createOasisWebServer(options = {}) {
 
   // A running subagent of this job reads the note with its next step.
   function noteToSubagent(job, description, note) {
-    const session = job && job.steerTarget;
-    if (!session) return false;
-    const record = [...agentRegistry(session).agents.values()].reverse().find((item) => item && item.description === description && item.child && ['running', 'queued', 'starting'].includes(String(item.status)));
-    if (!record) return false;
-    (record.child.inbox || (record.child.inbox = [])).push({ text: 'The user denied your last request and said:\n' + note + '\n\nDo that instead; do not ask for the same thing again.' });
-    return true;
+    return Boolean(job && job.steerTarget) && noteToChild(job.steerTarget, description, note);
   }
 
   function steerJob(job, message) {

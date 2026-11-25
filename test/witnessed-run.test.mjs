@@ -132,7 +132,7 @@ test('witnessed runs can be turned off, and never apply to high-risk commands', 
   const { config } = await scriptedModel(t, [
     toolCall('c1', 'run_command', { command: process.execPath, args: ['ok.js'] }),
     { content: '{"decision": "ask", "reason": "Unsure."}' },
-    toolCall('c2', 'run_command', { command: process.execPath, args: ['-e', 'console.log(2)'] }),
+    toolCall('c2', 'run_command', { command: process.execPath, args: ['-e', 'require("fs").writeFileSync("x", "2")'] }),
     { content: 'done' }
   ]);
   const session = await createSession({ root, config, settings: { ...settings, autoMode: { witness: false } }, permissionMode: 'auto' });

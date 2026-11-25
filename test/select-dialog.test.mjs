@@ -110,7 +110,8 @@ test('approval summaries and wrapped row counts', async () => {
   assert.equal(approvalRows('x'.repeat(81), 80), 2);
   assert.equal(approvalRows('\x1b[1mbold\x1b[22m', 80), 1);
   assert.equal(approvalSummary({ value: true }), '  ⎿ Allowed once');
-  assert.equal(approvalSummary({ value: 'always' }, { suggestion: 'run_command(npm test:*)' }), '  ⎿ Allowed for this session: run_command(npm test:*)');
+  assert.equal(approvalSummary({ value: 'always' }, { suggestion: 'run_command(npm test:*)' }), '  ⎿ Allowing npm test commands for this session');
+  assert.equal(approvalSummary({ value: 'note' }, {}), '  ⎿ Denied');
   assert.equal(approvalSummary({ value: false }), '  ⎿ Denied');
   assert.equal(approvalSummary(undefined), '  ⎿ Denied');
 });

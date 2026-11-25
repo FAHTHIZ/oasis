@@ -92,9 +92,19 @@ export function reportedNumbers(text) {
     const percent = raw.endsWith('%');
     const digits = raw.replace(/[%,-]/g, '');
     if (!percent && !digits.includes('.') && (digits.length < 3 || YEAR.test(digits))) continue;
-    out.push({ raw, value: Number(raw.replace(/[%,]/g, '')), decimals: (digits.split('.')[1] || '').length, percent });
+    out.push({ raw, value: Number(raw.replace(/[%,]/g, '')), decimals: (digits.split('.')[1] || '').length, percent, context: prose.slice(Math.max(0, match.index - 160), match.index + raw.length + 160) });
   }
   return out;
+}
+
+// "301 lines including the header, so 300 data rows": a line count from wc -l
+// less the header row, said in so many words. Seen live: the right answer was
+// marked "Not verified (300)" and the agent went round again for nothing.
+function lessHeader(number, produced) {
+  if (number.percent || number.decimals || !Number.isInteger(number.value) || number.value < 0) return false;
+  if (!/\bheaders?\b/i.test(String(number.context || ''))) return false;
+  for (const value of produced) if (Number(value) === number.value + 1) return true;
+  return false;
 }
 
 function supported(number, produced) {
@@ -115,7 +125,7 @@ export function analysisContract(text, events) {
   const numbers = reportedNumbers(text);
   if (!numbers.length) return [];
   const produced = producedNumbers(events);
-  const missing = numbers.filter((number) => !supported(number, produced));
+  const missing = numbers.filter((number) => !supported(number, produced) && !lessHeader(number, produced));
   if (!missing.length) return [];
   const listed = [...new Set(missing.map((number) => number.raw))];
   return [{
