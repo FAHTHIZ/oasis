@@ -97,7 +97,9 @@ function currentMode() {
 const MODE_CYCLE = ['ask', 'edits', 'auto', 'plan'];
 function cycleMode() {
   const modes = MODE_CYCLE.filter((mode) => mode !== 'plan' || (RT && !RT.needsToken));
-  settings.mode = modes[(modes.indexOf(currentMode()) + 1) % modes.length];
+  const next = modes[(modes.indexOf(currentMode()) + 1) % modes.length];
+  if (next === 'plan' && settings.mode !== 'plan') settings.prePlanMode = settings.mode;
+  settings.mode = next;
   allowEditsThisSession = false;
   saveSettings();
   updateModeUI();
@@ -3671,7 +3673,18 @@ async function requestApproval({ name, args, runtime = false }) {
     $('allowButton').textContent = 'Approve plan and start';
     openSheet('approvalSheet');
     markWaitingTools(true);
-    return new Promise((resolve) => { approvalResolve = resolve; });
+    // Approved: the agent leaves plan mode, and so does the mode chip, or the
+    // next message would go out in Plan again.
+    return new Promise((resolve) => {
+      approvalResolve = (value) => {
+        if ((value === true || value === 'always') && settings.mode === 'plan') {
+          settings.mode = settings.prePlanMode && settings.prePlanMode !== 'plan' ? settings.prePlanMode : 'ask';
+          saveSettings();
+          updateModeUI();
+        }
+        resolve(value);
+      };
+    });
   }
   if (runtime) {
     // From the agent on this computer: its own wording, diff and "always" rule.
@@ -4122,6 +4135,7 @@ $('modeChip').addEventListener('click', (event) => {
 $('modeMenu').addEventListener('click', (event) => {
   const button = event.target.closest('[data-mode]');
   if (!button) return;
+  if (button.dataset.mode === 'plan' && settings.mode !== 'plan') settings.prePlanMode = settings.mode;
   settings.mode = button.dataset.mode;
   allowEditsThisSession = false;
   saveSettings();

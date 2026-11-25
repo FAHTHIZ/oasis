@@ -71,6 +71,8 @@ export function webSessionState(session, env = process.env) {
   };
 }
 
+const APPROVAL_WAIT_MS = 30 * 60 * 1000;
+
 function stepBrief(name, value) {
   try {
     if (!value || typeof value !== 'object') return '';
@@ -808,12 +810,14 @@ export function createOasisWebServer(options = {}) {
         emit(job, 'approval_resolved', { approvalId, approved: Boolean(value), always: value === 'always', ...(value === 'rehearsal' ? { rehearsal: true } : {}) });
         resolve(value);
       };
-      const timer = setTimeout(() => finish(false), 5 * 60 * 1000);
+      // Unanswered for 30 minutes counts as no. It was 5, which turned a
+      // short coffee break into a "Denied" the person never chose.
+      const timer = setTimeout(() => finish(false), APPROVAL_WAIT_MS);
       timer.unref?.();
       job.pendingApprovals.set(approvalId, { resolve: finish, prompt: detail.message, risky: detail.risky, suggestion, rehearsal, ...(meta && meta.subagent ? { subagent: String(meta.subagent).slice(0, 200) } : {}) });
       job.status = 'waiting_approval';
       emit(job, 'approval_required', {
-        approvalId, prompt: detail.message, risky: detail.risky, expiresInSeconds: 300,
+        approvalId, prompt: detail.message, risky: detail.risky, expiresInSeconds: APPROVAL_WAIT_MS / 1000,
         ...(detail.diff ? { diff: detail.diff } : {}),
         ...(suggestion ? { suggestion } : {}),
         ...(rehearsal ? { rehearsal: true } : {}),
