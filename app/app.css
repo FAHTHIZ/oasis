@@ -334,6 +334,8 @@ code.inspect-text{font:12px var(--mono)}
 .msg.assistant:has(+.steps),.msg.assistant:has(+.thinking){margin-bottom:10px}
 .msg.assistant:has(+.steps) .msg-actions,.msg.assistant:has(+.thinking) .msg-actions{display:none}
 .msg.assistant:has(.cursor) .msg-actions{display:none}
+/* Narration between steps is secondary to the work and the answer: muted, a touch smaller. */
+.msg.assistant:has(+.steps) .body,.msg.assistant:has(+.thinking) .body{color:var(--muted);font-size:.94em}
 .msg-actions button{width:28px;height:28px;display:grid;place-items:center;border-radius:7px;color:var(--faint);background:none;border:0}
 .msg-actions button:hover{background:var(--raised);color:var(--text)}
 .msg-actions button.copied{color:var(--accent)}

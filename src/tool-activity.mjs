@@ -144,6 +144,8 @@ export function toolActivityOutcome(result) {
   if (value.cancelled === true) return 'cancelled';
   if (value.blocked === true) return 'blocked';
   if (value.approved === false) return 'declined';
+  // Plan mode stopping a write or command is a rule doing its job, not a failure.
+  if (/^(Error: )?Plan mode blocks /.test(String(value.error || value.output || ''))) return 'blocked';
   // A command moved to the background is still running: that is not a failure.
   if (value.timedOut === true) return value.movedToBackground === true && !value.error ? 'ok' : 'timed_out';
   return toolActivityStatus(value) === 'error' ? 'failed' : 'ok';
