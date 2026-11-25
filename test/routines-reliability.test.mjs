@@ -82,3 +82,28 @@ test('a success resets the streak, and OASIS_ROUTINE_MAX_FAILURES=0 never pauses
   assert.equal(job.enabled, true);
   assert.equal(job.failureStreak, 4);
 });
+
+test('a run past its timeout is stopped, recorded as timed_out and counts as a failure', async () => {
+  const { runTimeoutMs } = await import('../src/routines.mjs');
+  assert.equal(runTimeoutMs({}, {}), 0);
+  assert.equal(runTimeoutMs({}, { OASIS_ROUTINE_TIMEOUT_MINUTES: '30' }), 1_800_000);
+  assert.equal(runTimeoutMs({ timeoutMinutes: 0 }, { OASIS_ROUTINE_TIMEOUT_MINUTES: '30' }), 0, 'a routine can opt out of the default');
+  const env = await tempEnv();
+  const bg = fakeBackgrounds(env.HOME);
+  const t0 = new Date('2026-11-11T10:00:00Z');
+  await assert.rejects(createJob({ schedule: 'every 1h', prompt: 'x', kind: 'script', timeoutMinutes: -1 }, { env, now: t0 }), /timeout minutes/);
+  await createJob({ schedule: 'every 1h', prompt: 'sleep 99999', kind: 'script', name: 'hang', timeoutMinutes: 10 }, { env, now: t0 });
+  await tick({ env, now: new Date('2026-11-11T11:00:00Z'), backgrounds: bg });
+  // Within the limit: still running.
+  let summary = await tick({ env, now: new Date('2026-11-11T11:05:00Z'), backgrounds: bg });
+  assert.deepEqual(summary.finished, []);
+  summary = await tick({ env, now: new Date('2026-11-11T11:11:00Z'), backgrounds: bg });
+  assert.deepEqual(summary.timedOut, [ (await readJobs(env))[0].id ]);
+  assert.equal(summary.finished.length, 1);
+  const [job] = await readJobs(env);
+  assert.equal(job.activeRun, undefined);
+  assert.equal(job.lastStatus, 'timed_out');
+  assert.equal(job.failureStreak, 1);
+  const { runs } = await listRuns('hang', { env });
+  assert.equal(runs.at(-1).status, 'timed_out');
+});

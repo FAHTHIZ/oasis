@@ -46,7 +46,7 @@ export const SESSION_TOOL_DEFINITIONS = [
       events: { type: 'array', items: { type: 'string' }, description: 'Webhook routines only: run just for these events, e.g. pull_request.opened, issues.' },
       continue_this_conversation: { type: 'boolean', description: 'Each run starts from a copy of this conversation, so it keeps the context so far (the original is never changed). Set chain too to carry context from run to run.' },
       chain: { type: 'boolean' },
-      timezone: { type: 'string' }, grace_minutes: { type: 'integer', minimum: 0, maximum: 1440 },
+      timezone: { type: 'string' }, grace_minutes: { type: 'integer', minimum: 0, maximum: 1440 }, timeout_minutes: { type: 'integer', minimum: 0, maximum: 10080, description: 'Stop a run that takes longer than this (0 = no limit).' },
       permission_mode: { type: 'string', enum: ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk'] },
       paused: { type: 'boolean' }, reason: { type: 'string' } }, ['action']),
   fn('cron_delete', 'Cancel a scheduled prompt by id.', { id: { type: 'string' } }, ['id']),
@@ -566,7 +566,7 @@ export async function manageRoutine(session, args = {}, options = {}) {
   if (action === 'pause') return { paused: brief(await routines.pauseJob(args.id, args.reason || 'Paused by the agent.', { env })) };
   if (action === 'cancel') { const { job, cancelled } = await routines.cancelRun(args.id, { env }); return { id: job.id, cancelled }; }
   const fields = {};
-  for (const [from, to] of [['schedule', 'schedule'], ['prompt', 'prompt'], ['name', 'name'], ['kind', 'kind'], ['workdir', 'workdir'], ['skills', 'skills'], ['deliver', 'deliver'], ['timezone', 'timezone'], ['grace_minutes', 'graceMinutes'], ['events', 'events'], ['chain', 'chain'], ['permission_mode', 'permissionMode'], ['paused', 'paused']]) {
+  for (const [from, to] of [['schedule', 'schedule'], ['prompt', 'prompt'], ['name', 'name'], ['kind', 'kind'], ['workdir', 'workdir'], ['skills', 'skills'], ['deliver', 'deliver'], ['timezone', 'timezone'], ['grace_minutes', 'graceMinutes'], ['timeout_minutes', 'timeoutMinutes'], ['events', 'events'], ['chain', 'chain'], ['permission_mode', 'permissionMode'], ['paused', 'paused']]) {
     if (args[from] !== undefined) fields[to] = args[from];
   }
   if (action === 'create' && !fields.workdir) fields.workdir = session.root;

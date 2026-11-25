@@ -302,6 +302,14 @@ function normalizeFields(fields, existing = {}, now = new Date()) {
       job.graceMinutes = grace;
     }
   }
+  if (fields.timeoutMinutes !== undefined) {
+    if (fields.timeoutMinutes === null || fields.timeoutMinutes === '') delete job.timeoutMinutes;
+    else {
+      const limit = Number(fields.timeoutMinutes);
+      if (!Number.isInteger(limit) || limit < 0 || limit > 10080) throw new Error('timeout minutes must be a whole number from 0 (no limit) to 10080.');
+      job.timeoutMinutes = limit;
+    }
+  }
   if (fields.schedule !== undefined || fields.timezone !== undefined) {
     job.schedule = parseSchedule(fields.schedule !== undefined ? fields.schedule : job.schedule.display, { now, timezone: job.timezone });
     if (job.enabled !== false) job.nextRunAt = job.schedule.type === 'once' ? job.schedule.at : nextOccurrence(job, now);
@@ -611,6 +619,16 @@ async function launch(job, env, backgrounds, now, event = null) {
   return { fireId: randomUUID(), backgroundId: entry.id, startedAt: now.toISOString(), manual: false, ...(entry.sessionId ? { sessionId: entry.sessionId } : {}), ...(event ? { eventId: event.id, eventFile } : {}) };
 }
 
+// How long one run may take before the scheduler stops it: the routine's
+// timeoutMinutes, else OASIS_ROUTINE_TIMEOUT_MINUTES; 0 or unset means no limit.
+// Nobody watches a scheduled run, and a hung one blocked every later slot.
+export function runTimeoutMs(job, env = process.env) {
+  const own = Number.isInteger(job?.timeoutMinutes) ? job.timeoutMinutes : null;
+  const fallback = Number.parseInt(env.OASIS_ROUTINE_TIMEOUT_MINUTES || '', 10);
+  const minutes = own !== null ? own : Number.isInteger(fallback) && fallback > 0 ? fallback : 0;
+  return minutes > 0 ? minutes * 60_000 : 0;
+}
+
 export function maxRoutineFailures(env = process.env) {
   const raw = env.OASIS_ROUTINE_MAX_FAILURES;
   if (raw === undefined || raw === '') return 3;
@@ -628,7 +646,7 @@ async function reconcile(job, env, backgrounds, options) {
   let logText = '';
   if (entry?.logFile) { try { logText = await readFile(entry.logFile, 'utf8'); } catch {} }
   const { output, isError, missing } = extractRunOutput(logText, job.kind);
-  const status = !entry ? 'lost' : entry.status === 'stopped' ? 'cancelled' : entry.status === 'interrupted' ? 'interrupted' : (isError || missing || (entry.exitCode && entry.exitCode !== 0)) ? 'failed' : 'ok';
+  const status = !entry ? 'lost' : entry.status === 'stopped' ? (run.timedOut ? 'timed_out' : 'cancelled') : entry.status === 'interrupted' ? 'interrupted' : (isError || missing || (entry.exitCode && entry.exitCode !== 0)) ? 'failed' : 'ok';
   const finishedAt = (options.now || new Date()).toISOString();
   const silent = /^\s*\[SILENT\]/.test(output);
   const record = { ...run, status, finishedAt, exitCode: entry?.exitCode ?? null, silent };
@@ -640,11 +658,13 @@ async function reconcile(job, env, backgrounds, options) {
   }
   // Consecutive failures pause the routine (OASIS_ROUTINE_MAX_FAILURES, default
   // 3; 0 never pauses), so a broken routine does not fail and alert forever.
-  const streak = status === 'failed' || status === 'lost' ? (job.failureStreak || 0) + 1 : status === 'ok' ? 0 : job.failureStreak || 0;
+  const failed = status === 'failed' || status === 'timed_out';
+  const streak = failed || status === 'lost' ? (job.failureStreak || 0) + 1 : status === 'ok' ? 0 : job.failureStreak || 0;
   const maxFailures = maxRoutineFailures(env);
-  const pauseForFailures = status === 'failed' && maxFailures > 0 && streak >= maxFailures && job.enabled !== false && job.schedule?.type !== 'once';
+  const pauseForFailures = failed && maxFailures > 0 && streak >= maxFailures && job.enabled !== false && job.schedule?.type !== 'once';
   if (status !== 'cancelled' && !silent && (output || status !== 'ok')) {
-    const message = (status === 'ok' ? output : 'Run ' + status + (output ? ':\n' + output : '.') + '\nLogs: oasis bg logs ' + run.backgroundId)
+    const label = status === 'timed_out' ? 'stopped after its ' + Math.round(runTimeoutMs(job, env) / 60_000) + '-minute timeout' : status;
+    const message = (status === 'ok' ? output : 'Run ' + label + (output ? ':\n' + output : '.') + '\nLogs: oasis bg logs ' + run.backgroundId)
       + (pauseForFailures ? '\n\nPaused after ' + streak + ' failed runs in a row. Fix it, then: oasis schedule resume ' + (job.name || job.id) : '');
     try { record.delivery = (await deliverOutput(job, message, { env, fetchImpl: options.fetchImpl })).delivered; } catch (error) { record.deliveryError = error.message; }
   }
@@ -671,6 +691,10 @@ export async function tick(options = {}) {
   const summary = { fired: [], finished: [], skipped: [], blocked: [] };
   await mutate(env, async (jobs) => {
     for (const job of jobs) {
+      const limit = job.activeRun && !job.activeRun.timedOut ? runTimeoutMs(job, env) : 0;
+      if (limit && now - new Date(job.activeRun.startedAt) > limit) {
+        try { await backgrounds.stopBackgroundSession(job.activeRun.backgroundId, env); job.activeRun.timedOut = true; summary.timedOut = [...(summary.timedOut || []), job.id]; } catch {}
+      }
       if (job.activeRun && await reconcile(job, env, backgrounds, { ...options, now })) summary.finished.push(job.id);
     }
     let running = jobs.filter((job) => job.activeRun).length;
