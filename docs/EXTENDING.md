@@ -3,6 +3,9 @@
 OASIS reads the same extension formats as Claude Code, so an existing setup works
 without conversion. Everything below is optional; OASIS works with none of it.
 
+For the two separately deployed first-party companions—EXTREMIS for capability discovery
+and OASIS Route for inference routing—see the [first-party ecosystem guide](ECOSYSTEM.md).
+
 Extensions can run third-party code with your account's permissions. Review a
 skill, plugin, hook or MCP server before turning it on. Project-level extensions
 (`.mcp.json`, project hooks, project settings that loosen permissions) wait until
