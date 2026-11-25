@@ -368,7 +368,7 @@ export function getProviderSummary(config) {
     provider: host,
     protocol: config.protocol || DEFAULT_PROTOCOL,
     model: config.model || DEFAULT_MODEL,
-    authentication: config.protocol === 'bedrock' ? (config.apiKey ? 'Bedrock API key' : 'AWS credentials (SigV4)') : config.protocol === 'vertex' ? 'Google Cloud access token' : config.protocol === 'foundry' ? (process.env.ANTHROPIC_FOUNDRY_AUTH_TOKEN ? 'Microsoft Entra ID token' : config.apiKey ? 'Foundry API key' : 'Microsoft Entra ID (az login)') : config.apiKey ? 'API key configured' : (isLoopbackUrl(config.baseURL) ? 'local endpoint; no API key required' : 'not configured'),
+    authentication: config.protocol === 'bedrock' ? (config.apiKey ? 'Bedrock API key' : 'AWS credentials (SigV4)') : config.protocol === 'vertex' ? 'Google Cloud access token' : config.protocol === 'foundry' ? (process.env.ANTHROPIC_FOUNDRY_AUTH_TOKEN ? 'Microsoft Entra ID token' : config.apiKey ? 'Foundry API key' : 'Microsoft Entra ID (az login)') : config.apiKey ? 'API key configured' : (isLoopbackUrl(config.baseURL) ? 'local endpoint; no API key required' : config.keyless === true ? 'none needed; this endpoint works without a key' : 'not configured'),
     configPath: config.configPath || getConfigPath()
   };
 }
