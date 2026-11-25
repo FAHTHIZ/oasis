@@ -217,6 +217,9 @@ export function agentLanes(workers, now = Date.now()) {
       outcome: AGENT_OUTCOME[worker.status] || (worker.waitingApproval ? 'waiting' : 'running'),
       waiting: Boolean(worker.waitingApproval),
       activity: done ? '' : String(worker.activity || ''),
+      // When the current state began (queued, retrying, between steps).
+      activityAt: done ? null : finite(worker.activityAt),
+      waitingAt: finite(worker.waitingAt),
       detail,
       branch: (detail.match(/Changes on branch (\S+) \(not merged yet\)/) || [])[1] || '',
       budget: String(worker.budget || ''),
@@ -239,7 +242,7 @@ function nowLines(turn, now) {
       for (const agent of step.agents) {
         if (agent.outcome !== 'running' && agent.outcome !== 'waiting') continue;
         const current = agent.steps.filter((item) => item.outcome === 'running').at(-1);
-        lines.push({ who: agent.description, agent: agent.index, text: agent.waiting ? 'Waiting for you to approve a step' : current ? current.label : agent.activity || 'Thinking', since: (current && current.startedAt) || agent.startedAt, waiting: agent.waiting });
+        lines.push({ who: agent.description, agent: agent.index, text: agent.waiting ? 'Waiting for you to approve a step' : current ? current.label : agent.activity || 'Thinking', since: (agent.waiting && agent.waitingAt) || (current && current.startedAt) || agent.activityAt || agent.startedAt, waiting: agent.waiting });
       }
       if (!lines.length) lines.push({ who: 'OASIS', text: step.label, since: step.startedAt });
       continue;

@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- The Activity panel's live strip times each agent from when its current state began. "Waiting its turn · 51s" used to count from when the agent started, so a 3-second wait could look like a minute. Waits for approval, queueing, and the gap between steps now each have their own clock.
 - "Always allow" on `python -m unittest discover` saves `python -m unittest:*`, not `python -m:*`, which would also have run `python -m pip install …` or `python -m http.server` without asking for the rest of the session. The button reads "Always allow python -m unittest".
 - The quality gate's token benchmark passes again. The parallel-agent and command-guidance text added since 0.12.0 put every request about 4% over the limit; the `task` tool's `isolation` and `parallel_tasks` descriptions and two system-prompt sentences are shorter now (about 1,300 fewer tokens per benchmark run, same instructions), and the baseline is refreshed for the `parallel_tasks` schema that parallel agents need.
 - Plan mode runs read-only subagents again. The built-in explore, plan and code-review agents list `read_skill_resource`, which was missing from the loop's read-only set, so none of them counted as read-only and every `task` call for them read "Plan mode blocks write, command, install, delete, and external tool calls." A call to an agent by its own name (`plan` or `explore` with a description and prompt, as gpt-oss writes it) now runs as a `task` for that agent instead of failing.

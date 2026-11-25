@@ -123,3 +123,19 @@ test('a task step carries one lane per agent, with its own steps, files and toke
   const old = buildTrace([{ role: 'user', content: 'x', at: t0 }, { role: 'assistant', tools: [{ id: 't', name: 'task', args: {}, startedAt: t0, endedAt: t0 + 5000, ok: true }], subagents: [{ id: 'agent_1', description: 'a', status: 'completed' }] }], { now: t0 + 5000 });
   assert.ok(old.turns[0].steps[0].agents[0].width > 50);
 });
+
+// "Waiting its turn · 51s" counted from the agent's start, not the wait's.
+test('the Now strip times an agent from when its current state began', async () => {
+  const { SubagentTracker } = await import('../app/core/subagents.mjs');
+  const t0 = 2_000_000;
+  const worker = (extra) => ({ role: 'assistant', content: '', tools: [{ id: 't1', name: 'task', args: {}, startedAt: t0 }], subagents: [{ id: 'agent_1', description: 'A', status: 'running', startedAt: t0, ...extra }] });
+  const line = (extra) => buildTrace([{ role: 'user', content: 'x', at: t0 }, worker(extra)], { now: t0 + 60_000, running: true }).turns[0].now[0];
+  assert.equal(line({ activity: 'Waiting its turn on the model', activityAt: t0 + 50_000 }).since, t0 + 50_000);
+  assert.equal(line({ waitingApproval: true, waitingAt: t0 + 55_000 }).since, t0 + 55_000);
+  assert.equal(line({}).since, t0, 'old saved agents fall back to their start');
+  const tracker = new SubagentTracker();
+  tracker.update({ type: 'agent.started', agent_id: 'a1', description: 'A' }, { at: t0 });
+  tracker.pause('A', 'Waiting its turn on the model', { at: t0 + 40_000 });
+  tracker.pause('A', 'Waiting its turn on the model', { at: t0 + 45_000 });
+  assert.equal(tracker.list({ now: t0 + 50_000 })[0].activityAt, t0 + 40_000, 'a repeated note keeps the original time');
+});

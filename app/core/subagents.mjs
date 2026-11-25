@@ -53,7 +53,7 @@ export class SubagentTracker {
     if (finished) {
       worker.steps = (worker.steps || 0) + 1;
       // Its last step is over: say so instead of showing it as still running.
-      if (worker.status === 'running' || worker.status === 'unknown') worker.activity = 'Thinking about the next step';
+      if (worker.status === 'running' || worker.status === 'unknown') { worker.activity = 'Thinking about the next step'; worker.activityAt = at; }
       worker.lastBrief = brief ? String(brief).slice(0, 120) : '';
       const open = (worker.log || []).find((item) => !item.endedAt);
       if (open) {
@@ -67,7 +67,8 @@ export class SubagentTracker {
     }
     if (!label) return false;
     worker.activity = label;
-    delete worker.paused; delete worker.pausedUntil;
+    worker.activityAt = at;
+    delete worker.paused; delete worker.pausedUntil; delete worker.pausedAt;
     // Its own steps, kept short, so the run can be replayed after it ends.
     worker.log = worker.log || [];
     worker.log.push({ label, startedAt: at, ...(toolName ? { name: String(toolName).slice(0, 60) } : {}), ...(path ? { path: String(path).slice(0, 300) } : {}) });
@@ -77,32 +78,35 @@ export class SubagentTracker {
   // Why a running agent is quiet between steps: queued behind another agent on
   // a one-at-a-time endpoint, or waiting out a provider error. `until` lets a
   // retry note lapse on its own; '' clears the note.
-  pause(description, text, { until = 0 } = {}) {
+  pause(description, text, { until = 0, at = Date.now() } = {}) {
     const name = String(description || '').slice(0, 200);
     const worker = [...this.workers.values()].filter((w) => w.description === name && (w.status === 'running' || w.status === 'unknown')).pop();
     if (!worker) return false;
     const label = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 160);
     if (!label) {
       if (!worker.paused) return false;
-      delete worker.paused; delete worker.pausedUntil;
+      delete worker.paused; delete worker.pausedUntil; delete worker.pausedAt;
       return true;
     }
+    // The timer counts from when it started waiting, not from a repeat note.
+    if (worker.paused !== label || !worker.pausedAt) worker.pausedAt = at;
     worker.paused = label;
     if (until > 0) worker.pausedUntil = until; else delete worker.pausedUntil;
     return true;
   }
   // A foreground approval this agent asked for is open (or was answered).
-  waiting(description, on) {
+  waiting(description, on, { at = Date.now() } = {}) {
     const name = String(description || '').slice(0, 200);
     const worker = [...this.workers.values()].filter((w) => w.description === name && (w.status === 'running' || w.status === 'unknown')).pop();
     if (!worker || worker.waitingApproval === Boolean(on)) return false;
     worker.waitingApproval = Boolean(on);
+    if (on) worker.waitingAt = at; else delete worker.waitingAt;
     return true;
   }
   list({ now = Date.now() } = {}) {
-    return [...this.workers.values()].sort((a, b) => a.order - b.order).map(({ order, log, paused, pausedUntil, ...worker }) => {
+    return [...this.workers.values()].sort((a, b) => a.order - b.order).map(({ order, log, paused, pausedUntil, pausedAt, ...worker }) => {
       const live = paused && (worker.status === 'running' || worker.status === 'unknown') && !(pausedUntil && now > pausedUntil);
-      return { ...worker, ...(live ? { activity: paused } : {}), ...(log ? { log: log.map((item) => ({ ...item })) } : {}) };
+      return { ...worker, ...(live ? { activity: paused, activityAt: pausedAt } : {}), ...(log ? { log: log.map((item) => ({ ...item })) } : {}) };
     });
   }
   get running() { return this.list().filter((worker) => worker.status === 'running' || worker.status === 'stopping').length; }
