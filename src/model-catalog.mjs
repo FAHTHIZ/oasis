@@ -254,7 +254,15 @@ export function catalogToolCalling(model, options = {}) {
 // say. Catalog files written before this field existed also give null.
 export function catalogReasoningReplay(model, options = {}) {
   const entry = findCatalogModel(model, options);
-  return entry && typeof entry.replay === 'string' ? entry.replay : null;
+  if (entry && typeof entry.replay === 'string') return entry.replay;
+  // The configured provider's own listing is authoritative. Without one (a
+  // newer download renamed or dropped it), a reseller entry that omits the
+  // field must not hide the many that state it.
+  const catalog = loadModelCatalog(options.env || process.env);
+  const hint = options.provider && catalog.lower[options.provider] ? options.provider : providerForBaseURL(options.baseURL, options.env || process.env);
+  if (entry && ((hint && entry.provider === hint) || FIRST_PARTY.includes(entry.provider))) return null;
+  const stated = findCatalogModel(model, { ...options, need: 'replay' });
+  return stated && typeof stated.replay === 'string' ? stated.replay : null;
 }
 
 // USD per million tokens in Oasis's pricing shape, with the first context tier as

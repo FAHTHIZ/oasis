@@ -402,6 +402,49 @@ async function clientMirrorWrite(context, absolute, content) {
   try { await clientFs.writeTextFile(absolute, content); } catch {}
 }
 
+// A CSV/TSV read in full comes with its columns and exact data-row count.
+// Small models counted rows by eye and were off by one (seen live: "301 data
+// rows" for 300 rows plus a header). Quoted fields may span lines.
+export function tableShape(relativePath, content) {
+  const ext = path.extname(String(relativePath || '')).toLowerCase();
+  if (ext !== '.csv' && ext !== '.tsv') return null;
+  const sep = ext === '.tsv' ? '\t' : ',';
+  const records = [];
+  let field = '';
+  let row = [];
+  let quoted = false;
+  const text = String(content || '').replace(/^\uFEFF/, '');
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else field += ch;
+    } else if (ch === '"' && field === '') quoted = true;
+    else if (ch === sep) { row.push(field); field = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      if (row.some((cell) => cell.trim() !== '')) records.push(row);
+      row = [];
+    } else field += ch;
+  }
+  row.push(field);
+  if (row.some((cell) => cell.trim() !== '')) records.push(row);
+  if (!records.length) return null;
+  const numeric = (cell) => /^\s*-?[\d.,]+%?\s*$/.test(cell) && /\d/.test(cell);
+  // A header: the first row has no numbers while a later row does, or
+  // every cell is a short label and the second row differs in shape.
+  const first = records[0];
+  const second = records[1] || [];
+  const header = records.length > 1 && !first.some(numeric) && (second.some(numeric) || first.every((cell) => /^[A-Za-z_][\w .()/-]{0,60}$/.test(cell.trim())));
+  return {
+    ...(header ? { columns: first.map((cell) => cell.trim()).slice(0, 50) } : {}),
+    dataRows: records.length - (header ? 1 : 0),
+    note: header ? 'dataRows excludes the header row.' : 'No header row detected; dataRows counts every row.'
+  };
+}
+
 export async function readWorkspaceFile(root, rawPath, options = {}) {
   const target = await resolveWorkspacePath(root, rawPath);
   const info = await stat(target.absolute);
@@ -419,7 +462,7 @@ export async function readWorkspaceFile(root, rawPath, options = {}) {
   const relativePath = target.relative.split(path.sep).join('/');
   // Non-UTF-8 text is reported so the model knows edits keep that encoding.
   const encodingNote = decoded.encoding === 'utf8' ? {} : { encoding: decoded.encoding };
-  if (!ranged) return { path: relativePath, content, ...encodingNote };
+  if (!ranged) { const table = tableShape(relativePath, content); return { path: relativePath, content, ...encodingNote, ...(table ? { table } : {}) }; }
   const lines = content.split('\n');
   const startLine = Math.max(1, Number.parseInt(options.offset, 10) || 1);
   const count = Math.max(1, Math.min(2000, Number.parseInt(options.limit, 10) || 2000));
@@ -430,7 +473,9 @@ export async function readWorkspaceFile(root, rawPath, options = {}) {
   let truncated = false;
   if (text.length > MAX_TEXT_FILE) { text = text.slice(0, MAX_TEXT_FILE); truncated = true; }
   const endLine = startLine + slice.length - 1;
-  return { path: relativePath, content: text, startLine, endLine, totalLines: lines.length, truncated: truncated || clipped || startLine - 1 + count < lines.length, ...(implicit ? { note: bigFileNote(info.size, startLine, endLine, lines.length, clipped) } : {}) };
+  const whole = startLine === 1 && !(truncated || clipped || count < lines.length);
+  const table = whole ? tableShape(relativePath, content) : null;
+  return { path: relativePath, content: text, startLine, endLine, totalLines: lines.length, truncated: truncated || clipped || startLine - 1 + count < lines.length, ...(implicit ? { note: bigFileNote(info.size, startLine, endLine, lines.length, clipped) } : {}), ...(table ? { table } : {}) };
 }
 
 const MAX_LINE_CHARS = 2000;

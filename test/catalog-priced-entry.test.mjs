@@ -24,3 +24,20 @@ test('a localhost gateway is not mistaken for a catalog app, and unpriced listin
   assert.equal(catalogPrice('anthropic/claude-sonnet-4-5', { baseURL: 'http://127.0.0.1:4000/v1', env }).input, 3);
   assert.equal(catalogPrice('claude-sonnet-4-5', { baseURL: 'https://reseller.example/v1', env }).output, 15);
 });
+
+test('reasoning replay: a renamed maker falls back to entries that state it, but a maker\'s own entry wins', async (t) => {
+  const { catalogReasoningReplay } = await import('../src/model-catalog.mjs');
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-catalog-replay-'));
+  t.after(async () => { resetModelCatalogForTest(); await rm(dir, { recursive: true, force: true }); });
+  const file = path.join(dir, 'catalog.json');
+  await writeFile(file, JSON.stringify({ schemaVersion: 9, fetchedAt: '2026-11-01T00:00:00Z', providers: {
+    google: { api: 'https://generativelanguage.googleapis.com/v1beta', models: { 'gemini-x': { context: 1 } } },
+    'reseller-a': { api: 'https://a.example/v1', models: { 'mimo-v9': { context: 1 }, 'gemini-x': { context: 1, replay: 'reasoning_content' } } },
+    'reseller-b': { api: 'https://b.example/v1', models: { 'mimo-v9': { context: 1, replay: 'reasoning_content' } } }
+  } }));
+  const env = { OASIS_MODEL_CATALOG: file };
+  resetModelCatalogForTest();
+  assert.equal(catalogReasoningReplay('mimo-v9', { baseURL: 'https://api.xiaomimimo.com/v1', env }), 'reasoning_content');
+  assert.equal(catalogReasoningReplay('mimo-v9', { baseURL: 'https://a.example/v1', env }), null, 'the configured provider\'s own entry is authoritative');
+  assert.equal(catalogReasoningReplay('gemini-x', { baseURL: 'http://127.0.0.1:9/v1', env }), null, 'the maker\'s entry beats a reseller');
+});
