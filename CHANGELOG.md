@@ -4,6 +4,11 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ## Unreleased
 
+### Added
+
+- `oasis schedule add --precheck CMD` gates an agent routine on a cheap shell check. When the command prints nothing (or `[SILENT]`) the run is recorded as skipped and no model call is made; otherwise its output is added to the prompt as data. A failing check counts as a failed run.
+- `oasis schedule install` runs the routine scheduler as an OS service (a systemd user unit on Linux, a launchd agent on macOS, a logon task on Windows), so routines keep firing after a reboot without a terminal open. `--print` shows the unit, `oasis schedule service` reports its state and `oasis schedule uninstall` removes it.
+
 ## [0.13.0] - 2026-11-25
 
 A stability release from a final pass over OASIS as a first-time user: research, data analysis, documents, writing, memory, the browser, routines, `/goal`, parallel agents, MCP, connectors, skills, voice and image attachments in the terminal, web app and desktop app. Unattended runs can now read the web, a new user can start with a free model that needs no key, and routines pause themselves after repeated failures.

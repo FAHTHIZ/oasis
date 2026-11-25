@@ -20,6 +20,11 @@ Start the scheduler with "oasis schedule daemon" (or run "oasis schedule tick" f
   oasis schedule prune                           delete routines that finished (one-time runs)
   oasis schedule tick                            one scheduler pass, then exit
   oasis schedule daemon [--interval SECONDS]     keep running and fire routines
+  oasis schedule install [--interval S] [--print] run the scheduler as an OS service
+                                                 (systemd, launchd or Task Scheduler) that
+                                                 survives reboots
+  oasis schedule uninstall                       remove that service
+  oasis schedule service                         is the service installed and running?
 
 SCHEDULE: "weekdays at 9am", "daily at 18:30", "every monday at 14:00", "0 9 * * 1-5" (cron), "every 2h", "in 30m", 2026-12-01T09:00, or
           "webhook" (runs when oasis web receives a signed POST; see show), or an RFC 5545 rule such as
@@ -87,6 +92,7 @@ function parseOptions(args) {
     else if (arg === '--prompt') fields.prompt = value();
     else if (arg === '--interval') fields.interval = Number(value());
     else if (arg === '--json') fields.json = true;
+    else if (arg === '--print' || arg === '--dry-run') fields.dryRun = true;
     else positional.push(arg);
   }
   if (skills.length) fields.skills = skills;
@@ -159,6 +165,27 @@ export async function scheduleCommand(args = [], { env = process.env, write = (t
     say('Started ' + result.fired.length + ', finished ' + result.finished.length + ', skipped ' + result.skipped.length + ', blocked ' + result.blocked.length + '.');
     for (const item of [...result.skipped, ...result.blocked]) say('  ' + item.id + ': ' + item.reason);
     return result;
+  }
+  if (sub === 'install') {
+    const { installService } = await import('./scheduler-service.mjs');
+    const { spec } = await installService({ env, interval: fields.interval, dryRun: fields.dryRun });
+    if (fields.dryRun) { say((spec.file ? '# ' + spec.file + '\n' : '') + spec.content); return spec; }
+    say('Installed the routine scheduler as a ' + ({ systemd: 'systemd user service', launchd: 'launchd agent', schtasks: 'Windows logon task' })[spec.kind] + (spec.file ? ' (' + spec.file + ')' : '') + '. It starts now and at every login, and restarts if it crashes.');
+    say('Logs: ' + spec.logs + '   Status: oasis schedule service   Remove: oasis schedule uninstall');
+    if (spec.note) say(spec.note);
+    return spec;
+  }
+  if (sub === 'uninstall') {
+    const { uninstallService } = await import('./scheduler-service.mjs');
+    const { removed } = await uninstallService({ env });
+    say(removed ? 'Removed the routine scheduler service. Routines stay; run them with oasis schedule daemon.' : 'No routine scheduler service was installed.');
+    return removed;
+  }
+  if (sub === 'service' || sub === 'status') {
+    const { serviceStatus } = await import('./scheduler-service.mjs');
+    const status = await serviceStatus({ env });
+    say(!status.installed ? 'The scheduler service is not installed. Install it with: oasis schedule install' : 'The scheduler service is installed and ' + (status.running ? 'running.' : 'not running.') + (status.spec.file ? '\n  ' + status.spec.file : '') + (status.detail && !status.running ? '\n  ' + status.detail.replace(/\n/g, '\n  ') : '') + '\nLogs: ' + status.spec.logs);
+    return status;
   }
   if (sub === 'daemon') {
     const controller = new AbortController();

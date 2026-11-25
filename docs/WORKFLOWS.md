@@ -115,13 +115,15 @@ session with `/export review.html` or `/export notes.md`.
 
 ```sh
 oasis schedule add "every 1d" "Summarise yesterday's new GitHub issues in this repo and save the summary to digests/"
-oasis schedule daemon        # or keep `oasis web` / `oasis gateway` running; they run routines too
+oasis schedule add "every 15m" "Triage the new issues listed below" --precheck "gh issue list --label new" --timeout 20
+oasis schedule install       # run the scheduler as an OS service (or: oasis schedule daemon, oasis web, oasis gateway)
 ```
 
 Routines accept cron expressions, RFC 5545 RRULEs, intervals, one-off times
 and signed webhooks. Results can be delivered to a chat with a gateway's home
 channel (`--deliver home`). An unattended run cannot answer approval prompts,
-so it only does what your permission rules already allow.
+so it only does what your permission rules already allow. A `--precheck` command
+gates the model: when it prints nothing, the run is skipped at no token cost.
 
 ## Work from a chat app
 
