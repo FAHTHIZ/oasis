@@ -137,12 +137,12 @@ function upsertConnection(connection) {
   settings.connections.push(connection);
   return connection;
 }
-function applyTheme() {
-  const dark = settings.theme === 'dark' || (settings.theme === 'system' && !matchMedia('(prefers-color-scheme: light)').matches);
+function applyTheme(theme = settings.theme) {
+  const dark = theme === 'dark' || (theme === 'system' && !matchMedia('(prefers-color-scheme: light)').matches);
   document.documentElement.classList.toggle('light', !dark);
   document.querySelector('meta[name="theme-color"]').content = dark ? '#0C0E0D' : '#F7F7F5';
 }
-matchMedia('(prefers-color-scheme: light)').addEventListener('change', applyTheme);
+matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => applyTheme());
 
 /* ---------- Toasts ---------- */
 function toast(message, kind = '') {
@@ -424,6 +424,8 @@ function closeSheet(id, { fromHistory = false } = {}) {
   const el = $(id);
   if (!el || el.hidden) return;
   el.hidden = true;
+  // A theme previewed in Settings but not saved goes back to the saved one.
+  if (id === 'settingsSheet') applyTheme();
   sheetTraps.get(id)?.deactivate();
   sheetTraps.delete(id);
   if (el.classList.contains('docked')) { el.classList.remove('docked'); el.style.left = el.style.width = el.style.bottom = ''; $('chat').style.paddingBottom = ''; }
@@ -4804,6 +4806,8 @@ function formSettings() {
     githubToken: $('githubToken').value.trim()
   };
 }
+// Choosing a theme previews it at once; Save keeps it, closing reverts it.
+$('themeSelect').addEventListener('change', (event) => applyTheme(event.target.value));
 $('notifyInput').addEventListener('change', async (event) => {
   if (!event.target.checked || typeof Notification === 'undefined') return;
   const permission = Notification.permission === 'default' ? await Notification.requestPermission().catch(() => 'denied') : Notification.permission;

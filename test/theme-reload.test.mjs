@@ -24,3 +24,10 @@ test('editing the active custom theme file re-applies it', async (t) => {
   assert.notEqual(currentTheme().colors.error.fg, before);
   applyTheme(resolveTheme('dark', { env: {} }));
 });
+
+test('choosing a theme in Settings previews it, and closing without Save reverts it', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const main = await readFile(new URL('../app/main.mjs', import.meta.url), 'utf8');
+  assert.match(main, /\$\('themeSelect'\)\.addEventListener\('change', \(event\) => applyTheme\(event\.target\.value\)\)/);
+  assert.match(main, /if \(id === 'settingsSheet'\) applyTheme\(\);/);
+});

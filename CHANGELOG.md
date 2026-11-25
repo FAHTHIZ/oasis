@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- Choosing a theme in Settings previews it straight away; closing Settings without saving puts the saved theme back.
 - The command palette (Ctrl K / sidebar Search) now finds chats, plugins and skills as its subtitle promises, not only the fixed actions.
 - Opening the Terminal tab while a task ran showed the task as "Waiting for you" and "Needs you", chimed, counted the wait against the running step, and offered a "tell OASIS what to do instead" box. The terminal's own approval no longer touches the running task.
 - Between steps, the Activity panel's live line said "Reading your message" while the chat's status line said "Retrying · attempt 2" or "Rate limited". The panel now shows the same state as the status line.
