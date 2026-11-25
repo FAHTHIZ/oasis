@@ -484,12 +484,17 @@ export async function readWorkspaceFile(root, rawPath, options = {}) {
   const encodingNote = decoded.encoding === 'utf8' ? {} : { encoding: decoded.encoding };
   if (!ranged) { const table = tableShape(relativePath, content); return { path: relativePath, content, ...encodingNote, ...(table ? { table } : {}) }; }
   const lines = content.split('\n');
+  // A final newline ends the last line; it does not start another one. Without
+  // this, "a\nb\n" reported totalLines 3 and models counted a phantom line.
+  const endsWithNewline = lines.length > 1 && lines[lines.length - 1] === '';
+  if (endsWithNewline) lines.pop();
   const startLine = Math.max(1, Number.parseInt(options.offset, 10) || 1);
   const count = Math.max(1, Math.min(2000, Number.parseInt(options.limit, 10) || 2000));
   let slice = lines.slice(startLine - 1, startLine - 1 + count);
   let clipped = false;
   if (implicit) slice = slice.map((line) => { if (line.length <= MAX_LINE_CHARS) return line; clipped = true; return line.slice(0, MAX_LINE_CHARS) + ' …[line truncated]'; });
   let text = slice.join('\n');
+  if (endsWithNewline && slice.length && startLine - 1 + slice.length === lines.length) text += '\n';
   let truncated = false;
   if (text.length > MAX_TEXT_FILE) { text = text.slice(0, MAX_TEXT_FILE); truncated = true; }
   const endLine = startLine + slice.length - 1;

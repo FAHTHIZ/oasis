@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- `read_file` with a line range counted the empty text after a file's final newline as one more line, so a two-line notes file was reported as `totalLines: 3` and models wrote the wrong line count.
 - A finished subagent's summary keeps the underscores in names: a report about `test_calc.py` and `test_add` no longer reads "test calc.py" and "test add" in the subagent card and the terminal. Lists read as one line and table cells stay apart.
 - A subagent's row shows a list report as one readable line ("are: mul, div" instead of "are: - mul - div"), without stray bold or code markers.
 - A thought that opens with "The user wants the notes" keeps that headline instead of shrinking to "The notes"; the narration rule now only drops "user wants" when an action follows ("to …" or a colon).

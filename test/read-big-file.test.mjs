@@ -66,3 +66,19 @@ test('oversized results stay valid JSON; reads say exactly which lines were show
   assert.match(parsed.stdout, /characters cut from the middle/);
   assert.equal(parsed.exitCode, 0);
 });
+
+test('a final newline does not count as an extra line', async (t) => {
+  const root = await workspace(t);
+  await writeFile(path.join(root, 'notes.txt'), 'line one\nhello world\n');
+  await writeFile(path.join(root, 'bare.txt'), 'line one\nhello world');
+  const whole = await readWorkspaceFile(root, 'notes.txt', { limit: 200 });
+  assert.equal(whole.totalLines, 2);
+  assert.equal(whole.endLine, 2);
+  assert.equal(whole.content, 'line one\nhello world\n');
+  assert.equal(whole.truncated, false);
+  assert.equal((await readWorkspaceFile(root, 'bare.txt', { limit: 200 })).totalLines, 2);
+  const last = await readWorkspaceFile(root, 'notes.txt', { offset: 2, limit: 1 });
+  assert.deepEqual([last.startLine, last.endLine, last.content, last.truncated], [2, 2, 'hello world\n', false]);
+  const first = await readWorkspaceFile(root, 'notes.txt', { offset: 1, limit: 1 });
+  assert.deepEqual([first.content, first.truncated], ['line one', true]);
+});
