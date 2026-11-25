@@ -1361,6 +1361,20 @@ async function manageSkills(root, args, autoApprove, explicitYes = false) {
     if (rest.length > 4) throw new Error('Use "oasis skills find [a few keywords]" to search the skills directory.');
     if (rest.some((value) => /^--/.test(value))) throw new Error('Search terms cannot start with command flags.');
     const query = rest.join(' ').trim();
+    // With keywords, ask skills.sh for matching skills; GitHub repository
+    // search (sorted by stars) is the fallback and the no-keyword listing.
+    if (query) {
+      const { searchSkillsDirectory, compactCount } = await import('./skill-install.mjs');
+      const skills = await searchSkillsDirectory(query).catch(() => null);
+      if (skills && skills.length) {
+        const width = Math.min(28, Math.max(...skills.map((item) => item.name.length)));
+        for (const item of skills) stdout.write('  ' + item.name.padEnd(width) + '  ' + item.source + (item.installs ? '  ' + compactCount(item.installs) + ' installs' : '') + '\n');
+        const first = skills[0];
+        stdout.write('Install one with: oasis skills add ' + first.source + ' --skill ' + first.name + '\nSee every skill in a source: oasis skills inspect ' + first.source + '\n');
+        return;
+      }
+      if (skills) { stdout.write('No skills found for "' + query + '" on skills.sh.\n'); return; }
+    }
     const items = await findSkillRepositories(query);
     if (!items.length) { stdout.write('No skill repositories found' + (query ? ' for "' + query + '"' : '') + '.\n'); return; }
     for (const item of items) stdout.write('  ' + item.full_name + '  ★' + item.stargazers_count + (item.description ? '  ' + String(item.description).slice(0, 100) : '') + '\n');

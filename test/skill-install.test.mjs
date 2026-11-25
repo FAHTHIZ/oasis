@@ -85,3 +85,19 @@ test('installSkillsFromSource clones a Git source without running its hooks', as
   assert.match(result.message, /Could not download the skill source/);
   await assert.rejects(readFile(marker), 'no hook ran');
 });
+
+test('skills.sh search returns individual skills with their install source', async () => {
+  const { searchSkillsDirectory, compactCount } = await import('../src/skill-install.mjs');
+  let asked = '';
+  const fetchImpl = async (url) => { asked = url; return { ok: true, json: async () => ({ skills: [
+    { source: 'anthropics/skills', skillId: 'pdf', installs: 236978 },
+    { source: 'anthropics/skills', skillId: 'pdf', installs: 1 },
+    { source: 'not a repo', skillId: 'x' },
+    { source: 'openai/skills', name: 'pdf', installs: 14041 }
+  ] }) }; };
+  const skills = await searchSkillsDirectory('pdf tools', { fetchImpl });
+  assert.equal(asked, 'https://skills.sh/api/search?q=pdf%20tools');
+  assert.deepEqual(skills, [{ source: 'anthropics/skills', name: 'pdf', installs: 236978 }, { source: 'openai/skills', name: 'pdf', installs: 14041 }]);
+  assert.deepEqual([compactCount(236978), compactCount(2438), compactCount(950), compactCount(1200000)], ['237k', '2.4k', '950', '1.2M']);
+  await assert.rejects(searchSkillsDirectory('x', { fetchImpl: async () => ({ ok: false, status: 503 }) }), /503/);
+});

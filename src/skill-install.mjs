@@ -198,3 +198,30 @@ export async function installSkillsFromSource(rawSource, options = {}) {
     if (fetched) await fetched.cleanup().catch(() => {});
   }
 }
+
+// skills.sh search (the directory `npx skills find` uses): individual skills
+// ranked by relevance, each with the source it installs from.
+export async function searchSkillsDirectory(query, { fetchImpl = fetch, limit = 15 } = {}) {
+  const response = await fetchImpl('https://skills.sh/api/search?q=' + encodeURIComponent(query), { headers: { accept: 'application/json', 'user-agent': 'oasis-cli' }, signal: AbortSignal.timeout(15000) });
+  if (!response.ok) throw new Error('skills.sh search failed (' + response.status + ')');
+  const data = await response.json();
+  const seen = new Set();
+  const skills = [];
+  for (const item of Array.isArray(data && data.skills) ? data.skills : []) {
+    const source = String((item && item.source) || '');
+    const name = String((item && (item.skillId || item.name)) || '');
+    if (!/^[\w.-]+\/[\w.-]+$/.test(source) || !/^[\w.:-]+$/.test(name) || seen.has(source + '/' + name)) continue;
+    seen.add(source + '/' + name);
+    skills.push({ source, name, installs: Number(item.installs) || 0 });
+    if (skills.length >= limit) break;
+  }
+  return skills;
+}
+
+// "236978" -> "237k"
+export function compactCount(value) {
+  const n = Number(value) || 0;
+  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'k';
+  return String(n);
+}

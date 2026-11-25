@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- `oasis skills find <keywords>` now searches skills.sh, so it lists matching skills ("pdf  anthropics/skills  237k installs") with the exact `oasis skills add SOURCE --skill NAME` command. It used to list the most-starred GitHub repos that mentioned the word anywhere in their README. GitHub search is still used when skills.sh is unreachable and when no keywords are given.
 - When OASIS answers without using any tools, Activity now says so ("OASIS answered without reading files or running anything") instead of showing the first-run hint under a turn that reads "0 steps".
 - Reopening a chat, or reloading the page, keeps the Undo and Preview buttons on the last reply when that turn changed files. Before, they disappeared and the only way back was typing `/undo`.
 - An expanded failed step in Activity shows its reason once: the Error box is left out when it would only repeat the red sentence above it.

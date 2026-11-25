@@ -157,7 +157,7 @@ export function helpText() {
     '  oasis app-server [--listen stdio://|unix://[PATH]|ws://IP:PORT] [--ws-auth capability-token --ws-token-file PATH | --ws-auth signed-bearer-token --ws-shared-secret-file PATH] [--permission-mode MODE]  Speak the Codex App Server protocol (JSONL on stdio, or one message per WebSocket text frame) so Codex app-server clients can drive OASIS',
     '  oasis mcp login|logout NAME   Sign in to (or out of) a remote MCP server with OAuth',
     '  oasis skills list              List skills visible to Oasis',
-    '  oasis skills find [query]      Search the skills.sh ecosystem',
+    '  oasis skills find [query]      Search skills.sh for skills (GitHub repos without a query)',
     '  oasis skills inspect SOURCE    List skills available from a source',
     '  oasis skills add SOURCE --skill NAME [--global] [--allow-risky]  Install a selected skill (audited first; --allow-risky installs one with high-risk lines)',
     '  oasis skills add SOURCE --all [--global]  Install all skills from a source',
