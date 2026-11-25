@@ -18,3 +18,22 @@ test('an Error box that only repeats the why line is recognised', async () => {
   assert.equal(repeatsWhy('Bad args.\nstack trace line', 'Bad args.'), false);
   assert.equal(repeatsWhy('anything', ''), false);
 });
+
+test('an MCP tool error shows the server message, not its JSON envelope', async () => {
+  const { stepResult, readableOutput } = await import('../app/core/timeline.mjs');
+  const content = JSON.stringify({ isError: true, content: 'MCP tool reported an error:\nError fetching wiki for a/b: Repository not found. Visit https://deepwiki.com/a/b to index it.' });
+  const why = 'Error fetching wiki for a/b: Repository not found. Visit https://deepwiki.com/a/b to index it.';
+  assert.equal(stepWhy({ content }), why);
+  assert.deepEqual(stepResult({ ok: true, name: 'mcp_deepwiki_read_wiki_contents', content }), { text: why, tone: 'fail' });
+  assert.equal(readableOutput(content), why);
+  // Array content, as some servers return it.
+  assert.equal(stepWhy({ content: JSON.stringify({ isError: true, content: [{ type: 'text', text: 'quota exceeded' }] }) }), 'quota exceeded');
+  // A successful MCP result is left alone.
+  assert.equal(stepWhy({ content: JSON.stringify({ isError: false, content: 'fine' }) }), '');
+});
+
+test('a read that ends with a newline counts its lines without a phantom one', async () => {
+  const { stepResult } = await import('../app/core/timeline.mjs');
+  const content = JSON.stringify({ path: 'notes.txt', content: 'line one\nhello world\n', startLine: 1, endLine: 2, totalLines: 2, truncated: false });
+  assert.equal(stepResult({ ok: true, name: 'read_file', content }).text, 'Read 2 lines');
+});

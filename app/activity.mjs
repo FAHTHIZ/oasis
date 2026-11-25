@@ -11,7 +11,7 @@
 // app/core/trace.mjs (pure, unit tested); this file is DOM only.
 
 import { buildTrace, matchStep, TRACE_FILTERS, turnStatusLabel, traceToMarkdown, traceToJSON } from './core/trace.mjs';
-import { formatDuration } from './core/timeline.mjs';
+import { formatDuration, mcpErrorText } from './core/timeline.mjs';
 
 const state = { filter: 'all', query: '', open: new Set(), lanes: new Set(), collapsed: new Set(), follow: true, queued: false, deps: null, trace: null, ticker: 0 };
 const turnEls = new Map();
@@ -476,7 +476,7 @@ export function stepWhy(tool = {}) {
   for (const candidate of [raw, raw.split('\n')[0]]) {
     try {
       const value = JSON.parse(candidate);
-      if (value && typeof value === 'object') { text = String(value.error || value.reason || value.message || value.stderr || ''); break; }
+      if (value && typeof value === 'object') { text = String(value.error || value.reason || value.message || value.stderr || mcpErrorText(value) || ''); break; }
     } catch { /* not JSON */ }
   }
   const quoted = text === raw && /"(?:error|reason)":"((?:[^"\\]|\\.)*)"/.exec(raw);

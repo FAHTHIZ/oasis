@@ -6,6 +6,8 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- A failed MCP tool call showed its raw `{"isError":true,"content":…}` JSON as the step's reason in the chat and Activity. The server's own message now shows, without the "MCP tool reported an error:" lead-in.
+- A file read that ended with a newline was labelled one line too long in the chat ("Read 3 lines" for two lines).
 - The approval sheet split multi-line arguments into one box per line, so an MCP tool's JSON arguments showed `{`, each key and `}` in separate boxes. Consecutive indented lines now form one code block that keeps its indentation.
 - Dictation and Talk said "Microphone access is blocked" for every microphone problem, including no microphone connected, a microphone in use by another app, or a browser without a speech service, even when permission was already granted. Each case now gets its own message and next step.
 - `read_file` with a line range counted the empty text after a file's final newline as one more line, so a two-line notes file was reported as `totalLines: 3` and models wrote the wrong line count.

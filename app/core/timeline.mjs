@@ -558,6 +558,15 @@ export function elapsedSince(start, now = Date.now()) {
   return Number.isFinite(Number(start)) ? formatDuration(now - Number(start)) : '';
 }
 
+// An MCP tool's own error, {"isError":true,"content":"MCP tool reported an
+// error:\n…"}: the server's message without the envelope or the lead-in line.
+export function mcpErrorText(value) {
+  if (!value || typeof value !== 'object' || value.isError !== true) return '';
+  const content = Array.isArray(value.content) ? value.content.filter((item) => item && item.type === 'text').map((item) => item.text).join('\n') : value.content;
+  if (typeof content !== 'string') return '';
+  return content.replace(/^\s*MCP tool reported an error:\s*\n?/, '').trim();
+}
+
 // What a step returned, readable: a failed tool's {"error":"…"} shows the
 // sentence once (OASIS adds "This step failed: …" below it), and a command
 // result {command, exitCode, stdout, stderr, …} shows its output, not JSON.
@@ -570,6 +579,8 @@ export function readableOutput(content) {
   try { value = JSON.parse(first); } catch { return text; }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return text;
   const rest = newline === -1 ? '' : text.slice(newline + 1).trim();
+  const mcpError = mcpErrorText(value);
+  if (mcpError) return mcpError + (rest ? '\n' + rest : '');
   // {"error", "tool"} too: the step already says which tool failed.
   if (typeof value.error === 'string' && Object.keys(value).every((key) => key === 'error' || key === 'tool')) {
     const error = value.error;
@@ -671,12 +682,14 @@ export function stepResult(step = {}) {
     return { text: count ? 'Wrote ' + plural(count, 'line') : 'Wrote an empty file', tone: '' };
   }
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    if (typeof value.error === 'string' && value.error) {
-      const line = value.error.split('\n').find((row) => row.trim()) || '';
+    const failure = typeof value.error === 'string' && value.error ? value.error : mcpErrorText(value);
+    if (failure) {
+      const line = failure.split('\n').find((row) => row.trim()) || '';
       return { text: line.length > 140 ? line.slice(0, 139) + '…' : line, tone: 'fail' };
     }
     if (typeof value.content === 'string' && typeof value.path === 'string' && !('exitCode' in value)) {
-      const count = value.content ? value.content.split('\n').length : 0;
+      // A final newline ends the last line; it is not one more.
+      const count = value.content ? value.content.replace(/\n$/, '').split('\n').length : 0;
       const total = Number(value.totalLines);
       if (Number.isInteger(value.startLine) && Number.isInteger(value.endLine) && Number.isInteger(total) && (value.startLine > 1 || value.endLine < total)) {
         return { text: 'Read lines ' + value.startLine.toLocaleString('en-US') + '–' + value.endLine.toLocaleString('en-US') + ' of ' + total.toLocaleString('en-US'), tone: '' };
