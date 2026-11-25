@@ -82,6 +82,16 @@ try {
   }
   step('every top-bar sheet opens and closes with Escape');
 
+  // The model and mode menus close with Escape (the model menu used to stay
+  // open, and Escape went on to stop a running task).
+  for (const [chip, menu] of [['#modelChip', '#modelMenu'], ['#modeChip', '#modeMenu']]) {
+    await page.locator(chip).click();
+    await page.locator(menu).waitFor({ state: 'visible', timeout: timeoutMs });
+    await page.keyboard.press('Escape');
+    await page.locator(menu).waitFor({ state: 'hidden', timeout: timeoutMs });
+  }
+  step('the model and mode menus close with Escape');
+
   // Settings: connectors are listed, and a theme previews at once and reverts
   // when Settings closes without saving.
   await page.locator('#settingsButton').click();

@@ -10,6 +10,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- Escape closes the model menu. Before, it stayed open, and during a task the same Escape stopped the task.
 - Connecting no longer keeps models that answered without calling tools as backups for one that does. A task that switched to one of them stopped being able to use tools.
 - One Escape now closes the command palette and the keyboard shortcuts list. Before, with text in the search box, the first Escape only cleared the text.
 - `oasis connect http://127.0.0.1:8081/v1` now works with OASIS Route: it uses `OASIS_ROUTE_API_KEY` from the environment, and a pasted `oasis_live_` key is read as a key instead of a model name. Added an OASIS Route provider preset.

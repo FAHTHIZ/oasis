@@ -505,7 +505,9 @@ tinykeys(document, {
   },
   Escape: () => {
     if ($('commandPaletteDialog').open || $('shortcutsDialog').open) return; // Native dialog handles Escape.
-    if (!$('modeMenu').hidden) { $('modeMenu').hidden = true; return; }
+    if (!$('modeMenu').hidden) { $('modeMenu').hidden = true; $('modeChip').focus(); return; }
+    // The model menu too: Esc used to skip it and, mid-task, stop the task.
+    if (!$('modelMenu').hidden) { $('modelMenu').hidden = true; $('modelChip').focus(); return; }
     const top = openSheets[openSheets.length - 1];
     if (top) closeSheet(top);
     else if (!$('filesPanel').hidden && innerWidth < 1024) toggleFiles(false);
@@ -519,6 +521,7 @@ tinykeys(document, {
 // leaving the app.
 function closeTopLayer() {
   if (!$('modeMenu').hidden) { $('modeMenu').hidden = true; return true; }
+  if (!$('modelMenu').hidden) { $('modelMenu').hidden = true; return true; }
   const top = openSheets[openSheets.length - 1];
   if (top && top !== 'approvalSheet') { closeSheet(top, { fromHistory: true }); return true; }
   if (top) return true;
