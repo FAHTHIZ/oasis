@@ -10,6 +10,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- Web search and page fetches now follow the permission mode. In auto mode the classifier answers the per-site question (public web reads are on its default allow list), and an allow rule such as `WebFetch` or bypass mode skips it. Before, `oasis -p --permission-mode auto` and scheduled research routines could never read the web, and the model answered from memory. Manual mode still asks once per site.
 - Web app on a phone: the model name in the composer no longer shrinks to "o…" once a chat starts. The context percentage folds into its ring there (hover or long-press for the numbers) and comes back past 70%.
 - The welcome screen in the web and desktop app now offers "try a free model that needs no key", so a first-time user can start without an account. It connects to the same keyless endpoint the CLI accepts.
 - Web app: "Not now" on the sign-in card for a tool server that needs sign-in (Linear, for example) is remembered for a week, so the card no longer comes back with every new task. `/connect` and Settings → Apps still connect it any time.

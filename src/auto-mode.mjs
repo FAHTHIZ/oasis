@@ -27,7 +27,8 @@ export const DEFAULT_AUTO_MODE = Object.freeze({
     'Read-only inspection: read-only commands such as ls, cat, grep, find, git status/diff/log/show, and package listings.',
     'Local git: local commits and branch creation that the user\'s task implies.',
     'Declared dependencies: installing dependencies the project already declares (npm ci, pip install -r requirements.txt, cargo build).',
-    'Workspace edits: creating and editing files inside the workspace as part of the task.'
+    'Workspace edits: creating and editing files inside the workspace as part of the task.',
+    'Public web reads: web searches and fetching public pages that the task needs (research, documentation, release notes), when the query or URL carries no private data.'
   ],
   soft_deny: [
     'Destructive deletes: deleting or overwriting files or directories outside the task (rm -rf, git clean -fdx, truncating files).',

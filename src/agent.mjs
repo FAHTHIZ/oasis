@@ -1678,7 +1678,12 @@ async function authorizeCall(session, name, args, context, options) {
   };
   const sites = webAccessSites(name, args, context.env || process.env);
   let siteApprovalHandled = false;
-  if (sites.length) {
+  // A settings or session allow rule for the tool, or bypass mode, already
+  // answers the site question. In auto mode the classifier answers it like any
+  // other approval (an explicit ask rule still reaches a person). Seen live:
+  // "oasis -p --permission-mode auto" and scheduled research routines could
+  // never search, because this prompt always waited for a person.
+  if (sites.length && mode !== 'bypassPermissions' && decision !== 'allow') {
     session.webAccessApprovals ||= new Set();
     // Every new site this call reaches is asked about in one prompt (a keyless
     // search names DuckDuckGo and its Bing fallback; federated search names
@@ -1689,7 +1694,7 @@ async function authorizeCall(session, name, args, context, options) {
       const message = name === 'web_search'
         ? 'Allow web_search to send this query to ' + hosts + ' for the rest of this session? Search results may refer to other websites; fetching any result page will ask separately.'
         : 'Allow fetch_url to retrieve public pages from ' + hosts + ' for the rest of this session?';
-      const ok = await overlay.approval(message, true, { scope: 'session', sites: pending });
+      const ok = await overlay.approval(message, mode !== 'auto' || decision === 'ask', { scope: 'session', sites: pending });
       if (!ok) return { deniedReason: overlay.permissionHookDenial || 'The user did not approve web access to ' + hosts + '.' };
       for (const host of pending) session.webAccessApprovals.add('site:' + host);
       siteApprovalHandled = true;
