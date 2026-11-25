@@ -107,3 +107,36 @@ test('a run past its timeout is stopped, recorded as timed_out and counts as a f
   const { runs } = await listRuns('hang', { env });
   assert.equal(runs.at(-1).status, 'timed_out');
 });
+
+test('a precheck that prints nothing skips the model; output starts the agent with it as data', async () => {
+  const env = await tempEnv({ OASIS_BASE_URL: 'http://127.0.0.1:9/v1', OASIS_MODEL: 'm', OASIS_API_KEY: 'k' });
+  const bg = fakeBackgrounds(env.HOME);
+  await assert.rejects(createJob({ schedule: 'every 1h', prompt: 'x', kind: 'script', precheck: 'true' }, { env, now: new Date('2026-11-11T10:00:00Z') }), /agent routines/);
+  await createJob({ schedule: 'every 1h', prompt: 'Summarise the new issues.', name: 'watch', precheck: 'gh issue list --state open', deliver: 'local' }, { env, now: new Date('2026-11-11T10:00:00Z') });
+  // Slot 1: nothing new.
+  await tick({ env, now: new Date('2026-11-11T11:00:00Z'), backgrounds: bg });
+  assert.deepEqual([...bg.entries.values()].map((e) => e.kind), ['exec']);
+  await bg.finish(0, '');
+  await tick({ env, now: new Date('2026-11-11T11:01:00Z'), backgrounds: bg });
+  let [job] = await readJobs(env);
+  assert.equal(job.lastStatus, 'skipped');
+  assert.equal(job.activeRun, undefined);
+  assert.equal([...bg.entries.values()].filter((e) => e.kind === 'agent').length, 0, 'no model run');
+  // Slot 2: the check finds something.
+  await tick({ env, now: new Date('2026-11-11T12:00:00Z'), backgrounds: bg });
+  await bg.finish(0, '#42 crash on start');
+  await tick({ env, now: new Date('2026-11-11T12:01:00Z'), backgrounds: bg });
+  const agent = [...bg.entries.values()].find((e) => e.kind === 'agent');
+  assert.ok(agent, 'the agent started');
+  assert.match(agent.options.prompt, /Summarise the new issues\.[\s\S]*<precheck_output>\n#42 crash on start\n<\/precheck_output>/);
+  [job] = await readJobs(env);
+  assert.equal(job.activeRun.phase, 'agent');
+  // A failing precheck is a failed run, not a silent skip.
+  await bg.finish(0, '{"type":"result","subtype":"success","result":"One new crash issue."}');
+  await tick({ env, now: new Date('2026-11-11T12:30:00Z'), backgrounds: bg });
+  await tick({ env, now: new Date('2026-11-11T13:00:00Z'), backgrounds: bg });
+  await bg.finish(2, 'gh: not logged in');
+  await tick({ env, now: new Date('2026-11-11T13:01:00Z'), backgrounds: bg });
+  const { runs } = await listRuns('watch', { env });
+  assert.deepEqual(runs.map((run) => run.status), ['skipped', 'ok', 'failed']);
+});

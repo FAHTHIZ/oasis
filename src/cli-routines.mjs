@@ -38,6 +38,9 @@ Options:
                            whatsapp:, mattermost: or webhook:https://...
   --tz ZONE                time zone for cron schedules, e.g. Asia/Dhaka
   --grace MINUTES          how late a missed cron slot may still run (0 = never)
+  --precheck CMD           agent routines: run CMD first and start the model only
+                           if it prints something (its output joins the prompt;
+                           nothing or [SILENT] = skipped, no model call)
   --timeout MINUTES        stop a run that takes longer (default: no limit,
                            or OASIS_ROUTINE_TIMEOUT_MINUTES)
   --event NAME             webhook routines: run only for this event, e.g.
@@ -76,6 +79,7 @@ function parseOptions(args) {
     else if (arg === '--deliver') fields.deliver = value();
     else if (arg === '--tz' || arg === '--timezone') fields.timezone = value();
     else if (arg === '--grace' || arg === '--grace-minutes') { const v = value(); fields.graceMinutes = v === '' ? null : Number(v); }
+    else if (arg === '--precheck' || arg === '--check') { fields.precheck = value() || null; }
     else if (arg === '--timeout' || arg === '--timeout-minutes') { const v = value(); fields.timeoutMinutes = v === '' ? null : Number(v); }
     else if (arg === '--paused') fields.paused = true;
     else if (arg === '--reason') fields.reason = value();
@@ -120,6 +124,7 @@ export async function scheduleCommand(args = [], { env = process.env, write = (t
     say(describeJob(job));
     say('  ' + (job.kind === 'script' ? 'command: ' : 'prompt: ') + job.prompt.split('\n')[0].slice(0, 200));
     if (job.workdir) say('  workdir: ' + job.workdir);
+    if (job.precheck) say('  precheck: ' + job.precheck);
     if (job.timeoutMinutes) say('  timeout: ' + job.timeoutMinutes + ' min per run');
     if (job.fromSession) say('  continues: ' + job.fromSession + (job.chain ? ' (chained: each run continues the last one)' : ' (each run forks it)'));
     if (job.schedule.type === 'event') {
