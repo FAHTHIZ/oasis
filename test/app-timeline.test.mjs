@@ -221,6 +221,7 @@ test('step output reads as text, not the JSON a tool returned', async () => {
   const { readableOutput } = await import('../app/core/timeline.mjs');
   assert.equal(readableOutput('{"error":"File has not been read yet"}\nThis step failed: File has not been read yet'), 'This step failed: File has not been read yet');
   assert.equal(readableOutput('{"error":"Nope"}'), 'Nope');
+  assert.equal(readableOutput('{"error":"Bad args","tool":"git_status"}\nThis step failed: Bad args'), 'This step failed: Bad args', 'the tool name is not repeated as JSON');
   const command = JSON.stringify({ command: 'cat', approved: true, exitCode: 1, signal: null, stdout: '', stderr: 'cat: missing.txt: No such file or directory\n', stdoutTruncated: false, stderrTruncated: false, timedOut: false, cancelled: false });
   assert.equal(readableOutput(command + '\nThe command failed (exit code 1).'), 'cat: missing.txt: No such file or directory\nThe command failed (exit code 1).');
   assert.equal(readableOutput(JSON.stringify({ exitCode: 0, stdout: 'a\nb\n', stderr: '' })), 'a\nb');

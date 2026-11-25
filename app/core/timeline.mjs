@@ -564,7 +564,8 @@ export function readableOutput(content) {
   try { value = JSON.parse(first); } catch { return text; }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return text;
   const rest = newline === -1 ? '' : text.slice(newline + 1).trim();
-  if (typeof value.error === 'string' && Object.keys(value).length === 1) {
+  // {"error", "tool"} too: the step already says which tool failed.
+  if (typeof value.error === 'string' && Object.keys(value).every((key) => key === 'error' || key === 'tool')) {
     const error = value.error;
     if (!error) return text;
     return rest && rest.includes(error.slice(0, 60)) ? rest : (error + (rest ? '\n' + rest : ''));

@@ -103,6 +103,19 @@ test('agent turn answers unrecoverable arguments with a tool error instead of fa
   assert.match(requests[2].messages.filter((m) => m.role === 'tool').at(-1).content, /REPAIRED-READ/);
 });
 
+test('a garbled call to a tool without parameters still runs', async (t) => {
+  const root = await workspace(t);
+  const statusCall = { content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'git_status', arguments: '{"":"' } }] };
+  const { config, requests } = await scriptedModel(t, [statusCall, { content: 'looked' }]);
+  const session = await createSession({ root, config, permissionMode: 'bypassPermissions' });
+  t.after(() => closeSession(session));
+  const repairs = [];
+  const result = await runAgentTurn(session, 'status?', { approval: async () => true, onToolCallRepair: (r) => repairs.push(r) });
+  assert.equal(result.text, 'looked');
+  assert.doesNotMatch(requests[1].messages.find((m) => m.role === 'tool').content, /not valid JSON/);
+  assert.deepEqual(repairs, [{ textCalls: 0, repairedArguments: 1, invalidArguments: 0 }]);
+});
+
 test('agent turn executes tool calls a model wrote as text', async (t) => {
   const root = await workspace(t);
   const { config, requests } = await scriptedModel(t, [

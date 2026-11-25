@@ -1177,6 +1177,16 @@ function normalizeAssistantToolCalls(session, assistant, step) {
       }
     } catch (error) {
       call.function.arguments = '{}';
+      // A tool that takes no arguments (git_status) runs the same whatever the
+      // model garbled into them, so there is nothing to resend.
+      const schema = toolParameterSchemas(session).get(call.function.name);
+      if (schema && schema.type === 'object' && !Object.keys(schema.properties || {}).length) {
+        repairs.repairedArguments++;
+        for (const item of Array.isArray(assistant.responseItems) ? assistant.responseItems : []) {
+          if (item && item.type === 'function_call' && (item.call_id || item.id) === call.id) item.arguments = '{}';
+        }
+        continue;
+      }
       repairs.invalidArguments++;
       // Carried to the history copy below without being serialized to providers.
       Object.defineProperty(call, '__oasisArgumentError', { value: error.message, enumerable: false, configurable: true });
