@@ -321,6 +321,12 @@ test('a settled thought is titled by its headline', async () => {
   assert.equal(thoughtHeadline('**Planning the fix**\n\nI will compare days.'), 'Planning the fix');
   assert.equal(thoughtHeadline('1. Read the file\n2. Fix it'), 'Read the file');
   assert.equal(thoughtHeadline('See [the docs](https://x.y) first: then edit.'), 'See the docs first: then edit');
+  // Underscores in names survive; only wrapping emphasis is removed.
+  assert.equal(thoughtHeadline('Open test_calc.py.'), 'Open test_calc.py');
+  assert.equal(thoughtHeadline('Check __init__.py and my_mod'), 'Check __init__.py and my_mod');
+  assert.equal(thoughtHeadline('I _really_ need to *read* it'), 'I really need to read it');
+  assert.equal(thoughtHeadline('Find *.mjs files'), 'Find *.mjs files');
+  assert.equal(thoughtHeadline('Use `foo_bar` now'), 'Use foo_bar now');
   assert.equal(thoughtHeadline(''), '');
   assert.ok(thoughtHeadline('word '.repeat(60)).endsWith('…'));
   assert.ok(thoughtHeadline('word '.repeat(60)).length <= 96);

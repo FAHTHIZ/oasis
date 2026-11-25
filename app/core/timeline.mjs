@@ -388,6 +388,9 @@ export function thoughtLabel(elapsedMs) {
 // The headline of a settled thought: the
 // summary's own bold title when it has one ("**Finding the bug**"), else its
 // first sentence, plain text, at most about one line. '' when there is none.
+const EMPHASIS_END = String.raw`(?=[\s,;:!?)]|\.(?!\w)|$)`;
+const EMPHASIS_UNDERSCORE = new RegExp(String.raw`(^|[\s(])__(\S(?:.*?\S)?)__` + EMPHASIS_END, 'g');
+const EMPHASIS_SINGLE = new RegExp(String.raw`(^|[\s(])([*_])(?![\s*_])(.*?[^\s*_]|[^\s*_])\2` + EMPHASIS_END, 'g');
 export function thoughtHeadline(text, max = 96) {
   const source = String(text || '').trim();
   if (!source) return '';
@@ -398,7 +401,11 @@ export function thoughtHeadline(text, max = 96) {
     .split(/\n/).find((row) => row.trim()) || '';
   line = line
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/[*_~`]+/g, '')
+    .replace(/`+|~~|\*{2,}/g, '')
+    // Underscores and single stars only where they wrap text as emphasis
+    // ("_why_", "*now*"): test_calc.py and __init__ keep theirs, *.mjs its star.
+    .replace(EMPHASIS_UNDERSCORE, '$1$2')
+    .replace(EMPHASIS_SINGLE, '$1$3')
     .replace(/^\s*(?:[-+>]|\d+[.)])\s+/gm, '')
     .replace(/\s+/g, ' ')
     .trim();
