@@ -1366,7 +1366,7 @@ export function friendlyToolError(error, args = {}, root = '') {
   return message;
 }
 
-export const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'worktree_inspect', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read', 'session_search', 'ide_get_diagnostics', 'ide_open_file', 'home_assistant', 'honcho_search', 'honcho_context', 'honcho_reasoning', ...SESSION_READ_ONLY_TOOLS]);
+export const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'read_skill_resource', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'worktree_inspect', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read', 'session_search', 'ide_get_diagnostics', 'ide_open_file', 'home_assistant', 'honcho_search', 'honcho_context', 'honcho_reasoning', ...SESSION_READ_ONLY_TOOLS]);
 
 const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
   name: 'exit_plan_mode',
@@ -1933,6 +1933,14 @@ async function executeOneCall(session, call, context, options) {
       call.function.name = alias.name;
       call.function.arguments = JSON.stringify(alias.args || {});
     }
+    // An agent's name called as a tool (`plan`, `explore` with a description
+    // and prompt) is a task for that agent. Left alone it failed, and in plan
+    // mode it read "Plan mode blocks write, command…" for a read-only planner.
+    const agentCall = agentNamedCall(session, call.function.name, safeToolArguments(call.function.arguments));
+    if (agentCall) {
+      call.function.name = 'task';
+      call.function.arguments = JSON.stringify(agentCall);
+    }
     if (call.function.name === 'run_command') {
       const rewritten = normalizeRunCommandCall(safeToolArguments(call.function.arguments), availableToolNames(session));
       if (rewritten) {
@@ -1958,6 +1966,18 @@ async function executeOneCall(session, call, context, options) {
     if (hint && hint.error) message.content = JSON.stringify({ error: hint.error + taskNameToolHint(session, call.function && call.function.name) });
   }
   return message;
+}
+
+function agentNamedCall(session, requested, args) {
+  const name = String(requested || '');
+  const tools = availableToolNames(session);
+  if (!name || tools.has(name) || !tools.has('task') || !session.agents || typeof session.agents !== 'object') return null;
+  const agent = Object.keys(session.agents).find((key) => key.toLowerCase() === name.toLowerCase());
+  if (!agent || !args || typeof args !== 'object' || Array.isArray(args)) return null;
+  const prompt = [args.prompt, args.task, args.query, args.instructions].find((value) => typeof value === 'string' && value.trim());
+  if (!prompt) return null;
+  const description = typeof args.description === 'string' && args.description.trim() ? args.description : prompt.slice(0, 60);
+  return { description, prompt, subagent_type: agent };
 }
 
 // Small models call the function the user asked them to write ("add a
