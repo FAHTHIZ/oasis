@@ -1687,7 +1687,12 @@ export async function runBuiltinCommand(name, argument, state) {
       const voice = await import('./voice.mjs');
       const { userSettingsPath } = await import('./settings.mjs');
       const { readFile, mkdir } = await import('node:fs/promises');
-      const settings = (session && session.settings) || {};
+      const file = userSettingsPath(env);
+      let saved = {};
+      try { saved = JSON.parse(await readFile(file, 'utf8')) || {}; } catch {}
+      // Before the first message the terminal has no session yet: read the saved choice (and
+      // this run's toggle) so /voice does not report "off" right after turning it on.
+      let settings = session && session.settings ? session.settings : { ...saved, ...(sessionOptions.voiceEnabled !== undefined ? { voiceEnabled: sessionOptions.voiceEnabled } : {}) };
       const arg = String(argument || '').trim().toLowerCase();
       const describe = () => {
         const recorder = voice.findRecorder({ env });
@@ -1706,10 +1711,8 @@ export async function runBuiltinCommand(name, argument, state) {
       if (settings.voiceDisabledByPolicy && arg !== 'off') return { output: 'Voice dictation is turned off by your organization\'s managed settings.' };
       const wanted = arg === 'off' ? false : arg === '' ? !voice.voiceEnabled(settings, env) : true;
       if (session && session.settings) session.settings.voiceEnabled = wanted;
+      else settings = { ...settings, voiceEnabled: wanted };
       sessionOptions.voiceEnabled = wanted;
-      const file = userSettingsPath(env);
-      let saved = {};
-      try { saved = JSON.parse(await readFile(file, 'utf8')) || {}; } catch {}
       saved.voiceEnabled = wanted;
       await mkdir(path.dirname(file), { recursive: true });
       await atomicWriteFile(file, JSON.stringify(saved, null, 2) + '\n', 'utf8');

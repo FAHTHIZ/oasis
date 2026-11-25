@@ -2406,6 +2406,10 @@ async function readMainInput(root, session, state) {
   const color = colorEnabled(stdout);
   const currentMode = () => (session && session.permissions ? session.permissions.mode : SESSION_OPTIONS.permissionMode || 'default');
   stdout.write('\n');
+  // Before the first message there is no session: read settings from disk so Alt+V honours a
+  // saved /voice on (and its transcription endpoint) instead of saying dictation is off.
+  const preSessionSettings = session && session.settings ? null : await loadSettings(root).catch(() => ({}));
+  const voiceSettings = () => (session && session.settings) || preSessionSettings || {};
   const initialText = queuedDraft;
   queuedDraft = '';
   const result = await readInput({
@@ -2439,13 +2443,13 @@ async function readMainInput(root, session, state) {
     onPasteImage: () => pasteClipboardImage(root),
     voice: {
       enabled: () => {
-        if (session && session.settings && session.settings.voiceDisabledByPolicy) return false;
+        const settings = voiceSettings();
+        if (settings.voiceDisabledByPolicy) return false;
         if (/^(0|false|off|1|true|on)$/i.test(String(process.env.OASIS_VOICE || ''))) return /^(1|true|on)$/i.test(process.env.OASIS_VOICE);
         if (typeof SESSION_OPTIONS.voiceEnabled === 'boolean') return SESSION_OPTIONS.voiceEnabled;
-        const settings = session && session.settings || {};
         return settings.voiceEnabled === true || Boolean(settings.voice && settings.voice.enabled === true);
       },
-      settings: () => (session && session.settings) || {},
+      settings: voiceSettings,
       // The project's name helps the transcriber spell it.
       hints: () => [path.basename(root)]
     },

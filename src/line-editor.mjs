@@ -876,6 +876,12 @@ export function readInput(options = {}) {
       if (!voice || !voice.enabled()) { hints = [DIM('Voice dictation is off. Turn it on with /voice on.', color)]; return; }
       const module = await import('./voice.mjs');
       if (!recording) {
+        // Check the transcription endpoint first, so nobody talks for a minute and only then
+        // learns there is no key to turn the audio into text.
+        if (!voice.transcribe && !module.transcriptionReady(voice.settings ? voice.settings() : {}, options.env || process.env)) {
+          hints = [DIM('Voice needs a transcription key (OPENAI_API_KEY or OASIS_VOICE_API_KEY) · /voice status', color)];
+          return;
+        }
         try {
           recording = await (voice.startRecording || module.startRecording)({ env: options.env || process.env });
           hints = [DIM('● Recording · ' + voiceKeyLabel(sequence) + ' to stop and transcribe · Esc to cancel', color)];

@@ -10,6 +10,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- Terminal voice dictation before the first message: `/voice` no longer prints "on" and then "Voice dictation: off", a second `/voice` turns it off again, and Alt+V honours a saved `/voice on` instead of saying dictation is off. With no transcription key, Alt+V now says so before recording rather than after you have spoken.
 - `oasis gateway` starts routines only after the platform is configured, so a missing token is one clear error instead of "Routine daemon started" followed by it. A Telegram token that is set but malformed now says so instead of asking you to set it.
 - In the terminal, a slash command typed while a task runs (`/status`, `/rewind`) runs as soon as the task ends instead of being sent to the model as a note. An MCP server waiting for sign-in now gets one short line (`[MCP] linear needs sign-in · run /mcp login linear`) instead of an error that included instructions meant for the agent.
 - Pasting a file copied from the file manager (a PDF, a CSV) into the message box adds it to the project and mentions it, as dropping it does. It used to vanish without a word.

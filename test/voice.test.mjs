@@ -193,3 +193,31 @@ test('web: /api/speak reads a reply aloud with the configured speech model', asy
   assert.equal((await spoken.arrayBuffer()).byteLength, 64);
   assert.doesNotMatch(seen[0].input, /```/);
 });
+
+test('/voice before the first message reports what it just saved, and a second /voice turns it off', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-vpre-'));
+  const env = { HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), OASIS_IGNORE_CLAUDE_SETTINGS: '1' };
+  const sessionOptions = {};
+  const first = await runBuiltinCommand('voice', '', { root: home, session: null, env, sessionOptions });
+  assert.match(first.output, /Voice dictation on\./);
+  assert.match(first.output, /Voice dictation: on/);
+  assert.doesNotMatch(first.output, /Voice dictation: off/);
+  const second = await runBuiltinCommand('voice', '', { root: home, session: null, env, sessionOptions: {} });
+  assert.equal(second.output, 'Voice dictation off.');
+  const status = await runBuiltinCommand('voice', 'status', { root: home, session: null, env, sessionOptions: {} });
+  assert.match(status.output, /Voice dictation: off/);
+});
+
+test('Alt+V with no transcription key says so before recording', async () => {
+  const input = new PassThrough(); input.isTTY = true; input.setRawMode = () => {};
+  const output = new PassThrough(); output.columns = 120;
+  let written = '';
+  output.on('data', (chunk) => { written += chunk.toString(); });
+  const done = readInput({ input, output, color: false, env: { HOME: await mkdtemp(path.join(os.tmpdir(), 'oasis-vk-')) }, voice: { enabled: () => true, settings: () => ({}), hints: () => [] } });
+  input.write('\x1bv');
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.match(written, /Voice needs a transcription key/);
+  assert.doesNotMatch(written, /Recording/);
+  input.write('x\r');
+  await done;
+});
