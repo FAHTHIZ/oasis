@@ -1106,6 +1106,9 @@ export function readInput(options = {}) {
           liveMenu = null;
           if (!commandPrefix && !mentionPrefix && !completion && hints.length && hints[0] && MENU_HINT.test(stripAnsi(hints[0]))) hints = [];
         }
+        // The banner says "? shortcuts": show them as soon as ? is typed on an empty prompt, as in
+        // Claude Code. The ? stays in the prompt, so the next key keeps typing a normal message.
+        if (state.text === '?' && !options.allowQuestionMark && action !== 'escape' && !completion) hints = SHORTCUTS_HELP.map((line) => DIM(line, color));
         draw();
       }
     };
