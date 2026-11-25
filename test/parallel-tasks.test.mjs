@@ -84,3 +84,28 @@ test('a subagent\'s computed numbers count as evidence for the parent', async ()
   assert.equal(parent.evidenceLedger.epoch, 0);
   assert.deepEqual(analysisContract('Gizmo sold 1,110 units.', parent.evidenceLedger.events), []);
 });
+
+test('a command the user denied for a subagent is never handed back to the parent to run', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-declined-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config } = await scriptedModel(t, [async (payload) => {
+    if (payload.messages[0].content.includes('SUBAGENT MODE')) {
+      if (/say hi/.test(String(payload.messages.find((m) => m.role === 'user').content))) return { content: 'hi' };
+      if (payload.messages.some((m) => m.role === 'tool')) return { content: 'All tests pass.' };
+      return toolCall('c1', 'run_command', { command: 'npm', args: ['test'] });
+    }
+    if (payload.messages.some((m) => m.role === 'tool')) return { content: 'done' };
+    return toolCall('t1', 'task', { description: 'two jobs', prompt: 'both', parallel_tasks: [{ description: 'Run npm test', prompt: 'run npm test' }, { description: 'other', prompt: 'say hi' }] });
+  }]);
+  const session = await createSession({ root, config, env: { ...process.env, HOME: root, OASIS_CONFIG_DIR: path.join(root, '.cfg') } });
+  t.after(() => closeSession(session));
+  const asked = [];
+  await runAgentTurn(session, 'go', { approval: async (message, force, extra) => { asked.push(extra && extra.subagent); return false; } });
+  const result = JSON.parse(session.messages.find((m) => m.role === 'tool' && m.name === 'task').content);
+  const denied = result.agents.find((a) => a.description === 'Run npm test');
+  assert.deepEqual(denied.user_declined, ['npm test']);
+  assert.match(denied.note_on_declined, /do not run it yourself/);
+  for (const key of ['note_on_rejection', 'note_on_report']) if (denied[key]) assert.doesNotMatch(denied[key], /run the check yourself|check them yourself/);
+  const other = result.agents.find((a) => a.description === 'other');
+  assert.equal(other.user_declined, undefined);
+});

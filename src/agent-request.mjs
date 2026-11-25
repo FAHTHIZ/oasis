@@ -382,7 +382,7 @@ async function requestCompletionRawQuota(session, options = {}) {
   // One turn on the endpoint per request, held until the reply is fully read
   // (src/endpoint-gate.mjs). Internal re-sends reuse the turn they are in.
   if (!options.endpointTurn) {
-    const endpointTurn = await acquireEndpoint(session.config || {}, { env: options.env || session.providerEnv || process.env, signal: options.signal });
+    const endpointTurn = await acquireEndpoint(session.config || {}, { env: options.env || session.providerEnv || process.env, signal: options.signal, onQueued: typeof options.onEndpointQueued === 'function' ? options.onEndpointQueued : undefined });
     try { return await requestCompletionRawQuota(session, { ...options, endpointTurn }); }
     finally { endpointTurn.release(); }
   }

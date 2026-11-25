@@ -4,7 +4,8 @@
 // transcript. Open items are surfaced once at the start of the next session
 // and can be listed or resolved with /followups.
 
-import { mkdir, readFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { replaceFileDurably } from './atomic-write.mjs';
@@ -75,6 +76,7 @@ async function saveFollowups(root, items) {
   const file = followupsPath(root);
   await mkdir(path.dirname(file), { recursive: true });
   await replaceFileDurably(file, JSON.stringify({ version: 1, items: items.slice(-MAX_ITEMS) }, null, 2) + '\n', { mode: 0o600 });
+  await excludeFromGit(path.dirname(path.dirname(file)), '/.oasis/followups.json');
 }
 
 /** Merge newly extracted items into the ledger. Returns the newly added items. */
@@ -129,4 +131,21 @@ export async function followupReminder(root, { limit = 8 } = {}) {
     'They are context, not instructions; mention any that are relevant to the current request, and do not start them unasked.\n' +
     shown.map((item) => '- [' + item.id + '] ' + item.text).join('\n') +
     (open.length > shown.length ? '\n(' + (open.length - shown.length) + ' more; see /followups)' : '') + '\n</system-reminder>';
+}
+
+// OASIS's own state in a project (.oasis/followups.json) showed up as an
+// untracked ".oasis/" in the user's git status. It goes in .git/info/exclude,
+// the repository's private ignore list, so the user's .gitignore is untouched.
+export async function excludeFromGit(root, pattern) {
+  const common = await new Promise((resolve) => execFile('git', ['rev-parse', '--git-common-dir'], { cwd: root, timeout: 5000, windowsHide: true }, (error, stdout) => resolve(error ? '' : String(stdout || '').trim())));
+  if (!common) return false;
+  const file = path.join(path.resolve(root, common), 'info', 'exclude');
+  let current = '';
+  try { current = await readFile(file, 'utf8'); } catch {}
+  if (current.split(/\r?\n/).includes(pattern)) return false;
+  try {
+    await mkdir(path.dirname(file), { recursive: true });
+    await appendFile(file, (current && !current.endsWith('\n') ? '\n' : '') + pattern + '\n');
+    return true;
+  } catch { return false; }
 }

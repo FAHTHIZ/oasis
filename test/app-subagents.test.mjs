@@ -55,3 +55,42 @@ test('a running subagent row shows the step it is on and how many it finished', 
   tracker.update({ type: 'agent.completed', agent_id: 'a1', description: 'Review cart.js', detail: 'tool_calls=2' });
   assert.equal(tracker.list()[0].activity, '');
 });
+
+test('the tracker keeps each agent\'s steps and times, and marks an open approval', async () => {
+  const { SubagentTracker } = await import('../app/core/subagents.mjs');
+  const tracker = new SubagentTracker();
+  tracker.update({ agent_id: 'agent_1', type: 'agent.started', description: 'Count lines' }, { at: 100 });
+  tracker.step('Count lines', 'Running wc -l *.js', { at: 200, name: 'run_command' });
+  assert.equal(tracker.waiting('Count lines', true), true);
+  assert.equal(tracker.list()[0].waitingApproval, true);
+  tracker.waiting('Count lines', false);
+  tracker.step('Count lines', '', { finished: true, at: 400, ok: true });
+  assert.equal(tracker.list()[0].activity, 'Thinking about the next step', 'a finished step is not shown as still running');
+  tracker.update({ agent_id: 'agent_1', type: 'agent.completed', report: 'cart.js: 12', detail: 'tool_calls=1' }, { at: 500 });
+  const [worker] = tracker.list();
+  assert.equal(worker.startedAt, 100);
+  assert.equal(worker.endedAt, 500);
+  assert.equal(worker.detail, 'cart.js: 12', 'the report preview, not the counters');
+  assert.deepEqual(worker.log.map((item) => [item.label, item.startedAt, item.endedAt, item.ok]), [['Running wc -l *.js', 200, 400, true]]);
+});
+
+test('a quiet agent says why: queued on the endpoint, or waiting out a retry', async () => {
+  const { SubagentTracker } = await import('../app/core/subagents.mjs');
+  const t = new SubagentTracker();
+  t.update({ agent_id: 'a1', type: 'agent.started', description: 'Run npm test' }, { at: 1000 });
+  assert.ok(t.pause('Run npm test', 'Waiting its turn on the model'));
+  assert.equal(t.list()[0].activity, 'Waiting its turn on the model');
+  assert.ok(t.pause('Run npm test', ''));
+  assert.notEqual(t.list()[0].activity, 'Waiting its turn on the model');
+  t.pause('Run npm test', 'Model busy, trying again in 5s', { until: 5000 });
+  assert.equal(t.list({ now: 4000 })[0].activity, 'Model busy, trying again in 5s');
+  assert.notEqual(t.list({ now: 6000 })[0].activity, 'Model busy, trying again in 5s');
+  // A new step replaces the note.
+  t.pause('Run npm test', 'Waiting its turn on the model');
+  t.step('Run npm test', 'Reading cart.test.js');
+  assert.equal(t.list()[0].activity, 'Reading cart.test.js');
+  // Finished agents never show a pause note.
+  t.pause('Run npm test', 'Waiting its turn on the model');
+  t.update({ agent_id: 'a1', type: 'agent.completed' });
+  assert.equal(t.pause('Run npm test', 'x'), false);
+});

@@ -89,3 +89,37 @@ test('time spent waiting for approval is kept apart from run time', () => {
   assert.match(traceToMarkdown(trace), /sleep 4.*\(ok, 4s, waited 21s for approval\)/);
   assert.equal(traceToJSON(trace).turns[0].steps[0].waitedMs, 21000);
 });
+
+test('a task step carries one lane per agent, with its own steps, files and tokens', async () => {
+  const { buildTrace, agentLanes, budgetTokens, traceToMarkdown } = await import('../app/core/trace.mjs');
+  const t0 = 1_000_000;
+  const entries = [
+    { role: 'user', content: 'two agents', at: t0 },
+    { role: 'assistant', content: '', tools: [{ id: 't1', name: 'task', args: { description: '2 agents' }, startedAt: t0 + 100 }], subagents: [
+      { id: 'agent_1', description: 'Count lines', status: 'completed', startedAt: t0 + 200, endedAt: t0 + 9_000, budget: '8.2k tokens · 2 requests', detail: 'cart.js: 12', log: [
+        { label: 'Running wc -l *.js', name: 'run_command', startedAt: t0 + 300, endedAt: t0 + 900, ok: true },
+        { label: 'Writing notes.txt', name: 'write_file', path: 'notes.txt', startedAt: t0 + 1000, endedAt: t0 + 1200, ok: true, lines: { added: 2, removed: 0 } }
+      ] },
+      { id: 'agent_2', description: 'List products', status: 'running', startedAt: t0 + 250, log: [{ label: 'Reading sales.csv', name: 'read_file', startedAt: t0 + 400 }] }
+    ] }
+  ];
+  const trace = buildTrace(entries, { now: t0 + 10_100, running: true });
+  const turn = trace.turns[0];
+  const step = turn.steps[0];
+  assert.equal(step.agents.length, 2);
+  assert.equal(step.agents[0].steps.length, 2);
+  assert.equal(step.agents[0].steps[1].lines.added, 2);
+  assert.equal(step.agents[1].outcome, 'running');
+  assert.equal(step.agents[1].steps[0].outcome, 'running');
+  assert.deepEqual(turn.files, ['notes.txt'], 'files an agent changed count for the turn');
+  assert.equal(turn.stats.agents, 2);
+  assert.equal(turn.stats.agentSteps, 3);
+  assert.equal(turn.stats.agentTokens, 8200);
+  assert.ok(turn.now.some((line) => line.agent === 2 && /Reading sales\.csv/.test(line.text)), 'the Now strip says what agent 2 is doing');
+  assert.match(traceToMarkdown(trace), /Agent 1: Count lines \(done/);
+  assert.equal(budgetTokens('tokens 8,218, requests 2'), 8218);
+  assert.equal(agentLanes(null).length, 0);
+  // A lane saved before agents had times is drawn over its task step.
+  const old = buildTrace([{ role: 'user', content: 'x', at: t0 }, { role: 'assistant', tools: [{ id: 't', name: 'task', args: {}, startedAt: t0, endedAt: t0 + 5000, ok: true }], subagents: [{ id: 'agent_1', description: 'a', status: 'completed' }] }], { now: t0 + 5000 });
+  assert.ok(old.turns[0].steps[0].agents[0].width > 50);
+});

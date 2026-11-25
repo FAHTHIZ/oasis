@@ -65,3 +65,21 @@ test('agents sharing a one-at-a-time endpoint all finish instead of failing on 4
   for (const reply of replies) assert.match(JSON.stringify(reply), /ok/);
   assert.ok(collisions <= 3, 'it learned the limit after the first collisions (' + collisions + ')');
 });
+
+test('a queued request is told it is waiting, and told again when its turn comes', async () => {
+  resetEndpointGates();
+  const config = { baseURL: 'https://queued.example/v1', maxConcurrentRequests: 1 };
+  const first = await acquireEndpoint(config, { env: {} });
+  const seen = [];
+  const pending = acquireEndpoint(config, { env: {}, onQueued: (info) => { seen.push('queued:' + info.ahead); return () => seen.push('turn'); } });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(seen, ['queued:1']);
+  first.release();
+  const second = await pending;
+  assert.deepEqual(seen, ['queued:1', 'turn']);
+  second.release();
+  // A free endpoint never reports queueing.
+  const free = await acquireEndpoint(config, { env: {}, onQueued: () => { seen.push('again'); } });
+  free.release();
+  assert.equal(seen.length, 2);
+});

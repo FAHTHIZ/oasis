@@ -2683,6 +2683,12 @@ function handleRunEvent(event) {
       showThinking();
       runClock.tick();
       break;
+    case 'note_routed': {
+      const who = String(event.to || '').slice(0, 120);
+      addMessage('note', who ? 'Your note went to agent “' + who + '”; it will see it at its next step.' : 'Your note went to OASIS; it will see it at its next step.');
+      scrollDown();
+      break;
+    }
     case 'continuing': {
       // The reply above read as final, but a check sent the model back to
       // work (the terminal prints the same "Not finished yet" line).
@@ -3721,8 +3727,16 @@ $('rehearsalButton').addEventListener('click', () => answerApproval('rehearsal')
 $('denyButton').addEventListener('click', () => {
   const instead = $('approvalInstead').value.trim();
   $('approvalInstead').value = '';
+  // The note rides with the denial so it reaches whoever asked (an agent's
+  // own request goes to that agent, not the main one). A runtime that did not
+  // take it (an older server) still gets it as a note to the task.
+  if (instead) agent.denyNote = instead;
   answerApproval(false);
-  if (instead && agent.busy && typeof agent.steer === 'function') void agent.steer(instead);
+  setTimeout(() => {
+    if (!instead || agent.denyNote !== instead) return;
+    agent.denyNote = '';
+    if (agent.busy && typeof agent.steer === 'function') void agent.steer(instead);
+  }, 0);
 });
 $('approvalInstead').addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); $('denyButton').click(); } });
 $('approvalInstead').addEventListener('input', () => { $('denyButton').textContent = $('approvalInstead').value.trim() ? 'Deny and send' : 'Deny'; });

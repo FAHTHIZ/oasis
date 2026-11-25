@@ -27,8 +27,11 @@ test('command analysis blocks wrappers around blocked executables', () => {
 
 test('command analysis flags inline code and arbitrary-exec flags as high risk', () => {
   for (const [cmd, args] of [
-    ['node', ['-e', 'x']], ['node', ['--eval=x']], ['python3', ['-c', 'x']], ['python3.12', ['-c', 'x']], ['python', ['-Bc', 'x']],
-    ['perl', ['-e', 'x']], ['ruby', ['-e', 'x']], ['php', ['-r', 'x']], ['deno', ['eval', 'x']],
+    // Snippets with side effects: a script that only reads and prints is
+    // treated like cat (see inline-code-readonly.mjs).
+    ['node', ['-e', 'require("fs").rmSync("x")']], ['node', ['--eval=require("child_process").exec("id")']],
+    ['python3', ['-c', 'import os; os.remove("x")']], ['python3.12', ['-c', 'import os; os.system("id")']], ['python', ['-Bc', 'import shutil; shutil.rmtree("x")']],
+    ['perl', ['-e', 'unlink "x"']], ['ruby', ['-e', 'File.delete("x")']], ['php', ['-r', 'unlink("x");']], ['deno', ['eval', 'Deno.removeSync("x")']],
     ['find', ['.', '-delete']], ['find', ['.', '-exec', 'rm', '{}', ';']], ['awk', ['BEGIN{system("id")}']],
     ['git', ['-c', 'core.pager=evil', 'log']], ['git', ['checkout', '--', '.']], ['env', ['node', 'script.js']],
     ['curl', ['-o', 'x', 'https://e.com']], ['kill', ['-9', '1']]
@@ -58,7 +61,7 @@ test('high-risk commands need interactive approval even with auto-approve', asyn
   assert.match(prompts[0].message, /HIGH RISK/);
   await assert.rejects(access(path.join(dir, 'pwned')));
   // Without any approval callback a high-risk command never runs.
-  const none = await runWorkspaceCommand(dir, process.execPath, ['-e', '1'], { autoApprove: true });
+  const none = await runWorkspaceCommand(dir, process.execPath, ['-e', 'require("fs").writeFileSync("pwned", "2")'], { autoApprove: true });
   assert.equal(none.approved, false);
   // An explicit allow rule is the user's decision and skips the prompt.
   const allowed = await runWorkspaceCommand(dir, process.execPath, ['-e', 'process.stdout.write("ok")'], { ruleAllowed: true });

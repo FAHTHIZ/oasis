@@ -533,7 +533,7 @@ export class RuntimeAgent {
         const at = Number.isFinite(stamp) ? { at: stamp - (this.clockSkew || 0) } : {};
         switch (event.type) {
           case 'started': if (data.sessionId) this.sessionId = data.sessionId; break;
-          case 'agent_activity': if (subagents.update(data)) this.emit('subagents', { workers: subagents.list() }); break;
+          case 'agent_activity': if (subagents.update(data, { at: at.at || Date.now() })) this.emit('subagents', { workers: subagents.list() }); break;
           case 'assistant_delta': if (data.text) addText(String(data.text), false); break;
           case 'assistant_text': if (data.text) addText(String(data.text), true); break;
           // The model's reasoning summary, streamed while it works (nothing for
@@ -567,7 +567,19 @@ export class RuntimeAgent {
             if (live && data.note) this.emit('continuing', { note: 'Not finished yet: ' + String(data.note).slice(0, 160) });
             break;
           case 'stream_restarted': stepText = ''; this.emit('retry', { attempt: data.attempt || 1 }); break;
-          case 'provider_retry': this.emit('retry', { attempt: Number(data.attempt) || 1, waitMs: Number(data.waitMs) || 0, ...(data.status ? { status: Number(data.status) } : {}) }); break;
+          case 'endpoint_wait':
+            if (data.subagent) {
+              if (subagents.pause(data.subagent, data.ready ? '' : 'Waiting its turn on the model (this endpoint answers one request at a time)')) this.emit('subagents', { workers: subagents.list() });
+            }
+            break;
+          case 'provider_retry':
+            if (data.subagent) {
+              const waitMs = Math.max(0, Number(data.waitMs) || 0);
+              const text = 'Model busy' + (data.status ? ' (' + Number(data.status) + ')' : '') + ', trying again in ' + Math.max(1, Math.round(waitMs / 1000)) + 's' + (Number(data.limit) > 0 ? ' · try ' + (Number(data.attempt) || 1) + ' of ' + Number(data.limit) : '');
+              if (subagents.pause(data.subagent, text, { until: Date.now() + waitMs })) this.emit('subagents', { workers: subagents.list() });
+              break;
+            }
+            this.emit('retry', { attempt: Number(data.attempt) || 1, waitMs: Number(data.waitMs) || 0, ...(data.status ? { status: Number(data.status) } : {}) }); break;
           case 'hook_result': if (live) this.emit('hook_result', { event: String(data.event || ''), outcome: data.outcome === 'blocked' ? 'blocked' : 'failed', reason: String(data.reason || '') }); break;
           case 'hook_status': if (live) this.emit('hook_status', { phase: data.phase === 'end' ? 'end' : 'start', event: String(data.event || ''), label: String(data.label || '') }); break;
           case 'compaction_started': this.emit('compacting', { beforeTokens: Number(data.beforeTokens) || 0, messages: Number(data.messages) || 0, timeoutSeconds: Number(data.timeoutSeconds) || 0, ...at }); break;
@@ -575,7 +587,7 @@ export class RuntimeAgent {
           case 'tool_start': {
             // A subagent's own steps show in its row, not the main timeline.
             if (data.subagent) {
-              if (subagents.step(data.subagent, data.present || data.label || data.name)) this.emit('subagents', { workers: subagents.list() });
+              if (subagents.step(data.subagent, data.present || data.label || data.name, { at: at.at || Date.now(), name: String(data.name || ''), path: String((data.args && (data.args.path || data.args.file_path)) || '') })) this.emit('subagents', { workers: subagents.list() });
               break;
             }
             const id = data.callId || 'call_' + event.id;
@@ -602,7 +614,7 @@ export class RuntimeAgent {
           case 'model_timing': this.emit('model_timing', { ...data }); break;
           case 'tool_result': {
             if (data.subagent) {
-              if (subagents.step(data.subagent, '', { finished: true })) this.emit('subagents', { workers: subagents.list() });
+              if (subagents.step(data.subagent, '', { finished: true, at: at.at || Date.now(), ok: data.outcome ? String(data.outcome) === 'ok' : !/^(error|failed|denied|blocked)$/i.test(String(data.status || '')), ...(data.lines ? { lines: data.lines } : {}), ...(data.outcome && data.outcome !== 'ok' ? { outcome: String(data.outcome).slice(0, 20) } : {}) })) this.emit('subagents', { workers: subagents.list() });
               break;
             }
             const outcome = TOOL_OUTCOMES.has(String(data.outcome || '')) ? String(data.outcome) : '';
@@ -637,16 +649,26 @@ export class RuntimeAgent {
             approvals = approvals.then(async () => {
               if (signal.aborted || resolved.has(approvalId)) return;
               this.emit('approval_waiting', { approvalId, tool: data.tool || '' });
+              // An agent asked: its lane and the Now strip say it needs you.
+              const askedBy = data.subagent ? String(data.subagent) : '';
+              if (askedBy && subagents.waiting(askedBy, true)) this.emit('subagents', { workers: subagents.list() });
+              const settle = () => { if (askedBy && subagents.waiting(askedBy, false)) this.emit('subagents', { workers: subagents.list() }); };
+              signal.addEventListener('abort', settle, { once: true });
               const value = await this.answeredHere(this.approve({ name: data.tool || 'runtime', args: { prompt: data.prompt, diff: data.diff, suggestion: data.suggestion, risky: data.risky, rehearsal: data.rehearsal === true, subagent: data.subagent || '' }, runtime: true }), approvalId, event.id, signal, jobId);
               // Left for another chat or device while it was open: the
               // question stays open on the computer for whoever looks next.
+              settle();
               if (signal.aborted) return;
               resolved.add(approvalId);
               // Answered on another device: the next poll brings its result.
               if (value === ELSEWHERE) { this.emit('answered_elsewhere', { kind: 'approval' }); return; }
               const body = approvalBody(data.approvalId, value);
+              const sentNote = value === false && this.denyNote ? String(this.denyNote).slice(0, 2000) : '';
+              if (sentNote) { body.note = sentNote; this.denyNote = ''; }
               this.emit('approval_answered', { approvalId, approved: body.approved });
-              await this.client.api('/api/jobs/' + jobId + '/approval', { method: 'POST', body }).catch(() => {});
+              const reply = await this.client.api('/api/jobs/' + jobId + '/approval', { method: 'POST', body }).catch(() => null);
+              // Say where the note went, so a denied agent's change of course is not a mystery.
+              if (sentNote && reply && reply.noteTo) this.emit('note_routed', { to: reply.noteTo === 'agent' && askedBy ? askedBy : '', note: sentNote });
             }).catch(() => {});
             break;
           }

@@ -82,6 +82,11 @@ export function buildTrace(entries = [], { now = Date.now(), running = false, ti
         if (!tool) continue;
         turn.steps.push({ tool, entryIndex: index });
       }
+      // The agents a task step started (the app saves them on its entry).
+      if (Array.isArray(entry.subagents) && entry.subagents.length) {
+        const task = turn.steps.filter((item) => item.entryIndex === index && String(item.tool.name) === 'task')[0];
+        if (task) task.agents = entry.subagents;
+      }
     } else if (entry.role === 'error') turn.error = String(entry.content || '');
     else if (entry.role === 'worked') {
       turn.worked = String(entry.content || '');
@@ -106,10 +111,11 @@ export function buildTrace(entries = [], { now = Date.now(), running = false, ti
 
 function finishTurn(turn, { now, running }) {
   const rows = [];
-  for (const { tool, entryIndex } of turn.steps) {
+  for (const { tool, entryIndex, agents } of turn.steps) {
     const span = stepSpan(tool, now);
     const outcome = stepOutcome(tool);
     rows.push({
+      agents: agentLanes(agents, now),
       id: String(tool.id || ''),
       name: String(tool.name || ''),
       kind: toolKind(tool.name),
@@ -136,10 +142,20 @@ function finishTurn(turn, { now, running }) {
     const width = Math.max(0.6, Math.min(100 - offset, (((end ?? start) - start) / spanMs) * 100));
     return { offset, width };
   };
-  for (const row of rows) Object.assign(row, place(row.startedAt, row.endedAt));
+  for (const row of rows) {
+    Object.assign(row, place(row.startedAt, row.endedAt));
+    for (const agent of row.agents) {
+      // Saved before agents carried times: draw the lane over its task step.
+      if (agent.startedAt === null && row.startedAt !== null) { agent.startedAt = row.startedAt; agent.endedAt = row.endedAt; agent.durationMs = null; }
+      Object.assign(agent, place(agent.startedAt, agent.endedAt));
+      for (const step of agent.steps) Object.assign(step, place(step.startedAt, step.endedAt));
+    }
+  }
   for (const span of turn.model) Object.assign(span, place(span.startedAt, span.endedAt));
   const count = (...outcomes) => rows.filter((row) => outcomes.includes(row.outcome)).length;
-  const files = [...new Set(rows.filter((row) => EDIT_TOOLS.has(row.name.toLowerCase()) && row.outcome === 'ok').map((row) => stepPath(row.tool.args)).filter(Boolean))];
+  const agentFiles = rows.flatMap((row) => row.agents.flatMap((agent) => agent.steps.filter((step) => step.kind === 'edit' && step.outcome === 'ok' && step.path && !agent.branch).map((step) => step.path)));
+  const files = [...new Set([...rows.filter((row) => EDIT_TOOLS.has(row.name.toLowerCase()) && row.outcome === 'ok').map((row) => stepPath(row.tool.args)), ...agentFiles].filter(Boolean))];
+  const agents = rows.flatMap((row) => row.agents);
   turn.steps = rows;
   turn.startedAt = startedAt;
   turn.endedAt = endedAt;
@@ -153,11 +169,88 @@ function finishTurn(turn, { now, running }) {
     edits: rows.filter((row) => row.kind === 'edit').length,
     commands: rows.filter((row) => row.kind === 'shell').length,
     reads: rows.filter((row) => row.kind === 'read' || row.kind === 'search').length,
+    agents: agents.length,
+    agentsRunning: agents.filter((agent) => agent.status === 'running').length,
+    agentSteps: agents.reduce((sum, agent) => sum + agent.stepCount, 0),
+    agentTokens: agents.reduce((sum, agent) => sum + agent.tokens, 0),
     modelMs: turn.model.reduce((sum, span) => sum + span.durationMs, 0),
     tokensIn: turn.model.reduce((sum, span) => sum + span.inputTokens, 0),
     tokensOut: turn.model.reduce((sum, span) => sum + span.outputTokens, 0)
   };
   turn.status = running ? 'running' : turn.error ? 'error' : turn.stopped ? 'stopped' : turn.stats.failed ? 'issues' : 'done';
+  turn.now = running ? nowLines(turn, now) : [];
+}
+
+const AGENT_DONE = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
+const AGENT_OUTCOME = { completed: 'ok', failed: 'failed', cancelled: 'cancelled', interrupted: 'cancelled' };
+
+// "tokens 8,218, requests 2" or "8.2k tokens" -> 8218 / 8200.
+export function budgetTokens(text) {
+  const raw = String(text || '');
+  let match = raw.match(/tokens\s+([\d,.]+)\s*([km])?/i) || raw.match(/([\d,.]+)\s*([km])?\s+tokens/i);
+  if (!match) return 0;
+  const value = Number(match[1].replace(/,/g, '')) * (/k/i.test(match[2] || '') ? 1e3 : /m/i.test(match[2] || '') ? 1e6 : 1);
+  return Number.isFinite(value) ? Math.round(value) : 0;
+}
+
+// One lane per agent a task step started: its span, status and own steps.
+export function agentLanes(workers, now = Date.now()) {
+  if (!Array.isArray(workers)) return [];
+  return workers.filter(Boolean).map((worker, index) => {
+    const done = AGENT_DONE.has(worker.status);
+    const log = Array.isArray(worker.log) ? worker.log : [];
+    const startedAt = finite(worker.startedAt) ?? finite(log[0] && log[0].startedAt);
+    let endedAt = finite(worker.endedAt);
+    if (endedAt === null) endedAt = done ? (finite(log.at(-1) && (log.at(-1).endedAt || log.at(-1).startedAt)) ?? startedAt) : (startedAt === null ? null : now);
+    const steps = log.map((item) => {
+      const start = finite(item.startedAt);
+      const end = finite(item.endedAt) ?? (done ? start : now);
+      const outcome = item.endedAt ? (item.ok === false ? (item.outcome === 'declined' || item.outcome === 'blocked' ? item.outcome : 'failed') : 'ok') : done ? 'cancelled' : 'running';
+      return { label: String(item.label || item.name || 'Step'), name: String(item.name || ''), kind: toolKind(item.name || ''), path: String(item.path || '').replaceAll(String.fromCharCode(92), '/'), startedAt: start, endedAt: end, durationMs: start !== null && end !== null ? Math.max(0, end - start) : null, outcome, lines: item.lines || null };
+    });
+    const detail = String(worker.detail || '');
+    return {
+      id: String(worker.id || 'agent_' + (index + 1)),
+      index: index + 1,
+      description: String(worker.description || worker.id || 'Agent ' + (index + 1)),
+      status: String(worker.status || 'unknown'),
+      outcome: AGENT_OUTCOME[worker.status] || (worker.waitingApproval ? 'waiting' : 'running'),
+      waiting: Boolean(worker.waitingApproval),
+      activity: done ? '' : String(worker.activity || ''),
+      detail,
+      branch: (detail.match(/Changes on branch (\S+) \(not merged yet\)/) || [])[1] || '',
+      budget: String(worker.budget || ''),
+      tokens: budgetTokens(worker.budget),
+      startedAt, endedAt,
+      durationMs: startedAt !== null && endedAt !== null ? Math.max(0, endedAt - startedAt) : null,
+      // Finished steps as the chat card counts them (some have no start label).
+      stepCount: Math.max(steps.length, Number(worker.steps) || 0),
+      steps
+    };
+  });
+}
+
+// What is happening right now, one line per actor, for the panel's live strip.
+function nowLines(turn, now) {
+  const lines = [];
+  for (const step of turn.steps) {
+    if (step.outcome !== 'running') continue;
+    if (step.agents.length) {
+      for (const agent of step.agents) {
+        if (agent.outcome !== 'running' && agent.outcome !== 'waiting') continue;
+        const current = agent.steps.filter((item) => item.outcome === 'running').at(-1);
+        lines.push({ who: agent.description, agent: agent.index, text: agent.waiting ? 'Waiting for you to approve a step' : current ? current.label : agent.activity || 'Thinking', since: (current && current.startedAt) || agent.startedAt, waiting: agent.waiting });
+      }
+      if (!lines.length) lines.push({ who: 'OASIS', text: step.label, since: step.startedAt });
+      continue;
+    }
+    lines.push({ who: 'OASIS', text: step.tool.waiting ? 'Waiting for you to approve: ' + step.label : step.label, since: step.startedAt, waiting: Boolean(step.tool.waiting) });
+  }
+  if (!lines.length) {
+    const last = turn.steps.filter((step) => step.endedAt !== null).map((step) => step.endedAt);
+    lines.push({ who: 'OASIS', text: turn.steps.length ? 'Thinking about the next step' : 'Reading your message', since: last.length ? Math.max(...last) : turn.startedAt, thinking: true });
+  }
+  return lines;
 }
 
 export const TRACE_FILTERS = [
@@ -176,13 +269,14 @@ export function matchStep(step, { filter = 'all', query = '' } = {}) {
   if (filter === 'read' && !['read', 'search'].includes(step.kind)) return false;
   const needle = String(query || '').trim().toLowerCase();
   if (!needle) return true;
-  return [step.label, step.target, step.name].some((value) => String(value || '').toLowerCase().includes(needle));
+  return [step.label, step.target, step.name, ...(step.agents || []).flatMap((agent) => [agent.description, ...agent.steps.map((item) => item.label)])].some((value) => String(value || '').toLowerCase().includes(needle));
 }
 
 const STATUS_WORDS = { running: 'Working', done: 'Done', issues: 'Done with failed steps', error: 'Error', stopped: 'Stopped' };
 export function turnStatusLabel(status) { return STATUS_WORDS[status] || 'Done'; }
 
-const OUTCOME_MARK = { ok: 'ok', failed: 'FAILED', timed_out: 'TIMED OUT', declined: 'declined', blocked: 'blocked', cancelled: 'stopped', running: 'running' };
+const AGENT_WORDS = { running: 'working', completed: 'done', failed: 'failed', cancelled: 'stopped', interrupted: 'interrupted', stopping: 'stopping' };
+const OUTCOME_MARK = { waiting: 'waiting', ok: 'ok', failed: 'FAILED', timed_out: 'TIMED OUT', declined: 'declined', blocked: 'blocked', cancelled: 'stopped', running: 'running' };
 
 // The trace as Markdown, for pasting into an issue or a review.
 export function traceToMarkdown(trace) {
@@ -192,6 +286,11 @@ export function traceToMarkdown(trace) {
     lines.push('', turnStatusLabel(turn.status) + ' · ' + turn.stats.steps + ' step' + (turn.stats.steps === 1 ? '' : 's') + (turn.durationMs ? ' · ' + formatDuration(turn.durationMs) : '') + (turn.files.length ? ' · changed ' + turn.files.join(', ') : ''), '');
     for (const step of turn.steps) {
       lines.push('- ' + step.label + (step.target && !step.label.includes(step.target) ? ' — `' + step.target.replace(/`/g, "'") + '`' : '') + ' (' + OUTCOME_MARK[step.outcome] + (step.durationMs !== null ? ', ' + (formatDuration(step.durationMs - step.waitedMs) || '<0.1s') : '') + (step.waitedMs >= 1000 ? ', waited ' + formatDuration(step.waitedMs) + ' for approval' : '') + ')');
+      for (const agent of step.agents || []) {
+        lines.push('  - Agent ' + agent.index + ': ' + agent.description + ' (' + (AGENT_WORDS[agent.status] || agent.status) + (agent.durationMs ? ', ' + formatDuration(agent.durationMs) : '') + (agent.budget ? ', ' + agent.budget : '') + ')');
+        for (const item of agent.steps) lines.push('    - ' + item.label + ' (' + OUTCOME_MARK[item.outcome] + (item.durationMs !== null ? ', ' + (formatDuration(item.durationMs) || '<0.1s') : '') + ')');
+        if (agent.branch) lines.push('    - Changes on branch ' + agent.branch + ', not merged yet');
+      }
     }
     if (turn.error) lines.push('', '> Error: ' + turn.error.split('\n')[0]);
     lines.push('');
@@ -233,7 +332,8 @@ export function traceToJSON(trace) {
         durationMs: step.durationMs,
         waitedMs: step.waitedMs,
         args: maskSecrets(step.tool.args || {}),
-        output: String(step.tool.content || '').slice(0, 4096)
+        output: String(step.tool.content || '').slice(0, 4096),
+        ...(step.agents && step.agents.length ? { agents: step.agents.map(({ offset, width, steps, ...agent }) => ({ ...agent, steps: steps.map(({ offset: _o, width: _w, ...item }) => item) })) } : {})
       }))
     }))
   };

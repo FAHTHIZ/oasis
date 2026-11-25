@@ -33,7 +33,7 @@ test('anything that writes, runs code, leaves the workspace or reads secrets sti
     ['rg', ['--pre', 'sh', 'x']], ['cat', ['/etc/passwd']], ['cat', ['../outside']], ['cat', ['~/.ssh/id_rsa']], ['cat', ['.env']],
     ['cat', ['home-link/.bashrc']], ['git', ['commit', '-m', 'x']], ['git', ['push']], ['git', ['branch', 'new']], ['git', ['tag', 'v1']],
     ['git', ['-C', '/', 'status']], ['git', ['diff', '--output=x']], ['git', ['diff', '--ext-diff']], ['git', ['config', 'user.name', 'x']],
-    ['git', ['stash']], ['sed', ['-i', 's/a/b/', 'src/a.js']], ['awk', ['{print}', 'src/a.js']], ['rm', ['src/a.js']], ['/bin/ls', []],
+    ['git', ['stash']], ['sed', ['-i', 's/a/b/', 'src/a.js']], ['awk', ['BEGIN{system("touch x")}', 'src/a.js']], ['awk', ['{print > "out"}', 'src/a.js']], ['rm', ['src/a.js']], ['/bin/ls', []],
     ['uniq', ['in', 'out']], ['date', ['-s', 'now']], ['tree', ['-o', 'out']]
   ]) assert.equal(readOnlyArgv(command, args, { root }), false, command + ' ' + args.join(' '));
 });

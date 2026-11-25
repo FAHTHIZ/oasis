@@ -13,7 +13,7 @@
 import { buildTrace, matchStep, TRACE_FILTERS, turnStatusLabel, traceToMarkdown, traceToJSON } from './core/trace.mjs';
 import { formatDuration } from './core/timeline.mjs';
 
-const state = { filter: 'all', query: '', open: new Set(), collapsed: new Set(), follow: true, queued: false, deps: null, trace: null, ticker: 0 };
+const state = { filter: 'all', query: '', open: new Set(), lanes: new Set(), collapsed: new Set(), follow: true, queued: false, deps: null, trace: null, ticker: 0 };
 const turnEls = new Map();
 const rowEls = new Map();
 
@@ -166,15 +166,17 @@ function renderSummary(trace) {
   if (!last) { box.hidden = true; return; }
   box.hidden = false;
   box.dataset.status = last.status;
+  const agentSteps = last.stats.agentSteps || 0;
   const parts = [
-    ['Steps', String(last.stats.steps)],
+    ['Steps', String(last.stats.steps + agentSteps), agentSteps ? agentSteps + ' by agents' : '', agentSteps ? last.stats.steps + ' by OASIS, ' + agentSteps + ' by its agents' : ''],
     ['Failed', String(last.stats.failed)],
     ['Files', String(last.files.length)],
     ['Time', dur(last.durationMs) || '–']
   ];
   // "7.2k / 41" did not fit a narrow panel and was cut off. Sent tokens are
   // the headline; received ones go on a second, smaller line.
-  if (last.stats.tokensIn || last.stats.tokensOut) parts.push(['Tokens', compact(last.stats.tokensIn), compact(last.stats.tokensOut) + ' out', (last.stats.tokensIn || 0).toLocaleString() + ' sent, ' + (last.stats.tokensOut || 0).toLocaleString() + ' received']);
+  if (last.stats.agents) parts.splice(2, 0, ['Agents', String(last.stats.agents), last.stats.agentsRunning ? last.stats.agentsRunning + ' working' : last.stats.agentTokens ? compact(last.stats.agentTokens) + ' tok' : '', last.stats.agentTokens ? 'Its agents used ' + last.stats.agentTokens.toLocaleString() + ' tokens' : '']);
+  if (last.stats.tokensIn || last.stats.tokensOut) parts.push(['Tokens', compact(last.stats.tokensIn), compact(last.stats.tokensOut) + ' out', (last.stats.tokensIn || 0).toLocaleString() + ' sent, ' + (last.stats.tokensOut || 0).toLocaleString() + ' received' + (last.stats.agentTokens ? '; agents used ' + last.stats.agentTokens.toLocaleString() + ' more' : '')]);
   const head = el('div', 'activity-summary-head');
   const dot = el('span', 'status-dot');
   dot.setAttribute('aria-hidden', 'true');
@@ -190,7 +192,26 @@ function renderSummary(trace) {
     cell.append(el('dt', '', label), dd);
     stats.appendChild(cell);
   }
-  box.replaceChildren(head, stats);
+  box.replaceChildren(head, ...(last.now && last.now.length ? [nowStrip(last.now)] : []), stats);
+}
+
+// Right now, one line per actor: OASIS itself and each agent at work.
+function nowStrip(lines) {
+  const strip = el('ul', 'activity-now');
+  strip.setAttribute('aria-label', 'Happening now');
+  const nowMs = Date.now();
+  for (const line of lines.slice(0, 8)) {
+    const li = el('li', 'activity-now-line' + (line.waiting ? ' waiting' : '') + (line.thinking ? ' thinking' : ''));
+    if (line.agent) li.style.setProperty('--lane', 'var(--lane-' + (((line.agent - 1) % 6) + 1) + ')');
+    const who = el('span', 'activity-now-who', line.agent ? String(line.agent) : '');
+    who.setAttribute('aria-hidden', 'true');
+    const text = el('span', 'activity-now-text');
+    text.append(el('strong', '', line.agent ? line.who : 'OASIS'), document.createTextNode(' ' + line.text));
+    text.title = (line.agent ? line.who : 'OASIS') + ': ' + line.text;
+    li.append(who, text, el('span', 'activity-now-since', line.since ? dur(Math.max(0, nowMs - line.since)) : ''));
+    strip.appendChild(li);
+  }
+  return strip;
 }
 
 function compact(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n || 0); }
@@ -296,7 +317,8 @@ function rowFor(turn, step) {
   bar.style.left = step.offset + '%';
   bar.style.width = step.width + '%';
   // Waiting for your approval is drawn as a hatched lead-in and left out of the run time.
-  const waited = step.waitedMs >= 1000 && step.durationMs ? step.waitedMs : 0;
+  // A task step's agents ran while one of them waited: its time is wall time.
+  const waited = step.waitedMs >= 1000 && step.durationMs && !(step.agents && step.agents.length) ? step.waitedMs : 0;
   bar.style.setProperty('--wait', waited ? Math.round(waited / step.durationMs * 100) + '%' : '0%');
   const ran = step.durationMs === null ? null : step.durationMs - waited;
   const durEl = button.querySelector('.trace-dur');
@@ -304,8 +326,99 @@ function rowFor(turn, step) {
   durEl.title = waited ? 'Ran ' + (dur(ran) || '<0.1s') + ' after waiting ' + dur(waited) + ' for your approval' : '';
   button.setAttribute('aria-expanded', String(state.open.has(row.dataset.key)));
   button.setAttribute('aria-label', step.label + (target ? ', ' + target : '') + ', ' + OUTCOME_TEXT[step.outcome] + (ran !== null ? ', ' + (dur(ran) || 'under 0.1 seconds') : '') + (waited ? ', waited ' + dur(waited) + ' for approval' : ''));
+  renderLanes(row, step);
   if (state.open.has(row.dataset.key)) fillDetail(row, step);
   return row;
+}
+
+const LANE_WORDS = { running: 'Working', waiting: 'Needs you', ok: 'Done', failed: 'Failed', cancelled: 'Stopped' };
+
+// The agents a task step started, one swimlane each on the turn's time axis.
+// Open a lane to see that agent's own steps and the start of its report.
+function renderLanes(row, step) {
+  let box = row.querySelector(':scope > .trace-agents');
+  if (!step.agents || !step.agents.length) { if (box) box.remove(); return; }
+  if (!box) { box = el('ol', 'trace-agents'); box.setAttribute('aria-label', 'Agents'); row.insertBefore(box, row.lastChild); }
+  const keep = [];
+  for (const agent of step.agents) {
+    const key = row.dataset.key + '/' + agent.id;
+    let lane = box.querySelector(':scope > li[data-key="' + CSS.escape(key) + '"]');
+    if (!lane) {
+      lane = el('li', 'trace-lane');
+      lane.dataset.key = key;
+      const head = el('button', 'trace-lane-head');
+      head.type = 'button';
+      head.innerHTML = '<span class="trace-lane-badge" aria-hidden="true"></span><span class="trace-lane-text"><span class="trace-lane-name"></span><span class="trace-lane-now"></span></span><span class="trace-track" aria-hidden="true"><i></i></span><span class="trace-dur"></span>';
+      head.addEventListener('click', () => { if (state.lanes.has(key)) state.lanes.delete(key); else state.lanes.add(key); render(); });
+      const body = el('div', 'trace-lane-body');
+      lane.append(head, body);
+    }
+    keep.push(lane);
+    const open = state.lanes.has(key);
+    lane.className = 'trace-lane ' + (agent.outcome === 'ok' ? 'ok' : agent.outcome === 'failed' ? 'fail' : agent.outcome === 'cancelled' ? 'skip' : 'running') + (agent.waiting ? ' waiting' : '') + (open ? ' open' : '');
+    lane.style.setProperty('--lane', 'var(--lane-' + (((agent.index - 1) % 6) + 1) + ')');
+    const head = lane.firstChild;
+    head.querySelector('.trace-lane-badge').textContent = String(agent.index);
+    head.querySelector('.trace-lane-name').textContent = agent.description;
+    const current = agent.steps.filter((item) => item.outcome === 'running').at(-1);
+    const facts = [LANE_WORDS[agent.outcome] || 'Working'];
+    if (agent.waiting) facts[0] = 'Needs you';
+    else if (current) facts.push(current.label);
+    else if (agent.activity && agent.outcome === 'running') facts.push(agent.activity);
+    if (agent.outcome !== 'running' && agent.stepCount) facts.push(agent.stepCount + (agent.stepCount === 1 ? ' step' : ' steps'));
+    if (agent.tokens) facts.push(compact(agent.tokens) + ' tokens');
+    if (agent.branch) facts.push('on branch ' + agent.branch);
+    head.querySelector('.trace-lane-now').textContent = facts.join(' · ');
+    const bar = head.querySelector('.trace-track i');
+    bar.style.left = (agent.offset || 0) + '%';
+    bar.style.width = (agent.width || 0) + '%';
+    head.querySelector('.trace-dur').textContent = agent.outcome === 'running' ? (dur(agent.durationMs) || '…') : dur(agent.durationMs);
+    head.setAttribute('aria-expanded', String(open));
+    head.setAttribute('aria-label', 'Agent ' + agent.index + ', ' + agent.description + ', ' + facts.join(', ') + (agent.durationMs ? ', ' + dur(agent.durationMs) : ''));
+    const body = lane.lastChild;
+    body.hidden = !open;
+    if (open) fillLane(body, agent);
+  }
+  [...box.children].forEach((child) => { if (!keep.includes(child)) child.remove(); });
+  keep.forEach((lane, index) => { if (box.children[index] !== lane) box.insertBefore(lane, box.children[index] || null); });
+}
+
+function fillLane(body, agent) {
+  const stamp = agent.steps.map((item) => item.outcome + (item.endedAt || '')).join(',') + '|' + agent.detail.length + '|' + agent.status;
+  if (body.dataset.stamp === stamp) {
+    // Only the clocks moved: patch the running bars in place.
+    body.querySelectorAll('.trace-sub').forEach((li, index) => { const item = agent.steps[index]; if (!item) return; const i = li.querySelector('.trace-track i'); i.style.left = item.offset + '%'; i.style.width = item.width + '%'; li.querySelector('.trace-dur').textContent = item.outcome === 'running' ? dur(item.durationMs) || '…' : dur(item.durationMs); });
+    return;
+  }
+  body.dataset.stamp = stamp;
+  const list = el('ol', 'trace-subs');
+  for (const item of agent.steps) {
+    const li = el('li', 'trace-sub ' + (STATUS_CLASS[item.outcome] || 'ok'));
+    const kind = el('span', 'trace-kind');
+    kind.setAttribute('aria-hidden', 'true');
+    kind.innerHTML = state.deps.iconFor(item.kind);
+    const label = el('span', 'trace-label', item.label);
+    label.title = item.label;
+    const lines = el('span', 'trace-lines');
+    if (item.lines) { lines.append(el('span', 'add', '+' + item.lines.added), el('span', 'del', '−' + item.lines.removed)); }
+    const track = el('span', 'trace-track');
+    track.setAttribute('aria-hidden', 'true');
+    const i = document.createElement('i');
+    i.style.left = item.offset + '%';
+    i.style.width = item.width + '%';
+    track.appendChild(i);
+    li.append(kind, label, lines, track, el('span', 'trace-dur', item.outcome === 'running' ? dur(item.durationMs) || '…' : dur(item.durationMs)));
+    list.appendChild(li);
+  }
+  const parts = [];
+  if (!agent.steps.length) parts.push(el('p', 'trace-lane-empty', agent.outcome === 'running' ? 'Starting…' : 'No steps recorded.'));
+  else parts.push(list);
+  if (agent.detail && agent.outcome !== 'running') {
+    const report = el('p', 'trace-lane-report' + (agent.branch ? ' branch' : ''), agent.detail);
+    parts.push(report);
+  }
+  if (agent.budget) parts.push(el('p', 'trace-lane-budget', agent.budget));
+  body.replaceChildren(...parts);
 }
 
 function fillDetail(row, step) {

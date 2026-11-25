@@ -11,10 +11,12 @@ export const SUBAGENT_STATUS_TEXT = {
   cancelled: 'Stopped', interrupted: 'Interrupted', unknown: 'Waiting'
 };
 
+const MAX_LOG = 80;
+
 export class SubagentTracker {
   constructor() { this.workers = new Map(); }
   // Returns true when the list changed.
-  update(data = {}) {
+  update(data = {}, { at = Date.now() } = {}) {
     const id = String(data.agent_id || '').slice(0, 100);
     if (!id) return false;
     const type = String(data.type || '');
@@ -22,6 +24,10 @@ export class SubagentTracker {
     if (data.description && type !== 'task.dispatched') current.description = String(data.description).slice(0, 200);
     if (data.team_id) current.teamId = String(data.team_id).slice(0, 100);
     if (STATE_FOR[type]) current.status = STATE_FOR[type];
+    // When it started and finished, for the Activity panel's agent lanes.
+    if (current.status === 'running' && !current.startedAt) current.startedAt = at;
+    if (['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) { current.endedAt = at; if (!current.startedAt) current.startedAt = at; for (const item of current.log || []) if (!item.endedAt) item.endedAt = at; }
+    else if (current.status === 'running') delete current.endedAt;
     if (current.status !== 'running' && current.status !== 'unknown') current.activity = '';
     // A parked approval (roadmap 2.1) stays flagged until the user answers it.
     if (type === 'agent.approval_pending') current.waitingApproval = true;
@@ -37,19 +43,66 @@ export class SubagentTracker {
   // tool_start events name the subagent by description, not id, so the newest
   // running worker with that description is the one at work. Without this the
   // row said only "Working" for minutes while the child read, ran and edited.
-  step(description, text, { finished = false } = {}) {
+  step(description, text, { finished = false, at = Date.now(), name: toolName = '', path = '', ok = true, lines = null, outcome = '' } = {}) {
     const name = String(description || '').slice(0, 200);
     const label = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 160);
     if (!name) return false;
     const matches = [...this.workers.values()].filter((w) => w.description === name);
     const worker = matches.filter((w) => w.status === 'running' || w.status === 'unknown').pop() || matches.pop();
     if (!worker) return false;
-    if (finished) { worker.steps = (worker.steps || 0) + 1; return true; }
+    if (finished) {
+      worker.steps = (worker.steps || 0) + 1;
+      // Its last step is over: say so instead of showing it as still running.
+      if (worker.status === 'running' || worker.status === 'unknown') worker.activity = 'Thinking about the next step';
+      const open = (worker.log || []).find((item) => !item.endedAt);
+      if (open) {
+        open.endedAt = at;
+        open.ok = ok !== false;
+        if (outcome) open.outcome = outcome;
+        if (lines && (Number(lines.added) > 0 || Number(lines.removed) > 0)) open.lines = { added: Math.max(0, Number(lines.added) || 0), removed: Math.max(0, Number(lines.removed) || 0) };
+      }
+      return true;
+    }
     if (!label) return false;
     worker.activity = label;
+    delete worker.paused; delete worker.pausedUntil;
+    // Its own steps, kept short, so the run can be replayed after it ends.
+    worker.log = worker.log || [];
+    worker.log.push({ label, startedAt: at, ...(toolName ? { name: String(toolName).slice(0, 60) } : {}), ...(path ? { path: String(path).slice(0, 300) } : {}) });
+    if (worker.log.length > MAX_LOG) worker.log.splice(0, worker.log.length - MAX_LOG);
     return true;
   }
-  list() { return [...this.workers.values()].sort((a, b) => a.order - b.order).map(({ order, ...worker }) => worker); }
+  // Why a running agent is quiet between steps: queued behind another agent on
+  // a one-at-a-time endpoint, or waiting out a provider error. `until` lets a
+  // retry note lapse on its own; '' clears the note.
+  pause(description, text, { until = 0 } = {}) {
+    const name = String(description || '').slice(0, 200);
+    const worker = [...this.workers.values()].filter((w) => w.description === name && (w.status === 'running' || w.status === 'unknown')).pop();
+    if (!worker) return false;
+    const label = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+    if (!label) {
+      if (!worker.paused) return false;
+      delete worker.paused; delete worker.pausedUntil;
+      return true;
+    }
+    worker.paused = label;
+    if (until > 0) worker.pausedUntil = until; else delete worker.pausedUntil;
+    return true;
+  }
+  // A foreground approval this agent asked for is open (or was answered).
+  waiting(description, on) {
+    const name = String(description || '').slice(0, 200);
+    const worker = [...this.workers.values()].filter((w) => w.description === name && (w.status === 'running' || w.status === 'unknown')).pop();
+    if (!worker || worker.waitingApproval === Boolean(on)) return false;
+    worker.waitingApproval = Boolean(on);
+    return true;
+  }
+  list({ now = Date.now() } = {}) {
+    return [...this.workers.values()].sort((a, b) => a.order - b.order).map(({ order, log, paused, pausedUntil, ...worker }) => {
+      const live = paused && (worker.status === 'running' || worker.status === 'unknown') && !(pausedUntil && now > pausedUntil);
+      return { ...worker, ...(live ? { activity: paused } : {}), ...(log ? { log: log.map((item) => ({ ...item })) } : {}) };
+    });
+  }
   get running() { return this.list().filter((worker) => worker.status === 'running' || worker.status === 'stopping').length; }
 }
 

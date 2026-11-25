@@ -81,3 +81,19 @@ test('agent turns capture follow-ups and remind the next session once', async (t
   const offUser = payloads[3].messages.filter((message) => message.role === 'user').pop();
   assert.ok(!String(offUser.content).includes('Open follow-ups'));
 });
+
+test('saving follow-ups keeps .oasis/ out of the user\'s git status', async () => {
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { execFileSync } = await import('node:child_process');
+  const os = await import('node:os');
+  const pathMod = await import('node:path');
+  const { excludeFromGit } = await import('../src/followups.mjs');
+  const dir = mkdtempSync(pathMod.join(os.tmpdir(), 'oasis-exclude-'));
+  execFileSync('git', ['init', '-q'], { cwd: dir });
+  const { mkdirSync } = await import('node:fs');
+  mkdirSync(pathMod.join(dir, '.oasis'));
+  writeFileSync(pathMod.join(dir, '.oasis', 'followups.json'), '{}');
+  assert.equal(await excludeFromGit(dir, '/.oasis/followups.json'), true);
+  assert.equal(await excludeFromGit(dir, '/.oasis/followups.json'), false, 'added once');
+  assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: dir, encoding: 'utf8' }).trim(), '');
+});

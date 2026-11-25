@@ -37,7 +37,7 @@ import { createPreviewHandler } from './web-preview.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { connectFromPaste } from './provider-connect.mjs';
 import { controlRoomSnapshot } from './control-room.mjs';
-import { stopAgent } from './agent-tasks.mjs';
+import { agentRegistry, stopAgent } from './agent-tasks.mjs';
 import { basicAuthToken, createCursorAgentsApi, cursorError } from './cursor-agents-api.mjs';
 import { actionNudgeNote } from './turn-guards.mjs';
 
@@ -767,6 +767,16 @@ export function createOasisWebServer(options = {}) {
     return true;
   }
 
+  // A running subagent of this job reads the note with its next step.
+  function noteToSubagent(job, description, note) {
+    const session = job && job.steerTarget;
+    if (!session) return false;
+    const record = [...agentRegistry(session).agents.values()].reverse().find((item) => item && item.description === description && item.child && ['running', 'queued', 'starting'].includes(String(item.status)));
+    if (!record) return false;
+    (record.child.inbox || (record.child.inbox = [])).push({ text: 'The user denied your last request and said:\n' + note + '\n\nDo that instead; do not ask for the same thing again.' });
+    return true;
+  }
+
   function steerJob(job, message) {
     if (!job || !['running', 'waiting_approval'].includes(job.status) || job.cancelRequested || !job.steerTarget) return false;
     if (!steerSession(job.steerTarget, message)) return false;
@@ -796,7 +806,7 @@ export function createOasisWebServer(options = {}) {
       };
       const timer = setTimeout(() => finish(false), 5 * 60 * 1000);
       timer.unref?.();
-      job.pendingApprovals.set(approvalId, { resolve: finish, prompt: detail.message, risky: detail.risky, suggestion, rehearsal });
+      job.pendingApprovals.set(approvalId, { resolve: finish, prompt: detail.message, risky: detail.risky, suggestion, rehearsal, ...(meta && meta.subagent ? { subagent: String(meta.subagent).slice(0, 200) } : {}) });
       job.status = 'waiting_approval';
       emit(job, 'approval_required', {
         approvalId, prompt: detail.message, risky: detail.risky, expiresInSeconds: 300,
@@ -1323,8 +1333,15 @@ export function createOasisWebServer(options = {}) {
               attempt: Math.max(0, Math.min(20, Math.floor(Number(info && info.attempt) || 0))),
               limit: Math.max(0, Math.min(20, Math.floor(Number(info && info.limit) || 0))),
               waitMs: Math.max(0, Math.min(600_000, Math.floor(Number(info && info.waitMs) || 0))),
-              ...(Number(info && info.status) > 0 ? { status: Math.floor(Number(info.status)) } : {})
+              ...(Number(info && info.status) > 0 ? { status: Math.floor(Number(info.status)) } : {}),
+              ...(info && info.subagent ? { subagent: String(info.subagent).slice(0, 200) } : {})
             });
+          },
+          // A request queued behind another on a one-at-a-time endpoint.
+          onEndpointQueued: (info) => {
+            const who = info && info.subagent ? { subagent: String(info.subagent).slice(0, 200) } : {};
+            emit(job, 'endpoint_wait', { ahead: Math.max(0, Math.min(64, Math.floor(Number(info && info.ahead) || 0))), ...who });
+            return () => emit(job, 'endpoint_wait', { ready: true, ...who });
           },
           onStreamRestart: (info) => {
             assistantDeltaBuffer = '';
@@ -3217,7 +3234,15 @@ export function createOasisWebServer(options = {}) {
       if (!pending || pending.question || pending.elicitation || pending.connector) { json(res, 404, { error: 'That approval request is no longer pending.' }); return; }
       const always = approved && body.always === true && Boolean(pending.suggestion);
       const rehearsal = approved && !always && body.rehearsal === true && Boolean(pending.rehearsal);
+      // "Deny, and do this instead": the note goes to whoever asked. Seen
+      // live: a note on a subagent's approval reached the main agent as the
+      // user's newest top-priority instruction, and it dropped the other
+      // agent's answer from the final reply.
+      const note = !approved && typeof body.note === 'string' ? body.note.trim().slice(0, 2000) : '';
+      let noteTo = '';
+      if (note) noteTo = pending.subagent && noteToSubagent(job, pending.subagent, note) ? 'agent' : steerJob(job, note) ? 'main' : '';
       pending.resolve(always ? 'always' : rehearsal ? 'rehearsal' : approved);
+      if (noteTo) { json(res, 200, { resolved: true, approved, always, noteTo }); return; }
       json(res, 200, { resolved: true, approved, always, ...(rehearsal ? { rehearsal: true } : {}) });
       return;
     }

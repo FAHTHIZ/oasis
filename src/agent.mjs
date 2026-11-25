@@ -3607,6 +3607,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         signal: requestSignal,
         ...(typeof options.onRateLimitWait === 'function' ? { onRateLimitWait: options.onRateLimitWait } : {}),
         ...(typeof options.onProviderRetry === 'function' ? { onProviderRetry: options.onProviderRetry } : {}),
+        ...(typeof options.onEndpointQueued === 'function' ? { onEndpointQueued: options.onEndpointQueued } : {}),
         ...(typeof options.onFallback === 'function' ? { onFallback: options.onFallback } : {}),
         ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {}),
         ...(reasoningHook ? { onReasoning: (chunk) => {
@@ -4041,6 +4042,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       ...(options.signal ? { signal: options.signal } : {}),
       ...(typeof options.onRateLimitWait === 'function' ? { onRateLimitWait: options.onRateLimitWait } : {}),
       ...(typeof options.onProviderRetry === 'function' ? { onProviderRetry: options.onProviderRetry } : {}),
+        ...(typeof options.onEndpointQueued === 'function' ? { onEndpointQueued: options.onEndpointQueued } : {}),
       ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {})
     });
     tokensUsed += Number(final.usage && final.usage.totalTokens || 0);

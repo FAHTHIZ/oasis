@@ -274,6 +274,31 @@ function readOnlyGit(args) {
   return false;
 }
 
+// awk reads files and prints; the same language can also write files
+// (print > "f"), run programs (system, | getline, print | "cmd"), read the
+// environment (ENVIRON, API keys included) or load code (-f, @include, -l).
+// Only a program given inline, with -F and -v and nothing that does those, runs
+// without asking.
+const AWK = new Set(['awk', 'gawk', 'mawk', 'nawk']);
+const AWK_UNSAFE = /system|getline|ENVIRON|PROCINFO|SYMTAB|FUNCTAB|[|@]|\/inet|\/dev\/|\bclose\b|\bfflush\b|\bprintf?\b[^;}]*>/;
+
+export function readOnlyAwk(args, cwd, root) {
+  let program = null;
+  const operands = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (program === null && (arg === '-F' || arg === '-v')) { if (i + 1 >= args.length) return false; if (arg === '-v' && !/^[A-Za-z_]\w*=/.test(args[i + 1])) return false; i++; continue; }
+    if (program === null && (/^-F./.test(arg) || /^-v[A-Za-z_]\w*=/.test(arg) || /^--field-separator=/.test(arg))) continue;
+    if (program === null && arg === '--') continue;
+    if (program === null && arg.startsWith('-')) return false;
+    if (program === null) { program = arg; continue; }
+    operands.push(arg);
+  }
+  if (program === null || AWK_UNSAFE.test(program)) return false;
+  // name=value operands are variable assignments, not files.
+  return argsStayInside(operands.filter((arg) => !/^[A-Za-z_]\w*=/.test(arg)), cwd, root);
+}
+
 /**
  * True when `command args` only reads, inside the workspace. `cwd` is where it
  * runs (a shell line may `cd` first); paths are resolved from there.
@@ -291,6 +316,7 @@ export function readOnlyArgv(command, args = [], { root, cwd = root } = {}) {
     return argsStayInside(args.filter((arg) => !GIT_READ.has(arg)), cwd, root) && !repoConfigRunsCommands(cwd);
   }
   if (name === 'npm' || name === 'pnpm' || name === 'yarn') return NPM_READ.has(args[0]) && args.slice(1).every((arg) => !arg.startsWith('--prefix') && !arg.startsWith('-C')) && argsStayInside(args.slice(1), cwd, root);
+  if (AWK.has(name)) return readOnlyAwk(args, cwd, root);
   if (!SIMPLE.has(name) || name === 'cd') return false;
   const unsafe = UNSAFE_FLAGS[name];
   if (unsafe && args.some((arg) => unsafe.test(arg))) return false;
@@ -421,12 +447,32 @@ function expandGlob(pattern, cwd, root) {
 }
 
 /** True when every command in a shell line only reads, inside the workspace. */
+// The line with the inside of every single-quoted string blanked out; null
+// when a quote is left open.
+function outsideSingleQuotes(text) {
+  let out = '';
+  let quote = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote === "'") { if (ch === "'") { quote = ''; out += ch; } else out += 'x'; continue; }
+    if (quote === '"') { if (ch === '\\' && i + 1 < text.length) { out += ch + text[++i]; continue; } if (ch === '"') quote = ''; out += ch; continue; }
+    if (ch === '\\' && i + 1 < text.length) { out += ch + text[++i]; continue; }
+    if (ch === "'" || ch === '"') quote = ch;
+    out += ch;
+  }
+  return quote ? null : out;
+}
+
 export function readOnlyShellLine(line, { root } = {}) {
   if (!root) return false;
   const text = String(line || '').replace(HARMLESS_REDIRECTS, ' ');
-  if (!text.trim() || /[`$<>~]|\(|\)|\{|\}|\n/.test(text)) return false;
+  // Inside single quotes the shell expands nothing, so `awk '{print $2}'` or
+  // `grep '<div>' a.html` is literal text. Only what lies outside them (and
+  // all of a double-quoted string) must avoid $ ` < > ~ ( ) { } and newlines.
+  const bare = outsideSingleQuotes(text);
+  if (bare === null || !text.trim() || /[`$<>~]|\(|\)|\{|\}|\n/.test(bare)) return false;
   // `a & b` would leave a background process running.
-  if (/(^|[^&])&([^&]|$)/.test(text)) return false;
+  if (/(^|[^&])&([^&]|$)/.test(bare)) return false;
   let cwd = path.resolve(root);
   const commands = splitShell(text);
   if (!commands.length) return false;

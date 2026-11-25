@@ -42,10 +42,14 @@ function pump(gate) {
   }
 }
 
-function waitTurn(gate, signal) {
+function waitTurn(gate, signal, onQueued) {
   if (gate.active < gate.limit && !gate.queue.length) { gate.active++; return Promise.resolve(); }
+  // Tell the caller it is queued (the page says "waiting its turn").
+  // It may return a function, called once the turn comes.
+  let onTurn = null;
+  if (typeof onQueued === 'function') try { onTurn = onQueued({ ahead: gate.queue.length + gate.active, limit: gate.limit }); } catch {}
   return new Promise((resolve, reject) => {
-    const entry = { resolve: () => { if (signal) signal.removeEventListener('abort', onAbort); resolve(); } };
+    const entry = { resolve: () => { if (signal) signal.removeEventListener('abort', onAbort); if (typeof onTurn === 'function') try { onTurn(); } catch {} resolve(); } };
     const onAbort = () => {
       const index = gate.queue.indexOf(entry);
       if (index >= 0) gate.queue.splice(index, 1);
@@ -62,9 +66,9 @@ function waitTurn(gate, signal) {
 // Takes a turn on the endpoint. Returns a handle: release() when the reply is
 // fully read; requeue() after the endpoint said "one at a time", which lowers
 // the limit and waits for the next turn.
-export async function acquireEndpoint(config, { env = process.env, signal } = {}) {
+export async function acquireEndpoint(config, { env = process.env, signal, onQueued } = {}) {
   const gate = gateFor(config, env);
-  await waitTurn(gate, signal);
+  await waitTurn(gate, signal, onQueued);
   let held = true;
   return {
     get waiting() { return gate.queue.length; },
@@ -78,7 +82,7 @@ export async function acquireEndpoint(config, { env = process.env, signal } = {}
     async requeue(limit = 1) {
       if (gate.limit > limit) { gate.limit = limit; gate.learned = true; }
       if (held) { held = false; gate.active = Math.max(0, gate.active - 1); pump(gate); }
-      await waitTurn(gate, signal);
+      await waitTurn(gate, signal, onQueued);
       held = true;
     }
   };
