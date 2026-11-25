@@ -91,9 +91,27 @@ export function newGateState() {
  * `host` supplies { emitDisplayText, pruneHistory, recordSessionEvent,
  * hookOptions, availableToolNames } from the agent.
  */
+// The open-steps reminder sent a full answer back (a code review the model
+// forgot to tick off). It ticked the step and replied "All checklist items are
+// now marked complete", and that line became the answer, losing the review.
+// A short follow-up once every step is done brings the held answer back.
+export function restoreHeldAnswer(text, g, session) {
+  const held = g && g.heldAnswer;
+  if (!held) return text;
+  const open = Array.isArray(session && session.todos) && session.todos.some((item) => item && item.status !== 'completed');
+  const reply = String(text || '').trim();
+  if (open || reply.length >= Math.min(400, held.length / 2)) return text;
+  // Any other work since the reminder (an edit, a test run) makes the new reply the answer.
+  const since = Array.isArray(session.messages) ? session.messages.slice(g.heldAnswerAt || 0) : [];
+  if (since.some((message) => message && message.role === 'assistant' && (message.tool_calls || []).some((call) => call && call.function && call.function.name !== 'todo_write'))) return text;
+  g.heldAnswer = '';
+  return held;
+}
+
 export async function runCompletionGates(turn, host) {
-  const { session, options, request, text, assistant, assistantMessage, verification, claimState, totals } = turn;
+  const { session, options, request, assistant, assistantMessage, verification, claimState, totals } = turn;
   const g = turn.gates;
+  const text = restoreHeldAnswer(turn.text, g, session);
   const { emitDisplayText, pruneHistory, recordSessionEvent, hookOptions, availableToolNames } = host;
   // The user steered while this reply was generating: show the reply, then
   // hand the model their message instead of ending the turn.
@@ -280,6 +298,10 @@ export async function runCompletionGates(turn, host) {
   const openTodos = Array.isArray(session.todos) ? session.todos.filter((item) => item && item.status !== 'completed') : [];
   if (text && openTodos.length && g.todosWrittenThisTurn && !g.openTodoNudged && !options.planOnly && permissionMode(session, options) !== 'plan') {
     g.openTodoNudged = true;
+    // Kept in case the model only ticks the steps off next and replies
+    // "All checklist items are now marked complete" instead of the answer.
+    g.heldAnswer = text;
+    g.heldAnswerAt = session.messages.length;
     if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind: 'open-todos' }); } catch {} }
     session.messages.push({ role: 'user', content: '<system-reminder>Your checklist still has open steps:\n' + openTodos.map((item) => '- [' + item.status + '] ' + item.content).join('\n') + '\nFinish them now, or, if they cannot or should not be done, update the checklist with todo_write and tell the user plainly which steps are unfinished and why. Do not report the task as complete while steps are open.</system-reminder>' });
     return CONTINUE;

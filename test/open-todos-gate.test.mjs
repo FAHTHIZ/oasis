@@ -47,3 +47,25 @@ test('a checklist left open by an earlier turn does not hijack an unrelated answ
   assert.equal(requests.length, before + 1);
   assert.equal(result.text, 'It is a parser for CSV files.');
 });
+
+// The full review came back once as "All checklist items are now marked complete".
+test('a full answer sent back for open steps is kept when the model only ticks them off', async (t) => {
+  const review = '**Code review of mathx.py**\n\n| Severity | Issue |\n|---|---|\n| Low | div raises ValueError, not ZeroDivisionError |\n| Low | mul has no type checks |\n\nNo high-risk findings. ' + 'Details follow. '.repeat(10).trim();
+  const one = toolCall('t1', 'todo_write', { todos: [{ content: 'Review mathx.py', status: 'pending' }] });
+  const tick = toolCall('t2', 'todo_write', { todos: [{ content: 'Review mathx.py', status: 'completed' }] });
+  const { session, requests } = await fixture(t, [one, { content: review }, tick, { content: 'All checklist items are now marked complete. No further actions are pending for this task.' }]);
+  const result = await runAgentTurn(session, 'Review mathx.py with a checklist.', {});
+  assert.equal(requests.length, 4);
+  assert.equal(result.text, review);
+  assert.equal(session.messages.filter((m) => m.role === 'assistant').at(-1).content, review, 'the transcript keeps the review as the answer');
+});
+
+test('work done after the open-steps reminder keeps the new reply', async (t) => {
+  const review = 'Partial answer that claims the review is done. '.repeat(8);
+  const one = toolCall('t1', 'todo_write', { todos: [{ content: 'Write notes.txt', status: 'pending' }] });
+  const write = toolCall('t2', 'write_file', { path: 'notes.txt', content: 'hi\n' });
+  const tick = toolCall('t3', 'todo_write', { todos: [{ content: 'Write notes.txt', status: 'completed' }] });
+  const { session } = await fixture(t, [one, { content: review }, write, tick, { content: 'Wrote notes.txt.' }]);
+  const result = await runAgentTurn(session, 'Plan it in a checklist, then write notes.txt.', {});
+  assert.match(result.text, /Wrote notes\.txt/);
+});

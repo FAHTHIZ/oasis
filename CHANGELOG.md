@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- A full answer sent back by the "checklist still has open steps" reminder is no longer lost. If the model then only ticks the steps off and replies with something short ("All checklist items are now marked complete"), the earlier answer is kept as the final answer. A `/code-review` run in the web app had ended that way with no review shown. If the model does more work after the reminder, its new reply stands.
 - Typing `/` in the web app's message box lists everyday commands first (/plan, /fix, /review, /undo, /compact, /clear, /help), then your skills and custom commands. It used to show the first eight built-ins (/notify, /inbox, /artifact…), and skills only appeared once you typed part of the name.
 - The Activity panel's turn header and Steps summary skip plan updates, like the chat and task bar do. One turn read "6 steps" in the chat and "8 steps" in Activity.
 - The Activity panel no longer shows step filters, search, Copy and JSON on a new task with no steps. They appear with the first step.
