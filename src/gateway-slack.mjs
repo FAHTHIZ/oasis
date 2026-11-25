@@ -45,6 +45,7 @@ export function createSlackGateway(options = {}) {
   async function api(method, body, tokenOverride) {
     const response = await fetchImpl(apiBase + '/' + method, { method: 'POST', headers: { authorization: 'Bearer ' + (tokenOverride || botToken), 'content-type': 'application/json; charset=utf-8' }, body: JSON.stringify(body || {}), signal: AbortSignal.timeout(30000) });
     const data = await response.json().catch(() => ({ ok: false, error: 'invalid JSON from Slack' }));
+    if (!data.ok && ['invalid_auth', 'not_authed', 'token_revoked', 'account_inactive'].includes(String(data.error))) throw Object.assign(new Error('Slack did not accept the token (' + data.error + '). Copy OASIS_SLACK_BOT_TOKEN (xoxb-…) and OASIS_SLACK_APP_TOKEN (xapp-…) again from your app\'s settings at api.slack.com/apps.'), { fatal: true });
     if (!data.ok) throw new Error('Slack ' + method + ' failed: ' + String(data.error || response.status).slice(0, 200));
     return data;
   }
@@ -138,7 +139,7 @@ export function createSlackGateway(options = {}) {
   }
 
   async function run() {
-    try { botUserId = String((await api('auth.test', {})).user_id || botUserId); } catch (error) { throw new Error('Slack bot token check failed: ' + error.message); }
+    try { botUserId = String((await api('auth.test', {})).user_id || botUserId); } catch (error) { throw /^Slack did not accept/.test(error.message) ? error : new Error('Slack bot token check failed: ' + error.message); }
     await reconnectLoop(connect, { log, isStopped: () => stopped });
   }
 

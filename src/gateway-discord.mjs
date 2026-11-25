@@ -40,6 +40,12 @@ export function stripMention(text, botId) {
   return botId ? String(text || '').replace(new RegExp('<@!?' + botId + '>', 'g'), '').trim() : String(text || '').trim();
 }
 
+const DISCORD_FATAL_CLOSE = {
+  4004: 'Discord did not accept the bot token in OASIS_DISCORD_BOT_TOKEN (authentication failed). Copy it again from the Developer Portal (your app, Bot, Reset Token).',
+  4013: 'Discord refused the gateway intents OASIS asked for (invalid intents). Update OASIS, then try again.',
+  4014: 'Discord refused the Message Content intent. Turn on Message Content Intent in the Developer Portal (your app, Bot, Privileged Gateway Intents), then start the gateway again.'
+};
+
 export function createDiscordGateway(options = {}) {
   const env = options.env || process.env;
   const token = options.token || env.OASIS_DISCORD_BOT_TOKEN;
@@ -63,6 +69,7 @@ export function createDiscordGateway(options = {}) {
     const response = await fetchImpl(apiBase + route, { method, headers: { authorization: 'Bot ' + token, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) });
     if (response.status === 204) return null;
     const data = await response.json().catch(() => null);
+    if (response.status === 401) throw new Error('Discord did not accept the bot token in OASIS_DISCORD_BOT_TOKEN (401 Unauthorized). Copy it again from the Developer Portal (your app, Bot, Reset Token).');
     if (!response.ok) throw new Error('Discord ' + method + ' ' + route.replace(/\/[A-Za-z0-9_-]{60,}/g, '/…') + ' failed: ' + response.status + ' ' + String(data && data.message || '').slice(0, 200));
     return data;
   }
@@ -148,7 +155,7 @@ export function createDiscordGateway(options = {}) {
   }
 
   function connect() {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       if (typeof WebSocketImpl !== 'function') throw new Error('This Node.js has no WebSocket; use Node 22 or later.');
       const ws = new WebSocketImpl(gatewayUrl);
       socket = ws;
@@ -156,7 +163,12 @@ export function createDiscordGateway(options = {}) {
       let sequence = null;
       let acked = true;
       const finish = () => { if (heartbeat) clearInterval(heartbeat); heartbeat = null; resolve(); };
-      ws.addEventListener('close', finish);
+      ws.addEventListener('close', (event) => {
+        // Close codes Discord will repeat on every reconnect: stop and say why.
+        const fatal = DISCORD_FATAL_CLOSE[event && event.code];
+        if (fatal && !stopped) { if (heartbeat) clearInterval(heartbeat); heartbeat = null; reject(Object.assign(new Error(fatal), { fatal: true })); return; }
+        finish();
+      });
       ws.addEventListener('error', () => { try { ws.close(); } catch {} finish(); });
       ws.addEventListener('message', (event) => {
         let packet;

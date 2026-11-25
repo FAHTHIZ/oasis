@@ -362,7 +362,12 @@ export async function reconnectLoop(connect, { log, isStopped }) {
   let backoff = 1000;
   while (!isStopped()) {
     const started = Date.now();
-    try { await connect(); } catch (error) { log(String(error && error.message || error)); }
+    try { await connect(); } catch (error) {
+      // A rejected token or a setting only the owner can fix (error.fatal) ends
+      // the loop with that message instead of reconnecting forever.
+      if (error && error.fatal) throw error;
+      log(String(error && error.message || error));
+    }
     if (isStopped()) break;
     if (Date.now() - started > 60000) backoff = 1000;
     log('disconnected; reconnecting in ' + Math.round(backoff / 1000) + 's');
