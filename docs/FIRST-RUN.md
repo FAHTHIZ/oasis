@@ -34,6 +34,8 @@ OASIS is a runtime, not an inference service. Choose a provider and model that y
 
 Before entering a credential, verify the provider URL, understand whether prompts and project context may be sent to it, and avoid committing credentials to project files, shell history, reports or screenshots. Start with a small, non-sensitive project.
 
+No key yet? Type `free` at the first-run prompt (or run `oasis connect free`, or pick "try a free model that needs no key" in the app) to look around with a free keyless model. It is slow and weaker at tools, so connect a real provider for actual work. Prompts sent to it go to a public third-party service, so keep to non-sensitive projects.
+
 See the [configuration reference](CONFIGURATION.md) for supported provider protocols and routing options.
 
 ## 4. Start with a bounded task

@@ -23,6 +23,7 @@ A stability release from a final pass over OASIS as a first-time user: research,
 
 ### Fixed
 
+- The terminal's first-run setup offers the free model that needs no key too, like the web app: type `free` at the paste prompt, pick 4 in the menu, or run `oasis connect free`. The user guide and first-run guide say what it is good for.
 - Discord gateway: a bot token Discord rejects, or a bot without the Message Content intent, now stops with what to fix (copy the token again, or turn the intent on in the Developer Portal) instead of reconnecting forever with no explanation. Slack names the two tokens to copy again when it reports `invalid_auth`.
 - Gateways: a missing token now says where it can live (this terminal, or `"env"` in your OASIS settings file, with the path) and links the setup steps, and [Messaging gateways](docs/GATEWAYS.md#where-the-tokens-go) documents it. A Telegram token that Telegram rejects is reported before routines start, with how to copy it again, instead of "Routine daemon started" followed by "getMe failed: Unauthorized". `oasis app-server --permission-mode accept-edits` is accepted like the main option.
 - `oasis install-github-app` no longer plans `sudo apt-get install install-github-app`. It, and other chat-only words such as `oasis hooks`, `oasis stats` and `oasis inbox`, plus `report`, `routing` and `branch` (which used to suggest unrelated commands such as `oasis import`), now say to type the slash command in a chat instead of being sent to the model as a one-word task.

@@ -42,6 +42,7 @@ OASIS is a runtime, not an inference service. Bring a key or a local model serve
 | FreeLLMAPI | [Self-hosted gateway](https://github.com/Azhan787/FreeLLMAPI) | Runs on `http://localhost:3001/v1` and pools provider keys behind one endpoint. |
 | Anthropic, OpenAI, Gemini, Groq, DeepSeek, xAI, Mistral, Hugging Face | The provider's console | Paste the key; the provider is detected from its prefix. |
 | Ollama, LM Studio, llama.cpp | Your own machine | Started servers on their default ports are found automatically. |
+| Free model, no key | Nothing to sign up for | For a first look only: slow (often under a minute per reply) and weaker at tools. Choose "try a free model that needs no key" on the web app's welcome screen, type `free` at the terminal's first-run prompt, or run `oasis connect free`. It uses the keyless `https://text.pollinations.ai/openai` endpoint. |
 
 Before entering a credential:
 

@@ -272,10 +272,16 @@ async function connectFromTerminalPaste(text, { model = '' } = {}) {
   return result;
 }
 
+// A free OpenAI-compatible endpoint that needs no key (the web app's "try a
+// free model" link uses the same one). Slow and weak, but enough to look around.
+export const KEYLESS_MODEL_URL = 'https://text.pollinations.ai/openai';
+export const isFreeChoice = (text) => /^(?:free|keyless|no key)$/i.test(String(text || '').trim());
+
 export async function pasteFirstSetup(root, { announce = true } = {}) {
   if (announce) {
     stdout.write('\nConnect a model. Paste an API key (OpenAI, Anthropic, OpenRouter, Gemini, Groq, Hugging Face and more),\n');
     stdout.write('a model link, or a local server address like http://localhost:11434. OASIS works out the rest.\n');
+    stdout.write('No key yet? Type free to try a free model that needs none (slower and weaker; fine for a first look).\n');
   }
   for (let attempt = 0; attempt < 3; attempt++) {
     let text;
@@ -284,7 +290,7 @@ export async function pasteFirstSetup(root, { announce = true } = {}) {
     if (!text) return 'menu';
     if (/^(?:later|skip|q|quit|exit|\/exit|\/quit|n|no)$/i.test(text)) { stdout.write('Setup skipped. Run oasis connect when you are ready.\n'); return 'skipped'; }
     try {
-      await connectFromTerminalPaste(text);
+      await connectFromTerminalPaste(isFreeChoice(text) ? KEYLESS_MODEL_URL : text);
       return 'connected';
     } catch (error) {
       stdout.write('Could not connect: ' + redactSecretText(String(error && error.message || error), text) + '\n');
@@ -304,6 +310,7 @@ function redactSecretText(message, secret) {
 const CONNECT_USAGE = [
   'Usage: oasis connect [KEY | MODEL LINK | SERVER ADDRESS] [--model NAME]',
   '       oasis connect --from-env [PROVIDER] [--model NAME]',
+  '       oasis connect free   (a free model that needs no key; slow, for a first look)',
   '',
   'Paste an API key, a model page link (Hugging Face, OpenRouter, Ollama) or a',
   'local server address. OASIS works out the provider, lists its models, tests',
@@ -349,6 +356,7 @@ export async function connectCommand(rest, root, { model = '' } = {}) {
   if (['--help', '-h', 'help'].includes(rest[0])) { stdout.write(CONNECT_USAGE); return; }
   if (rest[0] === '--from-env') { await connectFromEnvironment(rest[1] || '', { model }); return; }
   const inline = rest.join(' ').trim();
+  if (isFreeChoice(inline)) { await connectFromTerminalPaste(KEYLESS_MODEL_URL, { model }); return; }
   if (inline) {
     await connectFromTerminalPaste(inline, { model });
     // Only a pasted key belongs out of shell history; an address or link does not.
@@ -383,18 +391,24 @@ export async function ensureModelProviderSetup(root, options = {}) {
   stdout.write('\n  1. I have an API key (OpenAI, Anthropic, OpenRouter, Gemini, or a custom provider)\n');
   stdout.write('  2. Use a model on this computer (Ollama; smaller models may be weaker)\n');
   stdout.write('  3. Set this up later\n');
+  stdout.write('  4. Try a free model that needs no key (slower and weaker; fine for a first look)\n');
   const choices = { '1': 'openai', '2': 'ollama' };
   let preset = null;
   for (let attempt = 0; attempt < 3 && !preset; attempt++) {
     let answer;
-    try { answer = (await askLine('Choose [1/2/3] (default 1): ')).trim().toLowerCase() || '1'; }
+    try { answer = (await askLine('Choose [1/2/3/4] (default 1): ')).trim().toLowerCase() || '1'; }
     catch { return false; }
     if (['3', 'later', 'n', 'no', 'skip', 'q', 'quit', 'exit', '/exit', '/quit'].includes(answer)) {
       stdout.write('Setup skipped. Run oasis setup when you are ready.\n');
       return false;
     }
+    if (answer === '4' || isFreeChoice(answer)) {
+      try { await connectFromTerminalPaste(KEYLESS_MODEL_URL); }
+      catch (error) { stdout.write('Could not reach the free model: ' + String(error && error.message || error).replace(/[.\s]+$/, '') + '. Run oasis setup to pick another provider.\n'); }
+      try { return Boolean((await loadConfig()).configured); } catch { return false; }
+    }
     preset = choices[answer] || null;
-    if (!preset) stdout.write(attempt < 2 ? 'Type 1, 2 or 3 and press Enter (3 sets this up later).\n' : 'No setup was run. Run oasis setup when you are ready.\n');
+    if (!preset) stdout.write(attempt < 2 ? 'Type 1, 2, 3 or 4 and press Enter (3 sets this up later).\n' : 'No setup was run. Run oasis setup when you are ready.\n');
   }
   if (!preset) return false;
   try {
