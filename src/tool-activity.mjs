@@ -54,6 +54,9 @@ function fallbackToolLabel(name) {
   if (name.startsWith('mcp_')) return 'Used a connected tool: ' + words(name.slice(4));
   return name ? 'Used ' + words(name) : 'Completed a project step';
 }
+// Test runners beyond npm/node/go/cargo, as the web app's labels know them:
+// `python -m unittest`, `uv run pytest`, `deno test`, `make test`, `rspec`…
+const OTHER_TEST_RUNNERS = /\bpython[\d.]*\s+-m\s+(?:pytest|unittest|nose2|tox)\b|\bpy\s+-m\s+(?:pytest|unittest)\b|\b(?:deno|dotnet|mvn|gradle|gradlew|make|mix|swift|zig)\s+test\b|(?:^|[\s;&|(])(?:pytest|vitest|jest|mocha|rspec|phpunit|tox|nox)(?=\s|$)/i;
 export function labelToolActivity(name, args = {}, result = null) {
   const tool = String(name || '').toLowerCase();
   const path = fileName(args && (args.path || args.file_path || args.notebook_path));
@@ -69,7 +72,7 @@ export function labelToolActivity(name, args = {}, result = null) {
   if (tool === 'run_command' || tool === 'run_shell' || tool === 'powershell' || tool === 'auto_test') {
     if (args && args.run_in_background) return 'Started a background task';
     const command = commandText(args);
-    if (/\b(?:npm|pnpm|yarn|bun)\s+(?:(?:run|exec)\s+)?(?:test|check|vitest|jest|playwright|mocha)\b|\bnode\s+--test\b|\bpytest\b|\bgo\s+test\b|\bcargo\s+test\b/i.test(command) ||
+    if (/\b(?:npm|pnpm|yarn|bun)\s+(?:(?:run|exec)\s+)?(?:test|check|vitest|jest|playwright|mocha)\b|\bnode\s+--test\b|\bgo\s+test\b|\bcargo\s+test\b/i.test(command) || OTHER_TEST_RUNNERS.test(command) ||
         (tool === 'auto_test' && /test|check|lint|build/i.test(command))) return 'Ran the tests';
     return 'Ran a command';
   }

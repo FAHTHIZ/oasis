@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- Python's unittest results show up in the web app: `python -m unittest` prints "Ran 2 tests … OK" on stderr, which the step said was "No output" under the label "Ran a command". It now reads "Ran the tests · 2 passed" (failures, errors and skips are counted from `FAILED (failures=1, skipped=1)`), and any command that only writes to stderr counts those lines as output. The server's step labels recognize the same test runners as the app, and `cat pytest.ini` is no longer taken for a test run.
 - The web app no longer nudges the model to end every answer with "You can open the Preview tab…". Its note now asks for that only when the work built or changed a page or app there is something to look at, not for a script, a library or tests.
 - The web app's feed and Activity panel no longer call a missing test runner "Tests failed": `pytest` that is not installed reads "Couldn't find pytest", since no test ran. `python -m unittest`, `python -m pytest`, `uv run pytest`, `deno test`, `make test` and similar now read "Ran the tests" instead of "Ran a command".
 - A settled thought's one-line headline in the web app no longer drops underscores from names: "Open test_calc.py." read "Open testcalc.py" because every `_` and `*` was stripped as Markdown. Only emphasis that wraps text (`_why_`, `*now*`) is removed now, so `__init__.py`, `my_mod` and `*.mjs` keep their characters.

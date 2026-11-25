@@ -14,6 +14,10 @@ test('tool activity labels use plain language for common file, edit, command and
   assert.equal(labelToolActivity('edit_file', { path: 'src/math.mjs' }), 'Edited math.mjs');
   assert.equal(labelToolActivity('multi_edit', { path: 'src/math.mjs' }), 'Edited math.mjs');
   assert.equal(labelToolActivity('run_command', { command: 'npm', args: ['test'] }), 'Ran the tests');
+  assert.equal(labelToolActivity('run_command', { command: 'python', args: ['-m', 'unittest', 'discover'] }), 'Ran the tests');
+  assert.equal(labelToolActivity('run_command', { command: 'make test' }), 'Ran the tests');
+  assert.equal(labelToolActivity('run_command', { command: 'cat pytest.ini' }), 'Ran a command');
+  assert.equal(labelToolActivity('run_command', { command: 'python -m http.server' }), 'Ran a command');
   assert.equal(labelToolActivity('search_files', { query: 'add' }), "Searched for 'add'");
 });
 

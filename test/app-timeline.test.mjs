@@ -300,6 +300,10 @@ test('a finished step says what came back in one line, as Claude Code does', asy
   assert.equal(stepResult({ content: 'still running' }).text, '');
   assert.equal(testSummary('===== 3 passed, 1 skipped in 0.2s ====='), '3 passed · 1 skipped');
   assert.equal(testSummary('12 passing\n2 failing'), '12 passed · 2 failed');
+  // Python's unittest reports on stderr in its own words.
+  assert.equal(testSummary('..\n------\nRan 2 tests in 0.001s\n\nOK\n'), '2 passed');
+  assert.equal(testSummary('F.s\nRan 3 tests in 0.01s\n\nFAILED (failures=1, skipped=1)'), '1 passed · 1 failed · 1 skipped');
+  assert.equal(stepResult({ name: 'run_command', ok: true, content: JSON.stringify({ command: 'git', exitCode: 0, stdout: '', stderr: 'Switched to branch x\n' }) }).text, '1 line of output');
   // A ranged read shows the file text in the inspector, not its JSON envelope.
   assert.equal(readableOutput(JSON.stringify({ path: 'a.js', content: 'x\ny', startLine: 1, endLine: 2, totalLines: 2, truncated: false })), 'x\ny');
 });

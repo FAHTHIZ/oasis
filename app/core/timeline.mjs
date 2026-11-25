@@ -633,6 +633,16 @@ export function testSummary(text) {
   if (passed === undefined) passed = last(/\b(\d+) (?:tests? )?(?:passed|passing)\b/gi);
   if (failed === undefined) failed = last(/\b(\d+) (?:tests? )?(?:failed|failing)\b/gi);
   skipped = last(/\b(\d+) (?:skipped|pending)\b/gi);
+  // Python's unittest: "Ran 3 tests in 0.01s" then "OK (skipped=1)" or
+  // "FAILED (failures=1, errors=1)".
+  const ran = passed === undefined && failed === undefined && last(/^Ran (\d+) tests? in [\d.]+s$/gm);
+  const verdict = ran !== undefined && ran !== false && /^(OK|FAILED)\b(?: \(([^)]*)\))?$/m.exec(out.slice(out.lastIndexOf('Ran ' + ran + ' test')));
+  if (verdict) {
+    const counts = Object.fromEntries((verdict[2] || '').split(/,\s*/).map((part) => part.split('=')).filter(([, n]) => /^\d+$/.test(n || '')).map(([key, n]) => [key.trim(), Number(n)]));
+    failed = (counts.failures || 0) + (counts.errors || 0) + (counts.unexpected_successes || 0);
+    skipped = counts.skipped || 0;
+    passed = Math.max(0, ran - failed - skipped);
+  }
   if (passed === undefined && failed === undefined) return '';
   const parts = [];
   if (passed !== undefined) parts.push(passed.toLocaleString('en-US') + ' passed');
@@ -710,7 +720,8 @@ export function stepResult(step = {}) {
         const short = why.length > 110 ? why.slice(0, 109) + '…' : why;
         return { text: 'Exit code ' + value.exitCode + (short ? ' · ' + short : ''), tone: 'fail' };
       }
-      const rows = String(value.stdout || '').replace(/\s+$/, '');
+      // Plenty of tools report on stderr (unittest, git, compilers): that is output too.
+      const rows = (String(value.stdout || '').replace(/\s+$/, '') || String(value.stderr || '').replace(/\s+$/, ''));
       return { text: rows ? plural(rows.split('\n').length, 'line') + ' of output' : 'No output', tone: '' };
     }
   }
