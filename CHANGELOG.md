@@ -10,6 +10,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- The welcome screen in the web and desktop app now offers "try a free model that needs no key", so a first-time user can start without an account. It connects to the same keyless endpoint the CLI accepts.
 - Web app: "Not now" on the sign-in card for a tool server that needs sign-in (Linear, for example) is remembered for a week, so the card no longer comes back with every new task. `/connect` and Settings → Apps still connect it any time.
 - Tool calls with an optional field sent as an empty string where none is allowed (`"isolation": ""`, `"offset": ""`) drop that field instead of failing validation, as null fields already did. Small models often do this when delegating to subagents.
 - A reply made only of chat-template control tokens (a broken gpt-oss tool call such as `<|channel|>commentary to=functions?<|call|>`) is treated as an empty reply and the model is asked to continue, instead of ending the task with that text as the answer.

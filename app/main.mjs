@@ -3996,6 +3996,12 @@ $('input').addEventListener('input', () => {
 });
 connectOnPaste($('input'), 'chat');
 connectOnPaste($('connectInput'), 'welcome');
+// A keyless public endpoint, so a first-time user can try OASIS before getting a key.
+$('connectKeyless').addEventListener('click', (event) => {
+  event.preventDefault();
+  $('connectInput').value = 'https://text.pollinations.ai/openai';
+  $('connectForm').requestSubmit();
+});
 connectOnPaste($('settingsConnectInput'), 'settings');
 $('settingsConnectButton').addEventListener('click', async () => {
   const value = $('settingsConnectInput').value.trim();
