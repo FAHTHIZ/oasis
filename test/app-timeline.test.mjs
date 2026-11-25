@@ -339,6 +339,8 @@ test('a settled thought is titled by its headline', async () => {
   assert.equal(thoughtHeadline('Okay, so I need to check calc.py first.'), 'Check calc.py first');
   assert.equal(thoughtHeadline('User asks: write a tip calculator.'), 'Write a tip calculator');
   assert.equal(thoughtHeadline('We need to.'), 'We need to');
+  // "The user wants" without "to" names a thing, not an action: keep it whole.
+  assert.equal(thoughtHeadline('The user wants the notes. Reading notes.txt is enough.'), 'The user wants the notes');
   assert.equal(thoughtHeadline('Lets users pick a theme.'), 'Lets users pick a theme');
   assert.equal(thoughtHeadline('Check __init__.py and my_mod'), 'Check __init__.py and my_mod');
   assert.equal(thoughtHeadline('I _really_ need to *read* it'), 'I really need to read it');

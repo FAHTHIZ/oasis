@@ -401,7 +401,7 @@ export function thoughtLabel(elapsedMs) {
 const EMPHASIS_END = String.raw`(?=[\s,;:!?)]|\.(?!\w)|$)`;
 const EMPHASIS_UNDERSCORE = new RegExp(String.raw`(^|[\s(])__(\S(?:.*?\S)?)__` + EMPHASIS_END, 'g');
 const EMPHASIS_SINGLE = new RegExp(String.raw`(^|[\s(])([*_])(?![\s*_])(.*?[^\s*_]|[^\s*_])\2` + EMPHASIS_END, 'g');
-const NARRATION_LEAD = /^(?:(?:ok(?:ay)?|so|alright|now)[,.]?\s+)*(?:(?:we|i)\s+(?:need|have|want|should|must|will need)\s+to|let(?:'|\u2019)s|(?:the\s+)?user\s+(?:wants|asks|asked|is asking|requests|requested)(?:\s+(?:us|me))?(?:\s+to)?:?)\s+/i;
+const NARRATION_LEAD = /^(?:(?:ok(?:ay)?|so|alright|now)[,.]?\s+)*(?:(?:we|i)\s+(?:need|have|want|should|must|will need)\s+to|let(?:'|\u2019)s|(?:the\s+)?user\s+(?:wants|asks|asked|is asking|requests|requested)(?:(?:\s+(?:us|me))?\s+to|:))\s+/i;
 export function thoughtHeadline(text, max = 96) {
   const source = String(text || '').trim();
   if (!source) return '';
