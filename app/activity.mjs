@@ -140,6 +140,8 @@ function render() {
   const scroller = $('activityList');
   const empty = $('activityEmpty');
   empty.hidden = trace.turns.some((turn) => turn.steps.length || turn.status === 'running');
+  // Filters, search and export have nothing to act on until there are steps.
+  $('activityTools').hidden = !empty.hidden;
   const seenTurns = new Set();
   let anyShown = false;
   for (const [position, turn] of trace.turns.entries()) {

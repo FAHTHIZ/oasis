@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- The Activity panel no longer shows step filters, search, Copy and JSON on a new task with no steps. They appear with the first step.
 - The Activity panel's live strip times each agent from when its current state began. "Waiting its turn · 51s" used to count from when the agent started, so a 3-second wait could look like a minute. Waits for approval, queueing, and the gap between steps now each have their own clock.
 - "Always allow" on `python -m unittest discover` saves `python -m unittest:*`, not `python -m:*`, which would also have run `python -m pip install …` or `python -m http.server` without asking for the rest of the session. The button reads "Always allow python -m unittest".
 - The quality gate's token benchmark passes again. The parallel-agent and command-guidance text added since 0.12.0 put every request about 4% over the limit; the `task` tool's `isolation` and `parallel_tasks` descriptions and two system-prompt sentences are shorter now (about 1,300 fewer tokens per benchmark run, same instructions), and the baseline is refreshed for the `parallel_tasks` schema that parallel agents need.
