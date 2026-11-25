@@ -453,6 +453,9 @@ export function shellQuote(arg) {
   const text = String(arg ?? '');
   if (text && /^[\w@%+=:,./~-]+$/.test(text)) return text;
   if (!text.includes('"') && !/[$`\\!]/.test(text)) return '"' + text + '"';
+  // A single quote inside single quotes needs `'\''`, which is hard to read
+  // (`'print('\''$x'\'')'`); escaped double quotes say the same thing plainly.
+  if (text.includes("'") && !text.includes('!')) return '"' + text.replace(/[\\$`"]/g, '\\$&') + '"';
   return "'" + text.replace(/'/g, "'\\''") + "'";
 }
 export function describeTool({ name, args = {}, subagent }, { color = true, columns = 0 } = {}) {

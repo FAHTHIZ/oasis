@@ -11,3 +11,12 @@ test('reading a CSV says how many data rows it has besides the header', () => {
   const plain = fn('read_file', { content: 'x\ny\n' }).replace(/\x1b\[[0-9;]*m/g, '');
   assert.match(plain, /Read 2 lines$/);
 });
+
+test('command headers quote an argument with a single quote without the hard-to-read \'\\\'\' form', async () => {
+  const { execFileSync } = await import('node:child_process');
+  for (const arg of ["print('$x')", "it's", 'END{print $1}', "a'\\b\"c"]) {
+    const quoted = ui.shellQuote(arg);
+    assert.equal(execFileSync('bash', ['-c', 'printf %s ' + quoted]).toString(), arg, quoted);
+    if (!arg.includes('!')) assert.ok(!quoted.includes("'\\''"), quoted);
+  }
+});
