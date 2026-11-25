@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- The web app's Settings showed "OASIS 1.5.0", a constant left over from the old numbering. It now shows the version the connected runtime reports, the runtime status includes that version, and a test keeps the fallback equal to package.json.
 - When a turn delegates twice, each delegation step in chat and Activity shows only the subagents it started. Before, the second step listed the first step's finished agent again ("2 subagents"), the Agents count was too high, and both agents were numbered 1. Agents are now numbered across the turn, and a subagent that ends with a JSON wrapper like `{"summary": "…"}` shows as plain text.
 - `oasis doctor` no longer reports "Authentication: not configured" for a keyless endpoint that you connected and that answers. It now says "none needed; this endpoint works without a key". Its web search line also mentions the Bing fallback.
 - `oasis skills find <keywords>` now searches skills.sh, so it lists matching skills ("pdf  anthropics/skills  237k installs") with the exact `oasis skills add SOURCE --skill NAME` command. It used to list the most-starred GitHub repos that mentioned the word anywhere in their README. GitHub search is still used when skills.sh is unreachable and when no keywords are given.

@@ -2258,6 +2258,7 @@ export function createOasisWebServer(options = {}) {
       const workspaceEmpty = await import('./agent.mjs').then((mod) => mod.workspaceIsEmpty(activeRoot)).catch(() => false);
       json(res, 200, {
         connected: true,
+        version: oasisVersion(),
         workspaceEmpty,
         providerConfigured,
         provider: provider ? { provider: provider.provider, protocol: provider.protocol, model: provider.model, baseURL: provider.baseURL, authentication: provider.authentication } : null,

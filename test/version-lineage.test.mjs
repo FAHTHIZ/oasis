@@ -44,3 +44,10 @@ test('the package is on the 0.x line and its release tag matches', () => {
   assert.equal(pkg.version.split('.')[0], '0');
   assert.equal(pkg.oasisRelease.stableTag, 'v' + pkg.version);
 });
+
+test('the web app shows the package version, not a stale constant', () => {
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const app = readFileSync(new URL('../app/main.mjs', import.meta.url), 'utf8');
+  assert.equal(/const APP_VERSION = '([^']+)'/.exec(app)[1], pkg.version, 'update APP_VERSION in app/main.mjs with each release');
+  assert.match(readFileSync(new URL('../src/web.mjs', import.meta.url), 'utf8'), /version: oasisVersion\(\)/, 'the runtime status reports its version');
+});

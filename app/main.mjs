@@ -40,7 +40,9 @@ document.documentElement.dataset.booted = '1';
 // Composer autocomplete state (declared early: refreshFiles clears the file cache).
 const suggest = { token: null, items: [], index: 0, commands: null, files: null, noFileCommand: false, seq: 0 };
 
-const APP_VERSION = '1.5.0';
+// Kept equal to package.json (test/version-lineage.test.mjs); a connected
+// runtime reports its own version, which wins.
+const APP_VERSION = '0.12.0';
 const $ = (id) => document.getElementById(id);
 const store = new IndexedDBStore();
 const sandbox = new FrameSandbox();
@@ -4716,7 +4718,7 @@ function openSettings() {
   $('densityVerbose').checked = settings.density === 'verbose';
   $('githubToken').value = settings.githubToken;
   $('testResult').textContent = '';
-  $('versionLabel').textContent = APP_VERSION;
+  $('versionLabel').textContent = (RT && RT.status && RT.status.version) || APP_VERSION;
   for (const id of ['manualSetup', 'githubSettings', 'maxStepsField']) if ($(id)) $(id).hidden = Boolean(RT);
   $('autoSwitch').closest('label').hidden = Boolean(RT);
   $('runtimeInfo').hidden = !RT;
