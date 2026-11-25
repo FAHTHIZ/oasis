@@ -46,3 +46,19 @@ test('an empty reply stopped by the provider (content filter) is reported, not r
   assert.match(result.text, /content_filter/);
   assert.equal(result.emptyReply, true);
 });
+
+test('a reply made only of control tokens (a broken gpt-oss call) is asked again, not shown as the answer', async (t) => {
+  const { session, requests } = await fixture(t, [toolCall('c1', 'read_file', { path: 'a.txt' }), { content: '<|channel|>commentary to=functions?<|call|>' }, { content: 'The file says A.' }]);
+  const result = await runAgentTurn(session, 'What does a.txt say?', {});
+  assert.equal(result.text, 'The file says A.');
+  assert.equal(requests.length, 3);
+});
+
+test('onlyControlTokens keeps real text', async () => {
+  const { onlyControlTokens } = await import('../src/agent.mjs');
+  assert.equal(onlyControlTokens('<|channel|>commentary to=functions?<|call|>'), true);
+  assert.equal(onlyControlTokens('<|start|>assistant<|channel|>final<|message|><|end|>'), true);
+  assert.equal(onlyControlTokens('<|channel|>final<|message|>Done: a.txt says A.'), false);
+  assert.equal(onlyControlTokens('Use the <|endoftext|> token carefully.'), false);
+  assert.equal(onlyControlTokens('plain answer'), false);
+});

@@ -10,6 +10,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- A reply made only of chat-template control tokens (a broken gpt-oss tool call such as `<|channel|>commentary to=functions?<|call|>`) is treated as an empty reply and the model is asked to continue, instead of ending the task with that text as the answer.
 - The product name is spelled OASIS everywhere in the terminal and the web app; about 290 messages still said "Oasis". Settings folders on macOS and Windows keep their existing names.
 - Terminal: when the bytes of an arrow key or Shift+Tab arrive a little apart (SSH, a busy machine), the rest is decoded as the key instead of typing `[Z` or `[A` into the prompt. Esc stays instant and vim's Esc-then-key is unchanged.
 - Web app: archiving a session shows an Undo button in the toast instead of telling you to run `oasis sessions unarchive` in a terminal.

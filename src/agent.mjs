@@ -1095,6 +1095,17 @@ export function droppedWorkspaceFolderPath(root, rawPath) {
   return relative.split(path.sep).join('/');
 }
 
+// True for text made only of chat-template control tokens and their header
+// words (gpt-oss harmony and similar), with nothing a person could read.
+export function onlyControlTokens(content) {
+  if (typeof content !== 'string' || !/<\|[\w-]+\|>/.test(content)) return false;
+  return !content
+    .replace(/<\|[\w-]+\|>/g, ' ')
+    .replace(/\bto=functions\b[\w.?-]*/g, ' ')
+    .replace(/\b(?:assistant|commentary|analysis|final|json|code)\b/g, ' ')
+    .trim();
+}
+
 function normalizeAssistantToolCalls(session, assistant, step) {
   const repairs = { textCalls: 0, repairedArguments: 0, invalidArguments: 0 };
   const native = Array.isArray(assistant.tool_calls) ? assistant.tool_calls : [];
@@ -1123,6 +1134,11 @@ function normalizeAssistantToolCalls(session, assistant, step) {
       // pass as a final answer; the model is told which tools exist.
       const unknown = unknownTextToolCalls(assistant.content, availableToolNames(session));
       if (unknown.length) Object.defineProperty(assistant, 'unknownToolNames', { value: unknown, enumerable: false, configurable: true });
+      // A broken harmony call with no tool name or arguments
+      // ("<|channel|>commentary to=functions?<|call|>") is not an answer: treat it
+      // as an empty reply so the model is asked to continue, instead of ending
+      // the task with control tokens as the final message.
+      else if (onlyControlTokens(assistant.content)) assistant.content = null;
     }
   }
   // Results are matched to calls by ID, so a reply that leaves an ID empty or
