@@ -45,6 +45,10 @@ test('the task tool tells the model how to run agents together and warns about w
 
 test('a finished agent line shows its report and an unmerged branch', () => {
   assert.equal(completedDetail('## Found\n\n* `total` adds tax twice', null), 'Found total adds tax twice');
+  // Names keep their underscores; lists and tables read as one line.
+  assert.equal(completedDetail('Functions in `test_calc.py` are:\n\n- `test_add`\n- `test_sub`', null), 'Functions in test_calc.py are: test_add, test_sub');
+  assert.equal(completedDetail('> Note: **check** _this_ in __init__.py', null), 'Note: check this in __init__.py');
+  assert.equal(completedDetail('| file | issue |\n|---|---|\n| a.js | bug |', null), 'file · issue a.js · bug');
   assert.match(completedDetail('Wrote README.md', { changed: true, branch: 'oasis/readme-1' }), /^Changes on branch oasis\/readme-1 \(not merged yet\)\. Wrote README\.md$/);
   assert.match(completedDetail('', null, { toolCalls: 3 }), /no report \(3 steps\)/);
   assert.ok(completedDetail('x'.repeat(900), null).length <= 500);

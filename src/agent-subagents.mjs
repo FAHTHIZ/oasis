@@ -906,8 +906,30 @@ export function liftChildEvidence(parent, events, agentId) {
 
 // One readable line for a finished agent: the start of its report, plus a
 // warning when its edits sit on an unmerged branch.
+// A report as one plain line: headings, quotes, bold and code markers go, a
+// list reads "mul, div", and table rows keep their cells. Underscores inside
+// names (test_calc.py, __init__) stay; only _emphasis_ wrapping is removed.
+function plainReportLine(report) {
+  let line = '';
+  let inList = false;
+  for (const raw of String(report || '').replace(/```[\s\S]*?(?:```|$)/g, ' ').split(/\n/)) {
+    let row = raw.trim();
+    if (!row || /^\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?$/.test(row) || /^(?:-{3,}|\*{3,}|_{3,})$/.test(row)) continue;
+    row = row.replace(/^#{1,6}\s+/, '').replace(/^(?:>\s?)+/, '');
+    if (/^\|.*\|$/.test(row)) row = row.slice(1, -1).split('|').map((cell) => cell.trim()).filter(Boolean).join(' · ');
+    const item = row.match(/^(?:[-*+\u2022]|\d+[.)])\s+(.+)$/);
+    if (item) row = item[1];
+    row = row.replace(/\*\*|`+/g, '').replace(/(^|[\s(])__(\S(?:.*?\S)?)__(?=[\s,;:!?)]|\.(?!\w)|$)/g, '$1$2').replace(/(^|[\s(])[*_](?![\s*_])(.*?[^\s*_]|[^\s*_])[*_](?=[\s,;:!?)]|\.(?!\w)|$)/g, '$1$2').trim();
+    if (!row) continue;
+    line += line ? (item && inList ? ', ' : ' ') : '';
+    line += row;
+    inList = Boolean(item);
+  }
+  return line.replace(/\s+/g, ' ').trim();
+}
+
 export function completedDetail(report, worktreeResult, outcome = {}) {
-  const text = String(report || '').replace(/```[\s\S]*?```/g, ' ').replace(/[#*_`>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const text = plainReportLine(report);
   const branch = worktreeResult && worktreeResult.changed && worktreeResult.branch ? 'Changes on branch ' + worktreeResult.branch + ' (not merged yet). ' : '';
   const summary = text ? (text.length > 400 ? text.slice(0, 399).trimEnd() + '…' : text) : (() => { const steps = Math.max(0, Number(outcome.toolCalls) || 0); return 'Finished with no report (' + steps + (steps === 1 ? ' step' : ' steps') + ').'; })();
   return (branch + summary).slice(0, 500);

@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- A finished subagent's summary keeps the underscores in names: a report about `test_calc.py` and `test_add` no longer reads "test calc.py" and "test add" in the subagent card and the terminal. Lists read as one line and table cells stay apart.
 - A subagent's row shows a list report as one readable line ("are: mul, div" instead of "are: - mul - div"), without stray bold or code markers.
 - A thought's headline drops the narration raw-reasoning models open with ("We need to", "The user wants us to", "Let's"), so gpt-oss turns read "Add a function mul to mathx.py" instead of "We need to add a function mul to mathx.py".
 - Settings' approval options now use the same mode names as the composer chip (Ask first, Auto edit, Full auto, Plan), so the two places no longer describe the same choice in different words.
