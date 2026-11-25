@@ -115,3 +115,11 @@ test('successful file writes and edits create safe inline preview metadata only 
     exitCode: 0
   }), []);
 });
+
+// A search and two page reads all read "Looked up information online".
+test('web steps say whether they searched or read a page, and where', () => {
+  assert.equal(labelToolActivity('web_search', { query: 'latest Python release' }), "Searched the web for 'latest Python release'");
+  assert.equal(labelToolActivity('web_search', {}), 'Searched the web');
+  assert.equal(labelToolActivity('fetch_url', { url: 'https://www.python.org/downloads/' }), 'Read a page on python.org');
+  assert.equal(labelToolActivity('fetch_url', { url: 'not a url' }), 'Read a web page');
+});

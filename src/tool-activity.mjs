@@ -80,7 +80,14 @@ export function labelToolActivity(name, args = {}, result = null) {
   if (tool === 'search_files' || tool === 'grep') return query ? "Searched for '" + query + "'" : 'Searched the project';
   if (tool === 'glob_files') return query ? 'Found files matching ' + query : 'Found matching files';
   if (tool === 'repo_map') return 'Mapped the project files';
-  if (tool === 'fetch_url' || tool === 'web_search') return 'Looked up information online';
+  // Both used to read "Looked up information online", so a search and the
+  // pages read after it looked like three identical rows.
+  if (tool === 'web_search') return query ? "Searched the web for '" + query + "'" : 'Searched the web';
+  if (tool === 'fetch_url') {
+    let host = '';
+    try { host = new URL(String(args && args.url || '')).hostname.replace(/^www\./, ''); } catch {}
+    return host ? 'Read a page on ' + host : 'Read a web page';
+  }
   if (tool === 'git_status') return 'Checked project changes';
   if (tool === 'git_diff') return 'Reviewed the diff';
   if (tool === 'git_log') return 'Reviewed recent project history';
