@@ -265,6 +265,9 @@ export class RuntimeAgent {
   /** Send a note into the running task; the runtime reads it before its next step. */
   async steer(text) {
     const note = String(text || '').trim();
+    // A note typed while the task is still being created (the computer is
+    // starting tool servers) waits for the job instead of failing at once.
+    for (let waited = 0; this.busy && !this.jobId && note && waited < 60000; waited += 100) await new Promise((resolve) => setTimeout(resolve, 100));
     if (!this.busy || !this.jobId || !note) return false;
     try {
       await this.client.api('/api/jobs/' + this.jobId + '/steer', { method: 'POST', body: { message: note } });

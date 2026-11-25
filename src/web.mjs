@@ -1131,6 +1131,9 @@ export function createOasisWebServer(options = {}) {
       emit(job, 'notices', { notices: session.localContextNotices.slice(0, 3).map((note) => monitorText(note, 600)) });
     }
     if (session.mcpConnecting && typeof session.mcpConnecting.then === 'function') session.mcpConnecting.then(reportMcpFailures, () => {});
+    // Notes typed while the task starts (tool servers connecting, files being
+    // read) wait for its first step instead of being told it is not running.
+    job.steerTarget = session;
     void (async () => {
       try {
         const idleInfo = idleCompaction ? await idleCompaction.settle().catch(() => null) : null;
@@ -1178,9 +1181,11 @@ export function createOasisWebServer(options = {}) {
           if (handled) {
             emit(job, 'command_output', { command: slash[1].toLowerCase(), text: String(handled.output || '').slice(0, 24000) });
             if (!handled.prompt) {
+              job.steerTarget = null;
+              const leftover = carryUndeliveredSteering(session);
               const saved = await saveSession(session, { env });
               if (saved.id !== activeId) { activeSessions.delete(activeId); activeSessions.set(saved.id, session); }
-              job.result = { text: String(handled.output || ''), command: slash[1].toLowerCase(), finished: true, toolCalls: 0, sessionId: saved.id };
+              job.result = { text: String(handled.output || ''), command: slash[1].toLowerCase(), finished: true, toolCalls: 0, sessionId: saved.id, ...(leftover.length ? { undeliveredSteering: leftover } : {}) };
               if (taskWorktree) {
                 job.result.isolatedWorktree = await finalizeTaskWorktree();
                 emit(job, 'worktree_ready', job.result.isolatedWorktree);

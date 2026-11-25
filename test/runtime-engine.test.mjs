@@ -89,6 +89,25 @@ test('a note typed while the runtime works goes to the running job', async () =>
 });
 
 
+// The app is busy as soon as a message is sent, but the job id comes back
+// only once the computer has made the session (tool servers starting can
+// take seconds). A note typed then was turned away with "Could not queue".
+test('a note typed before the job has started waits for it', async () => {
+  const calls = [];
+  const client = { api: async (path, options = {}) => { calls.push([path, options.body]); return { queued: true }; } };
+  const agent = new RuntimeAgent({ client, onEvent: () => {} });
+  agent.busy = true;
+  const steered = agent.steer('use tabs');
+  setTimeout(() => { agent.jobId = '11111111-2222-3333-4444-555555555555'; }, 250);
+  assert.equal(await steered, true);
+  assert.deepEqual(calls, [['/api/jobs/11111111-2222-3333-4444-555555555555/steer', { message: 'use tabs' }]]);
+  // A send that fails before it starts ends the wait.
+  agent.jobId = '';
+  const dropped = agent.steer('late');
+  setTimeout(() => { agent.busy = false; }, 150);
+  assert.equal(await dropped, false);
+});
+
 test('undelivered runtime steering is preserved as bounded session state', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-steering-session-'));
   const configDir = await mkdtemp(path.join(os.tmpdir(), 'oasis-steering-config-'));
