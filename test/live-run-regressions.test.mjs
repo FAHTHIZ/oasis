@@ -184,6 +184,24 @@ test('optional tool fields sent as null are dropped instead of failing validatio
   assert.doesNotMatch(String(toolMessage.content), /Invalid arguments/);
 });
 
+test('optional tool fields sent as an empty string are dropped when they cannot be empty', async (t) => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-empties-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'a.txt'), 'alpha\n');
+  const { config, requests } = await scriptedModel(t, [toolCall('c1', 'read_file', { path: 'a.txt', offset: '', limit: '' }), { content: 'done' }]);
+  const session = await createSession({ root, config, env: { ...process.env, HOME: root, OASIS_CONFIG_DIR: path.join(root, '.cfg') } });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'read a.txt', { autoApprove: true });
+  const toolMessage = requests[1].messages.find((message) => message.role === 'tool');
+  assert.match(String(toolMessage.content), /alpha/);
+  assert.doesNotMatch(String(toolMessage.content), /Invalid arguments/);
+});
+
 test('subagent requests stream so a silent provider trips the idle watchdog instead of the long header timeout', async (t) => {
   const { mkdtemp, rm } = await import('node:fs/promises');
   const os = await import('node:os');

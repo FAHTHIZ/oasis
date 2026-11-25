@@ -1446,7 +1446,16 @@ async function validateRepairingNulls(schema, args) {
   const validation = await validateToolArguments(schema, args);
   if (validation.valid || !args || typeof args !== 'object' || Array.isArray(args) || !schema || !schema.properties) return { validation, args };
   const required = new Set(Array.isArray(schema.required) ? schema.required : []);
-  const nulls = Object.keys(args).filter((key) => args[key] === null && !required.has(key));
+  // Small models also fill optional fields with "" ("isolation": ""): drop those
+  // too when the field cannot hold an empty string (an enum without "", or not a string).
+  const emptyNotAllowed = (key) => {
+    const property = schema.properties[key];
+    if (!property || typeof property !== 'object') return false;
+    if (Array.isArray(property.enum)) return !property.enum.includes('');
+    const types = Array.isArray(property.type) ? property.type : [property.type];
+    return Boolean(property.type) && !types.includes('string');
+  };
+  const nulls = Object.keys(args).filter((key) => !required.has(key) && (args[key] === null || (args[key] === '' && emptyNotAllowed(key))));
   if (!nulls.length) return { validation, args };
   const cleaned = { ...args };
   for (const key of nulls) delete cleaned[key];
