@@ -27,7 +27,8 @@ import { quotaRoute, assertRouteAvailable, recordSuccess as recordQuotaSuccess, 
 import { parseFallbackChain, remainingFallbacks, fallbackReason, FALLBACK_REASON_TEXT } from './fallback-chain.mjs';
 import { runWithProviderBreaker, providerBreakerKey, isBreakerOpenError } from './circuit-breaker.mjs';
 import { promptToolCalling, toPromptToolMessages, foldSystemMessages, withSystemInUserTurn } from './prompt-tools.mjs';
-import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, serverRetryAdvice, isHardQuotaError, isMalformedGenerationError, isUnconfiguredRouteError, isPromptTooLargeError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry , rateLimitWaitHint } from './provider-retry.mjs';
+import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, serverRetryAdvice, isHardQuotaError, isMalformedGenerationError, isUnconfiguredRouteError, isPromptTooLargeError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry , rateLimitWaitHint, isConcurrencyLimit } from './provider-retry.mjs';
+import { acquireEndpoint } from './endpoint-gate.mjs';
 import { parallelToolCalls, promptCacheKeyField, samplingTemperature } from './turn-guards.mjs';
 import { postModelSwitch } from './model-switch.mjs';
 import { claudeEffortFor, claudeThinkingMode, firstPositiveConfiguredInteger, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError } from './model-budgets.mjs';
@@ -378,6 +379,13 @@ async function requestCompletionRaw(session, options = {}) {
 }
 
 async function requestCompletionRawQuota(session, options = {}) {
+  // One turn on the endpoint per request, held until the reply is fully read
+  // (src/endpoint-gate.mjs). Internal re-sends reuse the turn they are in.
+  if (!options.endpointTurn) {
+    const endpointTurn = await acquireEndpoint(session.config || {}, { env: options.env || session.providerEnv || process.env, signal: options.signal });
+    try { return await requestCompletionRawQuota(session, { ...options, endpointTurn }); }
+    finally { endpointTurn.release(); }
+  }
   if (options.quotaState) return requestCompletionRawInner(session, options);
   const quotaState = { route: null };
   const reply = await requestCompletionRawInner(session, { ...options, quotaState });
@@ -602,6 +610,7 @@ async function requestCompletionRawInner(session, options = {}) {
     // Per-minute limits: with a backup model, wait once and then let the
     // fallback chain move on; with none, waiting beats failing the task.
     let shortWaits = 0;
+    let concurrencyTurns = 0;
     // Per-minute limits reset within a minute, so waiting is cheap and safe.
     // Seen live on Gemma's 16k input-tokens/minute free tier: three waits were
     // not enough, and "retry in 1s" hints kept hitting the same full window.
@@ -658,6 +667,21 @@ async function requestCompletionRawInner(session, options = {}) {
           attempt--;
           continue;
         }
+      }
+      // "One request at a time": take turns with this endpoint's other
+      // requests (agents running together) instead of retrying into them.
+      if (status === 429 && options.endpointTurn && concurrencyTurns < 60 && isConcurrencyLimit(errorBody)) {
+        concurrencyTurns++;
+        clearTimeout(timer);
+        const othersWaiting = options.endpointTurn.waiting > 0;
+        traceRecovery(providerEnv, 'endpoint_turn', { status, attempt: concurrencyTurns, waiting: options.endpointTurn.waiting });
+        await options.endpointTurn.requeue(1);
+        // Alone in the queue, the busy request is someone else's (another
+        // terminal or tab): give it a moment instead of asking again at once.
+        await waitForProviderRetry(othersWaiting ? 300 : Math.min(8000, 1500 * concurrencyTurns), controller.signal);
+        timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+        attempt -= 1;
+        continue;
       }
       const hintedWait = (status === 429 || status === 402) && shortWaits < shortWaitBudget ? shortRateLimitMs(errorBody) : null;
       // After a failed wait, wait at least 10 s more each time, capped by the

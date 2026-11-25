@@ -63,6 +63,10 @@ const EXPLICIT_SHORT_WAIT = /\bretry (?:after|in) (\d+(?:\.\d+)?) ?s(?:ec(?:ond)
 const STATED_RESET = /\bsoonest (?:cooldown )?reset ~?(\d+(?:\.\d+)?) ?(s|m)\b/i;
 const LONG_LIMIT_WORDING = /PerDay|per ?day|daily|per ?month|monthly|credit|balance|insufficient|billing/i;
 const CONCURRENCY_LIMIT = /\bstill running\b|\b(?:1|one) request at a time\b|\btoo many concurrent\b|\bconcurren(?:t|cy) (?:request )?limit\b/i;
+export function isConcurrencyLimit(body) {
+  const text = String(body || '');
+  return CONCURRENCY_LIMIT.test(text) && !LONG_LIMIT_WORDING.test(text);
+}
 export function shortRateLimitMs(body) {
   const text = String(body || '');
   const explicit = EXPLICIT_SHORT_WAIT.exec(text);

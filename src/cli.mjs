@@ -434,7 +434,8 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
   if (process.env.OASIS_PERMISSION_PROMPTS === 'none') { stdout.write('\n[permissions] Denied without asking (--permission-prompts none): ' + approval.message.split('\n').filter(Boolean)[0] + '\n'); return false; }
   try {
     const shown = renderApprovalText(approval, { color: richOutput(), columns: stdout.columns, maxDiffLines: Math.max(6, Math.min(40, (Number(stdout.rows) || 40) - 14)) });
-    stdout.write('\n' + shown + '\n');
+    const asker = meta && meta.subagent ? (richOutput() ? '\x1b[2m' : '') + '  Asked by the agent: ' + String(meta.subagent).slice(0, 100) + (richOutput() ? '\x1b[22m' : '') + '\n' : '';
+    stdout.write('\n' + asker + shown + '\n');
     const approvalSound = playSound('attention', { stream: stdout });
     if (CURRENT_TURN_STARTED_AT) notifyAttention('OASIS needs your approval: ' + approval.message.split('\n').filter(Boolean)[0], { elapsedMs: Date.now() - CURRENT_TURN_STARTED_AT, soundPlayed: approvalSound, stream: stdout });
     const offerAlways = meta && meta.suggestion && !forceInteractive;

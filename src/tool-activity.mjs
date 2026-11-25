@@ -82,6 +82,7 @@ export function labelToolActivity(name, args = {}, result = null) {
   if (tool === 'git_diff') return 'Reviewed the diff';
   if (tool === 'git_log') return 'Reviewed recent project history';
   if (tool === 'task') {
+    if (args && Array.isArray(args.parallel_tasks) && args.parallel_tasks.length > 1) return 'Ran ' + args.parallel_tasks.length + ' agents together';
     const type = text(args && args.subagent_type, 40);
     return (args && args.run_in_background ? 'Started ' : 'Ran ') + (type && type !== 'general-purpose' ? 'the ' + type + ' agent' : 'a subagent');
   }

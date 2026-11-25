@@ -1385,10 +1385,32 @@ export const RESTRICTED_TOOL_NAMES = new Set(['run_command', 'powershell', 'moni
 
 
 
+// parallel_tasks is the whole group: the top-level description/prompt only
+// label it. Weak models (seen live: gpt-oss-20b) also use "tasks"/"agents",
+// send the list as a JSON string, or leave the required top-level fields
+// empty, so normalise all of that before validation.
+export function promoteParallelTask(schema, args) {
+  if (!schema || !schema.properties || !schema.properties.parallel_tasks || !args || typeof args !== 'object' || Array.isArray(args)) return args;
+  let list = args.parallel_tasks ?? args.tasks ?? args.agents;
+  if (typeof list === 'string') { try { list = JSON.parse(list); } catch { return args; } }
+  if (!Array.isArray(list)) return args;
+  const { tasks: _tasks, agents: _agents, ...rest } = args;
+  const entries = list.filter((item) => item && typeof item === 'object' && String(item.prompt || item.task || '').trim())
+    .map((item) => ({ description: String(item.description || item.name || String(item.prompt || item.task).slice(0, 40)), prompt: String(item.prompt || item.task), ...(typeof item.subagent_type === 'string' ? { subagent_type: item.subagent_type } : {}) }));
+  if (!entries.length) { const { parallel_tasks: _drop, ...plain } = rest; return String(plain.prompt || '').trim() ? plain : args; }
+  // One entry is just one agent: run it as a normal task call.
+  if (entries.length === 1) {
+    const { parallel_tasks: _drop, ...plain } = rest;
+    return { ...plain, description: entries[0].description, prompt: entries[0].prompt, ...(entries[0].subagent_type ? { subagent_type: entries[0].subagent_type } : {}) };
+  }
+  return { ...rest, description: String(rest.description || '').trim() || entries.length + ' agents', prompt: String(rest.prompt || '').trim() || 'Run these agents together.', parallel_tasks: entries };
+}
+
 // Weaker models fill optional fields with null ("model": null). When the call
 // is valid without those keys, drop them instead of spending a turn on a
 // correction (seen live: gpt-oss-20b on the task tool). Returns { validation, args }.
 async function validateRepairingNulls(schema, args) {
+  args = promoteParallelTask(schema, args);
   const validation = await validateToolArguments(schema, args);
   if (validation.valid || !args || typeof args !== 'object' || Array.isArray(args) || !schema || !schema.properties) return { validation, args };
   const required = new Set(Array.isArray(schema.required) ? schema.required : []);
@@ -2307,7 +2329,19 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
         return recordedReview ? { ...specialistResult, verdict: recordedReview.verdict, verdictReason: recordedReview.detail } : specialistResult;
       }
       if (name === 'task') {
-        return await runSubagent(session, validatedInput, executionContext, { ...executionOptions, parentToolUseId: options.parentToolUseId });
+        const group = Array.isArray(validatedInput.parallel_tasks) ? validatedInput.parallel_tasks.filter((item) => item && typeof item === 'object' && String(item.prompt || '').trim()) : [];
+        const { parallel_tasks: _batch, ...first } = validatedInput;
+        if (group.length < 2) return await runSubagent(session, group.length ? { ...first, description: String(group[0].description || first.description), prompt: String(group[0].prompt), ...(group[0].subagent_type ? { subagent_type: group[0].subagent_type } : {}) } : first, executionContext, { ...executionOptions, parentToolUseId: options.parentToolUseId });
+        // One call, several agents at once: weaker models send one task per
+        // reply, so "do these at the same time" used to run one after another.
+        const shared = Object.fromEntries(['run_in_background', 'isolation', 'model', 'environment', 'team_id'].filter((key) => first[key] !== undefined).map((key) => [key, first[key]]));
+        const specs = [...group.slice(0, MAX_PARALLEL_SUBAGENTS).map((item) => ({ ...shared, description: String(item.description || 'Subagent').slice(0, 200), prompt: String(item.prompt), ...(item.subagent_type ? { subagent_type: item.subagent_type } : {}) }))];
+        const limit = Math.max(1, maxParallelTasksFrom(session, runtime.env || process.env, MAX_PARALLEL_SUBAGENTS));
+        const agents = await runPool(specs, limit, async (spec) => {
+          try { return await runSubagent(session, spec, executionContext, { ...executionOptions, parentToolUseId: options.parentToolUseId }); }
+          catch (error) { return { description: spec.description, error: error && error.message ? error.message : String(error) }; }
+        });
+        return { agents, ran_together: specs.length, message: specs.length + ' agents ran at the same time. Each report is below; summarise them for the user.' };
       }
       if (name === 'execute_code') {
         const { runExecuteCode } = await import('./code-mode.mjs');

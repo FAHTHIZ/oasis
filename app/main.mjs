@@ -3,7 +3,7 @@
 // drives the agent on that computer (runtime engine, core/runtime.mjs).
 import { PRESETS, testProvider } from './core/providers.mjs';
 import { alwaysAllowLabel } from './core/approval-rule.mjs';
-import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
+import { SUBAGENT_STATUS_TEXT, friendlyBudget } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
 import { sideWork, liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline, formatTokens } from './core/live-status.mjs';
@@ -1375,6 +1375,7 @@ function toggleAllSteps() {
 function verboseSteps() { return Boolean(settings && settings.density === 'verbose'); }
 
 // Subagents started in a group, with their live status (running, done, failed).
+const expandedReports = new Set();
 function renderSubagents(group, workers = []) {
   group.subagents = workers;
   let box = group.list.querySelector('.subagents');
@@ -1405,10 +1406,24 @@ function renderSubagents(group, workers = []) {
       ? worker.activity + '…' + (worker.steps ? ' · ' + worker.steps + (worker.steps === 1 ? ' step done' : ' steps done') : '')
       : '';
     const finished = !live && worker.steps && !worker.detail ? worker.steps + (worker.steps === 1 ? ' step' : ' steps') : '';
-    item.querySelector('.sa-detail').textContent = worker.waitingApproval ? 'Waiting for you: /tasks approve ' + worker.id + ' or /tasks deny ' + worker.id : (live || worker.detail || finished);
-    item.querySelector('.sa-detail').classList.toggle('live', Boolean(live) && !worker.waitingApproval);
-    // Spent and limit, from the same budget projection as /tasks.
-    item.querySelector('.sa-budget').textContent = worker.budget || '';
+    const detailEl = item.querySelector('.sa-detail');
+    detailEl.textContent = worker.waitingApproval ? 'Waiting for you to approve a step' : (live || worker.detail || finished);
+    detailEl.classList.toggle('live', Boolean(live) && !worker.waitingApproval);
+    // A finished agent's line is the start of its report: click to read it all.
+    const isReport = !live && !worker.waitingApproval && worker.detail && worker.status !== 'running' && worker.status !== 'unknown';
+    if (isReport) {
+      detailEl.classList.add('report');
+      if (/^Changes on branch /.test(worker.detail)) detailEl.classList.add('branch');
+      detailEl.tabIndex = 0;
+      detailEl.title = 'Show the whole result';
+      const key = 'sa:' + worker.id;
+      if (expandedReports.has(key)) detailEl.classList.add('open');
+      const toggle = () => { detailEl.classList.toggle('open'); if (detailEl.classList.contains('open')) expandedReports.add(key); else expandedReports.delete(key); };
+      detailEl.addEventListener('click', toggle);
+      detailEl.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); } });
+    }
+    // Spent and limit, from the same budget projection as /tasks, in plain words.
+    item.querySelector('.sa-budget').textContent = friendlyBudget(worker.budget || '');
     list.appendChild(item);
   }
   box.replaceChildren(head, list);
@@ -3619,6 +3634,7 @@ async function requestApproval({ name, args, runtime = false }) {
     const risky = Boolean(args.risky) || /^WARNING\b/.test(lines[0]);
     if (/^WARNING\b/.test(lines[0])) lines.shift();
     summary.replaceChildren();
+    if (args.subagent) { const who = document.createElement('span'); who.className = 'approval-agent'; who.textContent = 'Asked by the agent: ' + String(args.subagent).slice(0, 100); summary.appendChild(who); }
     if (risky) { const badge = document.createElement('span'); badge.className = 'risk-badge'; badge.textContent = 'Risky'; summary.appendChild(badge); }
     for (const line of lines) {
       if (!line.trim()) continue;

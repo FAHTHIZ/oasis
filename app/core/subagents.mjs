@@ -27,7 +27,7 @@ export class SubagentTracker {
     if (type === 'agent.approval_pending') current.waitingApproval = true;
     if (type === 'agent.approval_granted' || type === 'agent.approval_denied') current.waitingApproval = false;
     if (data.budget) current.budget = String(data.budget).slice(0, 200);
-    const detail = String(data.detail || '').replace(/\s+/g, ' ').trim();
+    const detail = String(data.report || data.detail || '').replace(/\s+/g, ' ').trim();
     // Skip runtime counters such as "tool_calls=0 duration_ms=812".
     if (detail && !type.startsWith('agent.approval_') && !/^(?:[a-z_]+=\S+\s*)+$/i.test(detail)) current.detail = detail.slice(0, 240);
     this.workers.set(id, current);
@@ -51,4 +51,28 @@ export class SubagentTracker {
   }
   list() { return [...this.workers.values()].sort((a, b) => a.order - b.order).map(({ order, ...worker }) => worker); }
   get running() { return this.list().filter((worker) => worker.status === 'running' || worker.status === 'stopping').length; }
+}
+
+// "tokens 8,218, requests 2, steps 2" → "8.2k tokens · 2 requests · 2 steps";
+// a limit reads "8.2k of 50k tokens". Unknown parts pass through unchanged.
+export function friendlyBudget(text) {
+  const raw = String(text || '').replace(/^budget\s+/i, '').trim();
+  if (!raw) return '';
+  const short = (value) => {
+    const n = Number(String(value).replace(/,/g, ''));
+    if (!Number.isFinite(n)) return String(value);
+    if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'k';
+    return String(n);
+  };
+  const nouns = { tokens: ['token', 'tokens'], requests: ['request', 'requests'], steps: ['step', 'steps'], usd: ['', ''] };
+  return raw.split(/,\s+(?=[a-z_]+\s)/i).map((part) => {
+    const match = /^([a-z_]+)\s+(\$?[\d.,]+)(?:\/(\$?[\d.,]+))?$/i.exec(part.trim());
+    if (!match) return part.trim();
+    const [, kind, spent, limit] = match;
+    if (kind === 'usd') return limit ? spent + ' of ' + limit : spent;
+    const [one, many] = nouns[kind] || [kind, kind];
+    const value = short(spent);
+    return (limit ? value + ' of ' + short(limit) : value) + ' ' + (!limit && value === '1' ? one : many);
+  }).join(' · ');
 }

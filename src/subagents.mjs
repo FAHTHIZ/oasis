@@ -610,13 +610,14 @@ export function taskToolDefinition(agents) {
   const list = kept.join('\n');
   return { type: 'function', function: {
     name: 'task',
-    description: 'Run a subagent with its own context; it returns one report. It cannot see this conversation: give a complete, self-contained prompt. Task calls in ONE response run in parallel (max ' + MAX_PARALLEL_SUBAGENTS + '); each returns an id for send_message.\nAgent types:\n' + list,
+    description: 'Run a subagent with its own context; it returns one report. It cannot see this conversation: give a complete, self-contained prompt. Several agents AT THE SAME TIME: list them all in parallel_tasks (max ' + MAX_PARALLEL_SUBAGENTS + '). Each returns an id for send_message.\nAgent types:\n' + list,
     parameters: { type: 'object', properties: {
       description: { type: 'string', description: '3-5 word label' },
       prompt: { type: 'string', description: 'Full instructions, including what to return' },
       subagent_type: { type: 'string', enum: Object.keys(agents), description: 'Default general-purpose' },
       run_in_background: { type: 'boolean', description: 'Return the id now, report later. It cannot ask for approval; unallowed actions are denied.' },
-      isolation: { type: 'string', enum: ['worktree'], description: 'Work in its own git worktree and branch' },
+      isolation: { type: 'string', enum: ['worktree'], description: 'Rarely needed: only when agents running at the same time edit the SAME files. Its changes then stay on a separate branch, NOT in the user\'s folder, until you merge them with worktree_merge. Omit for normal work.' },
+      parallel_tasks: { type: 'array', maxItems: MAX_PARALLEL_SUBAGENTS, description: 'All the agents to run at the same time, one entry each with its own description and full prompt. When set, the top-level description/prompt only label the group and do not start an agent', items: { type: 'object', properties: { description: { type: 'string' }, prompt: { type: 'string' }, subagent_type: { type: 'string', enum: Object.keys(agents) } }, required: ['description', 'prompt'] } },
       environment: { type: 'string', enum: ['shared', 'desktop'], description: 'desktop: its own private virtual screen (Linux, Xvfb) with the computer tool and a visible browser on it, for GUI or web work in parallel without touching the user\'s screen' },
       team_id: { type: 'string', description: 'Team ID from team_create' },
       model: { type: 'string', description: 'Model ID; omit to inherit' },

@@ -240,6 +240,9 @@ export function recordAgentEvent(session, type, fields = {}) {
     ...(fields.teamId ? { team_id: String(fields.teamId).slice(0, 100) } : {}),
     ...(fields.description ? { description: String(fields.description).slice(0, 200) } : {}),
     ...(fields.detail ? { detail: String(fields.detail).slice(0, 500) } : {}),
+    // The finished agent's report preview: for the chat that ran it only.
+    // The control room reads `detail` and never shows output.
+    ...(fields.report ? { report: String(fields.report).slice(0, 500) } : {}),
     // The web app's subagent list shows spent and limit from the same projection as /tasks.
     ...(worker && formatBudget(projectBudget(worker)) ? { budget: formatBudget(projectBudget(worker)).replace(/^budget /, '').slice(0, 200) } : {})
   };

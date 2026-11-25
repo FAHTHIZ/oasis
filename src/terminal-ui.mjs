@@ -460,6 +460,7 @@ export function describeTool({ name, args = {}, subagent }, { color = true, colu
   if (name === 'run_command') detail = [args.command, ...(Array.isArray(args.args) ? args.args.map(shellQuote) : [])].join(' ');
   else if (name === 'monitor') detail = (args.description ? args.description + ' · ' : '') + (args.ws ? String(args.ws.url || '') : [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' '));
   else if (name === 'run_shell' || name === 'auto_test') detail = String(args.command || '');
+  else if (name === 'task' && Array.isArray(args.parallel_tasks) && args.parallel_tasks.length > 1) detail = args.parallel_tasks.length + ' agents together: ' + args.parallel_tasks.map((item) => String(item && item.description || 'agent')).join(' · ');
   else if (name === 'task') detail = (args.subagent_type || 'general-purpose') + ': ' + (args.description || '');
   else if (['search_files', 'grep', 'ast_grep', 'glob_files'].includes(name) && (args.query || args.pattern)) detail = String(args.query || args.pattern) + (args.path && args.path !== '.' ? ' in ' + args.path : '');
   else if (args.path || args.pattern || args.query || args.url) detail = String(args.path || args.pattern || args.query || args.url);

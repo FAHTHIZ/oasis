@@ -637,7 +637,7 @@ export class RuntimeAgent {
             approvals = approvals.then(async () => {
               if (signal.aborted || resolved.has(approvalId)) return;
               this.emit('approval_waiting', { approvalId, tool: data.tool || '' });
-              const value = await this.answeredHere(this.approve({ name: data.tool || 'runtime', args: { prompt: data.prompt, diff: data.diff, suggestion: data.suggestion, risky: data.risky, rehearsal: data.rehearsal === true }, runtime: true }), approvalId, event.id, signal, jobId);
+              const value = await this.answeredHere(this.approve({ name: data.tool || 'runtime', args: { prompt: data.prompt, diff: data.diff, suggestion: data.suggestion, risky: data.risky, rehearsal: data.rehearsal === true, subagent: data.subagent || '' }, runtime: true }), approvalId, event.id, signal, jobId);
               // Left for another chat or device while it was open: the
               // question stays open on the computer for whoever looks next.
               if (signal.aborted) return;

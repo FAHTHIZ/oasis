@@ -105,6 +105,7 @@ export function activityLabel(tool = {}) {
   if (name === 'todo_write') return 'Updated the task plan';
   if (name === 'load_skill' || name === 'read_skill_resource' || name === 'list_skills') return 'Used a skill';
   if (name === 'task') {
+    if (Array.isArray(args.parallel_tasks) && args.parallel_tasks.length > 1) return 'Ran ' + args.parallel_tasks.length + ' agents together';
     const type = String(args.subagent_type || '').slice(0, 40);
     return (args.run_in_background ? 'Started ' : 'Ran ') + (type && type !== 'general-purpose' ? 'the ' + type + ' agent' : 'a subagent');
   }
@@ -144,6 +145,7 @@ export function liveLabel(tool = {}) {
   if (name === 'git_status') return 'Checking project changes';
   if (name === 'git_commit') return 'Making a commit';
   if (name === 'todo_write') return 'Updating the plan';
+  if (name === 'task' && Array.isArray(args.parallel_tasks) && args.parallel_tasks.length > 1) return 'Running ' + args.parallel_tasks.length + ' agents together';
   if (name === 'task') return args.description ? 'Delegating: ' + String(args.description).slice(0, 60) : 'Starting a subagent';
   if (name === 'ask_user_question') return 'Waiting for your answer';
   if (name === 'connect_service') return 'Waiting for you to connect ' + (String(args.service || '').slice(0, 40) || 'a service');
@@ -475,6 +477,8 @@ export function describeInput(tool = {}) {
     if (args.include || args.glob && args.pattern) sections.push({ label: 'Only', format: 'path', text: String(args.include || args.glob) });
   } else if ((name === 'list_files' || name === 'list_directory') && Object.keys(args).every((key) => key.startsWith('_') || ['path', 'depth', 'recursive'].includes(key))) {
     sections.push({ label: 'Folder', format: 'path', text: !args.path || args.path === '.' ? 'Project folder' : String(args.path) });
+  } else if (name === 'task' && Array.isArray(args.parallel_tasks) && args.parallel_tasks.length > 1) {
+    args.parallel_tasks.forEach((item, index) => sections.push({ label: 'Agent ' + (index + 1) + (item && item.description ? ': ' + String(item.description).slice(0, 80) : ''), format: 'prose', text: String(item && item.prompt || '') }));
   } else if (name === 'task') {
     if (args.description) sections.push({ label: 'Task', format: 'text', text: String(args.description) });
     if (args.subagent_type) sections.push({ label: 'Agent', format: 'text', text: String(args.subagent_type) });

@@ -30,7 +30,7 @@ import { compareWorld, driftNote, driftLines } from './world-drift.mjs';
 import { repairInterruptedHistory } from './tool-results.mjs';
 import { unsupportedChildClaim } from './claim-check.mjs';
 import { applyInjectionTaint, injectionTaint, judgedPathsFor, taintNotice } from './untrusted-content.mjs';
-import { changesFiles, evidenceSince, evidenceSummary, sessionEvidence } from './evidence-ledger.mjs';
+import { changesFiles, evidenceSince, evidenceSummary, recordEvidence, sessionEvidence } from './evidence-ledger.mjs';
 import { assessReport, checkReport } from './verification-contracts.mjs';
 import { assessOutcome, deriveTaskSpec } from './task-model.mjs';
 
@@ -671,7 +671,8 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     if (event && event.name) { record.recentTools.push(event.name); if (record.recentTools.length > 20) record.recentTools.shift(); }
   };
   const runOptions = foreground ? {
-    approval: options.approval,
+    // Several agents can ask at once: say which one is asking.
+    approval: typeof options.approval === 'function' ? (message, force, extra) => options.approval(message, force, { ...(extra && typeof extra === 'object' ? extra : {}), subagent: (extra && extra.subagent) || description }) : options.approval,
     signal: options.signal,
     onToolStart: (event) => { track(event); if (options.onToolStart) options.onToolStart(tag(event)); },
     onToolResult: options.onToolResult ? (event) => options.onToolResult(tag(event)) : undefined,
@@ -795,8 +796,10 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   const orphans = stopDescendants(parent, record, 'the agent that started it finished without waiting for it');
   // Team-dialogue obligations it never discharged (src/agent-dialogue.mjs).
   const lapsedThreads = lapseAgentDialogue(parent, record);
-  recordAgentEvent(parent, 'agent.completed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: 'tool_calls=' + Math.max(0, Number(outcome.toolCalls) || 0) });
   record.report = boundSubagentReport(outcome.text);
+  // The web app and /tasks show this line under the finished agent: what it
+  // found, and whether its edits are waiting on a branch instead of in the folder.
+  recordAgentEvent(parent, 'agent.completed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: 'tool_calls=' + Math.max(0, Number(outcome.toolCalls) || 0), report: completedDetail(record.report, worktreeResult, outcome) });
   record.injectionTaint = injectionTaint(child, 'agent ' + record.id);
   // A review-guard hit voids the verifier's PASS; the text came from the
   // parent's own work, so the parent is not held as if a page had injected it.
@@ -812,6 +815,12 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   // earlier review) saw; a later review judges this agent's result.
   if (!worktree && evidence.some(changesFiles)) noteTaskWorker(parent, { agentId: record.id, agentType: type, startedAt: runStartedAt, model: child.config && child.config.model });
   record.verificationIssues = checkReport(outcome.text, evidence, { domains: record.domains });
+  // What the child's tools showed (outputs it computed, pages it fetched) is
+  // runtime-recorded evidence; the parent repeating those numbers is not an
+  // unsupported claim. Seen live: the parent recomputed a subagent's correct
+  // total with a risky node -e and still ended with "Not verified (1,110)".
+  // Passing checks stay with the child (its tree may be a worktree).
+  if (!record.verificationIssues.length) liftChildEvidence(parent, evidence, record.id);
   const codeIssue = record.verificationIssues.find((issue) => issue.domain === 'code');
   record.unverifiedClaim = (codeIssue && codeIssue.reason) || (record.verificationIssues.length ? null : unsupportedChildClaim(outcome)) || null;
   // What the contracts checked (claim counts) and the delegated task's
@@ -843,6 +852,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     agent: type,
     description,
     ...(worktreeResult ? { worktree: worktreeResult } : {}),
+    ...(worktreeResult && worktreeResult.changed && worktreeResult.branch ? { note_on_worktree: 'These changes are on branch ' + worktreeResult.branch + ', NOT in the user\'s project folder yet. If the user asked for this work, merge it now with worktree_merge (branch ' + worktreeResult.branch + ') and say so; otherwise tell the user the branch name.' } : {}),
     finished: outcome.finished === true,
     report: handoff ? handoff.preview : record.report,
     ...(handoff ? { report_file: handoff.file, report_chars: handoff.chars } : {}),
@@ -863,6 +873,28 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     [REPORT_EVIDENCE]: { events: evidence, issues: record.verificationIssues || [], text: outcome.text },
     ...(record.usage && record.usage.requests ? { usage: { requests: record.usage.requests, inputTokens: record.usage.inputTokens, outputTokens: record.usage.outputTokens, costUsd: Number(Number(record.usage.costUsd || 0).toFixed(6)) } } : {})
   };
+}
+
+const LIFTED_KINDS = new Set(['execution', 'command', 'fetch', 'search']);
+export function liftChildEvidence(parent, events, agentId) {
+  const ledger = sessionEvidence(parent);
+  if (!ledger || !Array.isArray(events)) return 0;
+  let lifted = 0;
+  for (const event of events) {
+    if (!event || !LIFTED_KINDS.has(event.kind)) continue;
+    const { seq: _seq, at: _at, epoch: _epoch, mayEdit: _mayEdit, ...rest } = event;
+    if (recordEvidence(ledger, { ...rest, via: String(agentId || 'subagent') })) lifted++;
+  }
+  return lifted;
+}
+
+// One readable line for a finished agent: the start of its report, plus a
+// warning when its edits sit on an unmerged branch.
+export function completedDetail(report, worktreeResult, outcome = {}) {
+  const text = String(report || '').replace(/```[\s\S]*?```/g, ' ').replace(/[#*_`>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const branch = worktreeResult && worktreeResult.changed && worktreeResult.branch ? 'Changes on branch ' + worktreeResult.branch + ' (not merged yet). ' : '';
+  const summary = text ? (text.length > 400 ? text.slice(0, 399).trimEnd() + '…' : text) : (() => { const steps = Math.max(0, Number(outcome.toolCalls) || 0); return 'Finished with no report (' + steps + (steps === 1 ? ' step' : ' steps') + ').'; })();
+  return (branch + summary).slice(0, 500);
 }
 
 function recordSharedTaskWorktree(parent, record, worktreeResult) {
