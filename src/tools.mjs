@@ -1601,9 +1601,18 @@ export function skillLocation(root, item) {
   return { scope, path: file };
 }
 
+// Says what went wrong with a name that cannot be a skill. Models often pass
+// a tool's name (task_contract, run_command) to load_skill; tell them to call
+// the tool itself instead of only "must be a short identifier".
+export function badSkillName(name) {
+  const shown = JSON.stringify(String(name).slice(0, 80));
+  if (/^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/i.test(name)) return shown + ' is not a skill name: skill names use letters, numbers and hyphens (like code-review). If ' + shown + ' is a tool, call that tool directly; list_skills shows the skills.';
+  return shown + ' is not a skill name: skill names use letters, numbers and hyphens (like code-review), up to 64 characters. Call list_skills to see the skills.';
+}
+
 export async function loadSkillText(root, rawName, options = {}) {
   const name = String(rawName || '');
-  if (!/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(name)) throw new Error('Skill names must be a short identifier.');
+  if (!/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(name)) throw new Error(badSkillName(name));
   const skills = await listAvailableSkills(root, options);
   const skill = skills.find((item) => item.name.toLowerCase() === name.toLowerCase());
   if (!skill) throw new Error('No skill named "' + name + '" is available. Call list_skills to inspect valid names.');
@@ -1688,7 +1697,7 @@ export function pageSkillText(result, rawOffset) {
 
 export async function loadSkillResource(root, rawName, rawRelativePath, options = {}) {
   const name = String(rawName || '');
-  if (!/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(name)) throw new Error('Skill names must be a short identifier.');
+  if (!/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(name)) throw new Error(badSkillName(name));
   const relativePath = String(rawRelativePath || '').replace(/\\/g, '/');
   const parts = relativePath.split('/');
   if (relativePath.startsWith('/') || parts.length < 2 || parts.some((part) => !part || part === '.' || part === '..') ||
