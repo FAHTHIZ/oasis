@@ -45,7 +45,7 @@ export async function exitPlanMode(session, args, context, options) {
   const approval = context && context.approval;
   let answer = false;
   if (typeof approval === 'function') {
-    answer = await approval('Oasis has a plan and wants to start implementing it:\n\n' + plan + '\n\nLeave plan mode and implement this plan?', true, { tool: 'exit_plan_mode' });
+    answer = await approval('OASIS has a plan and wants to start implementing it:\n\n' + plan + '\n\nLeave plan mode and implement this plan?', true, { tool: 'exit_plan_mode' });
   }
   if (answer === true || answer === 'always') {
     const next = session.prePlanMode && session.prePlanMode !== 'plan' ? session.prePlanMode : 'default';

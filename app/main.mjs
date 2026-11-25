@@ -3646,6 +3646,33 @@ async function requestApproval({ name, args, runtime = false }) {
   $('approvalInstead').value = '';
   $('approvalInstead').hidden = !(agent && agent.busy && typeof agent.steer === 'function');
   $('denyButton').textContent = 'Deny';
+  $('allowButton').textContent = 'Allow';
+  $('approvalTitle').textContent = 'Allow this?';
+  $('approvalInstead').placeholder = 'Or tell OASIS what to do instead (sent with Deny)';
+  if (runtime && name === 'exit_plan_mode') {
+    $('approvalTitle').textContent = 'Review the plan';
+    $('approvalInstead').placeholder = 'Or say what to change in the plan (sent with Keep planning)';
+    // A plan reads as the document it is: rendered Markdown, all of it (it
+    // was cut at 1,600 characters and its wrapped lines showed as code),
+    // with buttons that say what they do.
+    const text = String(args.prompt || '');
+    const body = text.replace(/^O(?:asis|ASIS) has a plan and wants to start implementing it:\s*/i, '').replace(/\s*Leave plan mode and implement this plan\?\s*$/i, '');
+    summary.replaceChildren();
+    if (args.subagent) { const who = document.createElement('span'); who.className = 'approval-agent'; who.textContent = 'Asked by the agent: ' + String(args.subagent).slice(0, 100); summary.appendChild(who); }
+    const lead = document.createElement('span');
+    lead.className = 'approval-line';
+    lead.textContent = 'OASIS has a plan. Nothing has changed yet; approve it to start.';
+    const plan = document.createElement('div');
+    plan.className = 'approval-plan markdown';
+    plan.innerHTML = renderMarkdown(body.slice(0, 110_000) || 'The plan was not provided.');
+    summary.append(lead, plan);
+    detail.hidden = true;
+    $('denyButton').textContent = 'Keep planning';
+    $('allowButton').textContent = 'Approve plan and start';
+    openSheet('approvalSheet');
+    markWaitingTools(true);
+    return new Promise((resolve) => { approvalResolve = resolve; });
+  }
   if (runtime) {
     // From the agent on this computer: its own wording, diff and "always" rule.
     // "WARNING — RISKY ACTION" becomes a badge; an indented line is the

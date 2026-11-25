@@ -646,6 +646,11 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 #questionForm .row input{flex:1;min-width:0}
 .approval-summary .approval-line{display:block}
 .approval-summary .approval-command{display:block;margin:8px 0;padding:8px 10px;border-radius:8px;background:var(--sunken);font-size:13px;white-space:pre-wrap;word-break:break-word}
+.approval-summary .approval-plan{margin:10px 0 4px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--sunken);font-size:13.5px;line-height:1.55}
+.approval-plan :is(h1,h2,h3,h4){font-size:14px;margin:10px 0 4px}
+.approval-plan :is(ul,ol){margin:4px 0;padding-left:20px}
+.approval-plan p{margin:4px 0}
+.approval-plan pre{white-space:pre-wrap;font-size:12.5px}
 .risk-badge{display:inline-block;margin-bottom:6px;padding:2px 8px;border-radius:999px;background:var(--danger-soft);color:var(--danger);font-size:12px;font-weight:600}
 
 
