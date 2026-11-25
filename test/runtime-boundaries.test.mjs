@@ -49,3 +49,15 @@ test('the central dispatcher has no direct ask-user or IDE execution branches', 
   const dispatcher = source.slice(start, end);
   assert.doesNotMatch(dispatcher, /name === ['"](?:ask_user_question|ide_get_diagnostics|ide_open_file)['"]/);
 });
+
+// gpt-oss ended an answer with "October 2, 2023【fetch_url】."
+test('gpt-oss citation markers are removed from replies, CJK brackets are not', async () => {
+  const { stripModelCitations } = await import('../src/think-tags.mjs');
+  assert.equal(stripModelCitations('released on October 2, 2023【fetch_url】.'), 'released on October 2, 2023.');
+  assert.equal(stripModelCitations('See docs【3†L10-L20】 and【turn0search1】, ok'), 'See docs and, ok');
+  assert.equal(stripModelCitations('a 【web_search†python.org】b'), 'a b');
+  assert.equal(stripModelCitations('end 【2】'), 'end');
+  assert.equal(stripModelCitations('【注意】 keep this'), '【注意】 keep this');
+  assert.equal(stripModelCitations('plain text'), 'plain text');
+  assert.equal(stripModelCitations(null), null);
+});

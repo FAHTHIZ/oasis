@@ -1,6 +1,6 @@
 import { sitrepAlerts } from './team-sitrep.mjs';
 import { sharedCalibrationLedger } from './calibration.mjs';
-import { splitThinking, visibleReply } from './think-tags.mjs';
+import { splitThinking, visibleReply, stripModelCitations } from './think-tags.mjs';
 import { randomUUID } from 'node:crypto';
 import { scratchEnabled, scratchKey, scratchRelative, scratchPrompt, ensureScratch, isScratchPath, SCRATCH_ROOT } from './scratch.mjs';
 import { protectedConfigTarget, protectedEditMessage, protectedEditsAllowed, ruleNamesProtectedPath } from './protected-paths.mjs';
@@ -3814,6 +3814,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         if (split.reasoning && !assistant.reasoning_content && !assistant.reasoning) assistant.reasoning_content = split.reasoning;
       }
     }
+    if (assistant && typeof assistant.content === 'string') assistant.content = stripModelCitations(assistant.content);
     if (debugEnabled('raw')) debugLog('raw', 'model reply before cleanup: ' + JSON.stringify({ content: typeof assistant.content === 'string' ? assistant.content.slice(0, 4000) : assistant.content, tool_calls: assistant.tool_calls || [] }).slice(0, 6000));
     const toolCallRepairs = normalizeAssistantToolCalls(session, assistant, step);
     if ((toolCallRepairs.textCalls || toolCallRepairs.repairedNames || toolCallRepairs.repairedArguments || toolCallRepairs.repairedPaths || toolCallRepairs.invalidArguments) && typeof options.onToolCallRepair === 'function') options.onToolCallRepair(toolCallRepairs);

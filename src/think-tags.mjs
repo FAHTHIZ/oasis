@@ -118,3 +118,19 @@ export function visibleReply(text) {
   if (partialTag(trimmed)) return '';
   return splitThinking(value).content;
 }
+
+// gpt-oss cites in its own browsing syntax: "【fetch_url】", "【3†L10-L20】",
+// "【turn0search1】". Outside its native tool runtime those are dead markers
+// in the answer. Only marker shapes are removed; 【注意】 and other CJK
+// brackets stay.
+const MODEL_CITATION = /([ \t]*)【(?:[^【】\n]{0,80}†[^【】\n]{0,80}|turn\d+[a-z]+\d*|\d{1,3}|[a-z]+(?:_[a-z]+)+(?:[^【】\n]{0,60})?)】/g;
+export function stripModelCitations(text) {
+  if (typeof text !== 'string' || !text.includes('【')) return text;
+  // The space before a marker goes when punctuation or the line end follows
+  // ("2023 【fetch_url】." -> "2023."); between words one space stays.
+  return text.replace(MODEL_CITATION, (match, before, offset, whole) => {
+    const rest = whole.slice(offset + match.length);
+    if (!before || /^(?:[ \t]|[.,;:!?)\]]|\n|$)/.test(rest)) return '';
+    return ' ';
+  });
+}
