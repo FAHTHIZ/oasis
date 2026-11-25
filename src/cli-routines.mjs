@@ -47,6 +47,8 @@ Options:
   --precheck CMD           agent routines: run CMD first and start the model only
                            if it prints something (its output joins the prompt;
                            nothing or [SILENT] = skipped, no model call)
+  SCHEDULE "after NAME"    run when routine NAME finishes ok ("after NAME failed",
+                           "after NAME any"); {output} and {status} hold its result
   --timeout MINUTES        stop a run that takes longer (default: no limit,
                            or OASIS_ROUTINE_TIMEOUT_MINUTES)
   --event NAME             webhook routines: run only for this event, e.g.
@@ -112,7 +114,8 @@ export async function scheduleCommand(args = [], { env = process.env, write = (t
     if (!schedule || !prompt) return say(SCHEDULE_USAGE);
     const job = await createJob({ ...fields, schedule, prompt }, { env });
     say('Created ' + describeJob(job));
-    if (job.schedule.type === 'event') say('Webhook: POST /hooks/routines/' + job.id + ' on oasis web, signed with the secret from: oasis schedule show ' + job.id);
+    if (job.schedule.source === 'routine') say('It runs each time ' + job.schedule.display.replace(/^after /, '') + ' finishes' + (job.schedule.on === 'failed' ? ' with a failure.' : job.schedule.on === 'any' ? ' (ok or failed).' : ' successfully.') + ' Use {output} and {status} in the prompt for its result.');
+    else if (job.schedule.type === 'event') say('Webhook: POST /hooks/routines/' + job.id + ' on oasis web, signed with the secret from: oasis schedule show ' + job.id);
     say(job.enabled ? 'It runs while the scheduler is running: oasis schedule install (once; starts with the computer) or oasis schedule daemon' : 'It is paused. Resume it with: oasis schedule resume ' + job.id);
     return job;
   }
@@ -134,7 +137,8 @@ export async function scheduleCommand(args = [], { env = process.env, write = (t
     if (job.precheck) say('  precheck: ' + job.precheck);
     if (job.timeoutMinutes) say('  timeout: ' + job.timeoutMinutes + ' min per run');
     if (job.fromSession) say('  continues: ' + job.fromSession + (job.chain ? ' (chained: each run continues the last one)' : ' (each run forks it)'));
-    if (job.schedule.type === 'event') {
+    if (job.schedule.source === 'routine') { if (job.pendingEvents?.length) say('  waiting: ' + job.pendingEvents.length + ' finished run(s) to act on'); }
+    else if (job.schedule.type === 'event') {
       if (job.events?.length) say('  events:  ' + job.events.join(', '));
       say('  webhook: POST <oasis web address>/hooks/routines/' + job.id + (job.pendingEvents?.length ? '  (' + job.pendingEvents.length + ' waiting)' : ''));
       say('  secret:  ' + job.webhookSecret + '  (sign the raw body: X-Hub-Signature-256: sha256=HMAC_SHA256_HEX)');
