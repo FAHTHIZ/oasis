@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- An image sent in the web app disappeared from its message after a reload, leaving only "1 image attached". A small thumbnail (a few KB) is now saved with the chat; the full image is still not kept.
 - When a model passed a tool's name to `load_skill` (for example `task_contract`), it got only "Skill names must be a short identifier." The error now says what skill names look like, to call a tool directly, and to use `list_skills`.
 - After a reload, a step that waited for approval showed the wait as its run time (0.6s live, 3m 07s after reload), and a short thought before a step showed minutes ("9m 08s" for 2 s). The server now sends how long each step waited for approval, the app leaves it out on replay as it does live, and replayed thoughts end at their own time.
 - A failed MCP tool call showed its raw `{"isError":true,"content":…}` JSON as the step's reason in the chat and Activity. The server's own message now shows, without the "MCP tool reported an error:" lead-in.

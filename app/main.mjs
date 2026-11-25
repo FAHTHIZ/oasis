@@ -569,6 +569,7 @@ async function send(text) {
   setBusy(true);
   const images = attachments.map(({ mediaType, data, name }) => ({ mediaType, data, name }));
   sentThumbs = attachments.map((item) => item.url);
+  sentSaved = attachments.map((item) => item.thumb).filter(Boolean);
   attachments = [];
   renderAttachments();
   let settle;
@@ -2465,10 +2466,11 @@ function handleRunEvent(event) {
       // The Undo button already dimmed the turn; a "/undo" bubble repeats it.
       if (quietUndo && event.content === '/undo') { quietUndo = false; break; }
       const at = Date.now();
-      display.push({ role: 'user', content: event.content, at, ...(event.images ? { images: event.images } : {}) });
+      display.push({ role: 'user', content: event.content, at, ...(event.images ? { images: event.images, ...(sentSaved.length ? { thumbs: sentSaved } : {}) } : {}) });
       const el = addMessage('user', event.content, at);
       if (event.images) addImageNote(el, event.images, sentThumbs);
       sentThumbs = [];
+      sentSaved = [];
       scrollDown(true);
       break;
     }
@@ -2837,7 +2839,7 @@ function renderSavedDisplay(entries) {
       if (split.tool) { if (!split.text.trim()) continue; content = split.text; }
     }
     const el = addMessage(block.type === 'text' ? 'assistant' : entry.role, content, Number(entry.at) || 0);
-    if (entry.role === 'user' && entry.images) addImageNote(el, entry.images, []);
+    if (entry.role === 'user' && entry.images) addImageNote(el, entry.images, savedThumbs(entry.thumbs));
     if (entry.role === 'user' && entry.steer) el.classList.add('steer');
     if (entry.role === 'worked' && Array.isArray(entry.timings)) el.title = timingSummary(entry.timings);
     if (entry.role === 'worked') foldTurn(el, { at: Number(entry.at) || 0 });
@@ -6094,6 +6096,11 @@ boot().catch((error) => toast(error.message, 'error')).finally(() => { document.
 // device first, which keeps uploads small on slow connections and old phones.
 let attachments = [];
 let sentThumbs = [];
+let sentSaved = [];
+// Thumbnails saved with a chat: only small JPEG data URLs are shown.
+function savedThumbs(list) {
+  return Array.isArray(list) ? list.filter((url) => typeof url === 'string' && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(url) && url.length <= 40_000).slice(0, 4) : [];
+}
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 const MAX_IMAGE_BYTES = 3_500_000;
 const MAX_IMAGE_SIDE = 1600;
@@ -6124,7 +6131,27 @@ async function prepareImage(file) {
   } catch { /* not decodable here: send as is if the type is allowed */ }
   if (!blob || !IMAGE_TYPES.includes(mediaType)) throw new Error('Use a PNG, JPEG, GIF or WebP image.');
   if (blob.size > MAX_IMAGE_BYTES) throw new Error('That image is too large, even after scaling it down.');
-  return { mediaType, data: await base64Of(blob), name: file.name || 'pasted-image', url: URL.createObjectURL(blob) };
+  return { mediaType, data: await base64Of(blob), name: file.name || 'pasted-image', url: URL.createObjectURL(blob), thumb: await thumbnailOf(blob) };
+}
+// A small JPEG kept with the chat (a few KB), so a sent image still shows
+// after a reload. The full image is not kept in saved chats.
+const THUMB_SIDE = 160;
+async function thumbnailOf(blob) {
+  try {
+    const bitmap = await createImageBitmap(blob);
+    const scale = Math.min(1, THUMB_SIDE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d');
+    // JPEG has no transparency: a white backing keeps transparent PNGs readable.
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    if (bitmap.close) bitmap.close();
+    const url = canvas.toDataURL('image/jpeg', 0.72);
+    return /^data:image\/jpeg;base64,/.test(url) && url.length <= 40_000 ? url : '';
+  } catch { return ''; }
 }
 async function addImages(files) {
   const list = [...files].filter((file) => file && /^image\//.test(file.type));
