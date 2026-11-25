@@ -19,7 +19,7 @@ import { renderMarkdown, renderPartialMarkdown, splitStableMarkdown } from './ma
 import { smartConnect, looksLikeConnection, parsePaste, scanLocal, buildChain, nextInChain, configFor, classifyFailure, maskSecret, isGitHubToken, serverLabel } from './core/connect.mjs';
 import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from './core/plugins.mjs';
 import { detectRuntime, RuntimeAgent, RuntimeWorkspace, tokenFromPaste, saveRuntimeToken, forgetRuntimeToken, deviceRemembered } from './core/runtime.mjs';
-import { APP_KEYBOARD_SHORTCUTS, searchAppCommands } from './core/command-palette.mjs';
+import { APP_KEYBOARD_SHORTCUTS, paletteExtras, searchPalette } from './core/command-palette.mjs';
 import { normalizeTaskProgress } from './core/task-progress.mjs';
 import { RuntimeTerminal, loadXterm, wrapWords } from './core/terminal.mjs';
 import { suggestToken, rankSuggestions, applySuggestion, starterCommands } from './core/composer-suggest.mjs';
@@ -172,6 +172,7 @@ function openNativeDialog(id) {
   if (typeof dialog.showModal === 'function') dialog.showModal();
   else dialog.setAttribute('open', '');
   if (id === 'commandPaletteDialog') {
+    void loadPaletteExtras();
     $('commandPaletteInput').value = '';
     renderCommandPalette();
     $('commandPaletteModKey').textContent = displayShortcut('MOD+K');
@@ -221,7 +222,7 @@ function renderShortcutGuide() {
 
 function renderCommandPalette() {
   const results = $('commandPaletteResults');
-  const items = searchAppCommands($('commandPaletteInput').value).filter((item) => !item.runtimeOnly || (RT && !RT.needsToken));
+  const items = searchPalette($('commandPaletteInput').value, paletteExtra).filter((item) => !item.runtimeOnly || (RT && !RT.needsToken));
   results.replaceChildren();
   commandPaletteSelected = 0;
   if (!items.length) {
@@ -288,7 +289,33 @@ function updatePaletteSelection() {
   buttons[commandPaletteSelected].scrollIntoView({ block: 'nearest' });
 }
 
+// Chats, plugins and skills for the palette, gathered each time it opens.
+let paletteExtra = [];
+async function loadPaletteExtras() {
+  try {
+    const [index, commands] = await Promise.all([
+      workspace ? chatIndex(workspace.project.id).catch(() => ({ list: [] })) : { list: [] },
+      slashCommandList().catch(() => [])
+    ]);
+    paletteExtra = paletteExtras({ chats: index.list || [], plugins: PLUGINS, skills: (commands || []).filter((item) => item && (item.kind === 'skill' || item.kind === 'command')), currentChat: chatId });
+  } catch { paletteExtra = []; }
+  if ($('commandPaletteDialog').open && $('commandPaletteInput').value.trim()) renderCommandPalette();
+}
+
 function runPaletteCommand(id) {
+  const [kind, ...rest] = String(id).split(':');
+  const value = rest.join(':');
+  if (value && kind === 'chat') { closeNativeDialog('commandPaletteDialog'); setTimeout(() => { void openChat(value); }, 0); return; }
+  if (value && kind === 'plugin') {
+    closeNativeDialog('commandPaletteDialog');
+    setTimeout(() => { renderPluginGrid(); openSheet('pluginsSheet'); const tile = document.querySelector('#pluginGrid [data-plugin="' + CSS.escape(value) + '"]'); if (tile) tile.scrollIntoView({ block: 'center' }); }, 0);
+    return;
+  }
+  if (value && kind === 'skill') {
+    closeNativeDialog('commandPaletteDialog');
+    setTimeout(() => { const input = $('input'); input.value = '/' + value + ' '; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); input.setSelectionRange(input.value.length, input.value.length); }, 0);
+    return;
+  }
   const actions = {
     'new-chat': () => newChat(),
     'open-chats': () => openChats(),

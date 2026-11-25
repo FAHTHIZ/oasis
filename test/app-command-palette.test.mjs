@@ -31,7 +31,7 @@ test('browser workspace exposes an accessible native command panel and shortcut 
   assert.ok(html.includes('id="shortcutsFilter"'));
   assert.ok(main.includes("'$mod+KeyK':"), 'MOD+K opens the palette (tinykeys)');
   assert.ok(main.includes("'[Shift]+/':"), '/ in the empty message box');
-  assert.ok(main.includes('searchAppCommands('));
+  assert.ok(main.includes('searchPalette('));
   assert.ok(css.includes('.native-dialog::backdrop'));
   assert.ok(css.includes('.command-result[aria-selected="true"]'));
 });
@@ -59,4 +59,19 @@ test('keyboard guide documents only shortcuts wired by the browser workspace', (
   assert.ok(main.includes("$('editorSheet').addEventListener('keydown'"), '[ and ] are wired in the file viewer');
   assert.ok(keys.includes('MOD+O'));
   assert.equal(APP_KEYBOARD_SHORTCUTS.length, 17);
+});
+
+test('the palette finds chats, plugins and skills when searching', async () => {
+  const { paletteExtras, searchPalette } = await import('../app/core/command-palette.mjs');
+  const extras = paletteExtras({
+    chats: [{ id: 'a1', title: 'Use the DeepWiki tools to explain the repo' }, { id: 'now', title: 'The open chat' }],
+    plugins: [{ id: 'research', name: 'Researcher', description: 'Searches the web', keywords: ['cite'] }],
+    skills: [{ name: 'debugging', description: 'Reproduce and fix a bug', kind: 'skill' }],
+    currentChat: 'now'
+  });
+  assert.equal(extras.some((item) => item.id === 'chat:now'), false, 'the open chat is not offered');
+  assert.equal(searchPalette('deepwiki', extras)[0].id, 'chat:a1');
+  assert.equal(searchPalette('researcher', extras)[0].id, 'plugin:research');
+  assert.equal(searchPalette('debugging', extras)[0].id, 'skill:debugging');
+  assert.equal(searchPalette('', extras).some((item) => item.id.includes(':')), false, 'an empty search lists only actions');
 });

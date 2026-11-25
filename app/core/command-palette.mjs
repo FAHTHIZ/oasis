@@ -58,3 +58,30 @@ export function searchAppCommands(query, commands = APP_PALETTE_COMMANDS) {
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .map((entry) => entry.item);
 }
+
+// Chats, plugins and skills as palette results, beside the fixed actions.
+// They are listed only for a search (an empty palette shows the actions).
+// ids: chat:ID, plugin:ID, skill:NAME (run by the app).
+export function paletteExtras({ chats = [], plugins = [], skills = [], currentChat = '' } = {}) {
+  const out = [];
+  for (const chat of chats.slice(0, 200)) {
+    if (!chat || !chat.id || chat.id === currentChat) continue;
+    const title = String(chat.title || '').trim() || 'Untitled chat';
+    out.push({ id: 'chat:' + chat.id, label: title.slice(0, 120), description: 'Open this chat', section: 'Chats', keywords: 'chat conversation task history' });
+  }
+  for (const plugin of plugins) {
+    if (!plugin || !plugin.id) continue;
+    out.push({ id: 'plugin:' + plugin.id, label: String(plugin.name || plugin.id), description: String(plugin.description || 'Plugin'), section: 'Plugins', keywords: ['plugin', ...(Array.isArray(plugin.keywords) ? plugin.keywords : [])].join(' ').slice(0, 400) });
+  }
+  for (const skill of skills) {
+    if (!skill || !skill.name) continue;
+    out.push({ id: 'skill:' + skill.name, label: '/' + skill.name, description: String(skill.description || 'Skill').slice(0, 200), section: skill.kind === 'skill' ? 'Skills' : 'Commands', keywords: 'skill command slash' });
+  }
+  return out;
+}
+
+// What the palette shows for a query: actions, plus chats, plugins and skills when searching.
+export function searchPalette(query, extras = []) {
+  if (!String(query || '').trim()) return [...APP_PALETTE_COMMANDS];
+  return searchAppCommands(query, [...APP_PALETTE_COMMANDS, ...extras]).slice(0, 40);
+}
