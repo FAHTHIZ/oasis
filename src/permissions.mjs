@@ -841,11 +841,23 @@ export function suggestRule(toolName, args = {}) {
     // Keep explicit paths: allowing "node" must not also allow ./some/dir/node.
     const raw = String(args.command || '');
     const command = /[\\/]/.test(raw) ? raw : path.basename(raw);
-    const first = Array.isArray(args.args) && args.args[0] && !String(args.args[0]).startsWith('-') ? ' ' + args.args[0] : '';
+    const argv = Array.isArray(args.args) ? args.args.map(String) : [];
+    // An interpreter is only offered with what it was asked to run ("node
+    // --test", "python3 manage.py"), never bare, and never for inline code:
+    // "always allow node" would also allow every node -e script after it.
+    const evalFlags = INTERPRETER_EVAL_FLAGS[path.basename(raw)];
+    if (evalFlags) {
+      if (!argv[0] || evalFlags.includes(argv[0]) || argv.some((arg) => evalFlags.includes(arg))) return null;
+      return 'run_command(' + command + ' ' + argv[0] + ':*)';
+    }
+    const first = argv[0] && !argv[0].startsWith('-') ? ' ' + argv[0] : '';
     return 'run_command(' + command + first + ':*)';
   }
   if (toolName === 'run_shell' || toolName === 'powershell') {
-    const words = String(args.command || '').trim().split(/\s+/).slice(0, 2).join(' ');
+    const all = String(args.command || '').trim().split(/\s+/);
+    const evalFlags = INTERPRETER_EVAL_FLAGS[path.basename(all[0] || '')];
+    if (evalFlags && (all.length < 2 || all.slice(1).some((word) => evalFlags.includes(word)))) return null;
+    const words = all.slice(0, 2).join(' ');
     return words ? (toolName === 'powershell' ? 'PowerShell(' : 'run_shell(') + words + ':*)' : null;
   }
   if (toolName === 'fetch_url') {

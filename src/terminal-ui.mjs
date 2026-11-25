@@ -180,7 +180,7 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
   const rows = [
     ['workspace', tildePath(root || process.cwd(), env)],
     ...(model ? [['model', model + (provider ? dim('  via ' + provider) : '')]] : []),
-    ['mode', mode]
+    ['mode', BANNER_MODES[mode] ? BANNER_MODES[mode][0] + dim('  ' + BANNER_MODES[mode][1]) : mode]
   ];
   for (const [label, value] of rows) output.write('  ' + dim(label.padEnd(10)) + value + '\n');
   // Split the hint row between items rather than letting the terminal break "Shift+Tab modes".
@@ -319,6 +319,16 @@ export function transcriptLines(messages, { color = true, width = 100, maxResult
   return out.length ? out : ['Nothing in the transcript yet.'];
 }
 
+// The banner names the mode as people say it, with what it does
+// ("manual  asks before commands"), not the internal name "default".
+const BANNER_MODES = {
+  default: ['manual', 'asks before commands; edits can be undone'],
+  acceptEdits: ['accept edits', 'asks before commands'],
+  plan: ['plan', 'reads and plans; nothing changes until you approve'],
+  auto: ['auto', 'asks only for risky actions'],
+  dontAsk: ['dont-ask', 'never prompts; anything that would ask is refused'],
+  bypassPermissions: ['bypass-permissions', 'never asks']
+};
 const MODE_LABELS = {
   acceptEdits: '⏵⏵ accept edits on',
   plan: '⏸ plan mode on',

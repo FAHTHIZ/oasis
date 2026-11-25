@@ -850,7 +850,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   // (inline code, wrappers, find -exec, ...) always need an interactive answer.
   const configRisk = options.bypassPermissions || protectedEditsAllowed(options.env || process.env) ? null
     : protectedShellWrite([command].concat(args).join(' '));
-  const highRisk = configRisk || (analysis.highRisk && !options.ruleAllowed ? analysis.highRisk : null) || (options.injectionHold ? 'needs a person because ' + options.injectionHold : null);
+  const highRisk = configRisk || (analysis.highRisk && !(options.ruleAllowed && !options.sessionRuleOnly) ? analysis.highRisk : null) || (options.injectionHold ? 'needs a person because ' + options.injectionHold : null);
   const sandboxAutoAllowed = sandbox && sandbox.available && sandbox.autoAllowCommands !== false && !highRisk;
   // ls, cat, grep, git status/diff/log and friends: read-only, inside the workspace.
   // A command that leaves the sandbox (sandbox.excludedCommands) always asks, read-only or not.
@@ -2310,6 +2310,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         signal: context.signal,
         sandbox: context.sandbox,
         ruleAllowed: Boolean(context.ruleAllowed) && !install.forceAsk,
+        sessionRuleOnly: Boolean(context.sessionRuleOnly),
         bypassPermissions: Boolean(context.autoApprove && context.permissionMode === 'bypassPermissions'),
         readOnlyCommands: readOnlyCommandsEnabled(env, (context.session && context.session.settings) || {}),
         settings: (context.session && context.session.settings) || {},

@@ -383,7 +383,7 @@ test('OS sandbox masks common credential paths from sandboxed processes', () => 
 test('session rules for path commands keep the path; deny rules also catch path forms', () => {
   const policy = new PermissionPolicy({ permissions: { deny: ['run_command(rm:*)'] } });
   const rule = suggestRule('run_command', { command: '/usr/local/bin/node', args: ['--version'] });
-  assert.equal(rule, 'run_command(/usr/local/bin/node:*)');
+  assert.equal(rule, 'run_command(/usr/local/bin/node --version:*)');
   policy.rememberForSession(rule);
   assert.equal(policy.evaluate('run_command', { command: '/usr/local/bin/node', args: ['--version'] }).decision, 'allow');
   assert.notEqual(policy.evaluate('run_command', { command: '/tmp/evil/node', args: ['--version'] }).decision, 'allow');

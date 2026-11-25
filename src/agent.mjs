@@ -1698,6 +1698,11 @@ async function authorizeCall(session, name, args, context, options) {
   } else if (decision === 'allow') {
     overlay.ruleAllowed = true;
     overlay.autoApprove = true;
+    // A rule from one click on "Always allow … this session" covers the
+    // routine use it was offered for; it does not wave through high-risk
+    // forms of the same program ("node:*" then "node -e <code>"). Rules
+    // written in settings still do, as they name exactly what they allow.
+    if (verdict.session) overlay.sessionRuleOnly = true;
   }
   return { context: overlay, args, hookContext };
 }
