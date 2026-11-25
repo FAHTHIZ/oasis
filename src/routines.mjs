@@ -381,7 +381,7 @@ export async function resumeJob(ref, { env = process.env, now = new Date() } = {
     const job = findJob(jobs, ref);
     if (job.state === 'completed') throw new Error(job.id + (job.schedule && job.schedule.type === 'rrule' ? ' has no occurrences left in its RRULE' : ' already ran its one-time schedule') + '. Edit its schedule to run it again.');
     job.enabled = true; job.state = 'scheduled';
-    delete job.pausedAt; delete job.pausedReason;
+    delete job.pausedAt; delete job.pausedReason; delete job.failureStreak;
     if (!job.nextRunAt) job.nextRunAt = job.schedule.type === 'once' ? job.schedule.at : nextOccurrence(job, now);
     if (job.lastStatus === 'blocked_config') job.lastStatus = 'pending';
     return job;
@@ -611,6 +611,13 @@ async function launch(job, env, backgrounds, now, event = null) {
   return { fireId: randomUUID(), backgroundId: entry.id, startedAt: now.toISOString(), manual: false, ...(entry.sessionId ? { sessionId: entry.sessionId } : {}), ...(event ? { eventId: event.id, eventFile } : {}) };
 }
 
+export function maxRoutineFailures(env = process.env) {
+  const raw = env.OASIS_ROUTINE_MAX_FAILURES;
+  if (raw === undefined || raw === '') return 3;
+  const value = Number.parseInt(raw, 10);
+  return Number.isInteger(value) && value >= 0 ? value : 3;
+}
+
 // Finishes runs whose background session has ended: records the result, writes the
 // output file and delivers it. Safe to repeat: a run is only finished once.
 async function reconcile(job, env, backgrounds, options) {
@@ -631,16 +638,23 @@ async function reconcile(job, env, backgrounds, options) {
     record.outputFile = path.join(dir, run.startedAt.replace(/[:.]/g, '-') + '.md');
     await writeFile(record.outputFile, output + '\n', { mode: 0o600 });
   }
+  // Consecutive failures pause the routine (OASIS_ROUTINE_MAX_FAILURES, default
+  // 3; 0 never pauses), so a broken routine does not fail and alert forever.
+  const streak = status === 'failed' || status === 'lost' ? (job.failureStreak || 0) + 1 : status === 'ok' ? 0 : job.failureStreak || 0;
+  const maxFailures = maxRoutineFailures(env);
+  const pauseForFailures = status === 'failed' && maxFailures > 0 && streak >= maxFailures && job.enabled !== false && job.schedule?.type !== 'once';
   if (status !== 'cancelled' && !silent && (output || status !== 'ok')) {
-    const message = status === 'ok' ? output : 'Run ' + status + (output ? ':\n' + output : '.') + '\nLogs: oasis bg logs ' + run.backgroundId;
+    const message = (status === 'ok' ? output : 'Run ' + status + (output ? ':\n' + output : '.') + '\nLogs: oasis bg logs ' + run.backgroundId)
+      + (pauseForFailures ? '\n\nPaused after ' + streak + ' failed runs in a row. Fix it, then: oasis schedule resume ' + (job.name || job.id) : '');
     try { record.delivery = (await deliverOutput(job, message, { env, fetchImpl: options.fetchImpl })).delivered; } catch (error) { record.deliveryError = error.message; }
   }
   await appendRun(job.id, record, env);
   job.lastStatus = status; job.lastRunAt = run.startedAt; job.lastFinishedAt = finishedAt;
   // chain: the next run continues from this run's conversation (only after a clean run).
   if (job.chain && status === 'ok' && run.sessionId) job.fromSession = run.sessionId;
-  job.failureStreak = status === 'failed' || status === 'lost' ? (job.failureStreak || 0) + 1 : status === 'ok' ? 0 : job.failureStreak || 0;
+  job.failureStreak = streak;
   delete job.activeRun;
+  if (pauseForFailures) Object.assign(job, { enabled: false, state: 'paused', pausedReason: streak + ' failed runs in a row; the last: oasis bg logs ' + run.backgroundId + '. Resume when fixed.' });
   if (status === 'interrupted' || status === 'lost') {
     // Never re-run an interrupted fire automatically: it may have had side effects.
     Object.assign(job, { enabled: false, state: 'paused', pausedReason: 'The last run was ' + status + '; review it (oasis bg logs ' + run.backgroundId + ') and resume.' });
