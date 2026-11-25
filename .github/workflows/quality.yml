@@ -271,6 +271,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Run the web app task, approval and contrast smoke test
         run: node .github/scripts/browser-e2e.mjs
+      - name: Run the first-time user tour (sheets, palette, theme, files, image, phone)
+        run: node .github/scripts/browser-tour.mjs
       - name: Upload desktop and phone-width screenshots
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

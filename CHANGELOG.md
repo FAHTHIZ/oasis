@@ -4,6 +4,10 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ## Unreleased
 
+### Added
+
+- A Playwright tour of the web app as a first-time user runs in CI beside the end-to-end task test (`.github/scripts/browser-tour.mjs`): every sheet opens and closes, the command palette finds actions and chats, a theme previews and reverts, Settings lists connectors, the Files tab picks up new files, an attached image reaches the model and keeps its thumbnail after a reload, and the phone layout never scrolls sideways.
+
 ### Fixed
 
 - One Escape now closes the command palette and the keyboard shortcuts list. Before, with text in the search box, the first Escape only cleared the text.
