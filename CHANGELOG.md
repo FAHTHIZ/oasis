@@ -23,7 +23,7 @@ A stability release from a final pass over OASIS as a first-time user: research,
 
 ### Fixed
 
-- `oasis install-github-app` no longer plans `sudo apt-get install install-github-app`. It, and other chat-only words such as `oasis hooks`, `oasis stats` and `oasis inbox`, now say to type the slash command in a chat instead of being sent to the model as a one-word task.
+- `oasis install-github-app` no longer plans `sudo apt-get install install-github-app`. It, and other chat-only words such as `oasis hooks`, `oasis stats` and `oasis inbox`, plus `report`, `routing` and `branch` (which used to suggest unrelated commands such as `oasis import`), now say to type the slash command in a chat instead of being sent to the model as a one-word task.
 - A schedule OASIS can't read (`oasis schedule add check ...`) gets one plain line with examples instead of the cron parser's "CronPattern: invalid configuration format" error, and `every bluesday` now suggests `every monday at 14:00` too.
 - `oasis schedule add --permission-mode` accepts the same spellings as `oasis --permission-mode` (`manual`, `accept-edits`, `dont-ask`). Before, a routine refused the names the main help shows, and its error listed different ones. After creating a routine, OASIS also points to `oasis schedule install` so it keeps running after a restart.
 - OASIS Route setup reads `OASIS_ROUTE_API_KEY` or asks for the key. Before, the loopback branch never asked, so the Route choice always failed its probe with HTTP 401.
