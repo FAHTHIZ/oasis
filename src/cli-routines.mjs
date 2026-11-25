@@ -1,7 +1,7 @@
 // `oasis schedule` (aliases: cron, routines): durable scheduled jobs. See src/routines.mjs.
 import path from 'node:path';
 import { stdout } from 'node:process';
-import { cancelRun, createJob, describeJob, editJob, listRuns, pauseJob, readJobs, removeFinished, removeJob, resumeJob, runDaemon, tick, triggerJob } from './routines.mjs';
+import { cancelRun, createJob, describeJob, formatWhen, editJob, listRuns, pauseJob, readJobs, removeFinished, removeJob, resumeJob, runDaemon, tick, triggerJob } from './routines.mjs';
 
 const SCHEDULE_USAGE = `Usage: oasis schedule COMMAND
 
@@ -127,7 +127,7 @@ export async function scheduleCommand(args = [], { env = process.env, write = (t
     if (job.pausedReason && job.enabled === false) say('  paused: ' + job.pausedReason);
     if (job.lastProblem) say('  blocked: ' + job.lastProblem);
     if (!runs.length) say('  No runs yet.');
-    for (const run of runs) say('  ' + [run.finishedAt || run.startedAt, run.status, run.manual ? 'manual' : '', run.backgroundId || '', run.reason || '', run.deliveryError ? 'delivery failed: ' + run.deliveryError : '', run.outputFile || ''].filter(Boolean).join('  '));
+    for (const run of runs) say('  ' + [formatWhen(run.finishedAt || run.startedAt, { timezone: job.timezone }), run.status, run.manual ? 'manual' : '', run.backgroundId || '', run.reason || '', run.deliveryError ? 'delivery failed: ' + run.deliveryError : '', run.outputFile || ''].filter(Boolean).join('  '));
     return { job, runs };
   }
   if (sub === 'edit') { const job = await editJob(ref, fields, { env }); say('Updated ' + describeJob(job)); return job; }

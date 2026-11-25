@@ -777,8 +777,26 @@ export async function runDaemon({ env = process.env, intervalMs = 30_000, log = 
   }
 }
 
-export function describeJob(job) {
+// "2026-11-26 09:00 GMT+6 (in 12h)": the routine's own time zone (or this
+// computer's), plus how far away it is. A bare UTC ISO string made people
+// convert 9am Dhaka from "03:00:00.000Z" in their head.
+export function formatWhen(iso, { timezone = '', now = Date.now() } = {}) {
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return String(iso || '');
+  let local;
+  try {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: timezone || undefined, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'short' }).formatToParts(new Date(at)).map((part) => [part.type, part.value]));
+    local = parts.year + '-' + parts.month + '-' + parts.day + ' ' + parts.hour + ':' + parts.minute + (parts.timeZoneName ? ' ' + parts.timeZoneName : '');
+  } catch { local = new Date(at).toISOString(); }
+  const delta = Math.round((at - now) / 1000);
+  const span = Math.abs(delta);
+  const amount = span < 60 ? span + 's' : span < 3600 ? Math.round(span / 60) + 'm' : span < 172800 ? Math.round(span / 3600) + 'h' : Math.round(span / 86400) + 'd';
+  return local + ' (' + (span < 30 ? 'now' : delta > 0 ? 'in ' + amount : amount + ' ago') + ')';
+}
+
+export function describeJob(job, { now = Date.now() } = {}) {
   const state = job.activeRun ? 'running' : job.enabled === false ? job.state || 'paused' : 'scheduled';
-  const next = job.activeRun ? 'running since ' + job.activeRun.startedAt : job.enabled !== false && job.nextRunAt ? 'next ' + job.nextRunAt : '';
+  const when = (iso) => formatWhen(iso, { timezone: job.timezone, now });
+  const next = job.activeRun ? 'running since ' + when(job.activeRun.startedAt) : job.enabled !== false && job.nextRunAt ? 'next ' + when(job.nextRunAt) : '';
   return [job.id, state.padEnd(9), job.schedule.display + (job.timezone ? ' (' + job.timezone + ')' : ''), job.kind === 'script' ? '[script]' : '', job.name ? '"' + job.name + '"' : '', next, job.lastStatus ? 'last: ' + job.lastStatus : '', job.deliver && job.deliver !== 'local' ? '→ ' + job.deliver : ''].filter(Boolean).join('  ');
 }
