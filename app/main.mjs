@@ -5026,6 +5026,10 @@ function toggleFiles(force) {
   panel.hidden = !show;
   localStorage.setItem('oasis.files', show ? '1' : '0');
   if (show) refreshFiles();
+  // It may open on the Activity tab (the last one used, and the phone's only
+  // way in): draw it, or it shows "Every step OASIS takes shows up here"
+  // over a finished run until the tab is clicked again.
+  if (show && currentPanelTab() === 'activity') refreshActivity();
 }
 $('filesButton').addEventListener('click', () => toggleFiles());
 // Drag (or arrow keys on) the panel's left edge to resize it; the width is remembered.

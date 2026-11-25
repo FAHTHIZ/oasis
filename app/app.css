@@ -985,6 +985,7 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .activity-stat dd{margin:0;font:600 13.5px/1.3 var(--mono);font-variant-numeric:tabular-nums;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .activity-stat.bad dd{color:var(--danger)}
 .activity-stat-sub{display:block;font:500 10.5px/1.2 var(--mono);color:var(--faint)}
+@media (max-width:480px){.activity-stats{grid-template-columns:repeat(3,1fr);row-gap:8px}}
 .activity-tools{display:grid;gap:6px;padding:0 10px 8px}
 .activity-tools input{font-size:13px;padding:6px 10px;min-height:32px}
 .seg{display:flex;gap:2px;padding:2px;border-radius:8px;background:var(--sunken);border:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
@@ -1127,6 +1128,7 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .trace-lane-name{font-weight:600;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .trace-lane-now{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .trace-lane.waiting .trace-lane-now{color:var(--warn)}
+@media (max-width:480px){.trace-lane-now{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}}
 .trace-lane .trace-track i,.trace-sub .trace-track i{background-color:var(--lane)}
 .trace-lane.running>.trace-lane-head .trace-track i{animation:pulse 1.2s ease-in-out infinite}
 .trace-lane.fail>.trace-lane-head .trace-track i{background-color:var(--danger)}
