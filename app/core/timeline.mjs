@@ -41,8 +41,14 @@ function commandOf(args = {}) {
 function isTestCommand(command) {
   const parts = String(command).toLowerCase().split(/[ \t]+/).filter(Boolean);
   const runner = ['npm', 'pnpm', 'yarn', 'bun', 'npx'].includes(parts[0]) && parts.some((part) => ['test', 'check', 'vitest', 'jest', 'playwright', 'mocha'].includes(part));
-  return runner || (parts[0] === 'node' && parts.includes('--test')) || parts[0] === 'pytest' || (parts[0] === 'go' && parts[1] === 'test') || (parts[0] === 'cargo' && parts[1] === 'test');
+  // `python -m unittest`, `python3 -m pytest`, `uv run pytest`, `deno test`, `make test`…
+  const python = /^(?:python[\d.]*|py)$/.test(parts[0]) && parts[1] === '-m' && TEST_MODULES.has(parts[2]);
+  const wrapped = ['uv', 'poetry', 'pipenv', 'bundle'].includes(parts[0]) && ['run', 'exec'].includes(parts[1]) && TEST_RUNNERS.has(parts[2]);
+  const subcommand = ['go', 'cargo', 'deno', 'bun', 'dotnet', 'mvn', 'gradle', './gradlew', 'make', 'mix', 'swift', 'zig'].includes(parts[0]) && parts[1] === 'test';
+  return runner || python || wrapped || subcommand || (parts[0] === 'node' && parts.includes('--test')) || TEST_RUNNERS.has(parts[0]);
 }
+const TEST_MODULES = new Set(['pytest', 'unittest', 'nose2', 'tox']);
+const TEST_RUNNERS = new Set(['pytest', 'tox', 'nox', 'vitest', 'jest', 'mocha', 'rspec', 'phpunit']);
 function words(value) { return String(value).replace(/[_-]+/g, ' ').trim(); }
 
 // A short hint shown next to the label: the file, pattern, command or URL.
@@ -199,6 +205,10 @@ export function stepLabel(step = {}) {
     const what = summarizeArgs(step.name, step.args) || 'a command';
     return 'Moved to the background: ' + (what.length > 70 ? what.slice(0, 67) + '…' : what);
   }
+  // A runner that is not installed never ran the tests: "Tests failed" would
+  // send you looking for a broken test.
+  const missing = outcome === 'failed' && /(?:^|"error":\s*")(?:error:\s*)?Command not found: ([^\s"]+?)\.?(?=[\s"]|$)/im.exec(String(step.content || ''));
+  if (missing) return "Couldn't find " + missing[1];
   const done = step.label && !/^Used /.test(step.label) ? step.label : activityLabel(step);
   return outcome === 'failed' || outcome === 'timed_out' ? failedLabel(done, outcome) : done;
 }

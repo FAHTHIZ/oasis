@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- The web app's feed and Activity panel no longer call a missing test runner "Tests failed": `pytest` that is not installed reads "Couldn't find pytest", since no test ran. `python -m unittest`, `python -m pytest`, `uv run pytest`, `deno test`, `make test` and similar now read "Ran the tests" instead of "Ran a command".
 - A settled thought's one-line headline in the web app no longer drops underscores from names: "Open test_calc.py." read "Open testcalc.py" because every `_` and `*` was stripped as Markdown. Only emphasis that wraps text (`_why_`, `*now*`) is removed now, so `__init__.py`, `my_mod` and `*.mjs` keep their characters.
 - A subagent's chat card no longer says "2 steps" while its Activity lane says "1 step". The card's count came from the agent's budget, which counts model rounds (already shown as requests), not the tool steps OASIS calls steps everywhere else; it now shows only when a step limit is set ("3 of 10 steps"). Activity rows and agent lanes cut short by the narrow panel show their full text on hover.
 - The auto mode classifier's time limit no longer counts time the provider made it wait (a rate-limit back-off or a turn in the endpoint queue), up to two extra minutes. On Pollinations' keyless tier (one reply per 45 s) the classifier, sent right after the agent's own request, spent its whole 30 s waiting out "Retry after 15s", so every MCP call fell back to a prompt. A timeout now says how long it waited.

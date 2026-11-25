@@ -11,6 +11,8 @@ test('steps read as finished work, and the running step reads as what is happeni
   assert.equal(activityLabel({ name: 'edit_file', args: { path: 'src/math.mjs' } }), 'Edited math.mjs');
   assert.equal(liveLabel({ name: 'edit_file', args: { path: 'src/math.mjs' } }), 'Editing math.mjs');
   assert.equal(activityLabel({ name: 'run_command', args: { command: 'npm', args: ['test'] } }), 'Ran the tests');
+  for (const command of ['python -m unittest test_calc.py', 'python3 -m pytest -q', 'uv run pytest', 'deno test', 'make test', 'pytest']) assert.equal(activityLabel({ name: 'run_command', args: { command } }), 'Ran the tests', command);
+  for (const command of ['python -m http.server', 'make build']) assert.equal(activityLabel({ name: 'run_command', args: { command } }), 'Ran a command', command);
   assert.equal(liveLabel({ name: 'run_command', args: { command: 'npm', args: ['test'] } }), 'Running the tests');
   assert.equal(liveLabel({ name: 'run_command', args: { command: 'ls -la' } }), 'Looking through the project');
   assert.equal(liveLabel({ name: 'run_command', args: { command: 'node build.mjs' } }), 'Running node build.mjs');
@@ -206,6 +208,9 @@ test('a failed step says what did not happen instead of the past tense', async (
   assert.equal(stepLabel({ id: 'a', name: 'write_file', args: { path: 'notes.txt' }, ok: false }), "Couldn't write notes.txt");
   assert.equal(groupTitle([{ id: 'a', name: 'write_file', args: { path: 'notes.txt' }, ok: false }]), "Couldn't write notes.txt");
   assert.equal(stepLabel({ id: 'b', name: 'run_command', args: { command: 'npm test' }, ok: false }), 'Tests failed');
+  // A runner that is not installed never ran a test.
+  assert.equal(stepLabel({ id: 'c', name: 'run_command', args: { command: 'pytest -q' }, ok: false, content: '{"command":"pytest","exitCode":null,"stdout":"","error":"Command not found: pytest. It is not installed or not on PATH"}' }), "Couldn't find pytest");
+  assert.equal(stepLabel({ id: 'd', name: 'run_command', args: { command: 'npm test' }, ok: false, content: 'exit 1\nFAILED x - Command not found: foo' }), 'Tests failed');
   assert.equal(stepLabel({ id: 'c', name: 'run_command', args: { command: 'make' }, ok: false }), 'Command failed');
   assert.equal(stepLabel({ id: 'c2', name: 'run_command', args: { command: 'cat missing.js' }, ok: false }), "Couldn't read missing.js");
   assert.equal(stepLabel({ id: 'd', name: 'edit_file', args: { path: 'a.js' }, ok: false, outcome: 'timed_out' }), 'Timed out trying to edit a.js');
