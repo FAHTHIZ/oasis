@@ -10,6 +10,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- In the app, the Control Room button (robot icon) shows in the top bar from the first load on wider screens. Before, it only appeared after a task finished. On phones it stays in the command palette so the folder name keeps its room.
 - In the app, a CSV, PDF or other non-image file dropped on the message box is no longer silently ignored. On this computer it is added to the project and mentioned in your message (`@file`) so the agent reads it; images still attach as before. Where files can't be added, a message says how to share them.
 - In the terminal, typing `?` on an empty prompt shows the keyboard shortcuts right away, as the welcome banner says. Before, nothing happened until you pressed Enter.
 - In the terminal, `/mcp` typed before your first message no longer says "No MCP servers are connected". It lists the servers you have set up and says they connect with your first message.

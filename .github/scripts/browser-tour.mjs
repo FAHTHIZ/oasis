@@ -71,6 +71,9 @@ try {
 
   const { context, page } = await open({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
 
+  // The control room's robot button is there on a wide screen from the first load (it used to
+  // appear only after a task finished).
+  await page.locator('#controlRoomButton').waitFor({ state: 'visible', timeout: timeoutMs });
   // Every sheet in the top bar opens, and Escape closes it.
   for (const [button, sheet] of [['#settingsButton', '#settingsSheet'], ['#pluginsButton', '#pluginsSheet'], ['#chatsButton', '#chatsSheet'], ['#controlRoomButton', '#controlRoomSheet'], ['#projectButton', '#projectsSheet']]) {
     // Some are only on narrow screens; the sidebar does their job on desktop.

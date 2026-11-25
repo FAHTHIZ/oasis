@@ -5767,6 +5767,9 @@ async function startRuntime(found) {
   for (const button of $('modeMenu').querySelectorAll('button')) { button.querySelector('span').textContent = RUNTIME_MODES[button.dataset.mode]; button.hidden = false; }
   for (const option of $('modeSelect').options) { option.textContent = { ask: 'Ask first: approve commands (edits can be undone)', edits: 'Auto edit: also allow routine file operations', auto: 'Full auto: asks only for risky actions', plan: 'Plan: approve the plan before any change' }[option.value]; option.hidden = false; option.disabled = false; }
   RT.entry = runtimeEntryFrom(RT.status);
+  // The robot button opens the control room; it was only revealed by a later status refresh (after
+  // a finished task), so a fresh page had no button even though the command palette had the view.
+  $('controlRoomButton').hidden = false;
   agent = new RuntimeAgent({
     client: RT.client,
     onEvent: handleEvent,
