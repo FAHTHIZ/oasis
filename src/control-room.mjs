@@ -300,7 +300,13 @@ export function formatControlRoom(snapshot, { now = Date.now() } = {}) {
   }
   if (ledger.sessions.length) {
     lines.push('', 'Sessions:');
-    for (const session of ledger.sessions.slice(0, 15)) lines.push('  ' + session.id.slice(0, 24).padEnd(24) + '  ' + String(session.agents).padStart(3) + ' agents  ' + String(session.tokens.toLocaleString('en-US')).padStart(10) + ' tokens' + (session.costUsd ? '  $' + session.costUsd.toFixed(4) : '') + '  ' + ago(session.lastActivity, now));
+    // A short id plus the first agent's task: the 24-character cut of a UUID told you nothing.
+    const firstTask = new Map();
+    for (const agent of [...ledger.agents].sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0))) if (agent.description && !firstTask.has(agent.sessionId)) firstTask.set(agent.sessionId, agent.description);
+    for (const session of ledger.sessions.slice(0, 15)) {
+      const task = String(firstTask.get(session.id) || '').replace(/\s+/g, ' ').trim();
+      lines.push('  ' + session.id.slice(0, 8) + '  ' + String(session.agents).padStart(3) + ' agents  ' + String(session.tokens.toLocaleString('en-US')).padStart(10) + ' tokens' + (session.costUsd ? '  $' + session.costUsd.toFixed(4) : '') + '  ' + ago(session.lastActivity, now).padEnd(8) + (task ? '  ' + (task.length > 50 ? task.slice(0, 49) + '…' : task) : ''));
+    }
   }
   if (ledger.history.length) {
     lines.push('', 'Recent:');

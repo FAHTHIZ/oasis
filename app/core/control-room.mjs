@@ -120,11 +120,21 @@ export function controlRoomHistory(snapshot, { now = Date.now(), limit = 40 } = 
 
 export function controlRoomSessions(snapshot, { now = Date.now(), limit = 12 } = {}) {
   const list = snapshot && snapshot.ledger && snapshot.ledger.sessions || [];
-  return list.slice(0, limit).map((item) => ({
-    key: item.id,
-    title: (item.live ? 'Open here · ' : '') + String(item.id).slice(0, 24),
-    detail: [item.agents + (item.agents === 1 ? ' agent' : ' agents'), item.running ? item.running + ' working' : '', formatTokens(item.tokens) + ' tokens', item.costUsd ? formatCost(item.costUsd) : '', ago(item.lastActivity, now)].filter(Boolean).join(' · ')
-  }));
+  // The ledger knows sessions by id only, which showed as a cut-off UUID. Name each one after the
+  // chat title of an open session, else the task of its first agent; the short id stays as detail.
+  const names = new Map();
+  for (const agent of snapshot && snapshot.live && snapshot.live.agents || []) if (agent.sessionTitle && !names.has(agent.sessionId)) names.set(agent.sessionId, agent.sessionTitle);
+  const ledgerAgents = [...(snapshot && snapshot.ledger && snapshot.ledger.agents || [])].sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0));
+  for (const agent of ledgerAgents) if (agent.description && !names.has(agent.sessionId)) names.set(agent.sessionId, agent.description);
+  return list.slice(0, limit).map((item) => {
+    const short = String(item.id).slice(0, 8);
+    const name = String(names.get(item.id) || '').trim();
+    return {
+      key: item.id,
+      title: (item.live ? 'Open here · ' : '') + (name ? (name.length > 60 ? name.slice(0, 59) + '…' : name) : 'Session ' + short),
+      detail: [name ? 'Session ' + short : '', item.agents + (item.agents === 1 ? ' agent' : ' agents'), item.running ? item.running + ' working' : '', formatTokens(item.tokens) + ' tokens', item.costUsd ? formatCost(item.costUsd) : '', ago(item.lastActivity, now)].filter(Boolean).join(' · ')
+    };
+  });
 }
 
 /**

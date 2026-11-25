@@ -162,3 +162,27 @@ test('oasis control-room prints the shared ledger as text and JSON', async (t) =
   assert.equal(json.ledger.agents[0].description, 'map the auth module');
   assert.ok(json.resources.cpus >= 1);
 });
+
+test('control room sessions are named after their chat or first task, not a cut-off id', async () => {
+  const { controlRoomSessions } = await import('../app/core/control-room.mjs');
+  const now = Date.now();
+  const snapshot = {
+    live: { agents: [{ sessionId: 'live-0000-1111', sessionTitle: 'Fix the login page' }] },
+    ledger: {
+      agents: [
+        { sessionId: 'aaaa1111-2222-3333-4444-555555555555', description: 'Later task', startedAt: now - 1000 },
+        { sessionId: 'aaaa1111-2222-3333-4444-555555555555', description: 'Implement adding hello.txt', startedAt: now - 5000 }
+      ],
+      sessions: [
+        { id: 'aaaa1111-2222-3333-4444-555555555555', agents: 2, tokens: 21000, lastActivity: now - 60000 },
+        { id: 'live-0000-1111', live: true, agents: 1, tokens: 10, lastActivity: now },
+        { id: 'bbbb2222-0000-0000-0000-000000000000', agents: 1, tokens: 5, lastActivity: now }
+      ]
+    }
+  };
+  const rows = controlRoomSessions(snapshot, { now });
+  assert.equal(rows[0].title, 'Implement adding hello.txt');
+  assert.match(rows[0].detail, /^Session aaaa1111 · 2 agents/);
+  assert.equal(rows[1].title, 'Open here · Fix the login page');
+  assert.equal(rows[2].title, 'Session bbbb2222');
+});
