@@ -317,6 +317,8 @@ function rowFor(turn, step) {
   button.querySelector('.trace-label').textContent = step.label;
   const target = step.target && !step.label.includes(step.target) ? step.target : '';
   button.querySelector('.trace-target').textContent = target;
+  // The narrow panel cuts the label and target short ("List ..."): hover shows them whole.
+  button.title = target ? step.label + ' ' + target : step.label;
   const bar = button.querySelector('.trace-track i');
   bar.style.left = step.offset + '%';
   bar.style.width = step.width + '%';
@@ -379,6 +381,7 @@ function renderLanes(row, step) {
     if (agent.tokens) facts.push(compact(agent.tokens) + ' tokens');
     if (agent.branch) facts.push('on branch ' + agent.branch);
     head.querySelector('.trace-lane-now').textContent = facts.join(' · ');
+    head.title = agent.description + '\n' + facts.join(' · ');
     const bar = head.querySelector('.trace-track i');
     bar.style.left = (agent.offset || 0) + '%';
     bar.style.width = (agent.width || 0) + '%';

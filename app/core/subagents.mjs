@@ -108,8 +108,11 @@ export class SubagentTracker {
   get running() { return this.list().filter((worker) => worker.status === 'running' || worker.status === 'stopping').length; }
 }
 
-// "tokens 8,218, requests 2, steps 2" → "8.2k tokens · 2 requests · 2 steps";
-// a limit reads "8.2k of 50k tokens". Unknown parts pass through unchanged.
+// "tokens 8,218, requests 2, steps 2" → "8.2k tokens · 2 requests";
+// a limit reads "8.2k of 50k tokens". The budget's "steps" are model rounds,
+// not the tool steps the Activity lane counts, so an unlimited count is left
+// out (requests already says it) and only a limit ("2 of 10 steps") shows.
+// Unknown parts pass through unchanged.
 export function friendlyBudget(text) {
   const raw = String(text || '').replace(/^budget\s+/i, '').trim();
   if (!raw) return '';
@@ -126,8 +129,9 @@ export function friendlyBudget(text) {
     if (!match) return part.trim();
     const [, kind, spent, limit] = match;
     if (kind === 'usd') return limit ? spent + ' of ' + limit : spent;
+    if (kind === 'steps' && !limit) return '';
     const [one, many] = nouns[kind] || [kind, kind];
     const value = short(spent);
     return (limit ? value + ' of ' + short(limit) : value) + ' ' + (!limit && value === '1' ? one : many);
-  }).join(' · ');
+  }).filter(Boolean).join(' · ');
 }

@@ -51,8 +51,10 @@ test('a finished agent line shows its report and an unmerged branch', () => {
 });
 
 test('budget lines read in plain words', () => {
-  assert.equal(friendlyBudget('tokens 8,218, requests 2, steps 2'), '8.2k tokens · 2 requests · 2 steps');
-  assert.equal(friendlyBudget('budget tokens 31,209/50,000, steps 1'), '31k of 50k tokens · 1 step');
+  assert.equal(friendlyBudget('tokens 8,218, requests 2, steps 2'), '8.2k tokens · 2 requests');
+  assert.equal(friendlyBudget('budget tokens 31,209/50,000, steps 1'), '31k of 50k tokens');
+  // A step limit still shows: that is what will stop the agent.
+  assert.equal(friendlyBudget('tokens 900, steps 3/10'), '900 tokens · 3 of 10 steps');
   assert.equal(friendlyBudget(''), '');
 });
 
