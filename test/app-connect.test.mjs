@@ -639,3 +639,18 @@ test('classifyFailure: Google\'s 400 "API key not valid" is an auth failure', as
   const { fetchImpl } = fakeFetch([[/generativelanguage.*models/, () => ({ status: 400, body: { error: { code: 400, message: 'Please pass a valid API key', status: 'INVALID_ARGUMENT' } } })]]);
   await assert.rejects(smartConnect(GEMINI_KEY, { fetchImpl }), (error) => /^Google Gemini did not accept this key\./.test(error.message));
 });
+
+// A gateway listed models that answered without calling the test tool; once a
+// later one called it, those chat-only models became its fallbacks and a task
+// that switched to one stopped using tools.
+test('smartConnect: models that answered without tools are not kept as fallbacks', async () => {
+  const { fetchImpl } = fakeFetch([
+    [/openrouter\.ai\/api\/v1\/models$/, () => ({ data: [{ id: 'anthropic/claude-opus-4.5' }, { id: 'qwen/qwen3-coder:free' }] })],
+    [/chat\/completions$/, (url, options) => (JSON.parse(options.body).model === 'anthropic/claude-opus-4.5' ? textReply : toolReply)]
+  ]);
+  const result = await smartConnect(OR_KEY, { fetchImpl });
+  assert.equal(result.model, 'qwen/qwen3-coder:free');
+  assert.equal(result.toolCalling, true);
+  assert.ok(result.unusable.includes('anthropic/claude-opus-4.5'), 'the chat-only model is marked unusable');
+  assert.deepEqual(result.connection.models, ['qwen/qwen3-coder:free', 'anthropic/claude-opus-4.5'], 'and listed after every usable model');
+});

@@ -453,6 +453,7 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
   if (gateway) tries = Math.max(tries, 8);
   const tried = new Set();
   let noTools = null;
+  const chatOnly = [];
   let hardFailures = 0;
   let attempts = 0;
   let cheap = 0;
@@ -493,7 +494,10 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
         result = await probe(model);
       }
-      if (result.toolCalling) return { model, toolCalling: true, failures, unusable };
+      // Models that answered but would not call the test tool can't run a
+      // task, so once one that can is found they never become its fallbacks.
+      if (result.toolCalling) return { model, toolCalling: true, failures, unusable: [...unusable, ...chatOnly] };
+      chatOnly.push(model);
       noTools = noTools || model;
       hardFailures += 1;
       failures.push({ model, reason: 'answered but did not call the test tool' });
