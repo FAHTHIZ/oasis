@@ -10,6 +10,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- Pasting a file copied from the file manager (a PDF, a CSV) into the message box adds it to the project and mentions it, as dropping it does. It used to vanish without a word.
 - The Changes and Files lists show a path like `out/stamp.txt` as one name again instead of "out/ stamp.txt", and a long folder path is shortened before the file name is.
 - Control Room (in the app and `oasis control-room`) names each session after its chat or first task, with a short id, instead of showing a cut-off 24-character id.
 - In the app, the Control Room button (robot icon) shows in the top bar from the first load on wider screens. Before, it only appeared after a task finished. On phones it stays in the command palette so the folder name keeps its room.

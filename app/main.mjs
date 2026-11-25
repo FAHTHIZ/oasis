@@ -6284,8 +6284,15 @@ function addImageNote(el, count, urls) {
 $('attachButton').addEventListener('click', () => $('attachInput').click());
 $('attachInput').addEventListener('change', async () => { await addImages($('attachInput').files); $('attachInput').value = ''; });
 $('input').addEventListener('paste', (event) => {
-  const files = event.clipboardData && event.clipboardData.files;
-  if (files && [...files].some((file) => /^image\//.test(file.type))) { event.preventDefault(); addImages(files); }
+  const data = event.clipboardData;
+  const files = data && data.files ? [...data.files] : [];
+  if (!files.length) return;
+  if (files.some((file) => /^image\//.test(file.type))) { event.preventDefault(); addImages(files); return; }
+  // A file copied from the file manager (a PDF, a CSV) used to vanish on paste. Treat it like a
+  // drop, unless the clipboard also carries text: then the text is what the person meant to paste.
+  if (data.getData('text/plain')) return;
+  event.preventDefault();
+  dropFiles(files);
 });
 for (const type of ['dragenter', 'dragover']) $('composer').addEventListener(type, (event) => { if ([...(event.dataTransfer && event.dataTransfer.items || [])].some((item) => item.kind === 'file')) { event.preventDefault(); $('composer').classList.add('dragging'); } });
 for (const type of ['dragleave', 'drop']) $('composer').addEventListener(type, () => $('composer').classList.remove('dragging'));

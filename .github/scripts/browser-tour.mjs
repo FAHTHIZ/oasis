@@ -169,6 +169,19 @@ try {
   await page.locator('#attachments button').first().click();
   step('a dropped CSV joins the project and the message; a dropped image attaches');
 
+  // Pasting a file copied from the file manager behaves like a drop (it used to vanish).
+  const pasted = await page.evaluateHandle(() => {
+    const data = new DataTransfer();
+    data.items.add(new File(['x,y\n3,4\n'], 'pasted.csv', { type: 'text/csv' }));
+    return data;
+  });
+  await page.locator('#input').focus();
+  await page.evaluate((data) => { document.querySelector('#input').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true })); }, pasted);
+  await page.waitForFunction(() => document.querySelector('#input').value.includes('@pasted.csv'), null, { timeout: timeoutMs });
+  assert.equal(await readFile(path.join(project, 'pasted.csv'), 'utf8'), 'x,y\n3,4\n');
+  await page.locator('#input').fill('');
+  step('a pasted CSV joins the project and the message');
+
   // The keyboard-shortcuts list opens from the palette.
   await page.locator('#commandPaletteButton').click();
   await page.locator('#commandPaletteInput').fill('keyboard shortcuts');
