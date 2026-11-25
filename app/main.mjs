@@ -145,14 +145,25 @@ function applyTheme(theme = settings.theme) {
 matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => applyTheme());
 
 /* ---------- Toasts ---------- */
-function toast(message, kind = '') {
+function toast(message, kind = '', action = null) {
   // The same note twice in a row (for example two reconnects) shows once.
-  for (const old of $('toasts').children) if (old.textContent === message) old.remove();
+  for (const old of $('toasts').children) if ((old.dataset.message || old.textContent) === message) old.remove();
   const el = document.createElement('div');
   el.className = 'toast ' + kind;
+  el.dataset.message = message;
   el.textContent = message;
+  // An optional action (Undo) stays a little longer so there is time to press it.
+  if (action && action.label && typeof action.run === 'function') {
+    el.classList.add('with-action');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'toast-action';
+    button.textContent = action.label;
+    button.addEventListener('click', () => { el.remove(); action.run(); }, { once: true });
+    el.append(' ', button);
+  }
   $('toasts').appendChild(el);
-  setTimeout(() => el.remove(), kind === 'error' ? 6000 : 3200);
+  setTimeout(() => el.remove(), kind === 'error' || action ? 6000 : 3200);
 }
 
 /* ---------- Command palette and keyboard guide ---------- */
@@ -3269,8 +3280,12 @@ async function renderRuntimeSessions() {
       archive.addEventListener('click', async () => {
         try { await RT.client.api('/api/sessions/' + encodeURIComponent(item.id) + '/archive', { method: 'POST' }); }
         catch (error) { toast('Could not archive that session: ' + error.message, 'error'); return; }
-        toast('Archived. Run oasis sessions unarchive ' + item.id + ' to bring it back.');
         void renderRuntimeSessions();
+        toast('Session archived.', '', { label: 'Undo', run: async () => {
+          try { await RT.client.api('/api/sessions/' + encodeURIComponent(item.id) + '/unarchive', { method: 'POST' }); }
+          catch (error) { toast('Could not bring that session back: ' + error.message + '. Run oasis sessions unarchive ' + item.id + '.', 'error'); return; }
+          void renderRuntimeSessions();
+        } });
       });
       li.append(archive);
     }

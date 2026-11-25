@@ -503,6 +503,9 @@ input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent)}
 /* Never cover the buttons of a docked approval. */
 body:has(.sheet.docked:not([hidden])) .toasts{bottom:auto;top:64px}
 .toast{background:var(--raised);border:1px solid var(--line-strong);border-radius:var(--r-md);padding:10px 14px;font-size:14px;box-shadow:var(--shadow);animation:rise .2s var(--ease)}
+.toast.with-action{display:flex;align-items:center;justify-content:space-between;gap:12px;pointer-events:auto}
+.toast-action{flex:none;font:600 13px var(--font);color:var(--accent);padding:4px 8px;border-radius:6px}
+.toast-action:hover{background:var(--accent-soft)}
 .toast.error{border-color:color-mix(in srgb,var(--danger) 50%,transparent);color:var(--danger)}
 
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
