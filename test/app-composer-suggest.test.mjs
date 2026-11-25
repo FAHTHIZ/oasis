@@ -41,3 +41,15 @@ test('/connect NAME suggests apps and completes without a slash', () => {
   assert.deepEqual(suggestToken('/connect '), { kind: 'app', query: '', start: 9, end: 9 });
   assert.equal(suggestToken('/connect github now'), null);
 });
+
+// A bare "/" showed /notify, /inbox, /artifact and never a skill.
+test('a bare slash leads with everyday commands, then skills and custom commands', async () => {
+  const { starterCommands } = await import('../app/core/composer-suggest.mjs');
+  const list = ['help', 'notify', 'inbox', 'artifact', 'clear', 'plan', 'fix', 'review', 'undo', 'compact', 'doctor'].map((name) => ({ name, kind: 'builtin' }))
+    .concat([{ name: 'deep-research', kind: 'command' }, { name: 'testing', kind: 'skill' }, { name: 'plan', kind: 'skill' }]);
+  const names = starterCommands(list).map((item) => item.name + ':' + item.kind);
+  assert.deepEqual(names.slice(0, 10), ['plan:builtin', 'fix:builtin', 'review:builtin', 'undo:builtin', 'compact:builtin', 'clear:builtin', 'help:builtin', 'deep-research:command', 'testing:skill', 'plan:skill']);
+  assert.ok(names.includes('notify:builtin'), 'the rest still follow');
+  assert.equal(starterCommands(list, 3).length, 3);
+  assert.deepEqual(starterCommands(null), []);
+});

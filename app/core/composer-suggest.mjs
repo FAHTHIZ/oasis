@@ -47,6 +47,18 @@ export function rankSuggestions(items, query, key = (item) => String(item), limi
   return scored.slice(0, max).map((entry) => entry.item);
 }
 
+// A bare "/" listed the runtime's first eight built-ins (/notify, /inbox,
+// /artifact...), so skills and custom commands never showed until you typed.
+// Lead with everyday commands, then what this project added.
+const STARTER_COMMANDS = ['plan', 'fix', 'review', 'undo', 'compact', 'clear', 'help'];
+export function starterCommands(commands, limit = 40) {
+  const list = Array.isArray(commands) ? commands.filter((item) => item && item.name) : [];
+  const starters = STARTER_COMMANDS.map((name) => list.find((item) => item.name === name && (item.kind || 'builtin') === 'builtin')).filter(Boolean);
+  const added = list.filter((item) => item.kind && item.kind !== 'builtin');
+  const rest = list.filter((item) => !starters.includes(item) && !added.includes(item));
+  return [...starters, ...added, ...rest].slice(0, Math.max(1, limit));
+}
+
 /** Replace the token with the chosen completion. Returns the new value and caret. */
 export function applySuggestion(value, token, completion) {
   const text = String(value || '');

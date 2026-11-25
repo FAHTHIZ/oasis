@@ -22,7 +22,7 @@ import { detectRuntime, RuntimeAgent, RuntimeWorkspace, tokenFromPaste, saveRunt
 import { APP_KEYBOARD_SHORTCUTS, searchAppCommands } from './core/command-palette.mjs';
 import { normalizeTaskProgress } from './core/task-progress.mjs';
 import { RuntimeTerminal, loadXterm, wrapWords } from './core/terminal.mjs';
-import { suggestToken, rankSuggestions, applySuggestion } from './core/composer-suggest.mjs';
+import { suggestToken, rankSuggestions, applySuggestion, starterCommands } from './core/composer-suggest.mjs';
 import { mcpServerFromForm, describeMcpServer } from './core/mcp.mjs';
 import { speakable, isStopPhrase, turnDetector, rmsLevel, lastReply } from './core/voice-mode.mjs';
 import { previewTarget } from './core/preview.mjs';
@@ -4025,7 +4025,7 @@ async function updateSuggest() {
   const seq = ++suggest.seq;
   if (!token) { closeSuggest(); return; }
   const items = token.kind === '/'
-    ? rankSuggestions(await slashCommandList(), token.query, (item) => item.name, 8)
+    ? (token.query.trim() ? rankSuggestions(await slashCommandList(), token.query, (item) => item.name, 8) : starterCommands(await slashCommandList()))
     : token.kind === 'app' ? (RT && !RT.needsToken ? rankSuggestions(await knownConnectors().then((list) => token.query ? list : [...list].sort((a, b) => Number(Boolean(b.suggested && !b.connected)) - Number(Boolean(a.suggested && !a.connected)))), token.query, (item) => item.id, 8) : [])
     : (await commandFileSuggestions(token.query, seq)) || rankSuggestions(await filePathList(), token.query, (item) => item, 8);
   if (seq !== suggest.seq) return;

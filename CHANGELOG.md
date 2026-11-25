@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- Typing `/` in the web app's message box lists everyday commands first (/plan, /fix, /review, /undo, /compact, /clear, /help), then your skills and custom commands. It used to show the first eight built-ins (/notify, /inbox, /artifact…), and skills only appeared once you typed part of the name.
 - The Activity panel's turn header and Steps summary skip plan updates, like the chat and task bar do. One turn read "6 steps" in the chat and "8 steps" in Activity.
 - The Activity panel no longer shows step filters, search, Copy and JSON on a new task with no steps. They appear with the first step.
 - The Activity panel's live strip times each agent from when its current state began. "Waiting its turn · 51s" used to count from when the agent started, so a 3-second wait could look like a minute. Waits for approval, queueing, and the gap between steps now each have their own clock.
