@@ -5680,7 +5680,7 @@ async function startRuntime(found) {
   // about commands and other actions with effects outside the files.
   const RUNTIME_MODES = { ask: 'Approve commands and risky actions. Edits can be undone.', edits: 'Also run routine file operations without asking.', auto: 'Decides on its own; asks only for risky actions.', plan: 'Reads and plans only; nothing changes until you approve the plan.' };
   for (const button of $('modeMenu').querySelectorAll('button')) { button.querySelector('span').textContent = RUNTIME_MODES[button.dataset.mode]; button.hidden = false; }
-  for (const option of $('modeSelect').options) { option.textContent = { ask: 'Ask before commands (edits can be undone)', edits: 'Allow routine file operations', auto: 'Full auto (asks only for risky actions)', plan: 'Plan only (approve the plan before any change)' }[option.value]; option.hidden = false; option.disabled = false; }
+  for (const option of $('modeSelect').options) { option.textContent = { ask: 'Ask first: approve commands (edits can be undone)', edits: 'Auto edit: also allow routine file operations', auto: 'Full auto: asks only for risky actions', plan: 'Plan: approve the plan before any change' }[option.value]; option.hidden = false; option.disabled = false; }
   RT.entry = runtimeEntryFrom(RT.status);
   agent = new RuntimeAgent({
     client: RT.client,

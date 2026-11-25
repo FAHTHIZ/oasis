@@ -4,6 +4,10 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ## Unreleased
 
+### Fixed
+
+- Settings' approval options now use the same mode names as the composer chip (Ask first, Auto edit, Full auto, Plan), so the two places no longer describe the same choice in different words.
+
 ## [0.12.1] - 2026-11-25
 
 A bug-fix and polish release from hands-on use of the web app and CLI with a keyless model: clearer approvals, a more accurate Activity feed and subagent cards, more dependable web research, and smaller fixes across skills, MCP, the terminal, undo and doctor.
