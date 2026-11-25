@@ -333,6 +333,13 @@ test('a settled thought is titled by its headline', async () => {
   assert.equal(thoughtHeadline('See [the docs](https://x.y) first: then edit.'), 'See the docs first: then edit');
   // Underscores in names survive; only wrapping emphasis is removed.
   assert.equal(thoughtHeadline('Open test_calc.py.'), 'Open test_calc.py');
+  // Raw reasoning narration gives way to the action it describes.
+  assert.equal(thoughtHeadline("We need to add a function mul to mathx.py. Let's read file."), 'Add a function mul to mathx.py');
+  assert.equal(thoughtHeadline('The user wants us to fix the failing test.'), 'Fix the failing test');
+  assert.equal(thoughtHeadline('Okay, so I need to check calc.py first.'), 'Check calc.py first');
+  assert.equal(thoughtHeadline('User asks: write a tip calculator.'), 'Write a tip calculator');
+  assert.equal(thoughtHeadline('We need to.'), 'We need to');
+  assert.equal(thoughtHeadline('Lets users pick a theme.'), 'Lets users pick a theme');
   assert.equal(thoughtHeadline('Check __init__.py and my_mod'), 'Check __init__.py and my_mod');
   assert.equal(thoughtHeadline('I _really_ need to *read* it'), 'I really need to read it');
   assert.equal(thoughtHeadline('Find *.mjs files'), 'Find *.mjs files');

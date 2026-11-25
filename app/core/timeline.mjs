@@ -401,6 +401,7 @@ export function thoughtLabel(elapsedMs) {
 const EMPHASIS_END = String.raw`(?=[\s,;:!?)]|\.(?!\w)|$)`;
 const EMPHASIS_UNDERSCORE = new RegExp(String.raw`(^|[\s(])__(\S(?:.*?\S)?)__` + EMPHASIS_END, 'g');
 const EMPHASIS_SINGLE = new RegExp(String.raw`(^|[\s(])([*_])(?![\s*_])(.*?[^\s*_]|[^\s*_])\2` + EMPHASIS_END, 'g');
+const NARRATION_LEAD = /^(?:(?:ok(?:ay)?|so|alright|now)[,.]?\s+)*(?:(?:we|i)\s+(?:need|have|want|should|must|will need)\s+to|let(?:'|\u2019)s|(?:the\s+)?user\s+(?:wants|asks|asked|is asking|requests|requested)(?:\s+(?:us|me))?(?:\s+to)?:?)\s+/i;
 export function thoughtHeadline(text, max = 96) {
   const source = String(text || '').trim();
   if (!source) return '';
@@ -425,6 +426,11 @@ export function thoughtHeadline(text, max = 96) {
     if (end > 0) line = line.slice(0, end + (line[end] === '.' ? 0 : 1));
   }
   line = line.replace(/[:;,]$/, '').trim();
+  // Raw reasoning (gpt-oss, R1) opens with narration: "We need to add mul",
+  // "The user wants us to fix the test", "Let's read the file". The headline
+  // keeps the action, unless too little would be left to say anything.
+  const action = line.replace(NARRATION_LEAD, '');
+  if (action !== line && action.split(/\s+/).length >= 2) line = action;
   if (/^[a-z]/.test(line)) line = line[0].toUpperCase() + line.slice(1);
   if (line.length > max) line = line.slice(0, max - 1).replace(/\s+\S*$/, '') + '…';
   return line;
