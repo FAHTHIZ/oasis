@@ -130,3 +130,30 @@ test('the json result names the model and its per-model usage', async (t) => {
   assert.equal(entry.inputTokens, parsed.usage.input_tokens);
   assert.equal(entry.outputTokens, parsed.usage.output_tokens);
 });
+
+test('a call nobody can approve tells the model so, not that the user declined, and a repeat says the same', async (t) => {
+  const root = await tmp();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const call = { command: 'git', args: ['init', '--quiet', 'sub'] };
+  const { config } = await scriptedModel(t, [toolCall('c1', 'run_command', call), toolCall('c2', 'run_command', call), { content: 'Could not run it.' }]);
+  let out = '';
+  await runHeadless({ prompt: 'init a repo in sub', root, config, outputFormat: 'stream-json', sessionOptions: { settings }, write: (text) => { out += text; } });
+  const results = out.trim().split('\n').map((line) => JSON.parse(line)).filter((event) => event.type === 'tool_result');
+  assert.equal(results.length, 2);
+  for (const result of results) {
+    assert.match(result.content, /non-interactive run and nobody is there to approve/);
+    assert.doesNotMatch(result.content, /user already declined/);
+  }
+});
+
+test('a canUseTool callback that says no is still the user declining', async (t) => {
+  const root = await tmp();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const call = { command: 'git', args: ['init', '--quiet', 'sub'] };
+  const { config } = await scriptedModel(t, [toolCall('c1', 'run_command', call), toolCall('c2', 'run_command', call), { content: 'Declined.' }]);
+  let out = '';
+  await runHeadless({ prompt: 'init a repo in sub', root, config, outputFormat: 'stream-json', canUseTool: async () => ({ behavior: 'deny' }), sessionOptions: { settings }, write: (text) => { out += text; } });
+  const results = out.trim().split('\n').map((line) => JSON.parse(line)).filter((event) => event.type === 'tool_result');
+  assert.doesNotMatch(results[0].content, /nobody is there/);
+  assert.match(results[1].content, /user already declined/);
+});

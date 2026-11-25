@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- In `oasis -p` runs, a call nobody can approve now tells the model that ("this is a non-interactive run and nobody is there to approve ...") instead of "The user already declined" or "The user did not approve web access". Told that a user had declined an MCP call nobody saw, the model reported the tool as not available. A `canUseTool` callback or prompt tool that says no is still reported as the user declining.
 - A link that a loaded skill gives ("Full docs: https://...") no longer counts as a cited page the agent never opened. `/ponytail-help` repeated its docs link, the research check sent the turn back to the model and the reply ended with "Not verified".
 
 ## [0.12.0] - 2026-11-24

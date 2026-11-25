@@ -1609,11 +1609,18 @@ async function authorizeCall(session, name, args, context, options) {
     // person down by repeating it.
     const declineKey = name + '\u0000' + safeArgsText + '\u0000' + safeMessage;
     if (!(session.turnDeclined instanceof Set)) session.turnDeclined = new Set();
+    // Nobody to ask (oasis -p with no approval channel): say so, rather than
+    // "the user declined". Seen live: told the user had declined an MCP call
+    // nobody saw, the model reported the tool "not available".
+    const unansweredNote = () => 'Not run: this is a non-interactive run and nobody is there to approve ' + (CLAUDE_TOOL_NAMES[name] || name) + ', so calling it again will not help.' + (overlay.autoModeUnsure ? ' Auto mode could not decide (' + String(overlay.autoModeUnsure).replace(/[.\s]+$/, '') + ').' : '') + ' Continue without it, and in your reply say what it was for and that the user can allow it (a permission mode, an allow rule or --yes).';
+    if (!(session.turnUnanswered instanceof Set)) session.turnUnanswered = new Set();
     if (session.turnDeclined.has(declineKey)) {
-      overlay.permissionHookDenial = 'The user already declined this exact ' + name + ' request in this turn. Do not ask again; continue without it or explain what you need and wait for their next message.';
+      overlay.permissionHookDenial = session.turnUnanswered.has(declineKey) ? unansweredNote() : 'The user already declined this exact ' + name + ' request in this turn. Do not ask again; continue without it or explain what you need and wait for their next message.';
       return false;
     }
-    const answer = await baseApproval(safeMessage, force, { tool: name, suggestion, input: safeArgs, ...(extra || {}) });
+    const approvalMeta = { tool: name, suggestion, input: safeArgs, ...(extra || {}) };
+    const answer = await baseApproval(safeMessage, force, approvalMeta);
+    if (!answer && approvalMeta.unanswered === true) { session.turnUnanswered.add(declineKey); overlay.permissionHookDenial = unansweredNote(); }
     if (answer === 'always' && suggestion && policy) policy.rememberForSession(suggestion);
     // "Apply the rehearsal" (offered only when extra.rehearsal.offer): the caller lands the
     // rehearsed changes instead of running the command again.
@@ -2720,6 +2727,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
   if (session && !options.isSubagent && !options.keepInjectionHold) clearInjectionTurnFlag(session);
   // Declined requests stay declined until a person types again, too.
   if (session && !options.isSubagent && !options.keepInjectionHold && session.turnDeclined instanceof Set) session.turnDeclined.clear();
+  if (session && !options.isSubagent && !options.keepInjectionHold && session.turnUnanswered instanceof Set) session.turnUnanswered.clear();
   // Audit trail: who started this turn. Scheduled, webhook and follow-up
   // turns run with nobody watching; the log says so.
   if (session && !options.isSubagent) {

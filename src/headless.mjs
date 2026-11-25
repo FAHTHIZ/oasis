@@ -259,7 +259,7 @@ export async function runHeadless(options) {
       approval: async (message, forceInteractive = false, meta = {}) => {
         if (autoApprove && !forceInteractive) return true;
         // --permission-prompts none: never ask anyone; anything not pre-approved is denied.
-        if (permissionPrompts === 'none') { denied.push({ tool_name: meta && meta.tool || null, detail: String(message).replace(/\s+/g, ' ').trim().slice(0, 300) }); return false; }
+        if (permissionPrompts === 'none') { if (meta) meta.unanswered = true; denied.push({ tool_name: meta && meta.tool || null, detail: String(message).replace(/\s+/g, ' ').trim().slice(0, 300) }); return false; }
         if (permissionPromptTool === 'stdio' && session && session.ide && meta && meta.tool) {
           // Edits open in the IDE's native diff view; Accept/Reject there answers the approval.
           const { reviewEditInIde } = await import('./ide.mjs');
@@ -317,6 +317,9 @@ export async function runHeadless(options) {
           denied.push({ tool_name: meta && meta.tool || null, detail: (answer === 'timeout' ? 'No answer before the approval timeout. ' : 'Denied with oasis bg deny. ') + String(message).replace(/\s+/g, ' ').trim().slice(0, 260) });
           return false;
         }
+        // Nothing above could ask anyone: the agent tells the model so (src/agent.mjs).
+        // A canUseTool callback or prompt tool that said no is a real answer.
+        if (meta && !canUseTool && !permissionPromptTool) meta.unanswered = true;
         denied.push({ tool_name: meta && meta.tool || null, ...(meta && meta.input && typeof meta.input === 'object' ? { tool_input: meta.input } : {}), detail: String(message).replace(/\s+/g, ' ').trim().slice(0, 300), ...(meta && meta.autoModeReason ? { auto_mode_reason: meta.autoModeReason } : {}) });
         return false;
       },
