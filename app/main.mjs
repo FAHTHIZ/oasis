@@ -2914,17 +2914,26 @@ function renderUsage() {
     const ring = document.createElement('span');
     ring.className = 'ctx-ring';
     ring.style.setProperty('--p', String(percent));
-    el.append(ring, document.createTextNode(percent === 0 && ctx.tokens > 0 ? '<1%' : percent + '%'));
+    const label = document.createElement('span');
+    label.className = 'usage-text';
+    label.textContent = percent === 0 && ctx.tokens > 0 ? '<1%' : percent + '%';
+    el.append(ring, label);
     if (percent >= 90) el.classList.add('full'); else if (percent >= 70) el.classList.add('warn');
     el.title = 'Context: ' + formatTokens(ctx.tokens) + ' of ' + formatTokens(ctx.window) + ' tokens' + (usageState.tokens ? ' · ' + formatTokens(usageState.tokens) + ' used this chat' : '') + (percent >= 70 ? '. Older work is summarised automatically, or type /compact.' : '');
   } else if (usageState.tokens) {
-    el.textContent = formatTokens(usageState.tokens) + ' tokens';
+    const label = document.createElement('span');
+    label.className = 'usage-text';
+    label.textContent = formatTokens(usageState.tokens) + ' tokens';
+    el.append(label);
     el.title = formatTokens(usageState.tokens) + ' tokens used this chat';
   } else el.removeAttribute('title');
   const cost = usageState.cost;
   if (cost && cost.usd > 0) {
     const label = formatUsd(cost.usd) + (cost.partial ? '+' : '');
-    el.append(document.createTextNode((el.childNodes.length ? ' · ' : '') + label));
+    const spend = document.createElement('span');
+    spend.className = 'usage-text';
+    spend.textContent = (el.childNodes.length ? ' · ' : '') + label;
+    el.append(spend);
     el.title = (el.title ? el.title + '\n' : '') + 'Estimated spend this chat: ' + label + (cost.partial ? ' (some requests used a model with no known price)' : '') + ', subagents included.';
   }
 }
