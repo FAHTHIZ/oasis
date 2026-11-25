@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- After a reload, a step that waited for approval showed the wait as its run time (0.6s live, 3m 07s after reload), and a short thought before a step showed minutes ("9m 08s" for 2 s). The server now sends how long each step waited for approval, the app leaves it out on replay as it does live, and replayed thoughts end at their own time.
 - A failed MCP tool call showed its raw `{"isError":true,"content":…}` JSON as the step's reason in the chat and Activity. The server's own message now shows, without the "MCP tool reported an error:" lead-in.
 - A file read that ended with a newline was labelled one line too long in the chat ("Read 3 lines" for two lines).
 - The approval sheet split multi-line arguments into one box per line, so an MCP tool's JSON arguments showed `{`, each key and `}` in separate boxes. Consecutive indented lines now form one code block that keeps its indentation.

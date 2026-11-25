@@ -1934,14 +1934,17 @@ function ensureGroup() {
 // summary it appears inside, live; when the model starts writing or running
 // a step the block settles into a collapsed "Thought for 12s" (kept with the
 // step, so a reload shows it again) or, with no reasoning text, goes away.
-function removeThinking() {
-  for (const t of document.querySelectorAll('#transcript .thinking.live')) settleThinking(t);
+// at: when the event that ended the thought happened, by the server's clock.
+// A replayed task (after a reload) settles its thoughts at their own time,
+// not at the moment the replay reaches them.
+function removeThinking(at) {
+  for (const t of document.querySelectorAll('#transcript .thinking.live')) settleThinking(t, at);
 }
-function settleThinking(block) {
+function settleThinking(block, at) {
   clearInterval(block._clock);
   const text = String(block._text || '').trim();
   if (!text) { block.remove(); return; }
-  const ms = thoughtMs(liveModel.request, Date.now(), block._started);
+  const ms = thoughtMs(liveModel.request, serverTime(at), block._started);
   if (block._entry) block._entry.reasoning = { text, ms };
   block.replaceWith(thoughtBlock(text, ms));
 }
@@ -2496,7 +2499,7 @@ function handleRunEvent(event) {
       liveModel.drafts.set(index, chars);
       if (event.done) { clearDraftRow(index); draftTexts.delete(index); setNow(draftNowLabel() || nowLabel); break; }
       if (!currentTurn) startStep();
-      removeThinking();
+      removeThinking(event.at);
       // A report without a target after one with it (a later call reusing
       // the slot, or a resend) keeps the words that named it.
       const before = draftTexts.get(index) || '';
@@ -2529,7 +2532,7 @@ function handleRunEvent(event) {
       currentTurn.text += event.delta;
       liveModel.output(String(event.delta || '').length);
       queueRender();
-      removeThinking();
+      removeThinking(event.at);
       clearDraftRow();
       draftTexts.clear();
       if (nowLabel !== 'Responding') setNow('Responding');
@@ -2565,14 +2568,14 @@ function handleRunEvent(event) {
       currentTurn.entry.content = text;
       if (text.trim()) {
         ensureProse();
-        removeThinking();
+        removeThinking(event.at);
         messageSource.set(currentTurn.wrap, text);
         settleStream(currentTurn, text);
         currentTurn.body.hidden = false;
         if (!(event.toolCalls && event.toolCalls.length)) currentTurn.body.classList.add('cursor');
         else currentTurn.body.classList.remove('cursor');
       } else if (currentTurn.wrap) { currentTurn.wrap.remove(); currentTurn.wrap = null; currentTurn.body = null; }
-      if (!text.trim() && !(event.toolCalls && event.toolCalls.length)) removeThinking();
+      if (!text.trim() && !(event.toolCalls && event.toolCalls.length)) removeThinking(event.at);
       break;
     }
     case 'tool_start': {
@@ -2590,7 +2593,7 @@ function handleRunEvent(event) {
         break;
       }
       if (!currentTurn) startStep();
-      removeThinking();
+      removeThinking(event.at);
       clearDraftRow();
       draftTexts.clear();
       clearCursor();
@@ -2625,6 +2628,8 @@ function handleRunEvent(event) {
       setWaiting(tool, false);
       tool.endedAt = Math.max(Number(tool.startedAt) || 0, serverTime(event.at));
       if (Number.isFinite(Number(event.durationMs))) tool.durationMs = Number(event.durationMs);
+      // The server's count of the approval wait, so a reload matches the live time.
+      if (Number(event.waitedMs) > 0) tool.waitedMs = Number(event.waitedMs);
       if (event.label) tool.label = event.label;
       if (event.lines) tool.lines = { added: Number(event.lines.added) || 0, removed: Number(event.lines.removed) || 0 };
       if (Array.isArray(event.sources) && event.sources.length) tool.sources = event.sources.slice(0, 8);
@@ -2792,7 +2797,7 @@ function handleRunEvent(event) {
       // Switched to another chat: the task keeps running on the computer and
       // this chat reattaches when it is opened again. Nothing is saved here,
       // so the saved job id survives.
-      removeThinking();
+      removeThinking(event.at);
       clearCursor();
       break;
     case 'done':

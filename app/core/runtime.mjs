@@ -483,6 +483,11 @@ export class RuntimeAgent {
     // Approvals, questions and forms answered earlier (before a reload) are
     // known from their resolution events and never asked twice.
     const resolved = new Set();
+    // Approval waits and step starts by the server's clock, for results
+    // recorded before the server sent waitedMs itself.
+    const approvalAsked = new Map();
+    const waits = [];
+    const stepStarts = new Map();
     const asking = new Set();
     let approvals = Promise.resolve();
     let clockSent = false;
@@ -531,6 +536,15 @@ export class RuntimeAgent {
         // and the header all measure from these stamps, so they agree.
         const stamp = Date.parse(event.at || '');
         const at = Number.isFinite(stamp) ? { at: stamp - (this.clockSkew || 0) } : {};
+        if (Number.isFinite(stamp)) {
+          if (event.type === 'approval_required' && data.approvalId) approvalAsked.set(String(data.approvalId), stamp);
+          if (event.type === 'approval_resolved' && approvalAsked.has(String(data.approvalId || ''))) waits.push([approvalAsked.get(String(data.approvalId)), stamp]);
+          if (event.type === 'tool_start' && data.callId) stepStarts.set(String(data.callId), stamp);
+          if (event.type === 'tool_result' && data.callId && !(Number(data.waitedMs) > 0) && stepStarts.has(String(data.callId))) {
+            const waitedMs = approvalWaitWithin(waits, stepStarts.get(String(data.callId)), stamp);
+            if (waitedMs > 0) data.waitedMs = waitedMs;
+          }
+        }
         switch (event.type) {
           case 'started': if (data.sessionId) this.sessionId = data.sessionId; break;
           case 'agent_activity': if (subagents.update(data, { at: at.at || Date.now() })) this.emit('subagents', { workers: subagents.list() }); break;
@@ -597,13 +611,13 @@ export class RuntimeAgent {
               if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
             }
             // A tool call the model wrote as JSON text became this real call: drop the JSON.
-            if (!stepHasTools) { this.emit('assistant', { content: splitTextToolCall(stepText).text, toolCalls: [call] }); stepHasTools = true; }
+            if (!stepHasTools) { this.emit('assistant', { content: splitTextToolCall(stepText).text, toolCalls: [call], ...at }); stepHasTools = true; }
             this.emit('tool_start', { id, name: data.name, args: call.args, ...at, ...(data.label ? { label: String(data.label).slice(0, 160) } : {}), ...(data.present ? { present: String(data.present).slice(0, 160) } : {}) });
             break;
           }
           // A tool call the model is still writing ("Writing src/app.mjs · 3.2 KB").
           case 'tool_draft':
-            if (live && data.name) this.emit('tool_draft', { index: Number(data.index) || 0, name: String(data.name), chars: Number(data.chars) || 0, ...(data.path ? { path: String(data.path) } : {}), ...(data.command ? { command: String(data.command) } : {}), ...(data.query ? { query: String(data.query) } : {}), ...(data.text ? { text: String(data.text).slice(0, 200) } : {}), ...(data.done ? { done: true } : {}) });
+            if (live && data.name) this.emit('tool_draft', { ...at, index: Number(data.index) || 0, name: String(data.name), chars: Number(data.chars) || 0, ...(data.path ? { path: String(data.path) } : {}), ...(data.command ? { command: String(data.command) } : {}), ...(data.query ? { query: String(data.query) } : {}), ...(data.text ? { text: String(data.text).slice(0, 200) } : {}), ...(data.done ? { done: true } : {}) });
             break;
           case 'tool_output':
             if (data.callId && data.text) this.emit('tool_output', { id: String(data.callId), stream: data.stream === 'stderr' ? 'stderr' : 'stdout', text: String(data.text), ...(data.capped ? { capped: true } : {}) });
@@ -629,7 +643,7 @@ export class RuntimeAgent {
               if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
             }
             const text = String(content || data.label || '');
-            this.emit('tool_result', { id: data.callId || '', name: data.name, ok, ...(outcome ? { outcome } : {}), content: text.slice(0, MAX_RESULT_PREVIEW_CHARS), ...(text.length > MAX_RESULT_PREVIEW_CHARS || /… \[truncated\]$/.test(text) ? { more: true } : {}), ...(Number.isFinite(Number(data.durationMs)) ? { durationMs: Number(data.durationMs) } : {}), ...(Array.isArray(data.sources) && data.sources.length ? { sources: data.sources.slice(0, 8).filter((source) => source && /^https?:\/\//i.test(String(source.url || ''))).map((source) => ({ url: String(source.url).slice(0, 500), ...(source.title ? { title: String(source.title).slice(0, 120) } : {}) })) } : {}), ...(data.lines && (Number(data.lines.added) > 0 || Number(data.lines.removed) > 0) ? { lines: { added: Math.max(0, Number(data.lines.added) || 0), removed: Math.max(0, Number(data.lines.removed) || 0) } } : {}), ...at });
+            this.emit('tool_result', { id: data.callId || '', name: data.name, ok, ...(outcome ? { outcome } : {}), content: text.slice(0, MAX_RESULT_PREVIEW_CHARS), ...(text.length > MAX_RESULT_PREVIEW_CHARS || /… \[truncated\]$/.test(text) ? { more: true } : {}), ...(Number.isFinite(Number(data.durationMs)) ? { durationMs: Number(data.durationMs) } : {}), ...(Number(data.waitedMs) > 0 ? { waitedMs: Number(data.waitedMs) } : {}), ...(Array.isArray(data.sources) && data.sources.length ? { sources: data.sources.slice(0, 8).filter((source) => source && /^https?:\/\//i.test(String(source.url || ''))).map((source) => ({ url: String(source.url).slice(0, 500), ...(source.title ? { title: String(source.title).slice(0, 120) } : {}) })) } : {}), ...(data.lines && (Number(data.lines.added) > 0 || Number(data.lines.removed) > 0) ? { lines: { added: Math.max(0, Number(data.lines.added) || 0), removed: Math.max(0, Number(data.lines.removed) || 0) } } : {}), ...at });
             break;
           }
           case 'plan':
@@ -834,4 +848,11 @@ export class RuntimeWorkspace {
     }
     return lines;
   }
+}
+
+// The part of [start, end] spent waiting on approvals ([asked, answered] pairs).
+export function approvalWaitWithin(waits, start, end) {
+  let total = 0;
+  for (const [from, to] of waits || []) total += Math.max(0, Math.min(to, end) - Math.max(from, start));
+  return Math.min(Math.max(0, end - start), Math.round(total));
 }

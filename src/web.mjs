@@ -801,10 +801,14 @@ export function createOasisWebServer(options = {}) {
       const suggestion = meta && meta.suggestion && !forceInteractive ? String(meta.suggestion).slice(0, 300) : null;
       // "Apply the rehearsal": only when the agent kept a rehearsal it can land.
       const rehearsal = Boolean(meta && meta.rehearsal && meta.rehearsal.offer && !forceInteractive);
+      const askedAt = Date.now();
       const finish = (approved) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        // Kept so the step's time can leave out the wait (see waitedDuring).
+        (job.approvalWaits ||= []).push([askedAt, Date.now()]);
+        if (job.approvalWaits.length > 200) job.approvalWaits.splice(0, job.approvalWaits.length - 200);
         job.pendingApprovals.delete(approvalId);
         if (job.pendingApprovals.size === 0 && job.status === 'waiting_approval') job.status = 'running';
         const value = approved === 'always' && suggestion ? 'always' : approved === 'rehearsal' && rehearsal ? 'rehearsal' : Boolean(approved);
@@ -1303,7 +1307,7 @@ export function createOasisWebServer(options = {}) {
               category: toolActivityCategory(name),
               status: toolActivityStatus(value),
               outcome: toolActivityOutcome(value),
-              ...(tracked && Number.isFinite(tracked.startedAt) ? { durationMs: Math.max(0, Date.now() - tracked.startedAt) } : {}),
+              ...(tracked && Number.isFinite(tracked.startedAt) ? { durationMs: Math.max(0, Date.now() - tracked.startedAt), ...(() => { const waitedMs = waitedDuring(job.approvalWaits, tracked.startedAt, Date.now()); return waitedMs > 0 ? { waitedMs } : {}; })() } : {}),
               result: summarizeToolResult(value),
               warning: toolActivityWarning(value),
               ...(() => { const sources = toolSources(name, args, value).map((source) => ({ url: redactApprovalSecrets(source.url), ...(source.title ? { title: redactApprovalSecrets(source.title) } : {}) })); return sources.length ? { sources } : {}; })(),
@@ -3429,4 +3433,14 @@ export async function readRegularFileNoFollow(file, maxBytes) {
   } finally {
     await handle.close();
   }
+}
+
+// How much of [start, end] was spent waiting for the person to answer an
+// approval. Sent with the step's time so a reload shows the same run time as
+// the live view (which keeps the wait apart) instead of run time plus the wait.
+export function waitedDuring(waits, start, end) {
+  if (!Array.isArray(waits)) return 0;
+  let total = 0;
+  for (const [from, to] of waits) total += Math.max(0, Math.min(to, end) - Math.max(from, start));
+  return Math.min(Math.max(0, end - start), Math.round(total));
 }

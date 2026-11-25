@@ -145,3 +145,55 @@ test('an approval answered on another device closes here and is not posted again
   assert.ok(seen.some((event) => event.type === 'tool_result' && event.ok));
   assert.equal(types.at(-1), 'done');
 });
+
+test('a replayed step leaves its approval wait out of its time, as the live view does', async () => {
+  const t = (s) => new Date(Date.UTC(2026, 10, 25, 10, 0, s)).toISOString();
+  const events = [
+    { id: 1, type: 'tool_start', at: t(0), data: { callId: 'c1', name: 'mcp_x_read', args: {} } },
+    { id: 2, type: 'approval_required', at: t(1), data: { approvalId: 'a1', prompt: 'Run?' } },
+    { id: 3, type: 'approval_resolved', at: t(50), data: { approvalId: 'a1', approved: true } },
+    // An older server: durationMs counts the wait and no waitedMs is sent.
+    { id: 4, type: 'tool_result', at: t(51), data: { callId: 'c1', name: 'mcp_x_read', status: 'ok', result: 'done', durationMs: 51000 } },
+    { id: 5, type: 'tool_start', at: t(52), data: { callId: 'c2', name: 'mcp_x_read', args: {} } },
+    { id: 6, type: 'tool_result', at: t(53), data: { callId: 'c2', name: 'mcp_x_read', status: 'ok', result: 'done', durationMs: 1000, waitedMs: 0 } },
+    { id: 7, type: 'completed', data: { text: 'Done.' } }
+  ];
+  const client = fakeClient([{ status: 'completed', events }]);
+  const seen = [];
+  const agent = new RuntimeAgent({ client, pollMs: 1, onEvent: (event) => seen.push(event), approve: async () => true });
+  await agent.resume(JOB);
+  const results = seen.filter((event) => event.type === 'tool_result');
+  assert.equal(results[0].durationMs, 51000);
+  assert.equal(results[0].waitedMs, 49000);
+  assert.equal(results[1].waitedMs, undefined, 'a step with no approval has no wait');
+});
+
+test('waitedDuring and approvalWaitWithin count only the overlap with the step', async () => {
+  const { waitedDuring } = await import('../src/web.mjs');
+  const { approvalWaitWithin } = await import('../app/core/runtime.mjs');
+  for (const fn of [waitedDuring, approvalWaitWithin]) {
+    assert.equal(fn([[10, 40]], 0, 100), 30);
+    assert.equal(fn([[10, 40], [200, 300]], 0, 100), 30, 'a later approval is not counted');
+    assert.equal(fn([[0, 500]], 100, 200), 100, 'never more than the step itself');
+    assert.equal(fn([], 0, 100), 0);
+  }
+});
+
+test('replayed events that end a thought carry the time they happened', async () => {
+  const t = (s) => new Date(Date.UTC(2026, 10, 25, 10, 0, s)).toISOString();
+  const events = [
+    { id: 1, type: 'reasoning_delta', at: t(1), data: { text: 'Planning.' } },
+    { id: 2, type: 'tool_draft', at: t(3), data: { index: 0, name: 'read_file', chars: 10 } },
+    { id: 3, type: 'tool_start', at: t(4), data: { callId: 'c1', name: 'read_file', args: { path: 'a' } } },
+    { id: 4, type: 'approval_required', at: t(5), data: { approvalId: 'a1', prompt: 'Run?' } }
+  ];
+  const client = fakeClient([{ status: 'waiting_approval', events }]);
+  const seen = [];
+  const agent = new RuntimeAgent({ client, pollMs: 1, onEvent: (event) => { seen.push(event); if (event.type === 'tool_start') agent.stop?.(); }, approve: () => new Promise(() => {}) });
+  agent.resume(JOB).catch(() => {});
+  for (let i = 0; i < 50 && !seen.some((event) => event.type === 'tool_start'); i++) await new Promise((resolve) => setTimeout(resolve, 5));
+  const draft = seen.find((event) => event.type === 'tool_draft');
+  const assistant = seen.find((event) => event.type === 'assistant');
+  assert.ok(Number.isFinite(draft.at) && Math.abs(draft.at - Date.parse(t(3))) < 60_000, 'tool_draft has its own time');
+  assert.ok(Number.isFinite(assistant.at), 'the assistant turn before a step has its time');
+});
