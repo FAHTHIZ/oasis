@@ -204,7 +204,11 @@ function nowStrip(lines) {
   const strip = el('ul', 'activity-now');
   strip.setAttribute('aria-label', 'Happening now');
   const nowMs = Date.now();
-  for (const line of lines.slice(0, 8)) {
+  // Between steps the chat's status line knows more than the trace does
+  // ("Retrying", "Rate limited", "Waiting for gpt-5"): say the same thing here.
+  const live = typeof state.deps.liveLabel === 'function' ? String(state.deps.liveLabel() || '') : '';
+  for (const raw of lines.slice(0, 8)) {
+    const line = raw.thinking && !raw.agent && live && !/^(Thinking|Responding)$/.test(live) ? { ...raw, text: live } : raw;
     const li = el('li', 'activity-now-line' + (line.waiting ? ' waiting' : '') + (line.thinking ? ' thinking' : ''));
     if (line.agent) li.style.setProperty('--lane', 'var(--lane-' + (((line.agent - 1) % 6) + 1) + ')');
     const who = el('span', 'activity-now-who', line.agent ? String(line.agent) : '');
