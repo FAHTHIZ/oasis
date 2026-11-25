@@ -41,3 +41,25 @@ export function alwaysAllowTitle(rule, scope = 'this session') {
   const prefix = match[2].trim();
   return 'Runs ' + prefix + ' and ' + prefix + ' with more arguments without asking again in ' + scope;
 }
+
+// Splits an approval prompt into prose lines and code blocks. An indented line
+// is code; consecutive indented lines form one block with the shared
+// indentation removed, so JSON arguments are not split into a box per line.
+export function approvalParts(lines) {
+  const parts = [];
+  let block = null;
+  for (const line of lines) {
+    if (/^\s{2,}\S/.test(line)) {
+      if (!block) { block = []; parts.push({ code: true, lines: block }); }
+      block.push(line.replace(/\s+$/, ''));
+      continue;
+    }
+    block = null;
+    if (line.trim()) parts.push({ code: false, text: line.trim() });
+  }
+  return parts.map((part) => {
+    if (!part.code) return part;
+    const indent = Math.min(...part.lines.map((line) => line.match(/^\s*/)[0].length));
+    return { code: true, text: part.lines.map((line) => line.slice(indent)).join('\n') };
+  });
+}

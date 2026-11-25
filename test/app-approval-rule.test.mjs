@@ -17,3 +17,15 @@ test('approval rules read as plain words on the Always allow button', () => {
   assert.equal(alwaysAllowLabel('install_package(npm:left-pad)'), 'Always allow install package npm:left-pad');
   assert.equal(alwaysAllowLabel('???'), 'Always allow this');
 });
+
+test('indented approval lines form one code block, so JSON arguments are not split per line', async () => {
+  const { approvalParts } = await import('../app/core/approval-rule.mjs');
+  const prompt = 'OASIS wants to use the "read_wiki_contents" tool from the "deepwiki" MCP server with:\n  {\n    "repoName": "FAHTHIZ/OASIS-ROUTE"\n  }\nMCP tools can read outside data.';
+  assert.deepEqual(approvalParts(prompt.split('\n')), [
+    { code: false, text: 'OASIS wants to use the "read_wiki_contents" tool from the "deepwiki" MCP server with:' },
+    { code: true, text: '{\n  "repoName": "FAHTHIZ/OASIS-ROUTE"\n}' },
+    { code: false, text: 'MCP tools can read outside data.' }
+  ]);
+  // A single command line stays one block; prose between blocks splits them.
+  assert.deepEqual(approvalParts(['Run:', '  npm test', '', 'then', '  rm -rf dist']).map((part) => part.code), [false, true, false, true]);
+});

@@ -2,7 +2,7 @@
 // in this browser. Opened from `oasis web`, the same UI
 // drives the agent on that computer (runtime engine, core/runtime.mjs).
 import { PRESETS, testProvider } from './core/providers.mjs';
-import { alwaysAllowLabel, alwaysAllowTitle } from './core/approval-rule.mjs';
+import { alwaysAllowLabel, alwaysAllowTitle, approvalParts } from './core/approval-rule.mjs';
 import { SUBAGENT_STATUS_TEXT, friendlyBudget, workersByStep } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
@@ -3706,11 +3706,12 @@ async function requestApproval({ name, args, runtime = false }) {
     summary.replaceChildren();
     if (args.subagent) { const who = document.createElement('span'); who.className = 'approval-agent'; who.textContent = 'Asked by the agent: ' + String(args.subagent).slice(0, 100); summary.appendChild(who); }
     if (risky) { const badge = document.createElement('span'); badge.className = 'risk-badge'; badge.textContent = 'Risky'; summary.appendChild(badge); }
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      const el = document.createElement(/^\s{2,}\S/.test(line) ? 'code' : 'span');
-      el.className = el.tagName === 'CODE' ? 'approval-command' : 'approval-line';
-      el.textContent = line.trim();
+    // Consecutive indented lines are one block (MCP arguments as JSON, a
+    // multi-line command), kept together with their relative indentation.
+    for (const part of approvalParts(lines)) {
+      const el = document.createElement(part.code ? 'code' : 'span');
+      el.className = part.code ? 'approval-command' : 'approval-line';
+      el.textContent = part.text;
       summary.appendChild(el);
     }
     if (args.diff) renderUnifiedDiff(detail, String(args.diff)); else detail.hidden = true;
