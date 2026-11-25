@@ -1407,8 +1407,13 @@ function renderSubagents(group, workers = []) {
       : '';
     const finished = !live && worker.steps && !worker.detail ? worker.steps + (worker.steps === 1 ? ' step' : ' steps') : '';
     const detailEl = item.querySelector('.sa-detail');
-    detailEl.textContent = worker.waitingApproval ? 'Waiting for you to approve a step' : (live || worker.detail || finished);
-    detailEl.classList.toggle('live', Boolean(live) && !worker.waitingApproval);
+    // Before its first step the only detail is how it was started (its model,
+    // "read-only", "own worktree"): a bare "openai" read as a status. Say it is
+    // starting and keep those facts on hover.
+    const starting = !live && !worker.waitingApproval && (worker.status === 'running' || worker.status === 'unknown') && !worker.steps;
+    detailEl.textContent = worker.waitingApproval ? 'Waiting for you to approve a step' : starting ? 'Thinking…' : (live || worker.detail || finished);
+    if (starting && worker.detail) detailEl.title = worker.detail;
+    detailEl.classList.toggle('live', (Boolean(live) || starting) && !worker.waitingApproval);
     // A finished agent's line is the start of its report: click to read it all.
     const isReport = !live && !worker.waitingApproval && worker.detail && worker.status !== 'running' && worker.status !== 'unknown';
     if (isReport) {
@@ -2839,7 +2844,7 @@ function renderUsage() {
     if (percent >= 90) el.classList.add('full'); else if (percent >= 70) el.classList.add('warn');
     el.title = 'Context: ' + formatTokens(ctx.tokens) + ' of ' + formatTokens(ctx.window) + ' tokens' + (usageState.tokens ? ' · ' + formatTokens(usageState.tokens) + ' used this chat' : '') + (percent >= 70 ? '. Older work is summarised automatically, or type /compact.' : '');
   } else if (usageState.tokens) {
-    el.textContent = formatTokens(usageState.tokens) + ' tok';
+    el.textContent = formatTokens(usageState.tokens) + ' tokens';
     el.title = formatTokens(usageState.tokens) + ' tokens used this chat';
   } else el.removeAttribute('title');
   const cost = usageState.cost;
@@ -3018,8 +3023,15 @@ async function saveChat(snapshot) {
     const index = await chatIndex(projectId);
     // The chat open right now stays current, even if this save is for one the user just left.
     index.current = workspace && workspace.project.id === projectId ? chatId : index.current || id;
+    // Opening a chat and leaving it saves it again; that is not activity, so
+    // an unchanged chat keeps its time and place instead of jumping to "now".
+    const sig = trimmed.length + ':' + (Array.isArray(snapshot.messages) ? snapshot.messages.length : 0) + ':' + JSON.stringify(trimmed[trimmed.length - 1] || '').length;
+    const before = index.list.find((item) => item.id === id);
     index.list = index.list.filter((item) => item.id !== id);
-    if (trimmed.length) index.list.unshift({ id, title: snapshot.title, updatedAt: Date.now() });
+    if (trimmed.length && before && before.sig === sig && before.updatedAt) {
+      const at = index.list.findIndex((item) => (item.updatedAt || 0) < before.updatedAt);
+      index.list.splice(at < 0 ? index.list.length : at, 0, { ...before, title: snapshot.title });
+    } else if (trimmed.length) index.list.unshift({ id, title: snapshot.title, updatedAt: Date.now(), sig });
     await store.setValue('chats:' + projectId, index);
   } catch { /* storage full: chat stays in memory */ }
 }

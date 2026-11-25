@@ -14,3 +14,18 @@ test('a CSV read comes with its columns and exact data-row count', () => {
   assert.equal(tableShape('notes.txt', 'a,b\n1,2'), null);
   assert.equal(tableShape('empty.csv', '\n\n'), null);
 });
+
+test('wc -l over a CSV with a header says how many lines are data', async () => {
+  const { mkdtemp, writeFile } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const pathMod = await import('node:path');
+  const { lineCountTableNote } = await import('../src/tools.mjs');
+  const dir = await mkdtemp(pathMod.join(os.tmpdir(), 'wc-csv-'));
+  await writeFile(pathMod.join(dir, 'sales.csv'), 'date,amount\n' + Array.from({ length: 300 }, (_, i) => '2024-01-01,' + i).join('\n') + '\n');
+  await writeFile(pathMod.join(dir, 'plain.csv'), '1,2\n3,4\n');
+  assert.match(await lineCountTableNote(dir, 'wc', ['-l', 'sales.csv']), /sales\.csv has a header row \(date, amount\), so its data rows are 300/);
+  assert.match(await lineCountTableNote(dir, 'bash', ['-c', 'wc -l sales.csv']), /data rows are 300/);
+  assert.equal(await lineCountTableNote(dir, 'wc', ['-l', 'plain.csv']), '');
+  assert.equal(await lineCountTableNote(dir, 'cat', ['sales.csv']), '');
+  assert.equal(await lineCountTableNote(dir, 'wc', ['-l', '../../etc/x.csv']), '');
+});

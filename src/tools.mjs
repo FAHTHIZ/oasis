@@ -405,6 +405,26 @@ async function clientMirrorWrite(context, absolute, content) {
 // A CSV/TSV read in full comes with its columns and exact data-row count.
 // Small models counted rows by eye and were off by one (seen live: "301 data
 // rows" for 300 rows plus a header). Quoted fields may span lines.
+// `wc -l sales.csv` prints 301 and the agent reported "301 data rows". When
+// a line count runs over a CSV/TSV in the workspace, the result says how
+// many of those lines are data, so the count is never the header's too.
+export async function lineCountTableNote(root, command, args = []) {
+  const line = [command, ...(Array.isArray(args) ? args : [])].map(String).join(' ');
+  if (!/\bwc\b[^|;&]*\s-\w*l/.test(line)) return '';
+  const files = [...new Set(line.match(/[^\s'"|;&<>]+\.(?:csv|tsv)\b/gi) || [])].slice(0, 5);
+  const notes = [];
+  for (const file of files) {
+    const absolute = path.resolve(root, file);
+    if (path.relative(root, absolute).startsWith('..')) continue;
+    try {
+      if ((await stat(absolute)).size > 20 * 1024 * 1024) continue;
+      const table = tableShape(file, await readFile(absolute, 'utf8'));
+      if (table && table.columns) notes.push(file + ' has a header row (' + table.columns.slice(0, 6).join(', ') + (table.columns.length > 6 ? ', …' : '') + '), so its data rows are ' + table.dataRows + ', not the line count.');
+    } catch { /* not a readable file: nothing to add */ }
+  }
+  return notes.join(' ');
+}
+
 export function tableShape(relativePath, content) {
   const ext = path.extname(String(relativePath || '')).toLowerCase();
   if (ext !== '.csv' && ext !== '.tsv') return null;
@@ -2313,6 +2333,8 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       if (commandResult && typeof commandResult === 'object' && typeof commandResult.exitCode === 'number') {
         const flagNote = [commandFlagWarning([args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ')), argvShellSyntaxWarning(args.args)].filter(Boolean).join(' ');
         if (flagNote) commandResult.commandWarning = flagNote;
+        const rows = commandResult.exitCode === 0 ? await lineCountTableNote(root, args.command, args.args).catch(() => '') : '';
+        if (rows) commandResult.tableNote = rows;
       }
       if (editSnapshot && commandResult && typeof commandResult === 'object') {
         const noOp = await noOpEditWarning(editSnapshot, commandResult.exitCode);

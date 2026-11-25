@@ -28,7 +28,7 @@ import { maskedPipelineWarning } from './pipe-status.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
 import { commentWarning } from './style-rules.mjs';
 import { snapshotScriptedEdit, noOpEditWarning } from './inplace-edit-check.mjs';
-import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment, nonInteractiveEnvironment } from './tools.mjs';
+import { lineCountTableNote, resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment, nonInteractiveEnvironment } from './tools.mjs';
 import { agentIgnoreMatch } from './agent-ignore.mjs';
 import { assertSandboxAvailable, launchCommand, sandboxLocalhostNote, withQuarantineNote } from './sandbox.mjs';
 import { fileGlobMatcher } from './glob.mjs';
@@ -840,8 +840,9 @@ export async function executePowerTool(name, args, context, root) {
         const pipeWarning = shellResult && typeof shellResult.exitCode === 'number' ? maskedPipelineWarning(args.command, shellResult.exitCode, process.platform === 'win32' ? 'cmd' : 'sh') : '';
         const noOp = editSnapshot && shellResult && typeof shellResult === 'object' ? await noOpEditWarning(editSnapshot, shellResult.exitCode) : '';
         const flagNote = shellResult && typeof shellResult.exitCode === 'number' ? commandFlagWarning(args.command) : '';
-        if (!pipeWarning && !noOp && !flagNote) return shellResult;
-        return { ...shellResult, ...(pipeWarning ? { exitCodeWarning: pipeWarning } : {}), ...(noOp ? { noOpEditWarning: noOp } : {}), ...(flagNote ? { commandWarning: flagNote } : {}) };
+        const rows = shellResult && shellResult.exitCode === 0 ? await lineCountTableNote(root, args.command).catch(() => '') : '';
+        if (!pipeWarning && !noOp && !flagNote && !rows) return shellResult;
+        return { ...shellResult, ...(pipeWarning ? { exitCodeWarning: pipeWarning } : {}), ...(noOp ? { noOpEditWarning: noOp } : {}), ...(flagNote ? { commandWarning: flagNote } : {}), ...(rows ? { tableNote: rows } : {}) };
       }
     case 'powershell':
       return await runShell(root, args, context, 'powershell');
