@@ -22,7 +22,7 @@
 // numbers nobody computed.
 
 import { claimsPassing } from './claim-check.mjs';
-import { fetchedUrls, lastCheck, normalizeUrl, producedNumbers, searchedUrls } from './evidence-ledger.mjs';
+import { fetchedUrls, lastCheck, normalizeUrl, producedNumbers, searchedUrls, skillUrls } from './evidence-ledger.mjs';
 import { checkQuotes } from './page-store.mjs';
 
 export const CONTRACT_DOMAINS = Object.freeze(['code', 'research', 'analysis']);
@@ -53,7 +53,8 @@ export function researchContract(text, events) {
   if (!cited.length) return [];
   const fetched = fetchedUrls(events);
   const searched = searchedUrls(events);
-  const unread = cited.filter((url) => !fetched.has(url));
+  const fromSkills = skillUrls(events);
+  const unread = cited.filter((url) => !fetched.has(url) && !fromSkills.has(url));
   if (!unread.length) return [];
   const onlySearched = unread.filter((url) => searched.has(url));
   const listed = unread.slice(0, MAX_LISTED).join(', ') + (unread.length > MAX_LISTED ? ' and ' + (unread.length - MAX_LISTED) + ' more' : '');

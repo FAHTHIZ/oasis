@@ -126,6 +126,8 @@ export function buildClaims(text, events = [], { analysis = false, now = Date.no
   const fetchEvents = new Map();
   for (const event of events || []) if (event.kind === 'fetch') { fetchEvents.set(event.url, event); if (event.finalUrl) fetchEvents.set(event.finalUrl, event); }
   const check = lastCheck(events);
+  const skillLinks = new Map();
+  for (const event of events || []) if (event.kind === 'skill') for (const url of event.urls || []) if (!skillLinks.has(url)) skillLinks.set(url, event);
   const claims = [];
   for (const sentence of claimSentences(text)) {
     if (claims.length >= MAX_CLAIMS) break;
@@ -153,6 +155,7 @@ export function buildClaims(text, events = [], { analysis = false, now = Date.no
         sources.add(url);
         const event = fetchEvents.get(url);
         if (event) { basis.push(basisOf(event)); statuses.push('reported'); }
+        else if (skillLinks.has(url)) { basis.push(basisOf(skillLinks.get(url))); statuses.push('reported'); }
         else { statuses.push('unverified'); reasons.push(url + ' was never fetched'); }
       }
     }

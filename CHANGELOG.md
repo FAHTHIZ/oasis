@@ -4,6 +4,10 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ## Unreleased
 
+### Fixed
+
+- A link that a loaded skill gives ("Full docs: https://...") no longer counts as a cited page the agent never opened. `/ponytail-help` repeated its docs link, the research check sent the turn back to the model and the reply ended with "Not verified".
+
 ## [0.12.0] - 2026-11-24
 
 The browser tool runs on Obscura by default and falls back to Chrome, and OASIS Route is a built-in gateway provider.

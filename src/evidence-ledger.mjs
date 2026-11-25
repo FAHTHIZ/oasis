@@ -14,7 +14,7 @@
 
 import { createHash } from 'node:crypto';
 
-export const EVIDENCE_KINDS = Object.freeze(['check', 'command', 'execution', 'fetch', 'search', 'edit', 'side_effect', 'tamper', 'read']);
+export const EVIDENCE_KINDS = Object.freeze(['check', 'command', 'execution', 'fetch', 'search', 'edit', 'side_effect', 'tamper', 'read', 'skill']);
 const MAX_EVENTS = 2000;
 const MAX_NUMBERS_PER_EVENT = 400;
 const MAX_URLS_PER_EVENT = 50;
@@ -242,6 +242,14 @@ export function evidenceFromToolResult(name, args = {}, result = {}, context = {
       ? { table: { dataRows: result.table.dataRows, header: Array.isArray(result.table.columns) } } : {};
     return { kind: 'read', tool: name, path: result.path.replace(/\\/g, '/').replace(/^\.\//, '').slice(0, 400), ...table, digest };
   }
+  // A loaded skill's text: the links it gives ("Full docs: https://...") are
+  // the skill author's references, not pages the agent claims to have read.
+  // Seen live: /ponytail-help repeated its docs link and the research check
+  // sent the turn round again and marked a help card "Not verified".
+  if (name === 'load_skill' && typeof result.error !== 'string' && typeof result.content === 'string') {
+    const urls = [...new Set([...result.content.matchAll(/https?:\/\/[^\s<>()"'`\]]+/g)].map((match) => normalizeUrl(match[0])).filter(Boolean))].slice(0, MAX_URLS_PER_EVENT);
+    return urls.length ? { kind: 'skill', tool: name, name: String(result.name || args.name || '').slice(0, 120), urls, digest } : null;
+  }
   if (context.edited && context.path) {
     return { kind: 'edit', tool: name, path: String(context.path).slice(0, 400), digest };
   }
@@ -277,6 +285,13 @@ export function fetchedUrls(events) {
 export function searchedUrls(events) {
   const out = new Set();
   for (const event of events || []) if (event.kind === 'search') for (const url of event.urls || []) out.add(url);
+  return out;
+}
+
+/** URLs that appear in the text of a skill the agent loaded. */
+export function skillUrls(events) {
+  const out = new Set();
+  for (const event of events || []) if (event.kind === 'skill') for (const url of event.urls || []) out.add(url);
   return out;
 }
 

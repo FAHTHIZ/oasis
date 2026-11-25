@@ -95,3 +95,19 @@ test('analysis contract: a number needs an execution that produced it', () => {
   assert.equal(checkReport('The p-value is 0.031.', events)[0].domain, 'analysis');
   assert.deepEqual(checkReport('Fixed it in 120 ms.', [...events, { kind: 'check', passed: true, finished: true }]), []);
 });
+
+test('a link a loaded skill gives is not an unread citation; other links still are', async () => {
+  const { buildClaims } = await import('../src/claim-ledger.mjs');
+  const ledger = createEvidenceLedger();
+  const skill = record(ledger, 'load_skill', { name: 'ponytail-help' }, { name: 'ponytail-help', source: 'built-in', content: '# Help\nFull docs + examples: https://github.com/DietrichGebert/ponytail\n' });
+  assert.equal(skill.kind, 'skill');
+  assert.deepEqual(skill.urls, ['https://github.com/DietrichGebert/ponytail']);
+  assert.equal(evidenceFromToolResult('load_skill', { name: 'x' }, { error: 'Skill not found' }), null);
+  assert.equal(evidenceFromToolResult('load_skill', { name: 'x' }, { name: 'x', content: 'no links here' }), null);
+  const events = evidenceSince(ledger, 0);
+  assert.deepEqual(researchContract('Full docs: https://github.com/DietrichGebert/ponytail', events), []);
+  const issues = researchContract('Docs: https://github.com/DietrichGebert/ponytail and [other](https://example.com/x).', events);
+  assert.deepEqual(issues[0].urls, ['https://example.com/x']);
+  const claims = buildClaims('Full docs are at https://github.com/DietrichGebert/ponytail.', events);
+  assert.ok(claims.claims.every((claim) => claim.status !== 'unverified'), JSON.stringify(claims.claims));
+});
