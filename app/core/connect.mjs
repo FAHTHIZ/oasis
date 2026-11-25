@@ -26,6 +26,8 @@ const KEY_RULES = [
   { test: /^tgp_v1_[A-Za-z0-9_-]{20,}$/, providers: ['together'] },
   // The unified key a self-hosted FreeLLMAPI gateway issues.
   { test: /^freellmapi-[A-Za-z0-9_-]{24,}$/, providers: ['freellmapi'] },
+  // The Oasis Key a self-hosted OASIS Route gateway issues.
+  { test: /^oasis_live_[A-Za-z0-9_-]{20,}$/, providers: ['oasis-route'] },
   { test: /^sk-(proj|svcacct|admin)-[A-Za-z0-9_-]{20,}$/, providers: ['openai'] },
   { test: /^sk-[a-f0-9]{32}$/, providers: ['deepseek', 'moonshot', 'openai'] },
   { test: /^sk-[A-Za-z0-9]{40,}$/, providers: ['openai', 'moonshot', 'deepseek'] },
@@ -35,7 +37,7 @@ const KEY_RULES = [
 ];
 
 // Self-hosted gateways on loopback that forward to cloud providers.
-const GATEWAYS = new Set(['omniroute', 'freellmapi']);
+const GATEWAYS = new Set(['omniroute', 'freellmapi', 'oasis-route']);
 
 const GITHUB_TOKEN = /^(gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})$/;
 const LOCAL_HOST = /^(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|[a-z0-9-]+\.local)$/i;
@@ -713,7 +715,7 @@ async function probeEndpoint(raw, { apiKey = '', fetchImpl = globalThis.fetch.bi
     try {
       const ids = await attempt.test();
       if (attempt.kind === 'ollama') return makeConnection('ollama', { baseURL: origin + '/v1', local: true, models: rankModels(ids), label: local ? 'Ollama (this device)' : 'Ollama at ' + url.host });
-      const provider = knownPreset ? knownPreset[0] : /:1234$/.test(origin) ? 'lmstudio' : /:8080$/.test(origin) ? 'llamacpp' : /:20128$/.test(origin) ? 'omniroute' : /:3001$/.test(origin) ? 'freellmapi' : 'custom';
+      const provider = knownPreset ? knownPreset[0] : /:1234$/.test(origin) ? 'lmstudio' : /:8080$/.test(origin) ? 'llamacpp' : /:20128$/.test(origin) ? 'omniroute' : /:3001$/.test(origin) ? 'freellmapi' : /:8081$/.test(origin) ? 'oasis-route' : 'custom';
       const label = knownPreset ? knownPreset[1].label : provider === 'custom' ? url.host : PRESETS[provider].label;
       // A gateway on localhost forwards to the cloud: time and label it as cloud.
       return makeConnection(provider, { baseURL: attempt.base, apiKey, local: local && !GATEWAYS.has(provider), models: orderByHints(rankModels(ids), ids.hints, { keyless: !apiKey }), skipModels: ids.hints ? [...ids.hints.noTools, ...(ids.hints.unavailable || []), ...(apiKey ? [] : ids.hints.paid)] : [], label });

@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- `oasis connect http://127.0.0.1:8081/v1` now works with OASIS Route: it uses `OASIS_ROUTE_API_KEY` from the environment, and a pasted `oasis_live_` key is read as a key instead of a model name. Added an OASIS Route provider preset.
 - An OASIS Route `no_eligible_route` 503 is no longer retried eight times (about 80 seconds) before failing: it cannot clear until Route's connections or policy change, so OASIS moves on at once and says to fix it in the Route console or set OASIS_MODEL to a model Route lists, instead of "The provider had a server-side problem".
 - The Files and Changes tabs re-read the workspace when you pick them, so files made outside OASIS (an editor, a terminal) appear without a reload.
 - Routines in Settings: Run now shows the routine as queued, and the list refreshes on its own while a run is queued or running, keeping Recent results open, instead of staying on "scheduled" and "No runs yet" until Settings is reopened.

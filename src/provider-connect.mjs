@@ -6,6 +6,7 @@
 // the same provider as the fallback chain.
 import { smartConnect, parsePaste, maskSecret } from '../app/core/connect.mjs';
 import { widenOllamaContext } from './local-context.mjs';
+import { providerForEndpoint, providerApiKey, getProvider } from './provider-registry.mjs';
 
 const APP_TO_RUNTIME = { openai: 'openai-compatible', anthropic: 'anthropic' };
 
@@ -31,11 +32,26 @@ export function runtimeConfigFromConnection(result, { fallbackCount = 3 } = {}) 
  * Connect from pasted text. Returns { config, label, models, toolCalling, notes, githubToken }.
  * Throws a readable error when nothing in the text points at a model.
  */
-export async function connectFromPaste(text, { fetchImpl = globalThis.fetch.bind(globalThis), onStatus = () => {}, allowPull = true, model = '' } = {}) {
+// A bare loopback address of a registry server that reads its own key variable
+// (OASIS Route on :8081 reads OASIS_ROUTE_API_KEY): the key for that server, or ''.
+// Only loopback, and only that server's own variable, so no key goes elsewhere.
+export function localServerKey(parsed, env = process.env) {
+  if (parsed.keys.length || parsed.urls.length !== 1) return { key: '', name: '' };
+  let url;
+  try { url = new URL(parsed.urls[0].url || parsed.urls[0]); } catch { return { key: '', name: '' }; }
+  if (!/^(127\.\d+\.\d+\.\d+|localhost|\[::1\])$/i.test(url.hostname)) return { key: '', name: '' };
+  const id = providerForEndpoint(url.href, undefined, { env });
+  const key = id ? providerApiKey(id, env) : '';
+  return { key, name: key ? (getProvider(id, { env })?.label || id) : '' };
+}
+
+export async function connectFromPaste(text, { fetchImpl = globalThis.fetch.bind(globalThis), onStatus = () => {}, allowPull = true, model = '', env = process.env } = {}) {
   const parsed = parsePaste(String(text || ''));
   if (!parsed.keys.length && !parsed.urls.length && !parsed.local) {
     throw new Error(parsed.githubTokens.length ? 'That is a GitHub token, not a model key. Paste a model API key or a model link.' : 'Paste an API key, a model page link or a local server address.');
   }
+  const local = localServerKey(parsed, env);
+  if (local.key) { onStatus('Using the ' + local.name + ' key from the environment'); text = String(text) + ' ' + local.key; }
   const result = await smartConnect(text, { fetchImpl, onStatus, allowPull, model });
   const config = runtimeConfigFromConnection(result);
   const notes = [...(result.notes || [])];

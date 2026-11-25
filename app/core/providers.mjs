@@ -23,6 +23,7 @@ export const PRESETS = {
   llamacpp: { label: 'llama.cpp server', protocol: 'openai', baseURL: 'http://localhost:8080/v1', model: '', keyHint: 'not needed' },
   omniroute: { label: 'OmniRoute (gateway)', protocol: 'openai', baseURL: 'http://localhost:20128/v1', model: 'auto', keyHint: 'sk-… from Dashboard → Endpoints', note: 'A self-hosted gateway that routes one endpoint to many providers. Start it with `omniroute`.' },
   freellmapi: { label: 'FreeLLMAPI (gateway)', protocol: 'openai', baseURL: 'http://localhost:3001/v1', model: 'auto', keyHint: 'freellmapi-… from the dashboard', note: 'A self-hosted gateway that pools your own free-tier keys behind one key. Add this app\'s origin to its DASHBOARD_ORIGINS for browser use.' },
+  'oasis-route': { label: 'OASIS Route (gateway)', protocol: 'openai', baseURL: 'http://localhost:8081/v1', model: 'auto', keyHint: 'oasis_live_… from Oasis Keys in the Route console', note: 'The first-party self-hosted gateway: one endpoint over the provider accounts you connect in Route, with its spend policy and failover.' },
   custom: { label: 'Custom (OpenAI-compatible)', protocol: 'openai', baseURL: '', model: '', keyHint: '' }
 };
 
