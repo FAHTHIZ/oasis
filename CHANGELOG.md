@@ -10,6 +10,9 @@ A stability release from a final pass over OASIS as a first-time user: research,
 
 ### Added
 
+- Webhook routine prompts can use payload fields such as `{issue.title}` or `{pull_request.number}` (and `{event}`). Values are inserted as quoted one-line literals, and script routines are never templated.
+- A webhook event or `oasis schedule run` starts its routine at once (well under a second) instead of on the scheduler's next 30-second pass, including when the scheduler runs in another process.
+
 - `oasis schedule add --precheck CMD` gates an agent routine on a cheap shell check. When the command prints nothing (or `[SILENT]`) the run is recorded as skipped and no model call is made; otherwise its output is added to the prompt as data. A failing check counts as a failed run.
 - `oasis schedule install` runs the routine scheduler as an OS service (a systemd user unit on Linux, a launchd agent on macOS, a logon task on Windows), so routines keep firing after a reboot without a terminal open. `--print` shows the unit, `oasis schedule service` reports its state and `oasis schedule uninstall` removes it.
 - Routines pause after three failed runs in a row instead of failing (and alerting) on every slot. The failure message says so with the resume command, `oasis schedule resume` starts a fresh count, and `OASIS_ROUTINE_MAX_FAILURES` sets the limit (0 never pauses).
