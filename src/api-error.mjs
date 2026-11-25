@@ -69,6 +69,7 @@ export function apiErrorAdvice(status, detail = '', mode = 'OpenAI-compatible ch
   if ((status === 401 || status === 403) && /paid_model_auth_required|sign in to use this model|requires? a paid|paid models? (?:require|need)/i.test(text)) return 'This model needs an account or key with this provider, or the model name does not exist there. Pick a free model with /model (or run oasis connect again), or add a key with oasis setup.';
   if (status === 401 || status === 403) return 'Check the API key for this provider (oasis setup, or the matching environment variable).';
   if (status === 404) return 'Check the model name and the ' + mode + ' endpoint URL.';
+  if (status >= 500 && /\bno_eligible_route\b|no authorized, eligible, healthy candidate/i.test(text)) return 'OASIS Route has no model it may use for this request, and retrying will not change that; the Route message says why. Fix it in the Route console (Connections, Models, Spend), or set OASIS_MODEL to a model Route lists.';
   if (isUnconfiguredRouteError(status, text)) return 'The gateway has no working account for this model\'s provider. Connect that provider in the gateway (for OmniRoute: its dashboard), or pick another model with /model.';
   if (status >= 500) return 'The provider had a server-side problem. Try again shortly.';
   return 'Check the configured ' + mode + ' endpoint, model name, credentials, and tool-calling support.';

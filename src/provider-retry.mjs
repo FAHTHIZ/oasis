@@ -34,7 +34,9 @@ export function isMalformedGenerationError(status, text) {
 // A gateway (OmniRoute, LiteLLM) answers 5xx for a route it has no account
 // for: "bridge is not configured", "no active connection". Seen live from
 // OmniRoute; it never clears on a retry, so move to the next model at once.
-const UNCONFIGURED_ROUTE_PATTERN = /\bnot configured\b|\bno (?:active |available )?(?:connections?|credentials|accounts?)\b|\bnot connected\b|\bprovider (?:is )?disabled\b/i;
+// OASIS Route says so with code no_eligible_route ("no authorized, eligible, healthy
+// candidate"): that also holds until its connections or policy change.
+const UNCONFIGURED_ROUTE_PATTERN = /\bno_eligible_route\b|no authorized, eligible, healthy candidate|\bnot configured\b|\bno (?:active |available )?(?:connections?|credentials|accounts?)\b|\bnot connected\b|\bprovider (?:is )?disabled\b/i;
 // "Prompt too long (max 6000 characters)" (Cloudflare's playground behind
 // OmniRoute, wrapped in a 502), "context length exceeded" and the like never
 // clear on a retry: the same request is just as large next time.
