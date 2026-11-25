@@ -202,6 +202,17 @@ export async function configureProvider(root = process.cwd(), options = {}) {
     stdout.write(protocol === 'bedrock'
       ? 'Bedrock uses AWS_BEARER_TOKEN_BEDROCK, or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, or AWS_PROFILE. Region: ' + (process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1') + '.\n'
       : 'Vertex uses GOOGLE_OAUTH_ACCESS_TOKEN or gcloud auth print-access-token. Project: ' + (process.env.ANTHROPIC_VERTEX_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || '(set ANTHROPIC_VERTEX_PROJECT_ID)') + '.\n');
+  } else if (localEndpoint && presetName !== 'custom' && getProvider(presetName)?.gateway) {
+    // A local gateway preset (OASIS Route) needs its own key: the loopback
+    // branch below never asked for one, so the probe always failed with 401.
+    const gateway = getProvider(presetName);
+    apiKey = providerApiKey(gateway, process.env);
+    if (apiKey) stdout.write('Using the key from ' + gateway.keyEnv.find((name) => process.env[name]) + '.\n');
+    else {
+      apiKey = await askKey(gateway.label + ' key (input hidden; Enter keeps the saved key for this endpoint): ');
+      if (!apiKey && existing.baseURL === baseURL && existing.protocol === protocol) apiKey = existing.apiKey || '';
+      if (!apiKey) apiKey = process.env.OASIS_LOCAL_API_KEY || '';
+    }
   } else if (!localEndpoint || presetName === 'custom') {
     const label = localEndpoint ? 'Optional local endpoint key' : (protocol === 'anthropic' ? 'ANTHROPIC API key' : 'API key');
     apiKey = await askKey(label + ' (input hidden; Enter keeps a key only if the endpoint is unchanged, otherwise use a matching environment variable): ');
