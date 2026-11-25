@@ -33,6 +33,17 @@ test('web /api/routines lists, creates and manages routines for the signed-in ow
   assert.equal((await post({ action: 'resume', id: job.id })).body.routines[0].enabled, true);
   // Run now shows as queued until the scheduler's next pass starts it.
   assert.equal((await post({ action: 'run', id: job.id })).body.routines[0].state, 'queued');
+  // The add form checks before it asks to confirm: nothing is saved, and the
+  // same errors come back (a schedule it cannot read, a name already used).
+  const checked = await post({ action: 'check', fields: { name: 'weekly', schedule: 'weekdays at 9am', prompt: 'x', kind: 'script' } });
+  assert.equal(checked.status, 200);
+  assert.ok(checked.body.ok && checked.body.nextRunAt && checked.body.schedule, JSON.stringify(checked.body));
+  const unreadable = await post({ action: 'check', fields: { schedule: 'every blue moon', prompt: 'x' } });
+  assert.equal(unreadable.status, 200, 'a failed check is an answer, not a failed request');
+  assert.equal(unreadable.body.ok, false);
+  assert.match(unreadable.body.error, /every 30m/);
+  assert.match((await post({ action: 'check', fields: { name: 'nightly', schedule: 'every 2h', prompt: 'x' } })).body.error, /already exists/);
+  assert.equal((await (await fetch(base, { headers })).json()).routines.length, 1, 'check saves nothing');
   const bad = await post({ action: 'create', fields: { schedule: 'whenever', prompt: 'x' } });
   assert.equal(bad.status, 400);
   assert.match(bad.body.error, /schedule/i);

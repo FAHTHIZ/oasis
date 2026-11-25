@@ -4747,21 +4747,34 @@ async function refreshRoutines() {
   try { renderRoutines(await RT.client.api('/api/routines')); }
   catch (error) { renderRoutines(null, 'Could not load routines: ' + error.message); }
 }
-async function routineAction(body, done) {
+async function routineAction(body, done, { inline = false } = {}) {
   try { renderRoutines(await RT.client.api('/api/routines', { method: 'POST', body })); toast(done); return true; }
-  catch (error) { toast('Routine not changed: ' + error.message, 'error'); return false; }
+  catch (error) {
+    // From the add form the reason stays beside its button, where the fix is typed.
+    if (inline) routineSetStatus(error.message, 'error');
+    else toast('Routine not changed: ' + error.message, 'error');
+    return false;
+  }
 }
 $('routineAddButton').addEventListener('click', async () => {
   const fields = { name: $('routineName').value.trim(), schedule: $('routineSchedule').value.trim(), prompt: $('routinePrompt').value.trim(), kind: $('routineScript').checked ? 'script' : 'agent', deliver: $('routineDeliver').value.trim() };
   if (!fields.schedule || !fields.prompt) { routineSetStatus('Add a schedule and a task.', 'error'); return; }
-  if (fields.kind === 'script' && !confirm('This command will run on your computer on schedule "' + fields.schedule + '":\n\n' + fields.prompt)) return;
+  // Check the schedule and name first: a schedule it cannot read used to be
+  // confirmed, then refused, and the reason flashed by in a toast.
+  routineSetStatus('Checking…');
+  let check;
+  try { check = await RT.client.api('/api/routines', { method: 'POST', body: { action: 'check', fields } }); }
+  catch (error) { routineSetStatus(error.message, 'error'); return; }
+  if (check && check.ok === false) { routineSetStatus(check.error || 'That routine cannot be saved.', 'error'); return; }
+  const next = check && check.nextRunAt ? '\nFirst run: ' + new Date(check.nextRunAt).toLocaleString() + '.' : '';
+  if (fields.kind === 'script' && !confirm('This command will run on your computer on schedule "' + fields.schedule + '":\n\n' + fields.prompt + '\n' + next)) { routineSetStatus(''); return; }
   routineSetStatus('Saving…');
-  if (await routineAction({ action: 'create', fields }, 'Routine added.')) {
+  if (await routineAction({ action: 'create', fields }, 'Routine added.' + (next ? next.replace('\n', ' ') : ''), { inline: true })) {
     for (const id of ['routineName', 'routineSchedule', 'routinePrompt', 'routineDeliver']) $(id).value = '';
     $('routineScript').checked = false;
     $('routineAdd').open = false;
+    routineSetStatus('');
   }
-  routineSetStatus('');
 });
 function openSettings() {
   renderConnections();

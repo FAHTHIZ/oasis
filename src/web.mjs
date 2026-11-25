@@ -2002,6 +2002,13 @@ export function createOasisWebServer(options = {}) {
       const action = String(body.action || '');
       const id = String(body.id || '');
       try {
+        if (action === 'check') {
+          const f = body.fields && typeof body.fields === 'object' ? body.fields : {};
+          // A check that fails is still an answer (200), not a failed request.
+          try { json(res, 200, { ok: true, ...(await routines.checkJob({ schedule: String(f.schedule || ''), prompt: String(f.prompt || ''), name: f.name ? String(f.name) : undefined, kind: f.kind === 'script' ? 'script' : 'agent', timezone: f.timezone ? String(f.timezone) : undefined, deliver: f.deliver ? String(f.deliver) : undefined, workdir: f.workdir ? String(f.workdir) : activeRoot }, { env })) }); }
+          catch (error) { json(res, 200, { ok: false, error: String(error && error.message || error).slice(0, 2000) }); }
+          return;
+        }
         if (action === 'create') {
           const f = body.fields && typeof body.fields === 'object' ? body.fields : {};
           await routines.createJob({ schedule: String(f.schedule || ''), prompt: String(f.prompt || ''), name: f.name ? String(f.name) : undefined, kind: f.kind === 'script' ? 'script' : 'agent', timezone: f.timezone ? String(f.timezone) : undefined, deliver: f.deliver ? String(f.deliver) : undefined, workdir: f.workdir ? String(f.workdir) : activeRoot, paused: Boolean(f.paused) }, { env });

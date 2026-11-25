@@ -334,6 +334,19 @@ export async function createJob(fields = {}, { env = process.env, now = new Date
   });
 }
 
+/**
+ * What createJob would make, without saving it: throws the same errors (a
+ * schedule it cannot read, a name already used). The browser checks first so
+ * it asks the user to confirm only a routine that will save.
+ */
+export async function checkJob(fields = {}, { env = process.env, now = new Date() } = {}) {
+  const jobs = await readJobs(env);
+  if (jobs.length >= MAX_JOBS) throw new Error('There are already ' + MAX_JOBS + ' routines. Remove some first.');
+  const job = normalizeFields({ ...fields, schedule: fields.schedule ?? '' }, { id: 'rt-check', createdAt: now.toISOString(), enabled: true, state: 'scheduled' }, now);
+  refuseDuplicateName(jobs, job);
+  return { schedule: job.schedule.display, nextRunAt: job.nextRunAt || null };
+}
+
 export async function editJob(ref, fields = {}, { env = process.env, now = new Date(), expectedUpdatedAt } = {}) {
   guardScheduledRun(env);
   return mutate(env, (jobs) => {
