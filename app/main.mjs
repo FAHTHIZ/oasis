@@ -2537,8 +2537,8 @@ function handleRunEvent(event) {
       if (liveModel.request && !liveModel.request.ended) {
         Object.assign(liveModel.request, { attempt: Number(event.attempt) || liveModel.request.attempt + 1, retryUntil: event.waitMs ? Date.now() + Number(event.waitMs) : 0, retryStatus: Number(event.status) || 0, firstOutputAt: 0, lastOutputAt: 0, startedAt: Date.now() });
         runClock.tick();
-      }
-      if (!event.waitMs) toast('Provider busy, retrying (' + event.attempt + ')…');
+      } else if (!event.waitMs) toast('Provider busy, retrying (' + event.attempt + ')…');
+      // (With a live request the status line already says "Retrying · attempt 2"; a toast over the chat said it twice.)
       break;
     case 'truncated':
       liveModel.resuming = true;
