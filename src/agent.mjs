@@ -845,9 +845,15 @@ export function hookOptions(session, env) {
     onHookStatus: session.onHookStatus || null,
     allowedHttpHookUrls: session.settings && session.settings.allowedHttpHookUrls,
     httpHookAllowedEnvVars: session.settings && session.settings.httpHookAllowedEnvVars,
-    evaluatePrompt: async ({ system, prompt, model, signal }) => {
+    evaluatePrompt: async ({ system, prompt, model, signal, onWait }) => {
       const config = model ? { ...session.config, model } : session.config;
-      const completion = await requestCompletion({ budgetParent: session, config, toolDefinitions: [], messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }] }, { noTools: true, signal });
+      // onWait(ms): time the provider made this request wait, which callers
+      // with a time limit (the auto mode classifier) do not count.
+      const waits = typeof onWait === 'function' ? {
+        onRateLimitWait: (info) => { try { onWait(Number(info && info.waitMs) || 0); } catch {} },
+        onEndpointQueued: () => { const queuedAt = Date.now(); return () => { try { onWait(Date.now() - queuedAt); } catch {} }; }
+      } : {};
+      const completion = await requestCompletion({ budgetParent: session, config, toolDefinitions: [], messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }] }, { noTools: true, signal, ...waits });
       chargeAuxiliaryUsage(session, completion.usage, { env, model: config.model });
       return completion.content;
     },

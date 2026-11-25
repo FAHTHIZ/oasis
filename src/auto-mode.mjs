@@ -99,6 +99,8 @@ function classifierSystem(config) {
 }
 
 const SYSTEM = classifierSystem(DEFAULT_AUTO_MODE);
+// How much provider-imposed waiting the classifier's time limit may absorb.
+const MAX_CLASSIFIER_WAIT_MS = 120000;
 
 /** Problems with custom rules, the way `claude auto-mode critique` reports them (without a model call). */
 export function critiqueAutoMode(custom = null) {
@@ -354,15 +356,35 @@ export async function classifyAction(state, request, evaluate, options = {}) {
   }
   let verdict = null;
   const timeoutSeconds = options.timeoutSeconds || 30;
-  const signal = AbortSignal.timeout(timeoutSeconds * 1000);
+  // The limit is for the model's answer, not for time the provider made the
+  // request wait (a rate-limit back-off or a turn in the endpoint queue).
+  // Seen live: Pollinations' keyless tier allows one reply per 45 s, so the
+  // classifier, sent right after the agent's own request, spent its whole
+  // 30 s waiting out "Retry after 15s" and every MCP call fell back to a prompt.
+  const controller = new AbortController();
+  let deadline = Date.now() + timeoutSeconds * 1000;
+  let waitedMs = 0;
+  let timer = null;
+  const arm = () => { clearTimeout(timer); timer = setTimeout(() => controller.abort(), Math.max(0, deadline - Date.now())); };
+  const onWait = (ms) => {
+    const add = Math.min(Math.max(0, Number(ms) || 0), MAX_CLASSIFIER_WAIT_MS - waitedMs);
+    if (add <= 0 || controller.signal.aborted) return;
+    waitedMs += add;
+    deadline += add;
+    arm();
+  };
+  arm();
+  const signal = controller.signal;
   try {
     const system = options.config ? classifierSystem(effectiveAutoModeConfig(options.config)) : SYSTEM;
-    const reply = await evaluate({ system, prompt: buildClassifierPrompt(request), model: options.model, signal });
+    const reply = await evaluate({ system, prompt: buildClassifierPrompt(request), model: options.model, signal, onWait });
     verdict = parseClassifierReply(reply);
   } catch (error) {
     // The provider layer reports any abort as a user cancel; name the timeout.
-    const why = signal.aborted ? 'no answer within ' + timeoutSeconds + ' s; set autoMode.model to a faster model or raise autoMode.timeoutSeconds' : (error.message || error);
+    const why = signal.aborted ? 'no answer within ' + timeoutSeconds + ' s' + (waitedMs >= 1000 ? ' (plus ' + Math.round(waitedMs / 1000) + ' s waiting on the provider)' : '') + '; set autoMode.model to a faster model or raise autoMode.timeoutSeconds' : (error.message || error);
     return { decision: 'ask', reason: 'The auto mode classifier failed (' + why + '); asking you instead.' };
+  } finally {
+    clearTimeout(timer);
   }
   if (!verdict) return { decision: 'ask', reason: 'The auto mode classifier gave no clear answer; asking you instead.' };
   state.checked = (state.checked || 0) + 1;

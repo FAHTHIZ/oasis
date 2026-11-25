@@ -271,6 +271,26 @@ test('a classifier timeout is reported as a timeout, not a user cancel', async (
   assert.match(verdict.reason, /no answer within 0\.05 s/);
 });
 
+test('time the provider makes the classifier wait does not count against its limit', async () => {
+  const { classifyAction, newAutoModeState } = await import('../src/auto-mode.mjs');
+  const request = { toolName: 'Bash', args: { command: 'curl', args: ['https://example.com'] }, messages: [], root: '/w' };
+  // A rate-limit back-off longer than the whole limit, then a quick answer.
+  const throttled = ({ signal, onWait }) => new Promise((resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new Error('Agent task cancelled by the user.')));
+    onWait(150);
+    setTimeout(() => resolve('{"decision":"allow","reason":"fine"}'), 120);
+  });
+  assert.equal((await classifyAction(newAutoModeState(), request, throttled, { timeoutSeconds: 0.05 })).decision, 'allow');
+  // Waiting is credited, but a model that never answers still times out, and the reason says it waited.
+  const stuck = ({ signal, onWait }) => new Promise((resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new Error('Agent task cancelled by the user.')));
+    onWait(1200);
+  });
+  const verdict = await classifyAction(newAutoModeState(), request, stuck, { timeoutSeconds: 0.05 });
+  assert.equal(verdict.decision, 'ask');
+  assert.match(verdict.reason, /no answer within 0\.05 s \(plus 1 s waiting on the provider\)/);
+});
+
 test('the classifier time limit follows the provider\'s reply time', async () => {
   const { classifierTimeoutSeconds } = await import('../src/auto-mode.mjs');
   assert.equal(classifierTimeoutSeconds({}, 0), 30);
