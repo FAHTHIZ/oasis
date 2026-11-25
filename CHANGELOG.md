@@ -10,6 +10,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- In the app, a CSV, PDF or other non-image file dropped on the message box is no longer silently ignored. On this computer it is added to the project and mentioned in your message (`@file`) so the agent reads it; images still attach as before. Where files can't be added, a message says how to share them.
 - In the terminal, typing `?` on an empty prompt shows the keyboard shortcuts right away, as the welcome banner says. Before, nothing happened until you pressed Enter.
 - In the terminal, `/mcp` typed before your first message no longer says "No MCP servers are connected". It lists the servers you have set up and says they connect with your first message.
 - Adding a routine in Settings checks the schedule and name before asking you to confirm, and the confirmation shows the first run time. Before, an unreadable schedule was confirmed, then refused, and the reason only flashed by in a toast while the status beside the button was cleared.

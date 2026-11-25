@@ -5113,6 +5113,7 @@ async function uploadToRuntime(picked) {
   closeSheet('projectsSheet');
   const refused = (result.refused || []).map((item) => item.path + ' (' + item.reason + ')');
   toast('Added ' + result.written.length + ' file' + (result.written.length === 1 ? '' : 's') + ' to ' + workspace.project.name + (refused.length ? '. Skipped ' + refused.join(', ') : '') + (tooLarge ? '. Skipped ' + tooLarge + ' over 10 MB' : '') + '.', refused.length ? 'error' : undefined);
+  return result;
 }
 for (const id of ['folderInput', 'filesInput']) {
   $(id).addEventListener('change', async (event) => {
@@ -6279,4 +6280,26 @@ $('input').addEventListener('paste', (event) => {
 });
 for (const type of ['dragenter', 'dragover']) $('composer').addEventListener(type, (event) => { if ([...(event.dataTransfer && event.dataTransfer.items || [])].some((item) => item.kind === 'file')) { event.preventDefault(); $('composer').classList.add('dragging'); } });
 for (const type of ['dragleave', 'drop']) $('composer').addEventListener(type, () => $('composer').classList.remove('dragging'));
-$('composer').addEventListener('drop', (event) => { if (event.dataTransfer && event.dataTransfer.files.length) { event.preventDefault(); addImages(event.dataTransfer.files); } });
+// Images attach to the message. Other files (a CSV, a PDF) used to vanish without a word; on this
+// computer they are added to the project and mentioned in the message so the agent reads them.
+async function dropFiles(fileList) {
+  const all = [...fileList];
+  const images = all.filter((file) => /^image\//.test(file.type));
+  const others = all.filter((file) => !/^image\//.test(file.type));
+  if (images.length) await addImages(images);
+  if (!others.length) return;
+  if (!(workspace && typeof workspace.upload === 'function')) {
+    toast('Only images can be attached to a message. Add other files to the project from Files first.', 'error');
+    return;
+  }
+  let result = null;
+  try { result = await uploadToRuntime(others); } catch (error) { toast(error.message, 'error'); }
+  const written = result && Array.isArray(result.written) ? result.written : [];
+  if (!written.length) return;
+  const input = $('input');
+  const mentions = written.map((file) => /\s/.test(file) ? '"' + file + '"' : '@' + file).join(' ');
+  input.value = input.value.trim() ? input.value.replace(/\s*$/, ' ') + mentions + ' ' : mentions + ' ';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.focus();
+}
+$('composer').addEventListener('drop', (event) => { if (event.dataTransfer && event.dataTransfer.files.length) { event.preventDefault(); dropFiles(event.dataTransfer.files); } });

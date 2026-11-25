@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import { startOasisWebServer } from '../../src/web.mjs';
@@ -148,6 +148,23 @@ try {
   await page.keyboard.press('Escape');
   await page.locator('#commandPaletteDialog').waitFor({ state: 'hidden' });
   step('the command palette finds actions and chats');
+
+  // Dropping a CSV and an image on the message box: the image attaches, and the CSV goes into the
+  // project and is mentioned in the message (it used to vanish without a word).
+  await page.locator('#input').fill('summarise');
+  const dropped = await page.evaluateHandle((png) => {
+    const data = new DataTransfer();
+    data.items.add(new File(['a,b\n1,2\n'], 'dropped.csv', { type: 'text/csv' }));
+    data.items.add(new File([Uint8Array.from(atob(png), (c) => c.charCodeAt(0))], 'dot.png', { type: 'image/png' }));
+    return data;
+  }, PNG.toString('base64'));
+  await page.dispatchEvent('#composer', 'drop', { dataTransfer: dropped });
+  await page.locator('#attachments img').first().waitFor({ timeout: timeoutMs });
+  await page.waitForFunction(() => document.querySelector('#input').value.includes('@dropped.csv'), null, { timeout: timeoutMs });
+  assert.equal(await readFile(path.join(project, 'dropped.csv'), 'utf8'), 'a,b\n1,2\n');
+  await page.locator('#input').fill('');
+  await page.locator('#attachments button').first().click();
+  step('a dropped CSV joins the project and the message; a dropped image attaches');
 
   // The keyboard-shortcuts list opens from the palette.
   await page.locator('#commandPaletteButton').click();
