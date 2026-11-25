@@ -302,6 +302,26 @@ async function doctorWorkspaceReport(root, status = {}) {
   stdout.write('  Workflow runtime: ' + (workflow.available
     ? 'available (QuickJS; saved JavaScript workflows can run)'
     : (/need quickjs-emscripten/i.test(workflow.reason || '') ? 'not installed' : 'unavailable: ' + workflow.reason) + ' (only needed for saved JavaScript workflows; run npm install in ' + APP_ROOT + ' or reinstall OASIS)') + '\n');
+  // Routines only run while a scheduler does; a saved routine with nothing
+  // running it is the most common reason "my schedule never fired".
+  try {
+    const { readJobs, runningDaemonPid } = await import('./routines.mjs');
+    const jobs = await readJobs(process.env);
+    if (jobs.length) {
+      const active = jobs.filter((job) => job.enabled !== false);
+      const pid = await runningDaemonPid(process.env);
+      let scheduler = pid ? 'running (pid ' + pid + ')' : '';
+      if (!pid) {
+        const { serviceStatus } = await import('./scheduler-service.mjs');
+        const service = await serviceStatus({ env: process.env }).catch(() => null);
+        scheduler = service?.running ? 'installed service is running' : service?.installed ? 'service installed but not running (oasis schedule service)' : 'not running';
+      }
+      stdout.write('  Routines: ' + jobs.length + ' saved, ' + active.length + ' active; scheduler ' + scheduler + '\n');
+      if (active.length && scheduler === 'not running') problems.push(active.length + ' active routine(s) will not run: no scheduler is running. Run oasis schedule install (starts with the computer) or keep oasis schedule daemon or oasis web open.');
+      for (const job of active.filter((item) => item.lastStatus === 'blocked_config' && item.lastProblem)) stdout.write('  Routine ' + (job.name || job.id) + ' is blocked: ' + job.lastProblem + '\n');
+      for (const job of jobs.filter((item) => item.enabled === false && item.pausedReason)) stdout.write('  Routine ' + (job.name || job.id) + ' is paused: ' + job.pausedReason + '\n');
+    }
+  } catch (error) { stdout.write('  Routines: could not read (' + error.message + ')\n'); }
   stdout.write('\nWorkspace: ' + root + '\n');
   let settings = null;
   try {
