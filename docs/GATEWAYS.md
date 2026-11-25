@@ -15,6 +15,16 @@ While a gateway is running it also hosts your [routines](USER-GUIDE.md#routines-
 | WhatsApp (official Cloud API) | `oasis gateway whatsapp` | Buttons | `whatsapp:+NUMBER` |
 | Mattermost | `oasis gateway mattermost` | Typed replies | `mattermost:CHANNEL_ID` |
 
+## Where the tokens go
+
+Each platform below reads its tokens and allowlists from `OASIS_…` environment variables. Set them in the terminal that runs the gateway (`export OASIS_TELEGRAM_BOT_TOKEN=…`), or keep them under `"env"` in your user settings file so every new terminal and the routine service have them:
+
+```json
+{ "env": { "OASIS_TELEGRAM_BOT_TOKEN": "123456789:AA…", "OASIS_TELEGRAM_ALLOWED_CHATS": "123456789" } }
+```
+
+The settings file is `~/.config/oasis/settings.json` on Linux and macOS and `%APPDATA%\oasis\settings.json` on Windows (`oasis permissions` prints it under "Settings files", and a gateway missing a token prints it too). Keep it private: it now holds a bot token.
+
 ## Pairing
 
 You do not have to collect IDs before starting a gateway. When somebody who is not on the allowlist messages the bot, they get a one-time code such as `K7QM-4XHP`, and the gateway log prints the same code. Approve it on the OASIS machine:

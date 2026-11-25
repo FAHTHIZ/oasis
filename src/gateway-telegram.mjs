@@ -86,7 +86,11 @@ export function createTelegramGateway(options = {}) {
   async function api(method, body) {
     const response = await fetchImpl(base + '/bot' + token + '/' + method, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}), signal: body && body.timeout ? AbortSignal.timeout((body.timeout + 15) * 1000) : AbortSignal.timeout(30000) });
     const data = await response.json().catch(() => ({ ok: false, description: 'invalid JSON from Telegram' }));
-    if (!data.ok) throw new Error('Telegram ' + method + ' failed: ' + String(data.description || response.status).slice(0, 200));
+    if (!data.ok) {
+      // A revoked or mistyped token: say what to do, not just "Unauthorized".
+      if (response.status === 401 || /^Unauthorized$/i.test(String(data.description || ''))) throw new Error('Telegram did not accept the bot token in OASIS_TELEGRAM_BOT_TOKEN (Unauthorized). Copy it again from @BotFather (/mybots, API Token).');
+      throw new Error('Telegram ' + method + ' failed: ' + String(data.description || response.status).slice(0, 200));
+    }
     return data.result;
   }
 
@@ -296,8 +300,13 @@ export function createTelegramGateway(options = {}) {
     return (updates || []).length;
   }
 
+  // The token is checked before routines start (runGateway calls check), so a
+  // bad token is one error instead of "Routine daemon started" and then it.
+  let checked = null;
+  async function check() { checked = checked || await api('getMe', {}); return checked; }
+
   async function run() {
-    const me = await api('getMe', {});
+    const me = await check();
     log('connected as @' + (me && me.username) + ' for ' + root + '; allowed chats: ' + [...allowed].join(', '));
     if (!/^(0|false|off|no)$/i.test(String(env.OASIS_TELEGRAM_COMMAND_MENU || ''))) await api('setMyCommands', { commands: TELEGRAM_COMMANDS }).catch((error) => log('could not set the command menu: ' + error.message));
     let backoff = 1000;
@@ -317,7 +326,7 @@ export function createTelegramGateway(options = {}) {
     for (const waiter of approvals.values()) waiter.resolve(false);
   }
 
-  return { run, stop, pollOnce, handleUpdate, chats, approvals };
+  return { run, stop, check, pollOnce, handleUpdate, chats, approvals };
 }
 
 export const GATEWAY_PLATFORMS = ['telegram', 'discord', 'slack', 'matrix', 'signal', 'email', 'whatsapp', 'mattermost'];
@@ -398,6 +407,7 @@ export async function runGateway(args = [], options = {}) {
   const gateway = kind === 'all' ? await createAllGateways(options) : await createGateway(kind, options);
   // Routines start only once the platform is configured, so a missing token is a plain error
   // instead of "Routine daemon started" followed by one.
+  if (typeof gateway.check === 'function') await gateway.check();
   const stopReady = typeof options.onReady === 'function' ? await options.onReady() : null;
   const onSignal = () => { gateway.stop(); Promise.resolve(typeof stopReady === 'function' && stopReady()).finally(() => process.exit(0)); };
   process.once('SIGINT', onSignal);

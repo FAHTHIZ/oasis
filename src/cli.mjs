@@ -14,7 +14,7 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr } from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
 import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { permissionModeName } from './permission-modes.mjs';
+import { normalizePermissionMode, permissionModeName } from './permission-modes.mjs';
 import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -3601,7 +3601,13 @@ async function main() {
         return () => scheduler.stop().catch(() => {});
       } catch (error) { stderr.write('Routines are not running: ' + error.message + '\n'); return null; }
     };
-    await runGateway(rest, { root: workspace, env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null, onReady });
+    try { await runGateway(rest, { root: workspace, env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null, onReady }); }
+    catch (error) {
+      // "Set OASIS_TELEGRAM_BOT_TOKEN …": say where a setting can live so it
+      // survives a new terminal, instead of leaving people to guess.
+      if (/^Set OASIS_[A-Z_]+/.test(String(error && error.message))) error.message += '\nSet it in this terminal (export NAME=value), or keep it under "env" in ' + userSettingsPath() + '. Setup steps: https://github.com/FAHTHIZ/oasis/blob/main/docs/GATEWAYS.md';
+      throw error;
+    }
     return;
   }
   if (command === 'app-server') {
@@ -3610,7 +3616,8 @@ async function main() {
     const flag = (name) => { const at = rest.indexOf(name); return at >= 0 ? rest[at + 1] : undefined; };
     const listen = flag('--listen') || 'stdio://';
     const modeAt = rest.indexOf('--permission-mode');
-    const permissionMode = (modeAt >= 0 ? rest[modeAt + 1] : null) || SESSION_OPTIONS.permissionMode || null;
+    const requestedMode = (modeAt >= 0 ? rest[modeAt + 1] : null) || SESSION_OPTIONS.permissionMode || null;
+    const permissionMode = requestedMode ? normalizePermissionMode(requestedMode) || requestedMode : null;
     if (permissionMode && !['default', 'acceptEdits', 'plan', 'auto'].includes(permissionMode)) throw new Error('oasis app-server --permission-mode must be default, acceptEdits, plan or auto.');
     const { parseListenUrl, loadWsAuth, startCodexAppServerWebSocket, appServerListenNotice } = await import('./codex-app-server-ws.mjs');
     const target = parseListenUrl(listen);
@@ -3657,7 +3664,8 @@ async function main() {
     const { serveAcp } = await import('./acp.mjs');
     const { oasisVersion } = await import('./version.mjs');
     const modeAt = rest.indexOf('--permission-mode');
-    const permissionMode = (modeAt >= 0 ? rest[modeAt + 1] : null) || SESSION_OPTIONS.permissionMode || null;
+    const requestedMode = (modeAt >= 0 ? rest[modeAt + 1] : null) || SESSION_OPTIONS.permissionMode || null;
+    const permissionMode = requestedMode ? normalizePermissionMode(requestedMode) || requestedMode : null;
     if (permissionMode && !['default', 'acceptEdits', 'plan', 'auto'].includes(permissionMode)) throw new Error('oasis acp --permission-mode must be default, acceptEdits, plan or auto.');
     await serveAcp({ env: process.env, version: oasisVersion(), permissionMode, editorTerminal: rest.includes('--editor-terminal') });
     return;
