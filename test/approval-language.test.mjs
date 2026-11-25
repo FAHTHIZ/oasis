@@ -114,8 +114,8 @@ test('command approval metadata preserves the exact executable argument boundari
 
 test('generic approval prompts keep their lines and indented command lines', async () => {
   const { formatApprovalMessage } = await import('../src/approval-language.mjs');
-  const { message } = formatApprovalMessage('Open an interactive terminal in the workspace?\n  /bin/bash  (in /tmp/p)\nYou type into it directly.');
-  assert.equal(message, 'OASIS is asking permission to take this action:\nOpen an interactive terminal in the workspace?\n  /bin/bash (in /tmp/p)\nYou type into it directly.');
+  const { message } = formatApprovalMessage('Run the cleanup step?\n  ./clean.sh  --all\nIt removes build output.');
+  assert.equal(message, 'OASIS is asking permission to take this action:\nRun the cleanup step?\n  ./clean.sh --all\nIt removes build output.');
   const mcp = formatApprovalMessage('Configure and start this stdio MCP server now?\nName: gh\nExecutable: npx\n\n\n\nArguments: ["-y"]').message;
   assert.match(mcp, /now\?\nName: gh\nExecutable: npx\n\nArguments/);
 });
@@ -173,4 +173,10 @@ test('reworded file and package prompts keep protected-file and package-check wa
   assert.match(install, /\nPackage check: reqeusts looks like a typo of requests\./);
   const plain = formatApprovalMessage('Delete the workspace file a.txt? Its current contents will be backed up first.', { tool: 'delete_file', input: { path: 'a.txt' } }).message;
   assert.doesNotMatch(plain, /Warning:/);
+});
+
+test('the Terminal tab asks to open a terminal directly', async () => {
+  const { formatApprovalMessage } = await import('../src/approval-language.mjs');
+  const shown = formatApprovalMessage('Open an interactive terminal in the workspace?\n  /bin/bash  (in /tmp/p)\nYou type into it directly; the agent cannot see or use it.', {});
+  assert.equal(shown.message, 'Open a terminal in this project?\n  /bin/bash (in /tmp/p)\nYou type into it directly; the agent cannot see or use it.');
 });

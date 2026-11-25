@@ -5346,10 +5346,14 @@ function terminalNote(text) {
   for (const row of wrapWords(text, xterm.cols)) xterm.writeln('\x1b[2m' + row + '\x1b[0m');
 }
 let terminalHintShown = false;
+// True while the screen holds only that hint, so starting the shell can clear
+// it instead of leaving "Press Enter..." above the first prompt.
+let terminalOnlyHint = false;
 function terminalIdleHint() {
   if (terminalHintShown || !xterm || (terminal && terminal.running)) return;
   terminalHintShown = true;
   terminalNote('Press Enter or select Start terminal to open a shell in this project.');
+  terminalOnlyHint = true;
 }
 function setTerminalRunning(running) {
   $('terminalStart').hidden = running;
@@ -5367,6 +5371,7 @@ $('terminalStart').addEventListener('click', async () => {
     terminal.size = { cols: xterm.cols, rows: xterm.rows };
     const id = await terminal.start(shell, []);
     if (id) {
+      if (terminalOnlyHint) { xterm.clear(); xterm.write('\x1b[2K\r'); terminalOnlyHint = false; }
       sessionStorage.setItem('oasis.terminal', id);
       setTerminalRunning(true);
       $('terminalStatus').textContent = shell.split(/[\\/]/).pop() + ' · running';
@@ -5382,7 +5387,7 @@ function ensureTerminal() {
       client: RT.client,
       approve: requestApproval,
       onStatus: (text) => { $('terminalStatus').textContent = text; },
-      onOutput: (data, { truncated }) => { if (truncated) xterm.writeln('\r\n[older output dropped]'); xterm.write(data); },
+      onOutput: (data, { truncated }) => { if (terminalOnlyHint) { xterm.clear(); xterm.write('\x1b[2K\r'); terminalOnlyHint = false; } if (truncated) xterm.writeln('\r\n[older output dropped]'); xterm.write(data); },
       onExit: (code, { lost = false } = {}) => {
         setTerminalRunning(false);
         if (lost) return; // The shell may still be running; reopening the tab reattaches.

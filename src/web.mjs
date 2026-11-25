@@ -1625,7 +1625,7 @@ export function createOasisWebServer(options = {}) {
   // the agent never sees the session, and only the server's configured shell can be started.
   async function startCompanionTerminal(job, sandbox, input) {
     const shellPath = companionShell();
-    const ok = await approvalFor(job, 'Open an interactive terminal in the workspace?\n  ' + shellPath + '  (in ' + activeRoot + ')\nYou type into it directly; the agent cannot see or use it. Oasis strips common secret environment variables from it.' +
+    const ok = await approvalFor(job, 'Open an interactive terminal in the workspace?\n  ' + shellPath + '  (in ' + activeRoot + ')\nYou type into it directly; the agent cannot see or use it. OASIS removes common secret environment variables from it.' +
       (sandbox && sandbox.available ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : ''), true);
     if (!ok) return { approved: false, command: shellPath, args: [], message: 'Terminal was not opened.' };
     const { launchCommand } = await import('./sandbox.mjs');

@@ -136,6 +136,10 @@ export function formatApprovalMessage(prompt, meta = {}) {
     message = 'OASIS wants to use the ' + safeLabel(toolName) + ' tool from the ' + safeLabel(server) + ' MCP server' + (empty ? '.' : ' with:\n' + json.split('\n').map((line) => '  ' + line).join('\n')) +
       '\nMCP tools can read outside data or change other systems, depending on what this server allows.';
     risky = /\b(?:delete|remove|drop|destroy|uninstall|overwrite|wipe|purge|truncate)/i.test(toolName || '');
+  } else if (/^Open an interactive terminal in the workspace\?\n/.test(original)) {
+    // You opened the Terminal tab yourself: ask that directly, not "OASIS is
+    // asking permission to take this action".
+    message = 'Open a terminal in this project?\n' + original.split('\n').slice(1).map((line) => /^\s{2,}\S/.test(line) ? '  ' + line.trim().replace(/\s{2,}/g, ' ') : line.trim()).join('\n');
   } else if (tool === 'delete_file' || /^delete (?:the workspace )?file\b/i.test(original)) {
     const match = original.match(/^Delete the workspace file\s+(.+?)\?\s*/i);
     const target = path || (match && match[1]) || '';

@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- The Terminal tab's approval now just asks "Open a terminal in this project?" instead of "OASIS is asking permission to take this action", since you opened it yourself. The "Press Enter or select Start terminal" hint is cleared once the shell starts, so it no longer sits above the first prompt.
 - MCP tool approvals read "OASIS wants to use the “room_code” tool from the “vault” MCP server with:" followed by the arguments as one code block. The web sheet used to show the JSON braces as plain text with only the inner lines as code, under a generic "asking permission to take this action" line. Tools whose names say delete, drop, wipe and the like are still marked risky.
 - When an answer the user asked to cite has no sources, the internal reminder lists the pages the model read ("cite the pages you read, by URL: https://www.python.org/downloads/release/python-3152/"). With only "the result cites no sources", gpt-oss re-sent the same uncited answer.
 - Finished web steps say what they did: "Searched the web for 'latest Python release'" and "Read a page on python.org". A search followed by two page reads used to show three identical "Looked up information online" rows in Activity.
