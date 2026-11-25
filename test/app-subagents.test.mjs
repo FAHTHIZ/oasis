@@ -117,3 +117,13 @@ test('a JSON-wrapped subagent report shows as its text', async () => {
   assert.equal(plainReport('Plain words.'), 'Plain words.');
   assert.equal(plainReport('{"summary": 3}'), '{"summary": 3}');
 });
+
+test('a subagent row reads a Markdown list report as one comma-separated line', async () => {
+  const { reportLine } = await import('../app/core/subagents.mjs');
+  assert.equal(reportLine('The functions in mathx.py are:\n- mul\n- div'), 'The functions in mathx.py are: mul, div');
+  assert.equal(reportLine('1. **Read** `calc.py`\n2. Found add\n\nAll good.'), 'Read calc.py, Found add All good.');
+  assert.equal(reportLine('plain   text\nhere'), 'plain text here');
+  const tracker = new SubagentTracker();
+  tracker.update({ type: 'agent.completed', agent_id: 'a1', description: 'List functions', report: 'Found:\n- mul\n- div' });
+  assert.equal(tracker.workers.get('a1').detail, 'Found: mul, div');
+});

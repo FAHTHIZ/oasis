@@ -33,7 +33,7 @@ export class SubagentTracker {
     if (type === 'agent.approval_pending') current.waitingApproval = true;
     if (type === 'agent.approval_granted' || type === 'agent.approval_denied') current.waitingApproval = false;
     if (data.budget) current.budget = String(data.budget).slice(0, 200);
-    const detail = plainReport(String(data.report || data.detail || '')).replace(/\s+/g, ' ').trim();
+    const detail = reportLine(plainReport(String(data.report || data.detail || '')));
     // Skip runtime counters such as "tool_calls=0 duration_ms=812".
     if (detail && !type.startsWith('agent.approval_') && !/^(?:[a-z_]+=\S+\s*)+$/i.test(detail)) current.detail = detail.slice(0, 240);
     this.workers.set(id, current);
@@ -142,6 +142,23 @@ export function friendlyBudget(text) {
 
 // Small models sometimes end a subagent with {"summary": "…"} instead of
 // prose. Show the text, not the JSON around it (only for one text field).
+// A report as one readable line for a subagent row: a Markdown list reads as
+// "are: mul, div" instead of "are: - mul - div", and bold or code markers go.
+export function reportLine(text) {
+  let line = '';
+  let inList = false;
+  for (const raw of String(text || '').split(/\n/)) {
+    const row = raw.trim().replace(/\*\*|`+/g, '');
+    if (!row || /^```/.test(raw.trim())) continue;
+    const item = row.match(/^(?:[-*+\u2022]|\d+[.)])\s+(.+)$/);
+    const piece = item ? item[1].trim() : row;
+    line += line ? (item && inList ? ', ' : ' ') : '';
+    line += piece;
+    inList = Boolean(item);
+  }
+  return line.replace(/\s+/g, ' ').trim();
+}
+
 export function plainReport(text) {
   const raw = String(text || '').trim();
   if (!/^\{[\s\S]*\}$/.test(raw)) return String(text || '');

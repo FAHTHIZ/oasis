@@ -6,6 +6,7 @@ User-facing change history grouped by package version. Releases published as 1.0
 
 ### Fixed
 
+- A subagent's row shows a list report as one readable line ("are: mul, div" instead of "are: - mul - div"), without stray bold or code markers.
 - A thought's headline drops the narration raw-reasoning models open with ("We need to", "The user wants us to", "Let's"), so gpt-oss turns read "Add a function mul to mathx.py" instead of "We need to add a function mul to mathx.py".
 - Settings' approval options now use the same mode names as the composer chip (Ask first, Auto edit, Full auto, Plan), so the two places no longer describe the same choice in different words.
 
