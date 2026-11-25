@@ -116,7 +116,7 @@ export function parseSchedule(input, { now = new Date(), timezone } = {}) {
   const every = /^every\s+(.+)$/i.exec(text);
   if (every) {
     const ms = parseDuration(every[1]);
-    if (!ms) throw new Error('Could not read the interval in "' + text + '". Use every 30m, every 2h or every 1d.');
+    if (!ms) throw new Error('Could not read the interval in "' + text + '". Use every 30m, every 2h, every 1d or every monday at 14:00.');
     if (ms < 60_000) throw new Error('The shortest interval is every 1m.');
     return { type: 'interval', everyMs: ms, display: text };
   }
@@ -136,7 +136,12 @@ export function parseSchedule(input, { now = new Date(), timezone } = {}) {
     if (!cron.nextRun(now)) throw new Error('never runs');
     return { type: 'cron', expr: text, display: text };
   } catch (error) {
-    throw new Error('Could not read the schedule "' + text + '": ' + (error.message || error) + '. Use daily at 09:00, weekdays at 9am, every monday at 14:00, a 5-field cron expression, an RRULE (DTSTART;TZID=Zone:20261201T090000 RRULE:FREQ=WEEKLY;BYDAY=MO), every 2h, in 30m or an ISO date.');
+    // Only a five-part expression was meant as cron; for anything else the
+    // cron parser's complaint ("CronPattern: invalid configuration format")
+    // is noise, so just say what to write.
+    const looksCron = text.split(/\s+/).length >= 5 && /^[\d*,/\-?LW#A-Za-z\s]+$/.test(text) && /[\d*]/.test(text);
+    const detail = looksCron ? ': ' + String(error.message || error).replace(/^CronPattern:\s*/, '').replace(/\.+$/, '') : '';
+    throw new Error('Could not read the schedule "' + text + '"' + detail + '. Use daily at 09:00, weekdays at 9am, every monday at 14:00, a 5-field cron expression, an RRULE (DTSTART;TZID=Zone:20261201T090000 RRULE:FREQ=WEEKLY;BYDAY=MO), every 2h, in 30m or an ISO date.');
   }
 }
 

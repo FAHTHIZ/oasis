@@ -27,3 +27,9 @@ test('routine permission mode refuses bypass and unknown names with the CLI spel
     await assert.rejects(createJob({ schedule: 'in 30m', prompt: 'x', permissionMode: mode }, { env }), /must be one of manual, accept-edits, plan, auto, dont-ask\./);
   }
 });
+
+test('a schedule that is not cron gets plain advice, not the cron parser error', async () => {
+  const env = await tempEnv();
+  await assert.rejects(createJob({ schedule: 'check', prompt: 'x' }, { env }), (error) => !/CronPattern|\.\./.test(error.message) && /Could not read the schedule "check"\. Use daily/.test(error.message));
+  await assert.rejects(createJob({ schedule: '61 * * * *', prompt: 'x' }, { env }), /"61 \* \* \* \*": Invalid value for minute: 61\. Use/);
+});
